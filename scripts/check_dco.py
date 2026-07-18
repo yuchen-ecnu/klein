@@ -19,13 +19,17 @@ def _git(*arguments: str) -> str:
     ).stdout.strip()
 
 
+def _commit_ids(base_ref: str) -> list[str]:
+    merge_base = _git("merge-base", base_ref, "HEAD")
+    return _git("rev-list", "--no-merges", f"{merge_base}..HEAD").splitlines()
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: check_dco.py <base-ref>", file=sys.stderr)
         return 2
 
-    merge_base = _git("merge-base", sys.argv[1], "HEAD")
-    commit_ids = _git("rev-list", f"{merge_base}..HEAD").splitlines()
+    commit_ids = _commit_ids(sys.argv[1])
     missing = [
         commit_id for commit_id in commit_ids if not _SIGN_OFF.search(_git("show", "-s", "--format=%B", commit_id))
     ]

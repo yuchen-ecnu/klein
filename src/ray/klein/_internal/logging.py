@@ -188,7 +188,7 @@ def _normalize_level(level: str | int) -> str | int:
     normalized = level.upper()
     if normalized == "TRACE":
         return TRACE_LEVEL
-    if normalized not in logging.getLevelNamesMapping():
+    if not isinstance(logging.getLevelName(normalized), int):
         raise ValueError(f"Unknown Klein log level: {level}")
     return normalized
 

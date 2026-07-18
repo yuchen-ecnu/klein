@@ -116,6 +116,7 @@ filterwarnings = [
   "error",
   "error::pytest.PytestUnraisableExceptionWarning",
   "ignore:.*pkg_resources.*:DeprecationWarning",
+  "ignore:The @wait_container_is_ready decorator is deprecated.*:DeprecationWarning:testcontainers\\.core\\.waiting_utils",
   "ignore:Using extra keyword arguments on `Field` is deprecated.*:DeprecationWarning:ray.serve._private.config",
   "ignore:`use_push_based_shuffle` is deprecated.*:DeprecationWarning:ray.data.context",
   "ignore:`use_polars` is deprecated.*:DeprecationWarning:ray.data.context",

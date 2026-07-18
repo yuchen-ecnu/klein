@@ -19,9 +19,14 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.fixture(scope="module")
 def redis_service():
     from redis import Redis
-    from testcontainers.redis import RedisContainer
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
-    container = RedisContainer("redis:7.2-alpine")
+    container = (
+        DockerContainer("redis:7.2-alpine")
+        .with_exposed_ports(6379)
+        .waiting_for(LogMessageWaitStrategy("Ready to accept connections"))
+    )
     container.start()
     client = Redis(
         host=container.get_container_host_ip(),
