@@ -166,7 +166,7 @@ Third-party packages can publish factories through the
 `ray.klein.table_factories` Python entry-point group.
 
 Kafka is deliberately not a second Klein-specific API. Its table options and
-Python methods reuse Ray Data 2.50+ names: `topics`, `bootstrap_servers`,
+Python methods reuse Ray Data 2.56 names: `topics`, `bootstrap_servers`,
 `trigger`, `start_offset`, `end_offset`,
 `consumer_config`, resource options, and `timeout_ms` for reads; `topic`,
 `key_field`, serializers, `producer_config`, `ray_remote_args`, and

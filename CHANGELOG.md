@@ -48,8 +48,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   temporary-path isolation, strict pytest configuration, and tiered CI jobs.
 - Imports and source layout are unified under `ray.klein` for future inclusion
   in the main Ray repository.
-- Compatibility is scoped to published Ray releases from 2.50.1 through 2.51.x,
-  with the minimum and maximum lines exercised independently in CI.
+- Compatibility is scoped to the Ray 2.56 minor line; the earlier 2.50 target
+  was dropped after dependency auditing found known vulnerabilities fixed in
+  later Ray releases.
 - Embedded streaming startup no longer claims a fixed private Ray metrics port;
   applications can pre-initialize Ray when custom runtime settings are needed.
 - Protobuf is constrained below 7 because supported Ray Serve versions use a descriptor
@@ -58,7 +59,7 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   architecture, integration, and external connector tiers.
 - Handwritten Ray Data source and sink mirrors were replaced by lazy dynamic
   calls through the `data` adapters.
-- Kafka's public read/write contract now matches Ray Data 2.50+, including its
+- Kafka's public read/write contract now matches Ray Data 2.56, including its
   bounded `read_kafka` offset model and native serializers. Continuous
   `KafkaSource` accepts confluent-kafka settings directly through
   `consumer_config` and owns deterministic partition/checkpoint state.

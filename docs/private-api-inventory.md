@@ -13,9 +13,9 @@ validation and ragged arrays are implemented locally.
 
 The project still uses several Ray Data extension classes whose stability is
 DeveloperAPI rather than PublicAPI, including datasource and datasink base
-classes. That is why the initial release intentionally supports only the
-published Ray 2.50.1–2.51.x range. Widening the range requires unit,
-integration, and clean-wheel tests against the proposed Ray version.
+classes. That is why the initial release intentionally supports only the Ray
+2.56 minor line. Widening the range requires unit, integration, and clean-wheel
+tests against the proposed Ray version.
 
 CI rejects direct private imports. Code that requires a private Ray API is not
 accepted into the package.

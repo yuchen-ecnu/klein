@@ -34,7 +34,7 @@ jobs:
       - run: pytest tests/unit tests/state tests/architecture --cov=ray.klein
       - run: pytest tests/integration -m "integration and not external" --timeout=300
       - run: sphinx-build -W --keep-going -b html docs docs/_build/html
-      - run: python scripts/audit_dependencies.py --local --skip-editable --progress-spinner off
+      - run: pip-audit --local --skip-editable --progress-spinner off
       - run: >-
           licensecheck --requirements-paths pyproject.toml
           --license Apache-2.0 --extras all --zero
@@ -58,9 +58,7 @@ jobs:
       - run: python -m build
       - run: python -m twine check dist/*
       - name: Generate dependency SBOM
-        run: >-
-          python scripts/audit_dependencies.py --format cyclonedx-json
-          --output dist/sbom.cdx.json --progress-spinner off
+        run: pip-audit --format cyclonedx-json --output dist/sbom.cdx.json --progress-spinner off
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: distributions

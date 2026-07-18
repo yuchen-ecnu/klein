@@ -33,7 +33,7 @@ dependencies = [
   "pyarrow>=14",
   "protobuf>=3.20.3,<7",
   "PyYAML>=6",
-  "ray[data]>=2.50.1,<2.52",
+  "ray[data]>=2.56.1,<2.57",
   "rich>=13",
   "sqlglot>=30.12,<31",
 ]
@@ -45,13 +45,13 @@ rocksdb = ["rocksdict>=0.3.29,<0.4"]
 serve = [
   "aiohttp>=3.13.3",
   "orjson>=3.9",
-  "ray[serve]>=2.50.1,<2.52",
+  "ray[serve]>=2.56.1,<2.57",
 ]
 all = [
   "aiohttp>=3.13.3",
   "confluent-kafka>=2.3,<3",
   "orjson>=3.9",
-  "ray[serve]>=2.50.1,<2.52",
+  "ray[serve]>=2.56.1,<2.57",
   "redis>=5,<7",
   "rocksdict>=0.3.29,<0.4",
 ]

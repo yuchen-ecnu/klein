@@ -23,7 +23,7 @@ external:
 
 audit:
 	reuse lint
-	python scripts/audit_dependencies.py --local --skip-editable --progress-spinner off
+	pip-audit --local --skip-editable --progress-spinner off
 	licensecheck --requirements-paths pyproject.toml --license Apache-2.0 --extras all --zero
 
 docs:

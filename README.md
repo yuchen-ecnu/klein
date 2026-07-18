@@ -8,7 +8,7 @@
   <a href="https://github.com/yuchen-ecnu/klein/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/yuchen-ecnu/klein/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-F59E0B">
   <img alt="Python 3.10–3.12" src="https://img.shields.io/badge/python-3.10%E2%80%933.12-3776AB">
-  <img alt="Ray 2.50–2.51" src="https://img.shields.io/badge/Ray-2.50--2.51-02A0CF">
+  <img alt="Ray 2.56" src="https://img.shields.io/badge/Ray-2.56-02A0CF">
   <a href="LICENSE"><img alt="Apache License 2.0" src="https://img.shields.io/badge/license-Apache--2.0-3DA639"></a>
 </p>
 
@@ -58,8 +58,8 @@ not install `ray/__init__.py` or replace files owned by Ray.
 
 ## Installation
 
-Klein for Ray currently targets Python 3.10–3.12 and published Ray releases
-from 2.50.1 through 2.51.x. Install it from a source checkout:
+Klein for Ray currently targets Python 3.10–3.12 and Ray 2.56.1. Install it from
+a source checkout:
 
 ```bash
 git clone https://github.com/yuchen-ecnu/klein.git

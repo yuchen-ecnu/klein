@@ -34,8 +34,8 @@ Use [Ray Data](https://docs.ray.io/en/latest/data/data.html) directly when a wor
 
 ## Install Klein
 
-Klein for Ray targets Python 3.10 through 3.12 and published Ray releases from
-2.50.1 through 2.51.x. Install the project from this checkout:
+Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.1. Install the
+project from this checkout:
 
 ```bash
 cd klein

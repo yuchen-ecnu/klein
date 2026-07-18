@@ -66,10 +66,6 @@ jobs:
           if-no-files-found: error
 
   integration:
-    strategy:
-      fail-fast: false
-      matrix:
-        ray-version: ["2.50.1", "2.51.2"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -81,7 +77,7 @@ jobs:
           cache: pip
       - run: python -m pip install -U pip
       - run: python -m pip install -e ".[all,test]"
-      - run: python -m pip install "ray[data,serve]==${{ matrix.ray-version }}"
+      - run: python -m pip install "ray[data,serve]==2.56.1"
       - name: Ray integration tests
         run: >-
           pytest tests/integration -m "integration and not external"
@@ -89,7 +85,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: integration-test-results-${{ matrix.ray-version }}
+          name: integration-test-results
           path: test-results/
           if-no-files-found: error
 
@@ -142,7 +138,7 @@ jobs:
           cache: pip
       - run: python -m pip install -U pip
       - run: python -m pip install -e ".[all,test]"
-      - run: python scripts/audit_dependencies.py --local --skip-editable --progress-spinner off
+      - run: pip-audit --local --skip-editable --progress-spinner off
       - run: >-
           licensecheck --requirements-paths pyproject.toml
           --license Apache-2.0 --extras all --zero
