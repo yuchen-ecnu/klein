@@ -55,12 +55,12 @@ class RedisValueLookup:
         self._result_field = result_field
 
     def __call__(self, record: Record) -> Record:
-        if self._lookup.runtime_info.batch_enabled:
-            return self._fetch_batch(record)
-        return self._fetch_one(record)
+        keys = self._lookup.resolve_keys(record)
+        if isinstance(keys, list):
+            return self._fetch_batch(record, keys)
+        return self._fetch_one(record, keys)
 
-    def _fetch_one(self, record: Record) -> Record:
-        key = self._lookup.single_key(record)
+    def _fetch_one(self, record: Record, key: str) -> Record:
         started_at = time.monotonic()
         try:
             with self._lookup.client() as client:
@@ -72,8 +72,7 @@ class RedisValueLookup:
         self._lookup.record_success(started_at)
         return self._with_result(record, self._decode(response))
 
-    def _fetch_batch(self, record: Record) -> Record:
-        keys = self._lookup.batch_keys(record)
+    def _fetch_batch(self, record: Record, keys: list[str]) -> Record:
         started_at = time.monotonic()
         try:
             with (
@@ -130,7 +129,10 @@ class RedisValueLookup:
         if self._data_type is RedisDataType.LIST:
             return [_decode_text(item) for item in value]
         if self._data_type is RedisDataType.SET:
-            return {_decode_text(item) for item in value}
+            # Redis sets are unordered, while Ray Data normalizes Python sets
+            # to list-valued Arrow columns. Return a stable list in both
+            # backends so batch and streaming have the same public schema.
+            return sorted(_decode_text(item) for item in value)
         raise ValueError(f"Unsupported Redis data type: {self._data_type}")
 
     def _decode_hash(self, value: Any) -> dict[str, str | None]:

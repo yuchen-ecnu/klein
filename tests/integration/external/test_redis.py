@@ -75,7 +75,7 @@ def test_write_redis_round_trip(clean_redis, data_type, rows, expected) -> None:
         key_prefix=prefix,
     )
 
-    context.data.from_items(rows).write_redis(
+    context.from_values(*rows).write_redis(
         connection,
         key=lambda row: row["name"],
         value=lambda row: row["value"],

@@ -34,12 +34,12 @@ class RedisMissingKeyFilter:
         )
 
     def __call__(self, record: Record) -> bool | list[bool]:
-        if self._lookup.runtime_info.batch_enabled:
-            return self._filter_batch(record)
-        return self._filter_one(record)
+        keys = self._lookup.resolve_keys(record)
+        if isinstance(keys, list):
+            return self._filter_batch(keys)
+        return self._filter_one(keys)
 
-    def _filter_one(self, record: Record) -> bool:
-        key = self._lookup.single_key(record)
+    def _filter_one(self, key: str) -> bool:
         started_at = time.monotonic()
         try:
             with self._lookup.client() as client:
@@ -51,8 +51,7 @@ class RedisMissingKeyFilter:
         self._lookup.record_success(started_at)
         return not bool(exists)
 
-    def _filter_batch(self, record: Record) -> list[bool]:
-        keys = self._lookup.batch_keys(record)
+    def _filter_batch(self, keys: list[str]) -> list[bool]:
         started_at = time.monotonic()
         try:
             with (

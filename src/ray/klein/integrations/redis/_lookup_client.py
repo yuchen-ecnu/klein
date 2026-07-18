@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
 import redis
@@ -64,12 +64,36 @@ class _RedisLookupClient:
         return format_redis_key(self._key(record), self._key_prefix, self._delimiter)
 
     def batch_keys(self, record: Record) -> list[str]:
+        return self._format_batch_keys(self._key(record))
+
+    def resolve_keys(self, record: Record) -> str | list[str]:
+        """Resolve a row key or a vector of keys from the backend's input shape.
+
+        Ray Data's element-wise ``map`` and ``filter`` lowerings remain row-wise
+        even when Klein's streaming operator has batching configured. The
+        extracted value is therefore the reliable distinction: a streaming
+        batch produces a key vector, while a Ray Data row produces one scalar.
+        """
+
         raw_keys = self._key(record)
-        if isinstance(raw_keys, (str, bytes, bytearray, memoryview)) or not isinstance(raw_keys, Sequence):
-            raise TypeError("Redis batch key extractor must return a non-empty sequence")
-        if not raw_keys:
+        if self.runtime_info.batch_enabled and self._is_key_collection(raw_keys):
+            return self._format_batch_keys(raw_keys)
+        return format_redis_key(raw_keys, self._key_prefix, self._delimiter)
+
+    @staticmethod
+    def _is_key_collection(raw_keys: Any) -> bool:
+        return not isinstance(raw_keys, (str, bytes, bytearray, memoryview, Mapping)) and isinstance(raw_keys, Iterable)
+
+    def _format_batch_keys(self, raw_keys: Any) -> list[str]:
+        if not self._is_key_collection(raw_keys):
+            raise TypeError("Redis batch key extractor must return a non-empty iterable")
+        try:
+            keys = list(raw_keys)
+        except TypeError as error:
+            raise TypeError("Redis batch key extractor must return a non-empty iterable") from error
+        if not keys:
             raise ValueError("Redis batch key extractor returned an empty sequence")
-        return [format_redis_key(key, self._key_prefix, self._delimiter) for key in raw_keys]
+        return [format_redis_key(key, self._key_prefix, self._delimiter) for key in keys]
 
     def record_success(self, started_at: float, batch_size: int | None = None) -> None:
         if self._duration_metric is not None:

@@ -105,20 +105,30 @@ class TransformLoweringTest(unittest.TestCase):
         self.assertIsNone(kw["num_cpus"])
         self.assertIsNone(kw["concurrency"])
 
-    def test_filter_filters_none_and_omits_user_fn_ctor(self):
+    def test_filter_filters_none_and_forwards_callable_class_constructor(self):
+        class _Predicate:
+            def __init__(self, threshold, *, inclusive=False):
+                self.threshold = threshold
+                self.inclusive = inclusive
+
+            def __call__(self, row):
+                return row["value"] >= self.threshold if self.inclusive else row["value"] > self.threshold
+
         lf = LogicalFunction(
-            _user_fn,
+            _Predicate,
             fn_constructor_args=[1],
+            fn_constructor_kwargs={"inclusive": True},
             lowering=lower_filter,
             resources=Resources(num_cpus=None, num_gpus=None, concurrency=3),
         )
         lf.to_batch([_FakeDS()])
         name, _ds, args, kw = self._calls[-1]
         self.assertEqual(name, "filter")
-        self.assertIs(args[0], _user_fn)
+        self.assertIs(args[0], _Predicate)
         self.assertEqual(kw["concurrency"], 3)
         self.assertNotIn("num_cpus", kw)  # None dropped
-        self.assertNotIn("fn_constructor_args", kw)  # filter doesn't forward them
+        self.assertEqual(kw["fn_constructor_args"], (1,))
+        self.assertEqual(kw["fn_constructor_kwargs"], {"inclusive": True})
 
     def test_union_passes_all_upstreams(self):
         lf = LogicalFunction(_user_fn, lowering=lower_union)

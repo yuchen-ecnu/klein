@@ -70,13 +70,15 @@ def lower_map_batches(ctx: LoweringContext) -> Dataset:
 
 
 def lower_filter(ctx: LoweringContext) -> Dataset:
-    # filter is the odd one: it filters None cpus/gpus and does NOT forward the
-    # user fn's constructor args to ray.data.
+    # ``filter`` rejects explicit ``None`` resource values, unlike the other
+    # transforms. Callable-class constructor arguments still need to reach Ray
+    # Data so each worker can instantiate the predicate.
     return Dataset.filter(
         ctx.upstream_ds[0],
         ctx.user_fn,
         concurrency=ctx.resources.concurrency,
         **filter_none_items({"num_cpus": ctx.resources.num_cpus, "num_gpus": ctx.resources.num_gpus}),
+        **ctx.user_fn_ctor_kwargs_for_ray_data,
     )
 
 
