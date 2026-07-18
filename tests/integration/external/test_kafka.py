@@ -55,7 +55,7 @@ class KafkaTest(KafkaTestBase):
         configuration = Configuration()
         configuration.set(ExecutionOptions.MODE, RuntimeExecutionMode.STREAMING)
         context = KleinContext(configuration)
-        context.from_items([{"name": "t1"}, {"name": "t2"}, {"name": "t3"}]).write_kafka(
+        context.from_values({"name": "t1"}, {"name": "t2"}, {"name": "t3"}).write_kafka(
             topic=topic,
             bootstrap_servers=self.bootstrap_servers,
             value_serializer="json",

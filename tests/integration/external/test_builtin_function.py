@@ -71,7 +71,7 @@ def test_redis_filter_handles_single_rows_and_batches(seeded_redis, batch_size) 
             [{"age": "23", "gender": "M"}, {"age": "18", "gender": "W"}],
         ),
         (RedisDataType.LIST, "list", [["Tom", "Lucy"], ["Jack", "Tom"]]),
-        (RedisDataType.SET, "set", [{"Tom", "Lucy"}, {"Jack", "Tom"}]),
+        (RedisDataType.SET, "set", [["Lucy", "Tom"], ["Jack", "Tom"]]),
     ],
 )
 def test_redis_lookup_handles_single_rows_and_batches(

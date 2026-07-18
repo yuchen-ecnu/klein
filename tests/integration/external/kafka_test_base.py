@@ -7,13 +7,32 @@ from threading import Event, Thread
 from confluent_kafka import Consumer, Producer, TopicPartition
 
 
+def _create_kafka_container():
+    """Build a Kafka testcontainer using the structured wait-strategy API."""
+
+    from testcontainers.core.container import DockerContainer
+    from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+    from testcontainers.kafka import KafkaContainer
+
+    class StructuredKafkaContainer(KafkaContainer):
+        def start(self, timeout: int = 30) -> "StructuredKafkaContainer":
+            script = self.TC_START_SCRIPT
+            command = f'sh -c "while [ ! -f {script} ]; do sleep 0.1; done; sh {script}"'
+            self.configure()
+            self.with_command(command)
+            DockerContainer.start(self)
+            self.tc_start()
+            LogMessageWaitStrategy(self.wait_for).with_startup_timeout(timeout).wait_until_ready(self)
+            return self
+
+    return StructuredKafkaContainer()
+
+
 class KafkaTestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Start the Kafka container
-        from testcontainers.kafka import KafkaContainer
-
-        cls.kafka = KafkaContainer()
+        cls.kafka = _create_kafka_container()
         cls.kafka.start(timeout=60)
 
         # Get Kafka bootstrap servers
