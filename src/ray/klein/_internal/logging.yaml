@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  text:
+    format: "%(asctime)s\t%(levelname)s %(name)s [event=%(klein_event)s%(klein_context)s] -- %(message)s"
+  json:
+    (): ray.klein._internal.logging._KleinJsonFormatter
+
+filters:
+  klein_context:
+    (): ray.klein._internal.logging._KleinContextFilter
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: text
+    filters: [klein_context]
+    stream: ext://sys.stderr
+
+loggers:
+  ray.klein:
+    level: INFO
+    handlers: [console]
+    propagate: false

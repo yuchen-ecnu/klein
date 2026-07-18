@@ -1,0 +1,43 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "name": "TestValueSource",
+      "num_cpus": null,
+      "num_gpus": null,
+      "concurrency": null,
+      "batch_size": null,
+      "async_buffer_size": null
+    },
+    {
+      "id": 2,
+      "name": "TestInfer",
+      "num_cpus": 4.0,
+      "num_gpus": 1.0,
+      "concurrency": null,
+      "batch_size": null,
+      "async_buffer_size": null
+    },
+    {
+      "id": 3,
+      "name": "KafkaSink",
+      "num_cpus": null,
+      "num_gpus": null,
+      "concurrency": null,
+      "batch_size": null,
+      "async_buffer_size": null
+    }
+  ],
+  "edges": [
+    {
+      "source": 1,
+      "target": 2,
+      "strategy": "ADAPTIVE"
+    },
+    {
+      "source": 2,
+      "target": 3,
+      "strategy": "ADAPTIVE"
+    }
+  ]
+}

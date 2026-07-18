@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+name: OpenSSF Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "31 2 * * 3"
+  push:
+    branches: [main]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@62b2cac7ed8198b15735ed49ab1e5cf35480ba46
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@ff0a06e83cb2de871e5a09832bc6a81e7276941f
+        with:
+          sarif_file: results.sarif

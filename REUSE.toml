@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+version = 1
+
+[[annotations]]
+path = [
+  ".editorconfig",
+  ".gitattributes",
+  ".github/**",
+  ".gitignore",
+  ".pre-commit-config.yaml",
+  "*.cff",
+  "*.md",
+  "*.toml",
+  "Makefile",
+  "NOTICE",
+  "PKG-INFO",
+  "docs/**",
+  "examples/**",
+  "scripts/**",
+  "src/**",
+  "tests/**",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2024-2026 Klein for Ray Authors"
+SPDX-License-Identifier = "Apache-2.0"

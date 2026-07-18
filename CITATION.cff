@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+cff-version: 1.2.0
+message: "If you use Klein for Ray in research, please cite the software repository."
+title: "Klein for Ray"
+type: software
+version: 0.1.0.dev0
+authors:
+  - family-names: "Klein for Ray Authors"
+repository-code: "https://github.com/yuchen-ecnu/klein"
+license: Apache-2.0
