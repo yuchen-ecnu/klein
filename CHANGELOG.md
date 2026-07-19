@@ -84,8 +84,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   applications can pre-initialize Ray when custom runtime settings are needed.
 - Protobuf is constrained below 7 because supported Ray Serve versions use a descriptor
   attribute removed by protobuf 7.
-- Ray Serve integrations now require `orjson>=3.11.6`, excluding releases with
-  known unbounded-recursion denial-of-service vulnerabilities.
+- Dependency floors for `aiohttp`, `click`, `orjson`, `protobuf`, `pyarrow`,
+  and `pytest` now exclude releases with known security vulnerabilities.
 - CI enforces a 68% branch-coverage floor with focused unit, state,
   architecture, integration, and external connector tiers.
 - Handwritten Ray Data source and sink mirrors were replaced by lazy dynamic
