@@ -61,7 +61,7 @@ jobs:
           pytest tests/unit tests/state tests/architecture
           -m "component_core and not slow"
           --junitxml=test-results/unit-core.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: unit-core-results
@@ -87,7 +87,7 @@ jobs:
           pytest tests/unit tests/state tests/architecture
           -m "component_runtime and not slow"
           --junitxml=test-results/unit-runtime.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: unit-runtime-results
@@ -113,7 +113,7 @@ jobs:
           pytest tests/unit tests/state tests/architecture
           -m "component_state and not slow"
           --junitxml=test-results/unit-state.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: unit-state-results
@@ -139,7 +139,7 @@ jobs:
           pytest tests/unit tests/state tests/architecture
           -m "component_sql and not slow"
           --junitxml=test-results/unit-sql.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: unit-sql-results
@@ -165,7 +165,7 @@ jobs:
           pytest tests/unit tests/state tests/architecture
           -m "component_connectors and not slow"
           --junitxml=test-results/unit-connectors.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: unit-connectors-results
@@ -194,7 +194,7 @@ jobs:
         run: >-
           pytest tests/unit tests/state tests/architecture -m "not slow"
           --junitxml=test-results/python-${{ matrix.python-version }}.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: python-${{ matrix.python-version }}-results
@@ -269,7 +269,7 @@ jobs:
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f
         with:
           use_oidc: true
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: coverage-results
@@ -298,7 +298,7 @@ jobs:
           pytest tests/integration
           -m "integration and component_runtime and not external"
           --timeout=300 --junitxml=test-results/integration-runtime.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: integration-runtime-results
@@ -324,7 +324,7 @@ jobs:
           pytest tests/integration
           -m "integration and component_state and not external"
           --timeout=300 --junitxml=test-results/integration-state.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: integration-state-results
@@ -350,7 +350,7 @@ jobs:
           pytest tests/integration
           -m "integration and component_sql and not external"
           --timeout=300 --junitxml=test-results/integration-sql.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: integration-sql-results
@@ -376,7 +376,7 @@ jobs:
           pytest tests/integration
           -m "integration and component_connectors and not external"
           --timeout=300 --junitxml=test-results/integration-connectors.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: integration-connectors-results
@@ -401,7 +401,7 @@ jobs:
           pytest tests/integration/external
           -m "external and component_connectors" --run-external
           --timeout=300 --junitxml=test-results/external-connectors.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: external-connectors-results
@@ -468,7 +468,7 @@ jobs:
           /tmp/ray-klein-wheel-test/bin/python -m pip install "pip==26.1.2"
           /tmp/ray-klein-wheel-test/bin/pip install --constraint requirements/ci-constraints.txt dist/*.whl
           /tmp/ray-klein-wheel-test/bin/python -c "import ray, ray.klein; assert callable(ray.klein.from_items)"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: runner.os == 'Linux'
         with:
           name: distributions
