@@ -55,7 +55,7 @@ def test_custom_partitioner_without_complete_spec_contract_fails_at_construction
         def partition(self, record):
             return [0]
 
-    with pytest.raises(TypeError, match="abstract method to_spec"):
+    with pytest.raises(TypeError, match=r"abstract method.*to_spec"):
         MissingSpecPartitioner()
 
 
