@@ -59,6 +59,7 @@ class DeliveryJournal:
         self._sender_vertex_id = None
         self._sender_task_name: str | None = None
         self._edge_index: int | None = None
+        self._topology_epoch: str | None = None
         # Per-target monotonic batch sequence. Peeked before the put (travels to
         # the downstream as batch_sequence) and committed only on landing on the ACTUAL
         # index (post-reroute), so worker-pool reroute can't punch holes that wedge
@@ -84,6 +85,7 @@ class DeliveryJournal:
         *,
         sender_task_name: str | None = None,
         edge_index: int | None = None,
+        topology_epoch: str | None = None,
     ) -> None:
         """Configure replay retention and stamp this task's sender id."""
         if enabled and max_bytes <= 0:
@@ -94,6 +96,7 @@ class DeliveryJournal:
         self._sender_vertex_id = sender_vertex_id
         self._sender_task_name = sender_task_name
         self._edge_index = edge_index
+        self._topology_epoch = topology_epoch
         self._max_bytes = max_bytes
         self._publish_size()
 
@@ -122,6 +125,7 @@ class DeliveryJournal:
             self._sender_task_name,
             self._edge_index,
             target_index,
+            self._topology_epoch,
         )
 
     def next_sequence(self, target_index: int) -> int:

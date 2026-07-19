@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import uuid
 from typing import ClassVar
 
 from ray.klein.config.configuration import Configuration
@@ -35,6 +36,14 @@ class ExecutionVertex:
         self.config = config
         self.stream_task: KleinActorHandle | None = None
         self.task_metric_group = task_metric_group
+        # ExecutionVertexId and the human-readable task name are intentionally
+        # stable across a local rescale.  A separate generation token lets the
+        # control plane reject a status RPC that arrives from an older actor
+        # after the same parallelism (and therefore the same name) is reused.
+        self.task_generation = uuid.uuid4().hex
+        # Replacement tasks keep the local-cut identity through Ray actor
+        # rebuilds until a later global deployment explicitly clears it.
+        self.restore_operation_id: str | None = None
         self._status = ExecutionVertexStatus.CREATED
         self._error_message: str | None = None
         # No per-vertex lock: all _status writes are serialized on the JobManager's
@@ -108,6 +117,11 @@ class ExecutionVertex:
         """
         self._status = ExecutionVertexStatus.CREATED
         self._error_message = None
+
+    def renew_task_generation(self) -> None:
+        """Give the next actor incarnation a unique status-report identity."""
+
+        self.task_generation = uuid.uuid4().hex
 
     @property
     def status(self) -> ExecutionVertexStatus:

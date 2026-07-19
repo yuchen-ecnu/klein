@@ -33,7 +33,11 @@ def test_coordinator_health_requires_an_opened_actor(monkeypatch, needs_recovery
         "find",
         staticmethod(lambda namespace: coordinator),
     )
-    monkeypatch.setattr(coordinator_module.klein, "get", lambda value: value)
+    monkeypatch.setattr(
+        coordinator_module.klein,
+        "get",
+        lambda value, *, timeout=None: value,
+    )
 
     assert CheckpointCoordinator.coordinator_healthy("job-a") is expected
 
@@ -53,8 +57,10 @@ async def test_coordinator_discovers_latest_checkpoint_for_its_job(tmp_path: Pat
     config.set(CheckpointOptions.DIRECTORY, root_uri)
     coordinator = CheckpointCoordinator(config, job_id="job-a")
     execution_graph = Mock()
+    execution_graph.execution_vertices = []
     execution_graph.barrier_splits = {}
     execution_graph.sink_execution_vertices = []
+    execution_graph.source_execution_vertices = []
 
     await coordinator.open(execution_graph, restore_path=None)
 
@@ -77,8 +83,10 @@ async def test_coordinator_restores_all_subtask_fragments_for_rescale(tmp_path: 
     config.set(CheckpointOptions.DIRECTORY, root_uri)
     coordinator = CheckpointCoordinator(config, job_id="job-a")
     execution_graph = Mock()
+    execution_graph.execution_vertices = []
     execution_graph.barrier_splits = {}
     execution_graph.sink_execution_vertices = []
+    execution_graph.source_execution_vertices = []
     await coordinator.open(execution_graph, restore_path=checkpoint_path)
 
     references = await coordinator.durable_operator_states(ExecutionVertexId(2, 0))
@@ -105,6 +113,7 @@ async def test_source_is_notified_only_after_its_state_is_durable(tmp_path: Path
     source_task = Mock()
     source_vertex = Mock(id=ExecutionVertexId(11, 0), stream_task=source_task)
     execution_graph = Mock()
+    execution_graph.execution_vertices = []
     execution_graph.barrier_splits = {}
     execution_graph.sink_execution_vertices = []
     execution_graph.source_execution_vertices = [source_vertex]
@@ -135,6 +144,7 @@ async def test_durable_source_notification_is_replayed_after_recovery(tmp_path: 
     source_task = Mock()
     source_vertex = Mock(id=ExecutionVertexId(11, 0), stream_task=source_task)
     execution_graph = Mock()
+    execution_graph.execution_vertices = []
     execution_graph.barrier_splits = {}
     execution_graph.sink_execution_vertices = []
     execution_graph.source_execution_vertices = [source_vertex]
@@ -168,8 +178,10 @@ async def test_durable_sink_transaction_is_committed_after_coordinator_recovery(
     config.set(CheckpointOptions.DIRECTORY, (tmp_path / "checkpoints").as_uri())
     coordinator = CheckpointCoordinator(config, job_id="job-a")
     execution_graph = Mock()
+    execution_graph.execution_vertices = []
     execution_graph.barrier_splits = {}
     execution_graph.sink_execution_vertices = []
+    execution_graph.source_execution_vertices = []
 
     await coordinator.open(execution_graph, restore_path=checkpoint_path)
 
@@ -197,8 +209,10 @@ async def test_terminal_flush_aborts_inflight_sink_transactions(tmp_path: Path) 
     config.set(CheckpointOptions.DIRECTORY, (tmp_path / "checkpoints").as_uri())
     coordinator = CheckpointCoordinator(config, job_id="job-a")
     execution_graph = Mock()
+    execution_graph.execution_vertices = []
     execution_graph.barrier_splits = {}
     execution_graph.sink_execution_vertices = []
+    execution_graph.source_execution_vertices = []
     await coordinator.open(execution_graph, restore_path=None)
     coordinator._inflight_sink_committables = {7: {"2:0": SinkCommittableCheckpointEntry("2:0", 7, committable)}}
 

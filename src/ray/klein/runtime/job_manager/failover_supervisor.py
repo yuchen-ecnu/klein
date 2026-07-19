@@ -37,6 +37,8 @@ class FailoverSupervisor:
         health_check_interval: float,
         restart_delay_provider: Callable[[], float],
         on_permanent_failure: Callable[[bool], Awaitable[None]],
+        stop_requested_provider: Callable[[], bool],
+        health_probe_timeout: float,
     ) -> None:
         self._job_master_provider = job_master_provider
         self._execution_graph_provider = execution_graph_provider
@@ -48,6 +50,8 @@ class FailoverSupervisor:
         self._health_check_interval = health_check_interval
         self._restart_delay_provider = restart_delay_provider
         self._on_permanent_failure = on_permanent_failure
+        self._stop_requested_provider = stop_requested_provider
+        self._health_probe_timeout = health_probe_timeout
 
     async def tick(self) -> None:
         """coordinator recovery → health probe → single-point recovery → global restart."""
@@ -66,7 +70,14 @@ class FailoverSupervisor:
                 )
 
         try:
-            report = await asyncio.to_thread(JobHealthReport, self._execution_graph_provider())
+            report = await asyncio.wait_for(
+                asyncio.to_thread(
+                    JobHealthReport,
+                    self._execution_graph_provider(),
+                    self._health_probe_timeout,
+                ),
+                timeout=self._health_probe_timeout + 1,
+            )
         except Exception:
             log_event(
                 logger,
@@ -127,6 +138,8 @@ class FailoverSupervisor:
         wake_event = self._wake_event_provider()
         restart_delay = self._restart_delay_provider()
         while True:
+            if self._stop_requested_provider():
+                return
             # Only the scheduler call goes on the writer: the SUPPRESSED branch's
             # stop (below, outside this block) also needs the writer, and the
             # backoff wait must not occupy it — so we await the single restart here

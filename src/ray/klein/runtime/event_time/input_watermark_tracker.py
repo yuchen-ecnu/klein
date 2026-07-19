@@ -35,6 +35,16 @@ class InputWatermarkTracker:
     def idle_input_count(self) -> int:
         return sum(1 for state in self._inputs.values() if state.idle)
 
+    def reconfigure_inputs(self, input_ids: Iterable[Hashable]) -> None:
+        """Replace physical inputs while preserving progress for surviving ids.
+
+        New inputs intentionally start without a watermark and therefore hold
+        back the aggregate until they report progress. Removed inputs stop
+        pinning the minimum immediately.
+        """
+
+        self._inputs = {input_id: self._inputs.get(input_id, _InputState()) for input_id in input_ids}
+
     def on_control(
         self,
         sender: Hashable,

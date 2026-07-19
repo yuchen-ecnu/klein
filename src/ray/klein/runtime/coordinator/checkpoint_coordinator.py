@@ -33,8 +33,8 @@ from ray.klein.state.state_snapshot_reference import StateSnapshotReference
 logger = get_logger(__name__)
 
 
-class _SinkCheckpointCommitError(RuntimeError):
-    """A transactional sink checkpoint could not become durable and visible."""
+class _CheckpointCommitError(RuntimeError):
+    """A checkpoint could not become durable and externally visible."""
 
 
 def _validate_integer_option(name: str, value: int, minimum: int) -> None:
@@ -102,14 +102,14 @@ class CheckpointCoordinator(AsyncWorker):
         return klein.get_actor_by_name(ComponentName.KLEIN_CHECKPOINT_COORDINATOR, namespace=namespace)
 
     @staticmethod
-    def coordinator_healthy(namespace: str) -> bool:
+    def coordinator_healthy(namespace: str, timeout: float = 30.0) -> bool:
         coordinator = CheckpointCoordinator.find(namespace=namespace)
         if coordinator:
             try:
                 # ``needs_recovery`` is the coordinator's cheap, public health
                 # probe: an actor rebuilt by Ray is alive but not healthy until
                 # JobManager re-opens its persisted state.
-                return not klein.get(coordinator.needs_recovery())
+                return not klein.get(coordinator.needs_recovery(), timeout=timeout)
             except Exception:
                 logger.warning("The checkpoint coordinator is not ready", exc_info=True)
                 return False
@@ -205,6 +205,10 @@ class CheckpointCoordinator(AsyncWorker):
         self._execution_graph: ExecutionGraph | None = None
         self._required_acknowledgements: dict[ExecutionVertexId, int] = {}
         self._inflight_checkpoints: dict[int, Checkpoint] = {}
+        # An aligned checkpoint leaves ``_inflight_checkpoints`` before its
+        # source notification/state merge has completed. Keep that second phase
+        # visible so a topology change cannot race an old-epoch state commit.
+        self._completing_checkpoints: set[int] = set()
         # Barrier-id generator is per-coordinator-instance, NOT a process global.
         # A process-global counter resets to 0 when Ray rebuilds this actor
         # (max_restarts=-1), and on a Tier-1 coordinator-only restart the
@@ -230,6 +234,21 @@ class CheckpointCoordinator(AsyncWorker):
         self._opened: bool = False
         self._progress_lock = None
         self._persistence_lock = None
+        self._rescale_operation_id: str | None = None
+        # A committed local topology is not independently recoverable until one
+        # full checkpoint has captured source progress and every stateful task
+        # under that topology.  While this marker is set, task-level recovery
+        # must escalate to a consistent global restore instead of rebuilding one
+        # actor from pre-rescale checkpoint state.
+        self._rescale_recovery_fence: str | None = None
+        self._rescale_recovery_pending_sources: set[ExecutionVertexId] = set()
+        self._rescale_recovery_required_state_revision: int | None = None
+        self._transient_rescale_states: dict[tuple[str, int], tuple[StateSnapshotReference, ...]] = {}
+        # Deliberately process-local. If the coordinator restarts before a
+        # new-topology checkpoint supersedes a transient cut, the safe outcome
+        # is a global checkpoint restore (including source rewind), never a
+        # silent single-operator restore from old state.
+        self._superseded_rescale_operations: set[tuple[str, int]] = set()
 
     def _ensure_locks(self) -> None:
         if self._progress_lock is None:
@@ -239,6 +258,23 @@ class CheckpointCoordinator(AsyncWorker):
 
     async def open(self, execution_graph: ExecutionGraph, restore_path: str | None) -> None:
         self._ensure_locks()
+        # ``open`` is also used by a global restart on an existing coordinator.
+        # Clear any abandoned in-memory transaction.  A coordinator-only Ray
+        # rebuild receives an ExecutionGraph whose replacement vertices still
+        # carry the local-cut identity; retain a conservative recovery fence in
+        # that case until a fresh checkpoint completes.
+        self._rescale_operation_id = None
+        self._transient_rescale_states = {}
+        self._superseded_rescale_operations = set()
+        restore_vertices = tuple(
+            vertex for vertex in execution_graph.execution_vertices if vertex.restore_operation_id is not None
+        )
+        restore_operations = {vertex.restore_operation_id for vertex in restore_vertices}
+        self._rescale_recovery_fence = min(restore_operations) if restore_operations else None
+        self._rescale_recovery_pending_sources = (
+            {source.id for source in execution_graph.source_execution_vertices} if restore_operations else set()
+        )
+        self._rescale_recovery_required_state_revision = None
         if not restore_path:
             restore_path = await asyncio.to_thread(
                 checkpoint_io.latest_checkpoint,
@@ -286,6 +322,7 @@ class CheckpointCoordinator(AsyncWorker):
         self._update_pending_sink_transaction_metric()
         self._inflight_operator_states = {}
         self._inflight_checkpoints = {}
+        self._completing_checkpoints = set()
         self._state_revision = 0
         self._persisted_state_revision = 0
         # Re-seed the barrier generator above the persisted high-water mark so a
@@ -399,6 +436,10 @@ class CheckpointCoordinator(AsyncWorker):
     def register_checkpoint(self, vertex_id: ExecutionVertexId, *, force: bool = False) -> CheckpointRegistration:
         # Intentionally sync: pure in-memory bookkeeping with no I/O. Ray async
         # actors happily expose sync methods alongside async ones.
+        if self._rescale_operation_id is not None:
+            return CheckpointRegistration.skip(
+                f"Checkpoint registration is paused for operator rescale {self._rescale_operation_id}"
+            )
         # No sink path downstream -> nothing to align/ack -> checkpointing this
         # source is meaningless without a required sink acknowledgement count.
         required_acknowledgements = self._required_acknowledgements.get(vertex_id, 0)
@@ -436,6 +477,53 @@ class CheckpointCoordinator(AsyncWorker):
         self._checkpoints_in_progress.set(len(self._inflight_checkpoints))
 
         return CheckpointRegistration.success(barrier_id)
+
+    async def begin_operator_rescale(self, operation_id: str, timeout: float) -> bool:
+        """Stop admitting checkpoints and wait for the old topology to drain."""
+
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ValueError("rescale operation_id cannot be empty")
+        if timeout <= 0:
+            raise ValueError("rescale timeout must be greater than zero")
+        deadline = time.monotonic() + timeout
+        while self._rescale_recovery_fence is not None:
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    "timed out waiting for the committed topology to complete its stabilization checkpoint"
+                )
+            await asyncio.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+        if self._rescale_operation_id not in {None, operation_id}:
+            raise RuntimeError(f"checkpoint coordinator is busy with rescale {self._rescale_operation_id}")
+        self._rescale_operation_id = operation_id
+        while self._inflight_checkpoints or self._completing_checkpoints:
+            if time.monotonic() >= deadline:
+                self._rescale_operation_id = None
+                raise TimeoutError("timed out waiting for in-flight checkpoints before rescale")
+            await asyncio.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+        return True
+
+    def finish_operator_rescale(self, operation_id: str, committed: bool = False) -> bool:
+        """Release checkpoint admission and optionally fence local recovery.
+
+        The committed form is idempotent so a caller can safely retry after a
+        lost RPC response.
+        """
+
+        if self._rescale_operation_id == operation_id:
+            self._rescale_operation_id = None
+            if committed:
+                self._rescale_recovery_fence = operation_id
+                self._rescale_recovery_pending_sources = {
+                    vertex.id for vertex in self._execution_graph.source_execution_vertices
+                }
+                self._rescale_recovery_required_state_revision = None
+            return True
+        return committed and self._rescale_recovery_fence == operation_id
+
+    def operator_rescale_recovery_fenced(self) -> bool:
+        """Whether a task failure must use global checkpoint recovery."""
+
+        return self._rescale_recovery_fence is not None
 
     def register_operator_state(
         self,
@@ -542,27 +630,36 @@ class CheckpointCoordinator(AsyncWorker):
         checkpoint = self._inflight_checkpoints.pop(barrier_id, None)
         if checkpoint is None:
             return False
-        self._checkpoints_in_progress.set(len(self._inflight_checkpoints))
+        self._completing_checkpoints.add(barrier_id)
+        self._checkpoints_in_progress.set(len(self._inflight_checkpoints) + len(self._completing_checkpoints))
         logger.debug(
             "Checkpoint barrier %s is aligned; notifying the source",
             barrier_id,
         )
-        source_vertex = self._execution_graph.execution_vertex(checkpoint.trigger_sources[0])
-        stream_task = source_vertex.stream_task
-        if stream_task is None:
-            await self._fail_checkpoint(
+        try:
+            source_vertex = self._execution_graph.execution_vertex(checkpoint.trigger_sources[0])
+            stream_task = source_vertex.stream_task
+            if stream_task is None:
+                await self._fail_checkpoint(
+                    checkpoint,
+                    barrier_id,
+                    "Source task is unavailable during checkpoint completion.",
+                )
+                logger.warning(
+                    "Source task %s disappeared while completing checkpoint %s",
+                    source_vertex.id,
+                    barrier_id,
+                )
+                return False
+            return await self._complete_aligned_checkpoint(
                 checkpoint,
                 barrier_id,
-                "Source task is unavailable during checkpoint completion.",
+                source_vertex.id,
+                stream_task,
             )
-            logger.warning("Source task %s disappeared while completing checkpoint %s", source_vertex.id, barrier_id)
-            return False
-        return await self._complete_aligned_checkpoint(
-            checkpoint,
-            barrier_id,
-            source_vertex.id,
-            stream_task,
-        )
+        finally:
+            self._completing_checkpoints.discard(barrier_id)
+            self._checkpoints_in_progress.set(len(self._inflight_checkpoints) + len(self._completing_checkpoints))
 
     async def _complete_aligned_checkpoint(
         self,
@@ -608,7 +705,8 @@ class CheckpointCoordinator(AsyncWorker):
                 self._update_pending_sink_transaction_metric()
                 if completed_committables:
                     self._state_revision += 1
-            if completed_committables:
+                stabilization_ready = self._record_rescale_stabilization_progress(source_vertex_id)
+            if completed_committables or stabilization_ready:
                 await self._persist_checkpoint_metadata(strict=True)
             checkpoint.mark_complete()
             duration_ms = max(
@@ -633,10 +731,10 @@ class CheckpointCoordinator(AsyncWorker):
                 duration_ms=duration_ms,
             )
             return True
-        except _SinkCheckpointCommitError:
-            checkpoint.mark_failed("Two-phase sink commit failed.")
+        except _CheckpointCommitError:
+            checkpoint.mark_failed("Checkpoint could not become durable.")
             self._checkpoints_failed.inc()
-            logger.exception("Two-phase sink commit failed for checkpoint %s", barrier_id)
+            logger.exception("Checkpoint %s could not become durable", barrier_id)
             raise
         except Exception:
             self._inflight_operator_states.pop(barrier_id, None)
@@ -698,6 +796,7 @@ class CheckpointCoordinator(AsyncWorker):
                     state_revision <= self._persisted_state_revision
                     and barrier_high_water <= self._persisted_high_water
                 ):
+                    self._clear_rescale_recovery_fence_if_durable()
                     return True
                 source_states = list(self._latest_source_states.values())
                 live_operator_states = dict(self._latest_operator_states)
@@ -741,7 +840,7 @@ class CheckpointCoordinator(AsyncWorker):
                     checkpoint_revision=target_revision,
                 )
                 if strict:
-                    raise _SinkCheckpointCommitError("Failed to persist transactional sink checkpoint") from error
+                    raise _CheckpointCommitError("Failed to persist checkpoint metadata") from error
                 return False
 
             self._checkpoint_path = latest_checkpoint_path
@@ -764,6 +863,7 @@ class CheckpointCoordinator(AsyncWorker):
                 return False
             if notify_sources:
                 await self._notify_durable_source_checkpoints()
+            self._clear_rescale_recovery_fence_if_durable()
 
         try:
             await asyncio.to_thread(
@@ -845,7 +945,7 @@ class CheckpointCoordinator(AsyncWorker):
                     transaction_id=entry.transaction_id,
                 )
                 if strict:
-                    raise _SinkCheckpointCommitError(
+                    raise _CheckpointCommitError(
                         f"Failed to commit sink transaction {entry.transaction_id!r}"
                     ) from error
                 continue
@@ -937,6 +1037,7 @@ class CheckpointCoordinator(AsyncWorker):
             },
             "history": history,
             "latest_path": self._checkpoint_path,
+            "rescale_recovery_fenced": self.operator_rescale_recovery_fenced(),
         }
 
     def _checkpoint_dashboard_row(self, checkpoint: Checkpoint) -> dict:
@@ -1004,6 +1105,73 @@ class CheckpointCoordinator(AsyncWorker):
         task_key = self._source_state_key(vertex_id)
         async with self._progress_lock:
             return self._latest_source_states.get(task_key)
+
+    async def stage_operator_rescale_state(
+        self,
+        operation_id: str,
+        job_vertex_id: int,
+        snapshots: tuple[StateSnapshotReference, ...],
+    ) -> None:
+        """Stage a local-cut snapshot without polluting global checkpoints."""
+
+        if self._rescale_operation_id != operation_id:
+            raise RuntimeError(f"operator rescale {operation_id} is not active")
+        if isinstance(job_vertex_id, bool) or not isinstance(job_vertex_id, int):
+            raise TypeError("job_vertex_id must be an integer")
+        references = tuple(snapshots)
+        if any(not isinstance(reference, StateSnapshotReference) for reference in references):
+            raise TypeError("rescale snapshots must be StateSnapshotReference values")
+        self._transient_rescale_states[operation_id, job_vertex_id] = references
+
+    def operator_rescale_states(
+        self,
+        operation_id: str,
+        vertex_id: ExecutionVertexId,
+    ) -> tuple[StateSnapshotReference, ...]:
+        return self._transient_rescale_states.get((operation_id, vertex_id.job_vertex_id), ())
+
+    async def restore_operator_rescale_states(
+        self,
+        operation_id: str,
+        vertex_id: ExecutionVertexId,
+    ) -> tuple[StateSnapshotReference, ...]:
+        """Restore the local cut initially, then normal checkpoint state.
+
+        A replacement actor's Ray restart recipe permanently contains its
+        rescale operation id. During the active swap the transient cut is
+        mandatory. Once committed, a later checkpoint supersedes that cut and
+        actor recovery must follow the normal latest-state path instead.
+        """
+
+        key = (operation_id, vertex_id.job_vertex_id)
+        transient = self._transient_rescale_states.get(key)
+        if transient is not None:
+            return transient
+        if self._rescale_operation_id == operation_id:
+            raise RuntimeError(f"managed state for active operator rescale {operation_id} is unavailable")
+        if key not in self._superseded_rescale_operations:
+            raise RuntimeError(
+                f"managed state for operator rescale {operation_id} is no longer recoverable; "
+                "a consistent global checkpoint restore is required"
+            )
+        return await self.latest_operator_states(vertex_id)
+
+    def discard_operator_rescale_state(self, operation_id: str, job_vertex_id: int) -> bool:
+        key = (operation_id, job_vertex_id)
+        self._superseded_rescale_operations.discard(key)
+        return self._transient_rescale_states.pop(key, None) is not None
+
+    def reconfigure_execution_graph(self, execution_graph: ExecutionGraph) -> None:
+        """Install new checkpoint acknowledgement topology without reopening."""
+
+        if execution_graph.namespace != self._job_id:
+            raise ValueError("execution graph belongs to a different job")
+        if self._rescale_operation_id is None:
+            raise RuntimeError("execution graph can only be reconfigured inside an operator rescale")
+        if self._inflight_checkpoints or self._completing_checkpoints:
+            raise RuntimeError("cannot reconfigure checkpoint topology with checkpoints in flight")
+        self._execution_graph = execution_graph
+        self._required_acknowledgements = checkpoint_io.coordinator_ack_counts(execution_graph)
 
     async def latest_operator_states(
         self,
@@ -1111,8 +1279,55 @@ class CheckpointCoordinator(AsyncWorker):
                 if not any(key.startswith(prefix) for prefix in prefixes)
             }
         self._latest_operator_states.update(completed_states)
+        if prefixes:
+            logical_ids = {int(prefix[:-1]) for prefix in prefixes}
+            self._superseded_rescale_operations.update(
+                key for key in self._transient_rescale_states if key[1] in logical_ids
+            )
+            self._transient_rescale_states = {
+                key: value for key, value in self._transient_rescale_states.items() if key[1] not in logical_ids
+            }
         if completed_states:
             self._state_revision += 1
+
+    def _record_rescale_stabilization_progress(self, source_vertex_id: ExecutionVertexId) -> bool:
+        """Record one source cut and report whether strict persistence is due.
+
+        Stateless rescaled operators have no transient fragments, so any fully
+        aligned checkpoint is sufficient.  For a stateful operator the state
+        replacement above removes the transient cut first. The fence itself is
+        only cleared later, after metadata at or beyond the captured revision is
+        durable.
+        """
+
+        operation_id = self._rescale_recovery_fence
+        if operation_id is None:
+            return False
+        self._rescale_recovery_pending_sources.discard(source_vertex_id)
+        if self._rescale_recovery_pending_sources:
+            return False
+        if any(key[0] == operation_id for key in self._transient_rescale_states):
+            logger.warning(
+                "Checkpoint completed without superseding transient state for rescale %s; "
+                "retaining the global-recovery fence",
+                operation_id,
+            )
+            return False
+        self._rescale_recovery_required_state_revision = self._state_revision
+        return True
+
+    def _clear_rescale_recovery_fence_if_durable(self) -> None:
+        """Clear the fence only when its new-topology state is on storage."""
+
+        operation_id = self._rescale_recovery_fence
+        required_revision = self._rescale_recovery_required_state_revision
+        if operation_id is None or required_revision is None:
+            return
+        if self._persisted_state_revision < required_revision:
+            return
+        self._rescale_recovery_fence = None
+        self._rescale_recovery_pending_sources.clear()
+        self._rescale_recovery_required_state_revision = None
 
     def _update_latest_source_state(self, entry: SourceCheckpointEntry) -> None:
         current = self._latest_source_states.get(entry.task_key)

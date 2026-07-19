@@ -38,6 +38,27 @@ def stop_workers(execution_graph: ExecutionGraph, timeout: float, force: bool) -
     _force_kill_survivors(execution_graph)
 
 
+def stop_job_vertex(
+    job_vertex: ExecutionJobVertex,
+    namespace: str,
+    timeout: float,
+    force: bool = False,
+) -> None:
+    """Stop only one operator's actors during a local rescale."""
+
+    references = _stop_worker(job_vertex, force)
+    try:
+        klein.get(references, timeout=timeout)
+    except Exception as error:
+        logger.warning("Operator stop did not complete within %.1fs; force-killing survivors: %s", timeout, error)
+    for vertex in job_vertex.execution_vertices.values():
+        if klein.get_actor_status(vertex.name, namespace=namespace) == StreamTaskStatus.ALIVE:
+            _kill_actor_with_retry(vertex.name, namespace)
+        if vertex.status != ExecutionVertexStatus.CREATED and not vertex.status.is_terminal:
+            vertex.transition_to(ExecutionVertexStatus.CANCELLED)
+        vertex.stream_task = None
+
+
 def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, force: bool) -> None:
     """Phase 1: ask every task (source-first BFS) to stop and wait for acks.
 
@@ -104,11 +125,12 @@ def _kill_actor_with_retry(name: str, namespace: str) -> None:
 def _stop_worker(job_vertex: ExecutionJobVertex, force: bool) -> list[KleinActorHandle]:
     references = []
     for vertex in job_vertex.execution_vertices.values():
+        if force:
+            if vertex.stream_task is not None:
+                klein.kill(vertex.stream_task)
+            continue
         if vertex.status == ExecutionVertexStatus.CREATED or vertex.status.is_terminal:
             logger.debug("Skipping inactive execution vertex %s during task shutdown", vertex)
-            continue
-        if force:
-            klein.kill(vertex.stream_task)
             continue
         references.append(vertex.stream_task.stop())
         vertex.transition_to(ExecutionVertexStatus.CANCELLING)

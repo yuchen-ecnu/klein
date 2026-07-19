@@ -49,7 +49,14 @@ from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVerte
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
-from ray.klein.runtime.message import Barrier, DeliveryChannel, PutAck, Record, StreamControl
+from ray.klein.runtime.message import (
+    Barrier,
+    DeliveryChannel,
+    PutAck,
+    Record,
+    RescaleBarrier,
+    StreamControl,
+)
 from ray.klein.runtime.operator.managed_state_operator import ManagedStateOperator
 from ray.klein.runtime.operator.operator import StreamOperator
 from ray.klein.runtime.operator.operator_type import OperatorType
@@ -66,6 +73,7 @@ from ray.klein.runtime.worker.pump import (
 from ray.klein.runtime.worker.watermark import WatermarkController, WatermarkMode
 from ray.klein.runtime.worker.weighted_queue import WeightedQueue
 from ray.klein.state.object_store_snapshot_cache import ObjectStoreSnapshotCache
+from ray.klein.state.state_snapshot_reference import StateSnapshotReference
 
 if TYPE_CHECKING:
     from ray.klein.runtime.job_manager.progress import SubtaskCounts
@@ -135,6 +143,7 @@ class StreamTask(AsyncWorker):
     def __init__(self, descriptor: "TaskDeploymentDescriptor") -> None:
         self._descriptor = descriptor
         self._task_name = descriptor.task_name
+        self._task_generation = descriptor.task_generation
         super().__init__()
         self._vertex_id: ExecutionVertexId = descriptor.vertex_id
         self._job_manager: KleinActorHandle = klein.get_actor_by_name(
@@ -149,6 +158,20 @@ class StreamTask(AsyncWorker):
         self._pump: InboxPump | None = None
         self._last_checkpoint_id: int | None = None
         self._last_checkpoint_state_size_bytes = 0
+        self._rescale_operation_id: str | None = None
+        self._rescale_role: str | None = None
+        self._rescale_expected_senders: set[ExecutionVertexId] = set()
+        self._rescale_seen_senders: set[ExecutionVertexId] = set()
+        self._rescale_edge_indices: tuple[int, ...] = ()
+        self._rescale_ready_obj: asyncio.Event | None = None
+        self._rescale_resume_obj: asyncio.Event | None = None
+        self._rescale_snapshot = None
+        self._rescale_tombstones: list[str] = []
+        self._topology_operation_id: str | None = None
+        self._topology_previous_descriptor: TaskDeploymentDescriptor | None = None
+        self._topology_pending_descriptor: TaskDeploymentDescriptor | None = None
+        self._topology_active = False
+        self._topology_commit_tombstones: list[str] = []
 
     # --- small accessors used by the components / subclass ---
 
@@ -157,7 +180,11 @@ class StreamTask(AsyncWorker):
         return self._eof_reached
 
     def is_running(self) -> bool:
-        return self._running and self.healthy
+        locally_fenced = self._rescale_operation_id is not None and (
+            self._rescale_role == "replacement"
+            or (self._rescale_ready_obj is not None and self._rescale_ready_obj.is_set())
+        )
+        return self._running and self.healthy and not locally_fenced
 
     @property
     def _runtime_state(self) -> _RuntimeState:
@@ -215,17 +242,7 @@ class StreamTask(AsyncWorker):
         self._state = state
 
         if output is not None:
-            output.attach_runtime_metrics(
-                state.metrics.replay_buffer_records.set,
-                state.metrics.replay_buffer_bytes.set,
-                state.metrics.backpressure_events,
-                state.metrics.backpressure_duration_ms,
-                transport_requests=state.metrics.transport_requests,
-                transport_batch_rows=state.metrics.transport_batch_rows,
-                transport_batch_bytes=state.metrics.transport_batch_bytes,
-                transport_send_duration_ms=state.metrics.transport_send_duration_ms,
-                transport_inflight_observer=state.metrics.transport_inflight_requests.set,
-            )
+            self._attach_output_metrics(output, state)
 
         await self._restore_operator_state(runtime_context)
 
@@ -278,6 +295,44 @@ class StreamTask(AsyncWorker):
         await self.start()
         self._running = True
 
+    async def setup_for_rescale(self, operation_id: str) -> None:
+        """Restore a replacement task completely while keeping its pump fenced."""
+
+        if self._running:
+            if self._rescale_operation_id == operation_id and self._rescale_role == "replacement":
+                return
+            raise RuntimeError(f"{self._task_name} is already running outside rescale {operation_id}")
+        self._begin_rescale(operation_id, "replacement")
+        try:
+            await self.setup_and_run()
+        except BaseException:
+            self._clear_rescale()
+            raise
+        self._rescale_ready.set()
+
+    async def setup_and_run_with_descriptor(
+        self,
+        descriptor: "TaskDeploymentDescriptor",
+    ) -> None:
+        """Bootstrap a Ray-rebuilt actor with the latest committed topology."""
+
+        if self._running:
+            if self._topology_operation_id is not None and self._topology_active:
+                self.commit_topology_reconfiguration(self._topology_operation_id)
+            if self._rescale_operation_id is not None:
+                self.resume_rescale(self._rescale_operation_id)
+            return
+        if descriptor.vertex_id != self._vertex_id:
+            raise ValueError("a rebuilt task must keep its execution vertex id")
+        if descriptor.task_name != self._task_name:
+            raise ValueError("a rebuilt task must keep its task name")
+        if descriptor.task_generation != self._task_generation:
+            raise ValueError("a rebuilt task must keep its task generation")
+        if descriptor.parallelism != self._descriptor.parallelism:
+            raise ValueError("a rebuilt task cannot change its own parallelism")
+        self._descriptor = descriptor
+        await self.setup_and_run()
+
     def _build_watermark(self, operator: StreamOperator, output: TaskOutput | None) -> WatermarkController:
         from ray.klein.config.pipeline_options import PipelineOptions
 
@@ -294,6 +349,7 @@ class StreamTask(AsyncWorker):
                 self._vertex_id,
                 replay_max_bytes,
                 sender_task_name=self._task_name,
+                topology_epochs=tuple(edge.topology_epoch for edge in self._descriptor.out_edges),
             )
         if not enabled:
             mode = WatermarkMode.DISABLED
@@ -306,6 +362,7 @@ class StreamTask(AsyncWorker):
                 self._vertex_id,
                 replay_max_bytes,
                 sender_task_name=self._task_name,
+                topology_epochs=tuple(edge.topology_epoch for edge in self._descriptor.out_edges),
             )
         else:
             mode = WatermarkMode.DISABLED
@@ -340,7 +397,14 @@ class StreamTask(AsyncWorker):
         if not operator.stateful or cache is None:
             return
         strategy = runtime_context.checkpoint_strategy
-        references = tuple(await strategy.restore_operator_states_async())
+        restore_operation_id = self._descriptor.restore_operation_id
+        references = (
+            tuple(await strategy.restore_rescale_operator_states_async(restore_operation_id))
+            if restore_operation_id is not None
+            else tuple(await strategy.restore_operator_states_async())
+        )
+        if restore_operation_id is not None and not references:
+            raise RuntimeError(f"managed state for operator rescale {restore_operation_id} is unavailable")
         if not references:
             return
         try:
@@ -349,6 +413,8 @@ class StreamTask(AsyncWorker):
             if hot_restores:
                 self._runtime_state.metrics.state_object_store_restores.inc(hot_restores)
         except Exception:
+            if restore_operation_id is not None:
+                raise
             durable_references = tuple(await strategy.restore_durable_operator_states_async())
             if not durable_references or durable_references == references:
                 raise
@@ -467,26 +533,242 @@ class StreamTask(AsyncWorker):
         )
 
     def _build_output(self, delivery_mode: DeliveryMode) -> TaskOutput | None:
-        edges = []
-        for edge in self._descriptor.out_edges:
-            targets = [
-                klein.get_actor_by_name(name, namespace=self._descriptor.namespace) for name in edge.target_task_names
-            ]
-            edges.append(
-                EdgeOutput(
-                    targets,
-                    edge.partitioner.build(),
-                    control_targets=edge.control_target_indices,
-                    output_buffer_max_rows=edge.output_buffer_max_rows,
-                    target_task_names=edge.target_task_names,
-                    put_timeout=edge.put_timeout,
-                    namespace=self._descriptor.namespace,
-                    delivery_mode=delivery_mode,
-                )
-            )
+        edges = [self._build_output_edge(edge, delivery_mode) for edge in self._descriptor.out_edges]
         if not edges:
             return None
         return TaskOutput(edges)
+
+    def _build_output_edge(self, edge, delivery_mode: DeliveryMode) -> EdgeOutput:
+        targets = [
+            klein.get_actor_by_name(name, namespace=self._descriptor.namespace) for name in edge.target_task_names
+        ]
+        if any(target is None for target in targets):
+            missing = [name for name, target in zip(edge.target_task_names, targets, strict=True) if target is None]
+            raise RuntimeError(f"downstream task actor(s) not found: {missing}")
+        return EdgeOutput(
+            targets,
+            edge.partitioner.build(),
+            control_targets=edge.control_target_indices,
+            output_buffer_max_rows=edge.output_buffer_max_rows,
+            target_task_names=edge.target_task_names,
+            put_timeout=edge.put_timeout,
+            namespace=self._descriptor.namespace,
+            delivery_mode=delivery_mode,
+        )
+
+    @staticmethod
+    def _attach_output_metrics(output: TaskOutput, state: _RuntimeState) -> None:
+        output.attach_runtime_metrics(
+            state.metrics.replay_buffer_records.set,
+            state.metrics.replay_buffer_bytes.set,
+            state.metrics.backpressure_events,
+            state.metrics.backpressure_duration_ms,
+            transport_requests=state.metrics.transport_requests,
+            transport_batch_rows=state.metrics.transport_batch_rows,
+            transport_batch_bytes=state.metrics.transport_batch_bytes,
+            transport_send_duration_ms=state.metrics.transport_send_duration_ms,
+            transport_inflight_observer=state.metrics.transport_inflight_requests.set,
+        )
+
+    async def reconfigure_topology(
+        self,
+        descriptor: "TaskDeploymentDescriptor",
+        timeout: float = 30.0,
+    ) -> None:
+        """Immediately hot-swap topology for recovery/compatibility callers."""
+
+        operation_id = f"immediate-topology-{time.monotonic_ns()}"
+        await self.prepare_topology_reconfiguration(operation_id, descriptor, timeout)
+        self.activate_topology_reconfiguration(operation_id)
+        self.commit_topology_reconfiguration(operation_id)
+
+    async def prepare_topology_reconfiguration(
+        self,
+        operation_id: str,
+        descriptor: "TaskDeploymentDescriptor",
+        timeout: float = 30.0,
+    ) -> bool:
+        """Prepare new routes while retaining the exact old edge journals.
+
+        The operator instance and its actor stay alive. The JobMaster invokes
+        this only after the direct upstream/target/downstream participants have
+        aligned a local rescale fence. No live route is changed by this phase.
+        """
+
+        self._validate_topology_reconfiguration(descriptor)
+        if self._topology_operation_id is not None:
+            if self._topology_operation_id == operation_id and self._topology_pending_descriptor == descriptor:
+                return True
+            raise RuntimeError(f"topology transaction {self._topology_operation_id} is already active")
+
+        state = self._runtime_state
+        output_changed = descriptor.out_edges != self._descriptor.out_edges
+        if output_changed and self._emit is not None and state.pipelined:
+            await self._emit.wait_idle(timeout)
+        if not self.healthy:
+            raise RuntimeError(f"{self._task_name} became unhealthy before topology reconfiguration")
+
+        state.checkpoint_strategy.validate_barrier_reconfiguration()
+
+        if output_changed:
+            if state.output is None:
+                raise RuntimeError("a terminal task cannot gain output edges during runtime rescale")
+            delivery_mode = DeliveryMode.INLINE if descriptor.operator.source else DeliveryMode.PIPELINED
+            state.output.prepare_edge_swap(
+                operation_id,
+                [
+                    None if edge == previous else self._build_output_edge(edge, delivery_mode)
+                    for previous, edge in zip(
+                        self._descriptor.out_edges,
+                        descriptor.out_edges,
+                        strict=True,
+                    )
+                ],
+            )
+        self._topology_operation_id = operation_id
+        self._topology_previous_descriptor = self._descriptor
+        self._topology_pending_descriptor = descriptor
+        self._topology_active = False
+        return True
+
+    def activate_topology_reconfiguration(self, operation_id: str) -> bool:
+        """Atomically expose a prepared actor-local topology transaction."""
+
+        previous, descriptor = self._require_topology_transaction(operation_id)
+        if self._topology_active:
+            return True
+        state = self._runtime_state
+        output_changed = descriptor.out_edges != previous.out_edges
+        try:
+            if output_changed:
+                if state.output is None:
+                    raise RuntimeError("a terminal task cannot activate output edges")
+                state.output.activate_edge_swap(operation_id)
+                self._configure_output_replay(state.output, descriptor)
+                self._attach_output_metrics(state.output, state)
+            state.checkpoint_strategy.reconfigure_barrier_split(dict(descriptor.barrier_split))
+            if state.event_time_tracker is not None:
+                state.event_time_tracker.reconfigure_inputs(descriptor.input_vertex_ids)
+            self._descriptor = descriptor
+            self._topology_active = True
+            return True
+        except BaseException:
+            self._restore_topology_transaction(operation_id, previous, output_changed)
+            raise
+
+    def rollback_topology_reconfiguration(self, operation_id: str) -> bool:
+        """Restore the old descriptor and original edge objects before commit."""
+
+        if operation_id in self._topology_commit_tombstones:
+            return False
+        if self._topology_operation_id is None:
+            return False
+        previous, descriptor = self._require_topology_transaction(operation_id)
+        self._restore_topology_transaction(
+            operation_id,
+            previous,
+            descriptor.out_edges != previous.out_edges,
+        )
+        return True
+
+    def commit_topology_reconfiguration(self, operation_id: str) -> bool:
+        """Release retained old journals at the irreversible local commit."""
+
+        if operation_id in self._topology_commit_tombstones:
+            return True
+        previous, descriptor = self._require_topology_transaction(operation_id)
+        if not self._topology_active:
+            raise RuntimeError(f"topology transaction {operation_id} has not been activated")
+        if descriptor.out_edges != previous.out_edges:
+            state = self._runtime_state
+            if state.output is None:
+                raise RuntimeError("a terminal task cannot commit output edges")
+            state.output.commit_edge_swap(operation_id)
+        self._clear_topology_transaction()
+        self._topology_commit_tombstones.append(operation_id)
+        del self._topology_commit_tombstones[:-16]
+        return True
+
+    def _restore_topology_transaction(
+        self,
+        operation_id: str,
+        previous: "TaskDeploymentDescriptor",
+        output_changed: bool,
+    ) -> None:
+        state = self._runtime_state
+        # Restore independent pieces best-effort so an injected failure in one
+        # component cannot strand the actor on a split topology.
+        failures: list[Exception] = []
+        self._descriptor = previous
+        try:
+            state.checkpoint_strategy.reconfigure_barrier_split(dict(previous.barrier_split))
+        except Exception as error:
+            failures.append(error)
+            logger.exception("Failed to restore checkpoint alignment after topology rollback")
+        if state.event_time_tracker is not None:
+            try:
+                state.event_time_tracker.reconfigure_inputs(previous.input_vertex_ids)
+            except Exception as error:
+                failures.append(error)
+                logger.exception("Failed to restore watermark inputs after topology rollback")
+        if output_changed and state.output is not None:
+            try:
+                state.output.rollback_edge_swap(operation_id)
+                self._configure_output_replay(state.output, previous)
+                self._attach_output_metrics(state.output, state)
+            except Exception as error:
+                failures.append(error)
+                logger.exception("Failed to restore output edges after topology rollback")
+        self._clear_topology_transaction()
+        if failures:
+            raise RuntimeError(f"failed to restore {len(failures)} component(s) after topology rollback") from failures[
+                0
+            ]
+
+    def _require_topology_transaction(
+        self,
+        operation_id: str,
+    ) -> tuple["TaskDeploymentDescriptor", "TaskDeploymentDescriptor"]:
+        if self._topology_operation_id != operation_id:
+            raise RuntimeError(f"topology transaction {operation_id} has not been prepared")
+        previous = self._topology_previous_descriptor
+        descriptor = self._topology_pending_descriptor
+        if previous is None or descriptor is None:
+            raise RuntimeError(f"topology transaction {operation_id} is incomplete")
+        return previous, descriptor
+
+    def _clear_topology_transaction(self) -> None:
+        self._topology_operation_id = None
+        self._topology_previous_descriptor = None
+        self._topology_pending_descriptor = None
+        self._topology_active = False
+
+    def _validate_topology_reconfiguration(self, descriptor: "TaskDeploymentDescriptor") -> None:
+        if self._state is None or not self._running:
+            raise RuntimeError(f"{self._task_name} is not running")
+        if descriptor.vertex_id != self._vertex_id:
+            raise ValueError("a live task can only be reconfigured for the same execution vertex")
+        if descriptor.parallelism != self._descriptor.parallelism:
+            raise ValueError("reconfigure_topology cannot resize the live task's own operator")
+        if descriptor.task_name != self._descriptor.task_name:
+            raise ValueError("reconfigure_topology cannot rename a live task")
+        if descriptor.task_generation != self._task_generation:
+            raise ValueError("reconfigure_topology cannot change a live task's generation")
+
+    def _configure_output_replay(
+        self,
+        output: TaskOutput,
+        descriptor: "TaskDeploymentDescriptor",
+    ) -> None:
+        enabled = descriptor.config.get(PipelineOptions.REPLAY_BUFFER_ENABLED)
+        max_bytes = descriptor.config.get(PipelineOptions.REPLAY_BUFFER_MAX_BYTES)
+        output.configure_replay(
+            enabled,
+            self._vertex_id,
+            max_bytes,
+            sender_task_name=self._task_name,
+            topology_epochs=tuple(edge.topology_epoch for edge in descriptor.out_edges),
+        )
 
     # --- actor loop ---
 
@@ -502,7 +784,195 @@ class StreamTask(AsyncWorker):
         await AsyncWorker.start(self)
 
     async def _run(self) -> None:
+        if self._rescale_role == "replacement":
+            await self._rescale_resume.wait()
+            return
+        if self._rescale_role in {"upstream", "target", "downstream"} and self._rescale_ready.is_set():
+            await self._rescale_resume.wait()
+            return
         await self._pump.run_once()
+
+    @property
+    def _rescale_ready(self) -> asyncio.Event:
+        if self._rescale_ready_obj is None:
+            self._rescale_ready_obj = asyncio.Event()
+        return self._rescale_ready_obj
+
+    @property
+    def _rescale_resume(self) -> asyncio.Event:
+        if self._rescale_resume_obj is None:
+            self._rescale_resume_obj = asyncio.Event()
+        return self._rescale_resume_obj
+
+    def _begin_rescale(self, operation_id: str, role: str) -> None:
+        if self._rescale_operation_id not in {None, operation_id}:
+            raise RuntimeError(f"{self._task_name} already participates in rescale {self._rescale_operation_id}")
+        self._rescale_operation_id = operation_id
+        self._rescale_role = role
+        self._rescale_seen_senders.clear()
+        self._rescale_snapshot = None
+        self._rescale_ready.clear()
+        self._rescale_resume.clear()
+
+    async def prepare_rescale_upstream(
+        self,
+        operation_id: str,
+        target_operator_id: int,
+        edge_indices: tuple[int, ...],
+        timeout: float,
+    ) -> bool:
+        """Fence selected outputs after all earlier input and then pause."""
+
+        self._begin_rescale(operation_id, "upstream")
+        self._rescale_edge_indices = tuple(edge_indices)
+        if not self._rescale_edge_indices:
+            raise ValueError("an upstream rescale participant needs a target output edge")
+        await self._runtime_state.inbox.put(InboxEnvelope(RescaleBarrier(operation_id, target_operator_id)))
+        await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
+        return True
+
+    def prepare_rescale_target(self, operation_id: str) -> None:
+        self._begin_rescale(operation_id, "target")
+        self._rescale_expected_senders = set(self._descriptor.input_vertex_ids)
+        if not self._rescale_expected_senders:
+            raise ValueError("source operators cannot be locally rescaled")
+
+    def prepare_rescale_downstream(
+        self,
+        operation_id: str,
+        expected_senders: tuple[ExecutionVertexId, ...],
+    ) -> None:
+        self._begin_rescale(operation_id, "downstream")
+        self._rescale_expected_senders = set(expected_senders)
+        if not self._rescale_expected_senders:
+            raise ValueError("a downstream rescale participant needs at least one target input")
+
+    async def await_rescale_ready(
+        self,
+        operation_id: str,
+        timeout: float,
+    ) -> StateSnapshotReference | None:
+        if self._rescale_operation_id != operation_id:
+            raise ValueError(f"{self._task_name} is not participating in rescale {operation_id}")
+        await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
+        return self._rescale_snapshot
+
+    def resume_rescale(self, operation_id: str) -> bool:
+        if self._rescale_operation_id != operation_id:
+            return False
+        if self._topology_operation_id == operation_id and self._topology_active:
+            self.commit_topology_reconfiguration(operation_id)
+        self._rescale_resume.set()
+        self._clear_rescale()
+        return True
+
+    def _clear_rescale(self) -> None:
+        if self._rescale_operation_id is not None:
+            self._rescale_tombstones.append(self._rescale_operation_id)
+            del self._rescale_tombstones[:-16]
+        self._rescale_operation_id = None
+        self._rescale_role = None
+        self._rescale_expected_senders.clear()
+        self._rescale_seen_senders.clear()
+        self._rescale_edge_indices = ()
+        self._rescale_snapshot = None
+        self._rescale_ready_obj = None
+        self._rescale_resume_obj = None
+
+    async def handle_rescale_barrier(
+        self,
+        barrier: RescaleBarrier,
+        sender_vertex_id: ExecutionVertexId | None,
+    ) -> None:
+        """Process one local topology fence in ordered inbox position."""
+
+        if barrier.operation_id in self._rescale_tombstones:
+            return
+        if barrier.operation_id != self._rescale_operation_id:
+            raise RuntimeError(f"unexpected rescale barrier {barrier.operation_id} at {self._task_name}")
+        await self._drain_rescale_boundary()
+        if sender_vertex_id is None:
+            await self._originate_rescale_barrier(barrier)
+            return
+        await self._receive_rescale_barrier(barrier, sender_vertex_id)
+
+    async def _drain_rescale_boundary(self) -> None:
+        state = self._runtime_state
+        if state.async_runner is not None:
+            await self._pump.flush_input_async()
+            await state.async_runner.barrier()
+        else:
+            await asyncio.get_running_loop().run_in_executor(state.executor, self._pump.flush_input)
+        if self._emit is not None:
+            await self._emit.wait_idle(30.0)
+
+    async def _originate_rescale_barrier(self, barrier: RescaleBarrier) -> None:
+        state = self._runtime_state
+        if self._rescale_role != "upstream" or state.output is None:
+            raise RuntimeError("only a prepared upstream task may originate a rescale barrier")
+        await asyncio.get_running_loop().run_in_executor(
+            state.executor,
+            state.output.collect_to_edges,
+            barrier,
+            self._rescale_edge_indices,
+        )
+        if self._emit is not None:
+            await self._emit.wait_idle(30.0)
+        self._rescale_ready.set()
+
+    async def _receive_rescale_barrier(
+        self,
+        barrier: RescaleBarrier,
+        sender_vertex_id: ExecutionVertexId,
+    ) -> None:
+        if self._rescale_role not in {"target", "downstream"}:
+            raise RuntimeError(f"{self._task_name} was not prepared to receive a rescale barrier")
+        if sender_vertex_id not in self._rescale_expected_senders:
+            raise RuntimeError(f"unexpected rescale sender {sender_vertex_id} at {self._task_name}")
+        if sender_vertex_id in self._rescale_seen_senders:
+            return
+        self._rescale_seen_senders.add(sender_vertex_id)
+        if self._rescale_seen_senders != self._rescale_expected_senders:
+            return
+
+        if self._rescale_role == "target":
+            await self._finish_target_rescale_barrier(barrier)
+        else:
+            await self._finish_downstream_rescale_barrier()
+        self._rescale_ready.set()
+
+    async def _finish_target_rescale_barrier(self, barrier: RescaleBarrier) -> None:
+        self._rescale_snapshot = await asyncio.get_running_loop().run_in_executor(
+            self._runtime_state.executor,
+            self._snapshot_and_forward_rescale_barrier,
+            barrier,
+        )
+        if self._emit is not None:
+            await self._emit.wait_idle(30.0)
+
+    async def _finish_downstream_rescale_barrier(self) -> None:
+        if self._watermark is None:
+            return
+        await self._watermark.advance()
+        if self._emit is not None:
+            await self._emit.wait_idle(30.0)
+
+    def _snapshot_and_forward_rescale_barrier(
+        self,
+        barrier: RescaleBarrier,
+    ) -> StateSnapshotReference | None:
+        state = self._runtime_state
+        state.operator.flush()
+        snapshot = None
+        if state.operator.stateful:
+            cache = state.state_snapshot_cache
+            if not isinstance(state.operator, ManagedStateOperator) or cache is None:
+                raise TypeError("stateful rescale target must use managed state")
+            snapshot = cache.cache(state.operator.snapshot_state())
+        if state.output is not None:
+            state.output.flush(force=True)
+            state.output.collect(barrier)
+        return snapshot
 
     # --- inbox RPC surface ---
 
@@ -682,7 +1152,14 @@ class StreamTask(AsyncWorker):
 
     def report_eof_finished(self) -> None:
         """Report FINISHED after the final EndOfData aligned (called from the pump)."""
-        klein.get(self._job_manager.update_stream_task_status(self._vertex_id, ExecutionVertexStatus.FINISHED))
+        klein.get(
+            self._job_manager.update_stream_task_status(
+                self._vertex_id,
+                ExecutionVertexStatus.FINISHED,
+                task_name=self._task_name,
+                task_generation=self._task_generation,
+            )
+        )
         self._eof_reached = True
 
     # --- failure / lifecycle ---
@@ -699,6 +1176,8 @@ class StreamTask(AsyncWorker):
                     self._vertex_id,
                     ExecutionVertexStatus.FAILED,
                     error_message,
+                    self._task_name,
+                    self._task_generation,
                 )
             )
         finally:
@@ -706,6 +1185,8 @@ class StreamTask(AsyncWorker):
 
     async def stop(self, timeout: float = 30.0) -> None:
         logger.debug("Stopping stream task %s", self._task_name)
+        if self._rescale_resume_obj is not None:
+            self._rescale_resume_obj.set()
         await super().stop(timeout)
         if self._state is None:
             self._running = False
@@ -732,6 +1213,6 @@ class StreamTask(AsyncWorker):
         return self._task_name
 
     def health_info(self) -> tuple[bool, str]:
-        if not self.healthy:
-            return False, f"Operator {self._task_name} is not alive."
+        if not self.is_running():
+            return False, f"Operator {self._task_name} is not running."
         return True, ""

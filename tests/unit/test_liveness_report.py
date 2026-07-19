@@ -49,7 +49,7 @@ class _FakeGraph:
         return self._vertices
 
 
-def _fake_klein_get(reqs):
+def _fake_klein_get(reqs, *, timeout=None):
     # The batched path passes a list of the ObjectRef stand-ins (the health
     # tuples themselves, since health_info returns them directly).
     return list(reqs)
@@ -134,7 +134,7 @@ class JobHealthReportTest(unittest.TestCase):
 
         call_count = {"n": 0}
 
-        def flaky_get(reqs):
+        def flaky_get(reqs, *, timeout=None):
             # First call is the batch (list) -> raise. Subsequent are per-request.
             if isinstance(reqs, list):
                 raise RuntimeError("batch resolution failed")

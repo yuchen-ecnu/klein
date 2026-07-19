@@ -29,7 +29,7 @@ def test_cli_help_lists_operator_commands() -> None:
 
     assert result.exit_code == 0
     assert "Klein streaming job management" in result.output
-    for command in ("attach", "cancel", "list", "status", "stop"):
+    for command in ("attach", "cancel", "dashboard", "list", "status", "stop"):
         assert command in result.output
 
 

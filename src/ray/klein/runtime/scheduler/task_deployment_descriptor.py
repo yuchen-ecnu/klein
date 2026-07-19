@@ -22,6 +22,7 @@ class OutputEdgeDescriptor:
     control_target_indices: tuple[int, ...]
     output_buffer_max_rows: int
     put_timeout: float
+    topology_epoch: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,7 @@ class TaskDeploymentDescriptor:
     operator: OperatorSpec
     vertex_id: ExecutionVertexId
     task_name: str
+    task_generation: str
     task_index: int
     parallelism: int
     config: Configuration
@@ -42,6 +44,7 @@ class TaskDeploymentDescriptor:
     namespace: str
     output_queue: Any | None = None
     input_vertex_ids: tuple[ExecutionVertexId, ...] = ()
+    restore_operation_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "barrier_split", FrozenMapping(self.barrier_split))

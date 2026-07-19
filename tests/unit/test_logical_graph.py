@@ -13,7 +13,7 @@ from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.operator.operator import StreamOperator
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.operator.operator_type import OperatorType
-from ray.klein.runtime.partitioning import ForwardPartitioner
+from ray.klein.runtime.partitioning import ForwardPartitioner, RescalePartitioner
 from ray.klein.runtime.resources import Resources
 
 
@@ -156,3 +156,41 @@ def test_cycle_is_rejected_at_build_time() -> None:
 
     with pytest.raises(ValueError, match="acyclic"):
         builder.build()
+
+
+def test_rescale_operator_changes_only_target_and_rewrites_incident_forward_edges() -> None:
+    builder = _builder()
+    source = _vspec(1, NodeType.SOURCE, parallelism=2)
+    target = _vspec(2, parallelism=2)
+    sink = _vspec(3, NodeType.SINK, parallelism=2)
+    for vertex in (source, target, sink):
+        builder.add_vertex(vertex)
+    builder.add_edge(EdgeSpec(source.id, target.id, ForwardPartitioner().to_spec()))
+    builder.add_edge(EdgeSpec(target.id, sink.id, ForwardPartitioner().to_spec()))
+    graph = builder.build()
+
+    resized = graph.rescale_operator(target.id.index, 4)
+
+    assert graph.get(target.id).concurrency == 2
+    assert resized.get(target.id).concurrency == 4
+    assert resized.get(source.id) is source
+    assert resized.get(sink.id) is sink
+    assert isinstance(resized.partitioner_for(source.id, target.id).build(), RescalePartitioner)
+    assert isinstance(resized.partitioner_for(target.id, sink.id).build(), RescalePartitioner)
+
+
+def test_rescale_operator_resolves_numeric_and_unique_display_names() -> None:
+    builder = _builder()
+    source = _vspec(1, NodeType.SOURCE)
+    sink = _vspec(2, NodeType.SINK)
+    builder.add_vertex(source).add_vertex(sink)
+    builder.add_edge(EdgeSpec(source.id, sink.id, ForwardPartitioner().to_spec()))
+    graph = builder.build()
+
+    assert graph.resolve_operator("2") == sink.id
+    assert graph.resolve_operator("op2") == sink.id
+    assert graph.rescale_operator("op2", 3).get(sink.id).concurrency == 3
+    with pytest.raises(KeyError, match="does not exist"):
+        graph.resolve_operator(99)
+    with pytest.raises(ValueError, match="greater than zero"):
+        graph.rescale_operator(2, 0)
