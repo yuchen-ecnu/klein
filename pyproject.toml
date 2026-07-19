@@ -72,6 +72,7 @@ test = [
   "reuse>=5,<7",
   "setuptools>=83,<84",
   "testcontainers[kafka,redis]>=4.13,<5",
+  "tomli>=2.4.1; python_version < '3.11'",
   "twine>=5,<7",
 ]
 dev = [
