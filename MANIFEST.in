@@ -5,11 +5,11 @@ include AUTHORS.md CHANGELOG.md CITATION.cff CODE_OF_CONDUCT.md
 include CONTRIBUTING.md GOVERNANCE.md LICENSE NOTICE README.md REUSE.toml
 include PROVENANCE.md TRADEMARKS.md
 include SECURITY.md SUPPORT.md Makefile pyproject.toml
-recursive-include .github *
 recursive-include LICENSES *
 recursive-include docs *
 recursive-include examples *
 recursive-include scripts *
 recursive-include tests *
 global-exclude __pycache__ *.py[cod] .DS_Store
+prune .github
 prune docs/_build

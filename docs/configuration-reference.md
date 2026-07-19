@@ -114,7 +114,7 @@ you intentionally don't need periodic recovery points.
 | `state.checkpoint.object-store-cache.enabled` | bool | `true` | Caches sufficiently large immutable state snapshots in Ray's Object Store to accelerate recovery. Disabled automatically in in-process debug mode. |
 | `state.checkpoint.object-store-cache.min-bytes` | int | `1048576` (1 MiB) | Minimum serialized snapshot size stored in the Object Store instead of coordinator memory. Must be non-negative. |
 | `state.ttl.cleanup.batch-size` | int | `1000` | Maximum expired state entries removed after processing one operator input. Must be at least `1`. |
-| `state.keyed.max-parallelism` | int | `128` | Stable key-group count for keyed state. Must be at least `1`, must not be lower than operator parallelism, and must match the value stored in a restored checkpoint. |
+| `state.keyed.max-parallelism` | int | `32768` | Stable key-group count for keyed state. Must be at least `1`, must not be lower than operator parallelism, and must match the value stored in a restored checkpoint. |
 | `table.exec.state.ttl` | duration or `None` | `None` | Default idle retention for streaming SQL regular joins, Top-N, and non-windowed aggregations. A configured value must be greater than zero. SQL hints or operator arguments override it for their state. |
 | `event-time.idle-input.check-interval` | duration | `1s` | How often a task evaluates its input-idleness strategy while its inbox is empty. Must be greater than zero. |
 | `udf.ignore-exception` | bool | `false` | If `true`, log a user-function exception and continue processing later records. Leave disabled when dropping a failed record would violate correctness. |

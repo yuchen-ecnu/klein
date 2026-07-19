@@ -1,5 +1,7 @@
 .coverage
+coverage.json
 coverage.xml
+.hypothesis/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/

@@ -42,7 +42,7 @@ class StateOptions:
 
     MAX_PARALLELISM = ConfigOption(
         "state.keyed.max-parallelism",
-        128,
+        32768,
         int,
         description="Stable key-group count. It must stay unchanged when restoring a rescaled keyed operator.",
     )

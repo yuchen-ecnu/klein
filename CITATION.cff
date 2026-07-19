@@ -3,7 +3,8 @@ cff-version: 1.2.0
 message: "If you use Klein for Ray in research, please cite the software repository."
 title: "Klein for Ray"
 type: software
-version: 0.1.0.dev0
+version: 0.1.0a1
+date-released: 2026-07-20
 authors:
   - family-names: "Klein for Ray Authors"
 repository-code: "https://github.com/yuchen-ecnu/klein"

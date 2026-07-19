@@ -10,19 +10,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 import pyarrow as pa
-from ray.data._internal.execution.interfaces.task_context import TaskContext
-from ray.data._internal.planner.plan_expression.expression_evaluator import eval_expr
-from ray.data._internal.planner.plan_expression.expression_visitors import (
-    _CallableClassUDFCollector,
-)
-from ray.data._internal.util import RetryingPyFileSystem
-from ray.data.context import DataContext
-from ray.data.datasource.path_util import (
-    _resolve_paths_and_filesystem,
-    _validate_and_wrap_filesystem,
-)
 from ray.data.expressions import DownloadExpr, Expr
 
+from ray.klein._compat.ray_data_expression import RayDataExpressionRuntime, read_uri
 from ray.klein._internal.logging import get_logger
 from ray.klein.api.changelog_row import ChangelogRow, row_kind_of
 
@@ -45,14 +35,11 @@ class StreamingExpressionEvaluator:
         if not isinstance(expression, Expr):
             raise TypeError(f"expression must be a Ray Data Expr, got {type(expression).__name__}")
         self._expression = expression
-        self._task_context = TaskContext(
-            task_idx=runtime_context.task_index,
-            op_name=runtime_context.task_name,
+        self._runtime = RayDataExpressionRuntime(
+            expression,
+            task_index=runtime_context.task_index,
+            task_name=runtime_context.task_name,
         )
-        udf_collector = _CallableClassUDFCollector()
-        udf_collector.visit(expression)
-        for udf in udf_collector.get_callable_class_udfs():
-            udf.init()
 
     @property
     def is_async(self) -> bool:
@@ -64,8 +51,7 @@ class StreamingExpressionEvaluator:
         if self.is_async:
             raise TypeError("DownloadExpr requires evaluate_async()")
         block = pa.Table.from_pylist([dict(row)])
-        with TaskContext.current(self._task_context):
-            result = eval_expr(self._expression, block)
+        result = self._runtime.evaluate(block)
         return _first_value(result)
 
     async def evaluate_async(self, row: Mapping[str, Any]) -> Any:
@@ -148,19 +134,7 @@ def _download_uri(uri: Any, filesystem: Any, column_name: str) -> bytes | None:
     """Read one URI with the same soft-failure contract as Ray's Download op."""
 
     try:
-        resolved_filesystem = _validate_and_wrap_filesystem(filesystem)
-        paths, resolved_filesystem = _resolve_paths_and_filesystem(
-            str(uri),
-            filesystem=resolved_filesystem,
-        )
-        if not paths or resolved_filesystem is None:
-            return None
-        retrying_filesystem = RetryingPyFileSystem.wrap(
-            resolved_filesystem,
-            retryable_errors=DataContext.get_current().retried_io_errors,
-        )
-        with retrying_filesystem.open_input_stream(paths[0]) as stream:
-            return stream.read()
+        return read_uri(str(uri), filesystem)
     except OSError:
         logger.debug("OSError reading URI %r from column %r", uri, column_name, exc_info=True)
     except Exception:

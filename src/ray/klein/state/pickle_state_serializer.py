@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import pickle
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 from ray.klein.state.state_serializer import StateSerializer
 
@@ -12,4 +12,4 @@ class PickleStateSerializer(StateSerializer[T], Generic[T]):
         return pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
 
     def loads(self, value: bytes) -> T:
-        return pickle.loads(value)
+        return cast(T, pickle.loads(value))

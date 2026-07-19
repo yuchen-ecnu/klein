@@ -36,14 +36,13 @@ Use [Ray Data](https://docs.ray.io/en/latest/data/data.html) directly when a wor
 ## Install Klein
 
 Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.1. Install the
-project from this checkout:
+Alpha release from PyPI:
 
 ```bash
-cd klein
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install "ray-klein==0.1.0a1"
 ```
 
 See [Compatibility](compatibility.md) before changing the Ray dependency range.

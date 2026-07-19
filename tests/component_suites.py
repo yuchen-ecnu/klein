@@ -22,6 +22,7 @@ _STATE_UNIT_MODULES = {
     "test_event_time.py",
     "test_replay_watermark.py",
     "test_stateful_operators.py",
+    "test_state_codec_properties.py",
     "test_window_assigners.py",
 }
 
@@ -39,6 +40,7 @@ _RUNTIME_UNIT_MODULES = {
     "test_async_notify.py",
     "test_async_ordered_runner.py",
     "test_columnar_passthrough.py",
+    "test_coverage_policy.py",
     "test_data_plane_contracts.py",
     "test_delivery_journal.py",
     "test_emit_pipeline.py",

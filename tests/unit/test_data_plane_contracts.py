@@ -55,6 +55,8 @@ def test_custom_partitioner_without_complete_spec_contract_fails_at_construction
         def partition(self, record):
             return [0]
 
+    # CPython 3.12 quotes the missing method name while older versions do not.
+    # Match the semantic parts of the error rather than interpreter wording.
     with pytest.raises(TypeError, match=r"abstract method.*to_spec"):
         MissingSpecPartitioner()
 

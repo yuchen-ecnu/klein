@@ -12,10 +12,12 @@ import argparse
 import asyncio
 import copy
 import gc
+import json
 import statistics
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import ray.cloudpickle as cloudpickle
@@ -159,7 +161,16 @@ def _target_lanes(repeats: int) -> Result:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="Use fewer repeats for a fast smoke benchmark.")
+    parser.add_argument("--json", type=Path, metavar="PATH", help="Write machine-readable benchmark results.")
+    parser.add_argument(
+        "--min-speedup",
+        type=float,
+        default=0.0,
+        help="Fail when any optimized path is slower than this multiplier.",
+    )
     args = parser.parse_args()
+    if args.min_speedup < 0:
+        parser.error("--min-speedup cannot be negative")
     repeats = 5 if args.quick else 25
     results = [
         _actor_copy(repeats),
@@ -175,6 +186,27 @@ def main() -> None:
             f"{result.name:36} {result.baseline_ms:12.4f} "
             f"{result.optimized_ms:13.4f} {result.speedup:8.2f}x  {result.detail}"
         )
+    if args.json is not None:
+        payload = {
+            "schema_version": 1,
+            "quick": args.quick,
+            "results": [
+                {
+                    "name": result.name,
+                    "baseline_ms": result.baseline_ms,
+                    "optimized_ms": result.optimized_ms,
+                    "speedup": result.speedup,
+                    "detail": result.detail,
+                }
+                for result in results
+            ],
+        }
+        args.json.parent.mkdir(parents=True, exist_ok=True)
+        args.json.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    regressions = [result for result in results if result.speedup < args.min_speedup]
+    if regressions:
+        names = ", ".join(f"{result.name} ({result.speedup:.2f}x)" for result in regressions)
+        raise SystemExit(f"data-plane performance regression: {names}")
 
 
 if __name__ == "__main__":

@@ -24,6 +24,11 @@ an alias for `make unit`. Integration modules receive an isolated, managed Ray
 runtime through the `ray_cluster` fixture. External tests are skipped unless
 `--run-external` is supplied.
 
+CI also resolves the exact lowest supported direct dependencies on Python 3.10
+and Python 3.12, plus the newest versions within the declared bounds. Hypothesis
+property tests exercise configuration encodings and durable state binary
+round-trips across generated values.
+
 ## CI components
 
 Every collected test receives exactly one component marker from
@@ -73,6 +78,11 @@ and requires the JobManager to replace it while keeping the job running.
 Per-test timeouts, strict marker/config validation, strict expected failures,
 and warnings-as-errors are enabled globally in `pyproject.toml`.
 
+The combined line-and-branch gate is 68%. Risk-based component floors protect
+state, configuration, connectors, checkpoint coordination, event time,
+partitioning, and observability independently so growth in unrelated modules
+cannot hide a regression in recovery-critical code.
+
 Architecture tests also enforce the observability boundaries: production
 modules use component-scoped Klein loggers, logging calls use deferred `%s`
 formatting, stdout writes are limited to declared user-facing boundaries, and
@@ -89,3 +99,8 @@ Documentation contract tests also keep the reference synchronized with code:
 `tests/integration/test_documented_examples.py` executes the standalone batch
 SQL and finite stateful-streaming examples on the managed local Ray cluster.
 The Sphinx CI job separately treats documentation warnings as errors.
+
+Nightly CI runs the real-Ray integration graph, a ten-minute unbounded
+backpressure soak, and machine-readable data-plane regression benchmarks. The
+weekly/manual reliability workflow uses a two-hour default soak; its duration
+can be changed through the workflow input without changing test code.
