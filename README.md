@@ -1,7 +1,10 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <p align="center">
-  <img alt="Klein" src="docs/_static/klein-logo.png" width="720">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/klein-logo-dark.svg">
+    <img alt="Klein" src="docs/_static/klein-logo.svg" width="720">
+  </picture>
 </p>
 
 <p align="center"><strong>Stateful stream processing on Ray.</strong></p>

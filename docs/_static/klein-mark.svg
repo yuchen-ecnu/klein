@@ -1,0 +1,41 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 340" role="img" aria-labelledby="title desc">
+  <title id="title">Klein mark</title>
+  <desc id="desc">Streaming paths folded into a Klein bottle with integrated data nodes.</desc>
+  <defs>
+    <linearGradient id="cyan" x1="55" y1="275" x2="345" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#02A0CF"/>
+      <stop offset="1" stop-color="#17BCE8"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="80" y1="105" x2="335" y2="290" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#123B68"/>
+      <stop offset="1" stop-color="#061C3D"/>
+    </linearGradient>
+    <linearGradient id="lower" x1="150" y1="235" x2="365" y2="290" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08AEDC"/>
+      <stop offset="0.58" stop-color="#0798C9"/>
+      <stop offset="0.6" stop-color="#123B68"/>
+      <stop offset="1" stop-color="#061C3D"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="none" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M36 164 C38 112 94 94 145 123 C205 157 232 228 296 228 C330 228 353 209 367 184" stroke="url(#navy)" stroke-width="25"/>
+    <path d="M36 164 C29 220 69 257 109 237" stroke="url(#cyan)" stroke-width="23"/>
+    <path d="M128 222 C139 212 148 201 158 190" stroke="url(#cyan)" stroke-width="23"/>
+    <path d="M146 108 L164 92" stroke="url(#cyan)" stroke-width="18"/>
+    <path d="M181 78 C233 34 312 30 340 88 C363 135 352 178 321 212" stroke="url(#cyan)" stroke-width="23"/>
+    <path d="M164 151 C211 113 265 73 315 96 C337 106 350 128 351 153" stroke="url(#navy)" stroke-width="9"/>
+    <path d="M151 220 L176 243" stroke="url(#cyan)" stroke-width="18"/>
+    <path d="M188 255 L209 275" stroke="url(#cyan)" stroke-width="18"/>
+    <path d="M221 285 C240 297 259 303 282 304 C334 307 368 270 367 216" stroke="url(#lower)" stroke-width="23"/>
+  </g>
+
+  <g stroke="#FFFFFF" stroke-width="6">
+    <rect x="65" y="151" width="27" height="27" rx="4" fill="#0A2B52"/>
+    <rect x="88" y="225" width="27" height="27" rx="4" fill="#05A8D8"/>
+    <rect x="268" y="69" width="27" height="27" rx="4" fill="#BFEAF7"/>
+    <rect x="326" y="207" width="27" height="27" rx="4" fill="#0A2B52"/>
+    <rect x="250" y="290" width="27" height="27" rx="4" fill="#BFEAF7"/>
+  </g>
+</svg>
