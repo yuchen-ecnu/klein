@@ -6,13 +6,16 @@ from __future__ import annotations
 import dataclasses
 import enum
 import re
+from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
 from ray.klein.config.configuration import Configuration
 
 _SECRET_KEY = re.compile(
-    r"(?:^|[.\-_])(password|passwd|secret|token|credential|api[.\-_]?key)(?:$|[.\-_])",
+    r"(?:^|[.\-_])"
+    r"(password|passwd|secret|token|credential|api[.\-_]?key|access[.\-_]?key|private[.\-_]?key)"
+    r"(?:$|[.\-_])",
     re.IGNORECASE,
 )
 
@@ -40,7 +43,16 @@ def safe_configuration(config: Configuration | None) -> dict[str, Any]:
 
     if config is None:
         return {}
-    return {
-        key: "<redacted>" if _SECRET_KEY.search(key) else dashboard_value(value)
-        for key, value in sorted(config.to_dict().items())
-    }
+    return {key: _safe_value(key, value) for key, value in sorted(config.to_dict().items())}
+
+
+def _safe_value(key: object, value: Any) -> Any:
+    if _SECRET_KEY.search(str(key)):
+        return "<redacted>"
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        value = dataclasses.asdict(value)
+    if isinstance(value, Mapping):
+        return {str(nested_key): _safe_value(nested_key, item) for nested_key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_safe_value("", item) for item in value]
+    return dashboard_value(value)

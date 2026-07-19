@@ -11,12 +11,14 @@ All tests use mock actors + fake execution graph — no Ray cluster required.
 """
 
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.job_manager_options import JobManagerOptions
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
+from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
@@ -55,6 +57,10 @@ class _FakeStreamTask:
             raise RuntimeError("setup failed")
         return mock.MagicMock()
 
+    def setup_and_run_with_descriptor(self, descriptor):
+        del descriptor
+        return self.setup_and_run()
+
     def replay_buffered_to(self, name):
         if not self.replay_flag:
             raise RuntimeError("replay failed")
@@ -75,8 +81,14 @@ class _FakeVertex:
         self.name = name
         self._status = status
         self.stream_task = stream_task
-        self.id = mock.MagicMock()
-        self.id.job_vertex_id = hash(name) % 1000
+        self.id = ExecutionVertexId(hash(name) % 1000, 0)
+        self.index = 0
+        self.concurrency = 1
+        self.task_generation = f"generation-{name}"
+        self.restore_operation_id = None
+        self.operator_spec = mock.MagicMock()
+        self.config = Configuration(include_environment=False)
+        self.task_metric_group = mock.MagicMock()
 
     @property
     def status(self):
@@ -102,6 +114,19 @@ def _build_graph(vertices):
     g.namespace = _FAKE_NAMESPACE
     g.execution_vertices = vertices
     g.input_job_edges.side_effect = lambda job_vertex_id: []
+    g.output_job_edges.side_effect = lambda job_vertex_id: []
+    job_vertices = {
+        vertex.id.job_vertex_id: SimpleNamespace(
+            id=vertex.id.job_vertex_id,
+            config=vertex.config,
+            concurrency=vertex.concurrency,
+            operator_spec=vertex.operator_spec,
+            output_queue=None,
+        )
+        for vertex in vertices
+    }
+    g.job_vertex.side_effect = job_vertices.__getitem__
+    g.barrier_splits = {vertex.id: {} for vertex in vertices}
     g.source_job_vertices = []
     return g
 
@@ -503,6 +528,26 @@ class RestartTest(unittest.TestCase):
         ):
             result = s.restart()
         self.assertEqual(result.status, RestartStatus.SUCCESS)
+
+    def test_successful_restart_clears_a_forced_global_recovery_policy(self):
+        s = self._scheduler()
+        previous_recovery = s._recovery
+        previous_recovery.require_global_recovery("uncertain local topology")
+        with (
+            mock.patch.object(js_mod.task_terminator, "stop_workers"),
+            mock.patch.object(s, "schedule", return_value=None),
+            mock.patch.object(js_mod.klein, "get", return_value=None),
+            mock.patch.object(
+                js_mod.klein,
+                "get_actor_status",
+                return_value=StreamTaskStatus.NOT_EXIST,
+            ),
+        ):
+            result = s.restart()
+
+        self.assertEqual(result.status, RestartStatus.SUCCESS)
+        self.assertIsNot(s._recovery, previous_recovery)
+        self.assertIsNone(s._recovery._force_global_recovery_reason)
 
     def test_restart_suppressed_after_limit(self):
         s = self._scheduler()

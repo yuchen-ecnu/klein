@@ -70,7 +70,7 @@ def place_workers(
     plan = strategy.plan(execution_graph)
     try:
         for job_vertex in execution_graph.job_vertices.values():
-            _instantiate_job_vertex(execution_graph, job_vertex, plan)
+            instantiate_job_vertex(execution_graph, job_vertex, plan)
     except Exception as error:
         for job_vertex in execution_graph.job_vertices.values():
             _cancel_created_tasks(job_vertex)
@@ -79,10 +79,11 @@ def place_workers(
     return plan
 
 
-def _instantiate_job_vertex(
+def instantiate_job_vertex(
     graph: ExecutionGraph,
     job_vertex: ExecutionJobVertex,
     plan: PlacementPlan,
+    restore_operation_id: str | None = None,
 ) -> None:
     """Create every actor for one physical job vertex.
 
@@ -93,7 +94,14 @@ def _instantiate_job_vertex(
     job_vertex.output_queue = Queue() if job_vertex.operator_spec.collecting else None
     for vertex in job_vertex.execution_vertices.values():
         vertex.reset()
-        descriptor = _build_descriptor(graph, job_vertex, vertex)
+        vertex.renew_task_generation()
+        vertex.restore_operation_id = restore_operation_id
+        descriptor = build_descriptor(
+            graph,
+            job_vertex,
+            vertex,
+            restore_operation_id=restore_operation_id,
+        )
         remote_args = {
             "name": vertex.name,
             "num_cpus": vertex.resources.cpus,
@@ -121,10 +129,12 @@ def _instantiate_job_vertex(
         logger.debug("Created execution vertex %s with placement %s", vertex.name, placement)
 
 
-def _build_descriptor(
+def build_descriptor(
     graph: ExecutionGraph,
     job_vertex: ExecutionJobVertex,
     vertex: ExecutionVertex,
+    *,
+    restore_operation_id: str | None = None,
 ) -> TaskDeploymentDescriptor:
     config = job_vertex.config
     output_buffer_max_rows = config.get(PipelineOptions.OUTPUT_BUFFER_MAX_ROWS)
@@ -142,6 +152,7 @@ def _build_descriptor(
             ),
             output_buffer_max_rows=output_buffer_max_rows,
             put_timeout=put_timeout,
+            topology_epoch=graph.topology_epoch(job_vertex.id, output_edge.target),
         )
         for output_edge in graph.output_job_edges(job_vertex.id)
     )
@@ -155,6 +166,7 @@ def _build_descriptor(
         operator=job_vertex.operator_spec,
         vertex_id=vertex.id,
         task_name=vertex.name,
+        task_generation=vertex.task_generation,
         task_index=vertex.index,
         parallelism=vertex.concurrency,
         config=config,
@@ -166,7 +178,43 @@ def _build_descriptor(
         output_queue=job_vertex.output_queue,
         namespace=graph.namespace,
         input_vertex_ids=input_vertex_ids,
+        restore_operation_id=restore_operation_id,
     )
+
+
+def deploy_job_vertex(job_vertex: ExecutionJobVertex) -> None:
+    """Move one locally-created operator's tasks to DEPLOYED."""
+
+    for vertex in job_vertex.execution_vertices.values():
+        if vertex.stream_task is None:
+            vertex.transition_to(ExecutionVertexStatus.FAILED)
+            raise DeploymentError("deploy operator", f"ExecutionVertex '{vertex}' has not been created yet.")
+        vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+
+
+def start_job_vertex(
+    job_vertex: ExecutionJobVertex,
+    timeout: float,
+    paused_operation_id: str | None = None,
+) -> None:
+    """Set up one replacement operator, optionally fenced until commit."""
+
+    try:
+        vertices = list(job_vertex.execution_vertices.values())
+        references = [
+            (
+                vertex.stream_task.setup_and_run()
+                if paused_operation_id is None
+                else vertex.stream_task.setup_for_rescale(paused_operation_id)
+            )
+            for vertex in vertices
+        ]
+        klein.get(references, timeout=timeout)
+        for vertex in vertices:
+            if vertex.status == ExecutionVertexStatus.DEPLOYED:
+                vertex.transition_to(ExecutionVertexStatus.RUNNING)
+    except Exception as error:
+        raise DeploymentError("start operator", error) from error
 
 
 def _task_class_for(vertex: ExecutionVertex) -> type[StreamTask]:
@@ -243,14 +291,28 @@ def _start_wave(job_vertices: list[ExecutionJobVertex], timeout: float) -> None:
             vertex.transition_to(ExecutionVertexStatus.RUNNING)
 
 
-def bootstrap_vertex(vertex, timeout: float) -> None:
+def bootstrap_vertex(
+    execution_graph: ExecutionGraph,
+    vertex: ExecutionVertex,
+    timeout: float,
+) -> None:
     """(Re)bootstrap one vertex's actor and wait for it — the shared mechanism
     behind both initial deploy and single-point recovery.
 
-    ``setup_and_run`` is idempotent (a no-op on a live actor), which is what makes
-    it safe to reuse for recovering a Ray-rebuilt actor. Does NOT transition
-    status — the caller owns that: initial deploy moves DEPLOYED→RUNNING; recovery
-    must NOT re-transition an already-RUNNING vertex (it may have reached a
-    terminal state during the crash window).
+    The latest descriptor is supplied explicitly because an unchanged actor's
+    original Ray constructor recipe predates any adjacent local rescale. Does
+    NOT transition status — the caller owns that: initial deploy moves
+    DEPLOYED→RUNNING; recovery must NOT re-transition an already-RUNNING vertex
+    (it may have reached a terminal state during the crash window).
     """
-    klein.get(vertex.stream_task.setup_and_run(), timeout=timeout)
+    job_vertex = execution_graph.job_vertex(vertex.id.job_vertex_id)
+    descriptor = build_descriptor(
+        execution_graph,
+        job_vertex,
+        vertex,
+        restore_operation_id=vertex.restore_operation_id,
+    )
+    klein.get(
+        vertex.stream_task.setup_and_run_with_descriptor(descriptor),
+        timeout=timeout,
+    )

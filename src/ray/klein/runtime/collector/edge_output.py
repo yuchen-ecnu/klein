@@ -230,6 +230,12 @@ class EdgeOutput:
     def refresh_downstream(self, downstream_name: str) -> None:
         self._sender.refresh_by_name(downstream_name)
 
+    def ensure_quiescent(self) -> None:
+        """Reject a topology swap while this edge still owns unsent data."""
+
+        if self._pending or self._buffered_rows or self._buffered_bytes or self._sender.inflight_requests:
+            raise RuntimeError("cannot replace an output edge while delivery is in flight")
+
     def configure_replay(
         self,
         enabled: bool,
@@ -238,6 +244,7 @@ class EdgeOutput:
         *,
         sender_task_name: str | None = None,
         edge_index: int | None = None,
+        topology_epoch: str | None = None,
     ) -> None:
         self._journal.configure(
             enabled,
@@ -245,6 +252,7 @@ class EdgeOutput:
             max_bytes,
             sender_task_name=sender_task_name,
             edge_index=edge_index,
+            topology_epoch=topology_epoch,
         )
 
     def acknowledge(self, target_index: int, forwarded_sequence: int) -> None:

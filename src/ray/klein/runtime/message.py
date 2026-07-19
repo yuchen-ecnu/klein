@@ -50,6 +50,20 @@ class InputActive(StreamControl):
 
 
 @dataclass(frozen=True, slots=True)
+class RescaleBarrier(StreamControl):
+    """A local topology fence used while one operator is replaced."""
+
+    operation_id: str
+    target_operator_id: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.operation_id, str) or not self.operation_id.strip():
+            raise ValueError("rescale operation_id cannot be empty")
+        if isinstance(self.target_operator_id, bool) or not isinstance(self.target_operator_id, int):
+            raise TypeError("rescale target_operator_id must be an integer")
+
+
+@dataclass(frozen=True, slots=True)
 class DeliveryChannel:
     """Stable identity for one upstream edge's actual delivery target."""
 
@@ -57,6 +71,7 @@ class DeliveryChannel:
     sender_task_name: str
     edge_index: int
     target_index: int
+    topology_epoch: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

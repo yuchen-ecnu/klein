@@ -63,6 +63,7 @@ _EXPORTS = {
     "read_kafka": ("ray.klein.api.read_api", "read_kafka"),
     "read_canal": ("ray.klein.api.read_api", "read_canal"),
     "read_rocketmq": ("ray.klein.api.read_api", "read_rocketmq"),
+    "rescale_operator": ("ray.klein.observability.state_api", "rescale_operator"),
     "register_debug_actor": ("ray.klein._internal.ray", "register_debug_actor"),
     "reset_context": ("ray.klein.api.klein_context", "reset_context"),
     "source": ("ray.klein.api.read_api", "source"),

@@ -54,6 +54,12 @@ class RecoveryManager:
         self._coordinator_provider = coordinator_provider
         self._rpc_timeout = rpc_timeout
         self._start_timeout = start_timeout
+        self._force_global_recovery_reason: str | None = None
+
+    def require_global_recovery(self, reason: str) -> None:
+        """Disable Tier-0 recovery after an uncertain topology rollback."""
+
+        self._force_global_recovery_reason = reason
 
     def _coordinator_alive(self) -> bool:
         from ray.klein._internal.constants import ComponentName
@@ -78,6 +84,7 @@ class RecoveryManager:
                 coordinator.needs_recovery(),
                 timeout=self._rpc_timeout,
             ):
+                self._clear_stable_rescale_metadata(coordinator)
                 return False
             restore_path = klein.get(
                 coordinator.latest_checkpoint_path(),
@@ -104,6 +111,7 @@ class RecoveryManager:
             )
             klein.get(coordinator.start(), timeout=self._start_timeout)
             self._reclaim_orphan_barriers(coordinator)
+            self._request_stabilization_checkpoint_after_recovery()
             log_event(
                 logger,
                 logging.INFO,
@@ -124,6 +132,64 @@ class RecoveryManager:
                 checkpoint_path=locals().get("restore_path"),
             )
             return False
+
+    def clear_stable_rescale_metadata(self) -> bool:
+        """Drop graph-local rescale identities after their fence is durable."""
+
+        marked = tuple(
+            vertex for vertex in self._execution_graph.execution_vertices if vertex.restore_operation_id is not None
+        )
+        if not marked:
+            return True
+        coordinator = self._coordinator_provider()
+        if coordinator is None:
+            return False
+        try:
+            if klein.get(coordinator.needs_recovery(), timeout=self._rpc_timeout):
+                return False
+            return self._clear_stable_rescale_metadata(coordinator)
+        except Exception:
+            logger.warning("Could not refresh operator-rescale recovery metadata", exc_info=True)
+            return False
+
+    def _clear_stable_rescale_metadata(self, coordinator: KleinActorHandle) -> bool:
+        marked = tuple(
+            vertex for vertex in self._execution_graph.execution_vertices if vertex.restore_operation_id is not None
+        )
+        if not marked:
+            return True
+        try:
+            fenced = klein.get(
+                coordinator.operator_rescale_recovery_fenced(),
+                timeout=self._rpc_timeout,
+            )
+        except Exception:
+            logger.warning("Could not read the operator-rescale recovery fence", exc_info=True)
+            return False
+        if fenced:
+            return False
+        for vertex in marked:
+            vertex.restore_operation_id = None
+        return True
+
+    def _request_stabilization_checkpoint_after_recovery(self) -> None:
+        """Re-arm the one-shot source request lost with coordinator inflight state."""
+
+        if not any(vertex.restore_operation_id is not None for vertex in self._execution_graph.execution_vertices):
+            return
+        requests = [
+            vertex.stream_task.request_checkpoint()
+            for vertex in self._execution_graph.source_execution_vertices
+            if vertex.stream_task is not None and vertex.status == ExecutionVertexStatus.RUNNING
+        ]
+        if not requests:
+            return
+        try:
+            accepted = klein.get(requests, timeout=self._rpc_timeout)
+            if not all(result is True for result in accepted):
+                logger.warning("One or more sources rejected the post-recovery stabilization checkpoint")
+        except Exception:
+            logger.warning("Could not re-request the post-recovery stabilization checkpoint", exc_info=True)
 
     def _reclaim_orphan_barriers(self, coordinator: KleinActorHandle) -> None:
         """Tell every task to drop in-flight barriers from the previous epoch.
@@ -208,6 +274,10 @@ class RecoveryManager:
         Classifying before acting stops one mid-rebuild vertex from blocking the
         re-bootstrap of others.
         """
+        preflight = self._task_recovery_preflight()
+        if preflight is not None:
+            return preflight
+
         rebuilt: list[ExecutionVertex] = []
         rebuilding: list[ExecutionVertex] = []
         for vertex in self._execution_graph.execution_vertices:
@@ -242,6 +312,68 @@ class RecoveryManager:
                 ", ".join(task_names),
                 task_names=task_names,
             )
+        return True
+
+    def _task_recovery_preflight(self) -> bool | None:
+        if self._force_global_recovery_reason is not None:
+            log_event(
+                logger,
+                logging.WARNING,
+                "failover.task.recovery_forced_global",
+                "Skipping task recovery because a consistent global restore is required: %s",
+                self._force_global_recovery_reason,
+                reason=self._force_global_recovery_reason,
+            )
+            return False
+        if self._operator_rescale_recovery_fenced():
+            # Between local-topology commit and its first complete checkpoint,
+            # rebuilding even an adjacent task from the previous checkpoint can
+            # cross topology epochs and lose or duplicate records.  Healthy
+            # actors need no action; any unhealthy actor forces the supervisor
+            # to use one consistent global restore.
+            return self._all_nonterminal_tasks_running()
+
+        # The first new-topology checkpoint made the local cut obsolete.  Drop
+        # its identity before building a recovery descriptor so future actor
+        # restarts restore normal checkpoint state.
+        for vertex in self._execution_graph.execution_vertices:
+            vertex.restore_operation_id = None
+        return None
+
+    def _operator_rescale_recovery_fenced(self) -> bool:
+        coordinator = self._coordinator_provider()
+        if coordinator is not None:
+            try:
+                if klein.get(coordinator.needs_recovery(), timeout=self._rpc_timeout):
+                    return any(
+                        vertex.restore_operation_id is not None for vertex in self._execution_graph.execution_vertices
+                    )
+                return bool(
+                    klein.get(
+                        coordinator.operator_rescale_recovery_fenced(),
+                        timeout=self._rpc_timeout,
+                    )
+                )
+            except Exception:
+                logger.warning(
+                    "Could not read the operator-rescale recovery fence; using graph metadata",
+                    exc_info=True,
+                )
+        return any(vertex.restore_operation_id is not None for vertex in self._execution_graph.execution_vertices)
+
+    def _all_nonterminal_tasks_running(self) -> bool:
+        for vertex in self._execution_graph.execution_vertices:
+            if vertex.status == ExecutionVertexStatus.FINISHED:
+                continue
+            if vertex.status != ExecutionVertexStatus.RUNNING or vertex.stream_task is None:
+                return False
+            if klein.get_actor_status(vertex.name, namespace=self._namespace) != StreamTaskStatus.ALIVE:
+                return False
+            try:
+                if not klein.get(vertex.stream_task.is_running(), timeout=self._rpc_timeout):
+                    return False
+            except Exception:
+                return False
         return True
 
     def _recover_vertex(self, vertex: ExecutionVertex) -> _RecoveryOutcome:
@@ -295,7 +427,11 @@ class RecoveryManager:
             task_name=vertex.name,
         )
         try:
-            task_deployer.bootstrap_vertex(vertex, timeout=self._start_timeout)
+            task_deployer.bootstrap_vertex(
+                self._execution_graph,
+                vertex,
+                timeout=self._start_timeout,
+            )
             return True
         except Exception as error:
             log_event(

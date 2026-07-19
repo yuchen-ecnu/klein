@@ -153,7 +153,7 @@ For continuous execution, see the
 | [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
 | [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
 | [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
-| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and dashboard integration boundaries. |
+| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the web Dashboard with operator scaling. |
 | [Troubleshooting](docs/troubleshooting.md) | Installation, planning, connector, watermark, checkpoint, backpressure, and CLI failures. |
 
 Build the documentation locally with:
