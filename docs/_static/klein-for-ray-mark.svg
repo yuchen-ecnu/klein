@@ -1,0 +1,13 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 216" role="img" aria-labelledby="title desc">
+  <title id="title">Klein for Ray mark</title>
+  <desc id="desc">A continuous data stream folds through itself in the shape of a Klein bottle, with square nodes marking the higher-dimensional crossing.</desc>
+  <g fill="#02A0CF">
+    <path d="M 130 10 C 180 10 214 45 214 90 C 214 116 204 137 187 155 C 204 174 214 194 214 208 H 185 C 185 194 176 178 162 164 L 150 153 C 176 125 188 109 188 90 C 188 59 165 36 130 36 C 95 36 72 59 72 90 C 72 114 57 133 44 150 C 29 169 24 190 27 208 H 4 C 0 181 10 155 27 132 C 40 115 48 103 48 90 C 48 45 80 10 130 10 Z"/>
+    <rect x="27" y="194" width="158" height="14" rx="5"/>
+    <path d="M 72 82 C 72 110 90 132 115 157 L 132 141 C 111 119 96 101 96 82 Z"/>
+    <rect x="111" y="139" width="25" height="25" rx="3"/>
+    <rect x="91" y="165" width="19" height="19" rx="3"/>
+    <rect x="68" y="186" width="19" height="19" rx="3"/>
+  </g>
+</svg>

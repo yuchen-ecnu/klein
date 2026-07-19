@@ -1,6 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Klein for Ray
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/klein-for-ray-logo-dark.svg">
+    <img alt="Klein for Ray" src="docs/_static/klein-for-ray-logo.svg" width="720">
+  </picture>
+</p>
 
 <p align="center"><strong>Stateful stream processing on Ray.</strong></p>
 
@@ -29,10 +34,13 @@ that survives task failures or parallelism changes. Use
 data preparation, inference, or training ingest that does not need streaming
 state or event-time progress.
 
-### Name
+### Name and mark
 
 “Klein” comes from the Klein bottle and the idea of taking a Möbius loop one
-dimension further.
+dimension further. The mark turns the bottle's continuous, self-crossing
+surface into a data stream; square waypoints preserve the distributed-node
+language shared by Ray's data products without claiming official project
+status.
 
 | Capability | What Klein provides |
 | --- | --- |
