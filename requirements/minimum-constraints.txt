@@ -10,8 +10,7 @@ licensecheck==2025.1
 mypy==1.11.0
 numpy==1.24.0; python_version < "3.12"
 numpy==1.26.2; python_version >= "3.12"
-orjson==3.9.0; python_version < "3.12"
-orjson==3.9.10; python_version >= "3.12"
+orjson==3.11.6
 pandas==2.2.3
 pip-audit==2.7.0
 protobuf==3.20.3; python_version < "3.12"
