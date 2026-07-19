@@ -58,47 +58,7 @@ status.
 | Ray Data | Executes bounded sources, transformations, shuffles, and sinks. |
 | Ray Object Store | Shares immutable checkpoint fragments to accelerate recovery. |
 
-```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#087EA4',
-    'primaryTextColor': '#FFFFFF',
-    'primaryBorderColor': '#044E68',
-    'secondaryColor': '#E6F7FF',
-    'secondaryTextColor': '#23272F',
-    'secondaryBorderColor': '#99D6F0',
-    'tertiaryColor': '#F6F7F9',
-    'tertiaryTextColor': '#23272F',
-    'lineColor': '#99A1B3',
-    'textColor': '#23272F',
-    'fontSize': '13px',
-    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
-  },
-  'flowchart': {
-    'nodeSpacing': 30,
-    'rankSpacing': 50,
-    'padding': 15,
-    'wrappingWidth': 120
-  }
-}}%%
-flowchart LR
-    classDef primary fill:#087EA4,stroke:#044E68,color:#FFFFFF,stroke-width:2px,rx:12,ry:12
-    classDef secondary fill:#E6F7FF,stroke:#99D6F0,color:#23272F,stroke-width:1.5px,rx:8,ry:8
-    classDef accent fill:#149ECA,stroke:#0D7EA8,color:#FFFFFF,stroke-width:2px,rx:8,ry:8
-    classDef neutral fill:#F6F7F9,stroke:#E0E3E8,color:#23272F,stroke-width:1px,rx:8,ry:8
-    classDef decision fill:#F6F7F9,stroke:#087EA4,color:#23272F,stroke-width:2px
-
-    API[DataStream and SQL]:::primary --> Plan[Logical graph]:::secondary
-    Plan --> Mode{Runtime?}:::decision
-    Mode -->|bounded| Data[Ray Data]:::accent
-    Mode -->|continuous| Manager[JobManager]:::accent
-    Manager --> Master[JobMaster]:::secondary
-    Master --> Tasks[Stream tasks]:::primary
-    Master --> Coordinator[Checkpoint coordinator]:::secondary
-    Tasks --> Objects[Object Store cache]:::neutral
-    Coordinator --> Durable[Durable checkpoints]:::neutral
-```
+![Klein for Ray component architecture](docs/_static/architecture-overview.png)
 
 The same lazy graph therefore has two execution paths: bounded-compatible work
 lowers to Ray Data, while continuous work expands into long-lived Ray actors.

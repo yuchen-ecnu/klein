@@ -22,99 +22,17 @@ This separation keeps three concerns independent:
 
 ## System overview
 
-```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#087EA4',
-    'primaryTextColor': '#FFFFFF',
-    'primaryBorderColor': '#044E68',
-    'secondaryColor': '#E6F7FF',
-    'secondaryTextColor': '#23272F',
-    'secondaryBorderColor': '#99D6F0',
-    'tertiaryColor': '#F6F7F9',
-    'tertiaryTextColor': '#23272F',
-    'tertiaryBorderColor': '#E0E3E8',
-    'clusterBkg': '#F6F7F9',
-    'clusterBorder': '#99D6F0',
-    'lineColor': '#99A1B3',
-    'textColor': '#23272F',
-    'fontSize': '13px',
-    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
-  },
-  'flowchart': {
-    'nodeSpacing': 30,
-    'rankSpacing': 50,
-    'padding': 15,
-    'wrappingWidth': 120
-  }
-}}%%
-flowchart LR
-    classDef primary fill:#087EA4,stroke:#044E68,color:#FFFFFF,stroke-width:2px,rx:12,ry:12
-    classDef secondary fill:#E6F7FF,stroke:#99D6F0,color:#23272F,stroke-width:1.5px,rx:8,ry:8
-    classDef accent fill:#149ECA,stroke:#0D7EA8,color:#FFFFFF,stroke-width:2px,rx:8,ry:8
-    classDef neutral fill:#F6F7F9,stroke:#E0E3E8,color:#23272F,stroke-width:1px,rx:8,ry:8
+![Klein and Ray component ownership map](_static/architecture-overview.png)
 
-    subgraph API[Application layer]
-        DataStream[DataStream API]:::primary
-        SQL[SQL and Table]:::primary
-        Connectors[Connectors]:::secondary
-    end
+The diagram groups components by ownership:
 
-    subgraph Plan[Planning layer]
-        Logical[Logical graph]:::secondary
-        Optimizer[Graph optimizer]:::secondary
-        Physical[Execution graph]:::accent
-    end
-
-    subgraph Runtime[Streaming runtime]
-        Manager[JobManager]:::primary
-        Master[JobMaster]:::secondary
-        Coordinator[Checkpoint coordinator]:::secondary
-        Tasks[Stream tasks]:::accent
-    end
-
-    subgraph Ray[Ray platform]
-        Data[Ray Data]:::neutral
-        Core[Ray Core actors]:::neutral
-        Objects[Object Store]:::neutral
-    end
-
-    Durable[Durable store]:::neutral
-
-    DataStream --> Logical
-    SQL --> Logical
-    Connectors --> Logical
-    Logical --> Manager
-    Manager --> Optimizer
-    Optimizer --> Physical
-    Logical --> Data
-    Physical --> Master
-    Master --> Tasks
-    Master --> Coordinator
-    Manager --> Core
-    Tasks --> Core
-    Tasks --> Objects
-    Coordinator --> Durable
-
-    style API fill:#F6F7F9,stroke:#99D6F0,stroke-width:1.5px
-    style Plan fill:#F6F7F9,stroke:#99D6F0,stroke-width:1.5px
-    style Runtime fill:#F6F7F9,stroke:#99D6F0,stroke-width:1.5px
-    style Ray fill:#F6F7F9,stroke:#99D6F0,stroke-width:1.5px
-```
-
-Read the diagram from left to right:
-
-1. Public APIs and connectors create operator and edge specifications; they do
-   not start Ray work immediately.
-2. `JobClient` validates the directed acyclic graph and rewrites regions such
-   as Ray Serve before selecting a runtime.
-3. Bounded-compatible graphs compile to Ray Data. For streaming graphs, the
-   `JobManager` applies union and operator-chaining rules and expands each
-   logical operator into parallel physical subtasks.
-4. Ray Core hosts the detached job control plane and long-lived stream tasks.
-   The Ray Object Store can cache immutable state snapshots, but durable
-   checkpoint storage remains the cluster-loss recovery boundary.
+1. The public API creates operator and edge specifications; it does not start
+   Ray work immediately.
+2. Klein's planning and control components validate the graph, select a
+   runtime, deploy work, and coordinate checkpoints.
+3. The streaming data plane owns long-lived stream tasks and managed state.
+4. Ray provides bounded execution, actors, object sharing, and the storage
+   boundary used by checkpoints.
 
 ## Plan once, choose one runtime
 
@@ -122,46 +40,7 @@ Read the diagram from left to right:
 walks upstream from those sinks to create one immutable `LogicalGraph`, applies
 an optional Ray Serve rewrite and resource plan, and then selects a backend.
 
-```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#087EA4',
-    'primaryTextColor': '#FFFFFF',
-    'primaryBorderColor': '#044E68',
-    'secondaryColor': '#E6F7FF',
-    'secondaryTextColor': '#23272F',
-    'secondaryBorderColor': '#99D6F0',
-    'tertiaryColor': '#F6F7F9',
-    'tertiaryTextColor': '#23272F',
-    'tertiaryBorderColor': '#E0E3E8',
-    'lineColor': '#99A1B3',
-    'textColor': '#23272F',
-    'fontSize': '13px',
-    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
-  },
-  'flowchart': {
-    'nodeSpacing': 30,
-    'rankSpacing': 50,
-    'padding': 15,
-    'wrappingWidth': 120
-  }
-}}%%
-flowchart LR
-    classDef primary fill:#087EA4,stroke:#044E68,color:#FFFFFF,stroke-width:2px,rx:12,ry:12
-    classDef secondary fill:#E6F7FF,stroke:#99D6F0,color:#23272F,stroke-width:1.5px,rx:8,ry:8
-    classDef accent fill:#149ECA,stroke:#0D7EA8,color:#FFFFFF,stroke-width:2px,rx:8,ry:8
-    classDef decision fill:#F6F7F9,stroke:#087EA4,color:#23272F,stroke-width:2px
-
-    Sink[Sink roots]:::primary --> Logical[Logical graph]:::secondary
-    Logical --> Rewrite[Plan rewrites]:::secondary
-    Rewrite --> Mode{Runtime?}:::decision
-    Mode -->|bounded| Batch[Batch compiler]:::accent
-    Batch --> Data[Ray Data DAG]:::primary
-    Mode -->|continuous| Optimize[Graph optimizer]:::accent
-    Optimize --> Expand[Physical subtasks]:::secondary
-    Expand --> Actors[Ray actors]:::primary
-```
+![Runtime selection from one logical graph](_static/runtime-selection.png)
 
 In `auto` mode, an unbounded source or an operation without a Ray Data
 lowering selects streaming execution. Otherwise the graph uses the batch
@@ -199,48 +78,7 @@ transport, replay tracking, and backpressure. Data and control share the same
 ordered channel, so a watermark or checkpoint barrier cannot pass records that
 were emitted before it.
 
-```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#087EA4',
-    'primaryTextColor': '#FFFFFF',
-    'primaryBorderColor': '#044E68',
-    'secondaryColor': '#E6F7FF',
-    'secondaryTextColor': '#23272F',
-    'lineColor': '#99A1B3',
-    'textColor': '#23272F',
-    'actorBkg': '#087EA4',
-    'actorTextColor': '#FFFFFF',
-    'actorBorder': '#044E68',
-    'activationBkgColor': '#E6F7FF',
-    'activationBorderColor': '#087EA4',
-    'signalColor': '#23272F',
-    'noteBkgColor': '#F6F7F9',
-    'noteBorderColor': '#99D6F0',
-    'noteTextColor': '#23272F',
-    'fontSize': '13px',
-    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
-  }
-}}%%
-sequenceDiagram
-    participant U as Upstream task
-    participant E as Edge output
-    participant D as Downstream task
-    participant O as Operator
-
-    U->>E: collect records
-    E->>E: partition and batch
-    E->>+D: put ordered batch
-    D-->>-E: accept and acknowledge
-    D->>O: process records
-    U->>E: emit watermark or barrier
-    Note over E: flush earlier records first
-    E->>+D: send ordered control
-    D->>D: align active inputs
-    D->>O: advance time or snapshot
-    D-->>-E: forward progress
-```
+![Ordered streaming data plane and backpressure](_static/streaming-data-plane.png)
 
 Inside a task, a weighted inbox bounds both rows and bytes. An input
 accumulator restores logical batches, the operator runs on a single-worker
@@ -264,49 +102,7 @@ A checkpoint is an ordered protocol across the data plane, state backends,
 external sinks, and durable storage. The completion marker is published last,
 so recovery never treats a partially written directory as complete.
 
-```mermaid
-%%{init: {
-  'theme': 'base',
-  'themeVariables': {
-    'primaryColor': '#087EA4',
-    'primaryTextColor': '#FFFFFF',
-    'primaryBorderColor': '#044E68',
-    'secondaryColor': '#E6F7FF',
-    'secondaryTextColor': '#23272F',
-    'lineColor': '#99A1B3',
-    'textColor': '#23272F',
-    'actorBkg': '#087EA4',
-    'actorTextColor': '#FFFFFF',
-    'actorBorder': '#044E68',
-    'activationBkgColor': '#E6F7FF',
-    'activationBorderColor': '#087EA4',
-    'signalColor': '#23272F',
-    'noteBkgColor': '#F6F7F9',
-    'noteBorderColor': '#99D6F0',
-    'noteTextColor': '#23272F',
-    'fontSize': '13px',
-    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
-  }
-}}%%
-sequenceDiagram
-    participant S as Source task
-    participant T as Transform task
-    participant K as Transactional sink
-    participant C as Coordinator
-    participant D as Durable store
-
-    S->>S: capture next position
-    S->>T: barrier after prior data
-    T->>T: align and snapshot state
-    T->>C: register state reference
-    T->>K: forward barrier
-    K->>K: prepare committable
-    K->>C: register committable
-    C->>D: write immutable state
-    C->>D: publish metadata last
-    C->>K: commit prepared output
-    C->>S: notify checkpoint complete
-```
+![Checkpoint lifecycle from source position to commit](_static/checkpoint-lifecycle.png)
 
 Managed state can use an in-memory or RocksDB task-local backend. Snapshots are
 split by key group so a restored operator can change parallelism without
