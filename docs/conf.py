@@ -24,7 +24,6 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
     "sphinx_design",
-    "sphinxcontrib.mermaid",
 ]
 
 autosummary_generate = True
@@ -37,7 +36,6 @@ nitpick_ignore = [
 ]
 
 myst_enable_extensions = ["colon_fence", "deflist", "fieldlist", "substitution"]
-myst_fence_as_directive = ["mermaid"]
 myst_heading_anchors = 3
 
 templates_path: list[str] = []
