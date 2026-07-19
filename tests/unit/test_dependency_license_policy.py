@@ -6,7 +6,10 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI job
+    import tomli as tomllib
 
 PROJECT_ROOT = Path(__file__).parents[2]
 LICENSE_OVERRIDES = runpy.run_path(str(PROJECT_ROOT / "scripts" / "check_dependency_licenses.py"))["LICENSE_OVERRIDES"]
