@@ -35,6 +35,7 @@ from ray.klein.runtime.graph.edge_spec import EdgeSpec
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.operator.operator_type import OperatorType
+from ray.klein.runtime.partitioning.forward_partitioner import ForwardPartitioner
 from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 from ray.klein.runtime.resources import Resources
 
@@ -276,6 +277,81 @@ class LogicalGraph:
                 )
                 operator = replace(operator, logical_function=logical_function)
             builder.replace_vertex(replace(vertex, resources=resources, operator=operator))
+        return builder.build()
+
+    def resolve_operator(self, operator_id: int | str) -> VertexId:
+        """Resolve a dashboard/operator identifier to one logical vertex.
+
+        Integer ids (and their decimal string form) are the stable control-plane
+        identity.  Exact physical display names and operator names are accepted
+        as a convenience, but an ambiguous name is rejected instead of silently
+        resizing more than one vertex.
+        """
+
+        if isinstance(operator_id, bool) or not isinstance(operator_id, int | str):
+            raise TypeError("operator_id must be an integer or string")
+        if isinstance(operator_id, int):
+            matches = [vertex_id for vertex_id in self._vertices if vertex_id.index == operator_id]
+        else:
+            candidate = operator_id.strip()
+            if not candidate:
+                raise ValueError("operator_id cannot be empty")
+            try:
+                numeric_id = int(candidate)
+            except ValueError:
+                matches = [
+                    vertex_id
+                    for vertex_id, vertex in self._vertices.items()
+                    if candidate in {vertex.name, vertex.operator.name}
+                ]
+            else:
+                matches = [vertex_id for vertex_id in self._vertices if vertex_id.index == numeric_id]
+        if not matches:
+            raise KeyError(f"operator {operator_id!r} does not exist")
+        if len(matches) > 1:
+            raise ValueError(f"operator name {operator_id!r} is ambiguous; use its numeric id")
+        return matches[0]
+
+    def rescale_operator(self, operator_id: int | str, parallelism: int) -> "LogicalGraph":
+        """Return a graph with exactly one operator's parallelism changed.
+
+        A FORWARD channel is valid only while both endpoints have equal
+        parallelism.  Resizing one endpoint therefore replaces that incident
+        channel with Klein's normal shuffle choice; all explicit non-FORWARD
+        partitioners remain unchanged.
+        """
+
+        if isinstance(parallelism, bool) or not isinstance(parallelism, int):
+            raise TypeError("parallelism must be an integer")
+        if parallelism <= 0:
+            raise ValueError("parallelism must be greater than zero")
+        vertex_id = self.resolve_operator(operator_id)
+        current = self._vertices[vertex_id]
+        if current.concurrency == parallelism:
+            return self
+
+        builder = self.to_builder()
+        builder.replace_vertex(
+            replace(
+                current,
+                resources=replace(current.resources, concurrency=parallelism),
+            )
+        )
+        for edge in self._edges:
+            if vertex_id not in {edge.source, edge.target} or not edge.partitioner.is_type(ForwardPartitioner):
+                continue
+            source_parallelism = builder.vertex(edge.source).concurrency
+            target_parallelism = builder.vertex(edge.target).concurrency
+            if source_parallelism == target_parallelism:
+                continue
+            builder.remove_edge(edge.source, edge.target)
+            builder.add_edge(
+                EdgeSpec(
+                    edge.source,
+                    edge.target,
+                    default_partitioner(source_parallelism, target_parallelism).to_spec(),
+                )
+            )
         return builder.build()
 
     @property

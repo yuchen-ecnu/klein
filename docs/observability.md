@@ -60,11 +60,70 @@ ray.klein.configure({
 Disabling state publication doesn't disable Ray logs, Ray metrics, or
 checkpointing.
 
+## Use the Klein Dashboard
+
+Start the bundled web Dashboard from a machine that can connect to the Ray
+cluster:
+
+```bash
+ray-klein dashboard --open
+```
+
+It listens on `127.0.0.1:8266` by default. The page polls the published job
+snapshots and renders the operator DAG. Like Flink's JobGraph, node color mixes
+idle (blue), busy (red), and backpressured (black) time. The graph uses the
+maximum busy and backpressure percentage across an operator's subtasks so one
+hot or skewed subtask is not hidden by the operator average; the exact values
+remain printed in each node and in the operator table for accessibility.
+
+The page also shows each operator's live parallelism and rates, and lets you
+apply a new positive parallelism to one running operator. A stale or terminal
+job is read-only. For a supported operator, every direct upstream task inserts
+an ordered local barrier on the incident edge and pauses at that cut. The old
+target aligns those barriers, snapshots managed state, and fences its direct
+downstream tasks before Klein swaps routing and resumes the region. Unrelated
+actors stay alive; there is no whole-job restart or global source stop.
+
+If a source is itself a direct upstream of the target, that source task pauses
+cooperatively at a record boundary while the local cut is installed. Sources
+elsewhere in the graph keep running. Source operators cannot yet be the rescale
+target, and transactional or collecting sinks are also unsupported in the
+first version. Local rescaling also currently requires the job to have exactly
+one physical source task (one source operator at concurrency 1); this keeps the
+post-commit recovery checkpoint on one consistent source cut until Klein gains
+a shared checkpoint epoch across parallel sources. Unsupported controls are
+disabled with the runtime-provided reason.
+
+The replacement operator is created and restores its state before the old
+operator is removed, but its input pump stays fenced until the topology commit.
+A scale operation therefore needs temporary capacity for both parallelisms.
+Existing job-wide PlacementGroup bundles are not resized: replacement actors
+use Ray's native placement, and bundles made surplus by a scale-in remain
+reserved until the job ends.
+
+The normal scale path does not restart the job. After commit, the checkpoint
+coordinator asks the source to emit an ordinary checkpoint at its next record
+or idle boundary; this stabilizes the new topology without stopping the source.
+The recovery fence is removed only after that checkpoint is durable. If any
+task fails after the local commit but before then, Klein deliberately falls
+back to a consistent global checkpoint recovery instead of restoring one task
+from stale state. If the coordinator is rebuilt during this window, Klein
+re-requests the stabilization checkpoint automatically.
+
+Use `--host` and `--port` to change the listener. Binding to a non-loopback
+address exposes an unauthenticated control endpoint and is refused unless you
+explicitly pass `--allow-unauthenticated`. Put such a listener behind an
+authenticated reverse proxy, or access the default listener through an SSH
+tunnel instead. A reverse proxy should rewrite `Host` to the configured
+listener host; the server rejects untrusted host names to prevent DNS-rebinding
+control requests.
+
 :::{note}
-The standalone wheel does not patch or bundle Ray Dashboard backend or React
-files. A native Ray Dashboard page requires an upstream Ray integration that
-adapts this state API. This repository deliberately avoids depending on Ray's
-private dashboard implementation.
+The standalone wheel does not patch Ray Dashboard backend or React files. The
+bundled Klein Dashboard is a small, independent HTTP page over the stable state
+API. Embedding the same controls inside Ray's native Dashboard still requires
+an upstream Ray integration; Klein deliberately avoids Ray's private dashboard
+implementation.
 :::
 
 ## Configure operational logs
@@ -189,8 +248,9 @@ The standalone integration uses only a small Ray actor surface:
    zero-CPU state actor on the Ray head node.
 2. The state actor refreshes immutable snapshots concurrently and keeps the
    last good snapshot for temporary actor outages and terminal history.
-3. `list_job_snapshots`, `get_job_snapshot`, and `cancel_job` expose a stable
-   client API for CLIs, dashboards, and automation.
+3. `list_job_snapshots`, `get_job_snapshot`, `rescale_operator`, and
+   `cancel_job` expose a stable client API for CLIs, dashboards, and automation.
 
-An eventual Ray Dashboard contribution can add HTTP and React adapters without
-moving scheduling state into the dashboard process.
+The bundled HTTP page is one adapter over this API. An eventual native Ray
+Dashboard contribution can reuse the same boundary without moving scheduling
+state into the dashboard process.

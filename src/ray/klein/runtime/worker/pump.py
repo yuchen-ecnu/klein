@@ -34,6 +34,7 @@ from ray.klein.runtime.message import (
     InputActive,
     InputIdle,
     Record,
+    RescaleBarrier,
     StreamControl,
     Watermark,
 )
@@ -103,6 +104,9 @@ class InboxPump:
             return
 
         payload = envelope.payload
+        if isinstance(payload, RescaleBarrier):
+            await self._task.handle_rescale_barrier(payload, envelope.sender_vertex_id)
+            return
         if self._state.is_async_operator:
             # Async path: feed the concurrency window and return immediately so
             # the NEXT envelope can start its requests while these are still in
@@ -311,6 +315,15 @@ class InboxPump:
         """Drain ready input batches and dispatch them on the executor thread."""
         for record in self._state.input_batches.flush(force=force):
             self.data_handler(record)
+
+    async def flush_input_async(self, force: bool = True) -> None:
+        """Drain a partial batch through the ordered async-operator path."""
+
+        emitted = await asyncio.get_running_loop().run_in_executor(
+            self._state.executor,
+            lambda: self._state.input_batches.flush(force=force),
+        )
+        await self._dispatch_async(emitted)
 
     def handle_stream_control(self, control: StreamControl, sender_vertex_id: object | None) -> None:
         tracker = self._state.event_time_tracker

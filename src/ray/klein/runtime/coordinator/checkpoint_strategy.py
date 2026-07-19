@@ -62,7 +62,7 @@ class CheckpointStrategy(ABC):
         atomic columnar source batch without generating adjacent barriers."""
 
     @abstractmethod
-    def generate_next_barrier(self, is_eof: bool) -> Barrier | None:
+    def generate_next_barrier(self, is_eof: bool, *, force: bool = False) -> Barrier | None:
         """Source-only: ask the coordinator to allocate the next barrier."""
 
     @abstractmethod
@@ -76,6 +76,13 @@ class CheckpointStrategy(ABC):
     @abstractmethod
     async def restore_durable_operator_states_async(self) -> tuple[StateSnapshotReference, ...]:
         """Return durable state fragments needed by this task."""
+
+    async def restore_rescale_operator_states_async(
+        self,
+        operation_id: str,
+    ) -> tuple[StateSnapshotReference, ...]:
+        del operation_id
+        return ()
 
     def register_sink_committable(self, barrier_id: int, committable: SinkCommittable) -> bool:
         """Register a prepared sink transaction before acknowledging a barrier."""
@@ -92,6 +99,17 @@ class CheckpointStrategy(ABC):
     @property
     def last_alignment_duration_ms(self) -> float:
         return 0.0
+
+    def reconfigure_barrier_split(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
+        """Replace physical-input alignment counts at a quiescent rescale cut."""
+
+        del barrier_splits
+        raise NotImplementedError(f"{type(self).__name__} does not support runtime topology changes")
+
+    def validate_barrier_reconfiguration(self) -> None:
+        """Fail before a topology transaction if old barriers are still aligned."""
+
+        return
 
 
 class _BarrierAligner:
@@ -144,6 +162,18 @@ class _BarrierAligner:
         for barrier_id in stale:
             self._inflight.pop(barrier_id, None)
         return len(stale)
+
+    def reconfigure(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
+        """Install a new topology after every old-topology barrier completed."""
+
+        self.validate_reconfiguration()
+        previous_eof = self._eof_from_src
+        self._split = dict(barrier_splits)
+        self._eof_from_src = {source_id: previous_eof.get(source_id, False) for source_id in barrier_splits}
+
+    def validate_reconfiguration(self) -> None:
+        if self._inflight:
+            raise RuntimeError("cannot reconfigure barrier alignment while checkpoints are in flight")
 
 
 class _CoordinatorClient:
@@ -240,6 +270,16 @@ class _CoordinatorClient:
     async def durable_operator_states_async(self) -> tuple[StateSnapshotReference, ...]:
         return tuple(await klein.aget(self._coordinator.durable_operator_states(self._vertex_id)))
 
+    async def rescale_operator_states_async(self, operation_id: str) -> tuple[StateSnapshotReference, ...]:
+        return tuple(
+            await klein.aget(
+                self._coordinator.restore_operator_rescale_states(
+                    operation_id,
+                    self._vertex_id,
+                )
+            )
+        )
+
     async def source_state_async(self) -> SourceCheckpointEntry | None:
         return await klein.aget(self._coordinator.source_state(self._vertex_id))
 
@@ -302,6 +342,12 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
             self._alignment_started_at.pop(key, None)
         return removed
 
+    def reconfigure_barrier_split(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
+        self._aligner.reconfigure(barrier_splits)
+
+    def validate_barrier_reconfiguration(self) -> None:
+        self._aligner.validate_reconfiguration()
+
     def restore_source_state(self) -> SourceCheckpointEntry | None:
         return self._coordinator.source_state()
 
@@ -333,13 +379,19 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
     async def restore_durable_operator_states_async(self) -> tuple[StateSnapshotReference, ...]:
         return await self._coordinator.durable_operator_states_async()
 
+    async def restore_rescale_operator_states_async(
+        self,
+        operation_id: str,
+    ) -> tuple[StateSnapshotReference, ...]:
+        return await self._coordinator.rescale_operator_states_async(operation_id)
+
     def should_trigger(self, record_emitted: bool, record_count: int = 1) -> bool:
         if self._operator_type != OperatorType.SOURCE:
             return False
         return self._trigger.should_trigger(record_emitted, record_count)
 
-    def generate_next_barrier(self, is_eof=False) -> Barrier | EndOfData | None:
-        registration = self._coordinator.register_barrier(force=is_eof)
+    def generate_next_barrier(self, is_eof=False, *, force: bool = False) -> Barrier | EndOfData | None:
+        registration = self._coordinator.register_barrier(force=is_eof or force)
         if registration.barrier_id is None:
             logger.debug("Checkpoint not triggered: %s", registration.reason)
             return None

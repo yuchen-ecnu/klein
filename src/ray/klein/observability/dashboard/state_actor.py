@@ -22,6 +22,7 @@ import ray
 from ray.klein._internal.logging import get_logger
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.observability_options import ObservabilityOptions
+from ray.klein.observability.dashboard.serialization import dashboard_value
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,7 @@ class _KleinStateActor:
             "snapshot": (existing or {}).get("snapshot"),
             "registered_at_ms": (existing or {}).get("registered_at_ms", now_ms),
             "last_refresh_ms": (existing or {}).get("last_refresh_ms"),
+            "refresh_generation": 0,
         }
         self._trim_history()
 
@@ -90,6 +92,34 @@ class _KleinStateActor:
         await self._refresh(job_id)
         return True
 
+    async def rescale_operator(
+        self,
+        job_id: str,
+        operator_id: int,
+        parallelism: int,
+        timeout: float = 60,
+    ) -> dict[str, Any] | None:
+        """Forward one bounded rescale request to the authoritative JobManager."""
+
+        entry = self._entries.get(job_id)
+        if entry is None:
+            return None
+        raw_result = await asyncio.wait_for(
+            entry["manager"].rescale_operator.remote(operator_id, parallelism),
+            timeout=timeout,
+        )
+        if not isinstance(raw_result, dict):
+            raise TypeError("JobManager.rescale_operator must return a dict")
+        result = dashboard_value(raw_result)
+        # Keep request identity stable at the public boundary and expose the
+        # concise ``parallelism`` spelling expected by dashboard clients while
+        # retaining the explicit runtime result field.
+        result["job_id"] = job_id
+        result["operator_id"] = operator_id
+        result.setdefault("target_parallelism", parallelism)
+        result["parallelism"] = result["target_parallelism"]
+        return result
+
     def publish_snapshot(self, job_id: str, snapshot: dict[str, Any]) -> None:
         entry = self._entries.get(job_id)
         if entry is None:
@@ -99,6 +129,8 @@ class _KleinStateActor:
 
     async def _refresh(self, job_id: str) -> dict[str, Any]:
         entry = self._entries[job_id]
+        generation = int(entry.get("refresh_generation", 0)) + 1
+        entry["refresh_generation"] = generation
         snapshot = await asyncio.wait_for(
             entry["manager"].dashboard_snapshot.remote(),
             timeout=_REFRESH_TIMEOUT_SECONDS,
@@ -110,6 +142,15 @@ class _KleinStateActor:
             "job_id": job_id,
             "dashboard_stale": False,
         }
+        # Multiple dashboard readers may refresh the same job concurrently.
+        # A slower, older RPC may return after a newer one; return its response
+        # to its own caller, but never let it roll the shared cache backwards.
+        if self._entries.get(job_id) is not entry or entry["refresh_generation"] != generation:
+            return _with_interval_metrics(
+                merged,
+                entry.get("snapshot"),
+                now_ms - entry["last_refresh_ms"] if entry.get("last_refresh_ms") else None,
+            )
         merged = _with_interval_metrics(
             merged,
             entry.get("snapshot"),
@@ -226,6 +267,13 @@ def _with_interval_metrics(
                 interval_ns,
                 1,
             )
+        subtasks = operator.get("subtasks", [])
+        operator["max_busy_percent"] = _maximum_percent(subtasks, operator, "busy_percent")
+        operator["max_backpressure_percent"] = _maximum_percent(
+            subtasks,
+            operator,
+            "backpressure_percent",
+        )
     return snapshot
 
 
@@ -269,3 +317,15 @@ def _percent_delta(current: dict[str, Any], previous: dict[str, Any], key: str, 
     if available_ns <= 0:
         return 0.0
     return min(100.0, 100.0 * _nonnegative_delta(current, previous, key) / available_ns)
+
+
+def _maximum_percent(
+    subtasks: list[dict[str, Any]],
+    operator: dict[str, Any],
+    key: str,
+) -> float:
+    """Return the hottest subtask value used by the topology visualization."""
+
+    if not subtasks:
+        return float(operator.get(key, 0.0))
+    return max(float(subtask.get(key, 0.0)) for subtask in subtasks)

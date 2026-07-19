@@ -1,0 +1,100 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Klein Dashboard</title>
+    <link rel="stylesheet" href="/assets/dashboard.css">
+    <script src="/assets/dashboard.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <div>
+          <h1>Klein Dashboard</h1>
+          <p>Streaming operators on Ray</p>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label for="job-picker">Job</label>
+        <select id="job-picker" aria-label="Select a Klein job"></select>
+        <button id="refresh" class="secondary" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="notice" class="notice" role="status" hidden></section>
+
+      <section class="job-heading" aria-labelledby="job-name">
+        <div>
+          <div class="eyebrow">JOB OVERVIEW</div>
+          <h2 id="job-name">Loading jobs…</h2>
+          <p id="job-id" class="muted"></p>
+        </div>
+        <span id="job-status" class="status neutral">UNKNOWN</span>
+      </section>
+
+      <section class="summary" aria-label="Job summary">
+        <article><span>Operators</span><strong id="operator-count">—</strong></article>
+        <article><span>Task instances</span><strong id="task-count">—</strong></article>
+        <article><span>Rows in</span><strong id="rows-in">—</strong></article>
+        <article><span>Rows out</span><strong id="rows-out">—</strong></article>
+        <article><span>Restarts</span><strong id="restart-count">—</strong></article>
+      </section>
+
+      <section class="panel topology-panel" aria-labelledby="topology-title">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">LIVE TOPOLOGY</div>
+            <h2 id="topology-title">Job graph</h2>
+          </div>
+          <div class="topology-heading-detail">
+            <div class="topology-legend" aria-label="Node color legend">
+              <span><i class="legend-swatch idle"></i>Idle</span>
+              <span><i class="legend-swatch busy"></i>Busy</span>
+              <span><i class="legend-swatch backpressured"></i>Backpressured</span>
+            </div>
+            <p class="muted">Color uses the hottest subtask</p>
+          </div>
+        </div>
+        <div class="topology-scroll">
+          <svg id="topology" class="topology" role="group" aria-label="Live operator topology"></svg>
+        </div>
+        <div id="topology-empty" class="empty" hidden>No topology is available for this job.</div>
+      </section>
+
+      <section class="panel operators-panel" aria-labelledby="operators-title">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow">OPERATOR METRICS</div>
+            <h2 id="operators-title">Operators</h2>
+          </div>
+          <p id="updated-at" class="muted"></p>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Operator</th>
+                <th scope="col">Status</th>
+                <th scope="col">Parallelism</th>
+                <th scope="col">Rows in/s</th>
+                <th scope="col">Rows out/s</th>
+                <th scope="col">Busy</th>
+                <th scope="col">Backpressure</th>
+                <th scope="col" class="control-heading">Scale operator</th>
+              </tr>
+            </thead>
+            <tbody id="operators"></tbody>
+          </table>
+        </div>
+        <div id="empty" class="empty" hidden>No operators are available for this job.</div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="alert" hidden></div>
+  </body>
+</html>

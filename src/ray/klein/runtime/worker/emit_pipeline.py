@@ -95,6 +95,19 @@ class EmitPipeline:
         await self._queue.put(commands)
         self._publish_queue_size()
 
+    async def wait_idle(self, timeout: float) -> None:
+        """Wait until every command accepted before a topology cut is sent."""
+
+        await self.drain_pending()
+        try:
+            await asyncio.wait_for(self._queue.join(), timeout=timeout)
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"emit worker of {self._task_name} did not become idle within {timeout:.1f}s") from None
+        if self._worker is not None and self._worker.done() and not self._worker.cancelled():
+            error = self._worker.exception()
+            if error is not None:
+                raise error
+
     async def _loop(self) -> None:
         while True:
             pending = await self._queue.get()

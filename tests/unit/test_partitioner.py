@@ -75,7 +75,8 @@ class MockCheckpointStrategy(CheckpointStrategy):
     def should_trigger(self, record_emitted: bool) -> bool:
         return False
 
-    def generate_next_barrier(self, is_eof: bool) -> Barrier | None:
+    def generate_next_barrier(self, is_eof: bool, *, force: bool = False) -> Barrier | None:
+        del force
         return None
 
     def register_operator_state(self, barrier_id, reference) -> bool:

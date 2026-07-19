@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+from dataclasses import dataclass
 
 import ray.klein as klein
 from ray.klein._internal.constants import ComponentName
@@ -38,6 +39,14 @@ from ray.klein.runtime.scheduler.restart_strategy import (
 )
 
 logger = get_logger(__name__)
+
+
+@dataclass(slots=True)
+class _LocalRescaleAttempt:
+    candidate_created: bool = False
+    routes_prepared: bool = False
+    coordinator_reconfiguration_attempted: bool = False
+    committed: bool = False
 
 
 class JobMaster:
@@ -242,6 +251,11 @@ class JobMaster:
                 checkpoint_path=restore_path,
             )
             self.schedule(restore_path)
+            # A successful whole-job restore establishes one consistent graph
+            # and checkpoint epoch. Retire any one-shot force-global policy
+            # installed for an uncertain local-rescale commit/rollback; keeping
+            # it would disable Tier-0 recovery forever after the job is healthy.
+            self._replace_recovery_graph(self.execution_graph)
             return RestartResult(RestartStatus.SUCCESS, "")
         except Exception as error:
             log_event(
@@ -277,11 +291,590 @@ class JobMaster:
             if vertex.stream_task is not None
         ]
 
+    def rescale_operator(
+        self,
+        execution_graph: ExecutionGraph,
+        operation_id: str,
+    ) -> None:
+        """Replace one operator while every unrelated actor stays alive.
+
+        Direct upstream tasks insert an ordered local fence and pause. The old
+        target aligns those fences, snapshots managed state and forwards a
+        fence downstream. Only after downstreams acknowledge that cut are the
+        replacement actors started and live tasks hot-reconfigured.
+        """
+
+        self._recovery.clear_stable_rescale_metadata()
+        target_id, old_graph, old_target, new_target = self._validate_local_rescale(execution_graph)
+        timeout = self._schedule_start_timeout
+        attempt = _LocalRescaleAttempt()
+        try:
+            self._apply_local_rescale(
+                execution_graph,
+                operation_id,
+                target_id,
+                old_graph,
+                old_target,
+                new_target,
+                timeout,
+                attempt,
+            )
+        except Exception:
+            if attempt.committed:
+                logger.exception(
+                    "Local rescale of operator %s failed after its commit point; retaining the new topology",
+                    old_target.name,
+                )
+                raise
+            logger.exception("Local rescale of operator %s failed; restoring the old topology", old_target.name)
+            self._rollback_local_rescale(
+                execution_graph,
+                operation_id,
+                target_id,
+                old_graph,
+                new_target,
+                timeout,
+                attempt,
+            )
+            raise
+
+    def _validate_local_rescale(self, execution_graph: ExecutionGraph) -> tuple[int, ExecutionGraph, object, object]:
+        changed = [
+            vertex_id
+            for vertex_id, old in self.execution_graph.job_vertices.items()
+            if old.concurrency != execution_graph.job_vertex(vertex_id).concurrency
+        ]
+        if len(changed) != 1:
+            raise ValueError("local rescale must change exactly one operator")
+        target_id = changed[0]
+        old_graph = self.execution_graph
+        old_target = old_graph.job_vertex(target_id)
+        new_target = execution_graph.job_vertex(target_id)
+        if old_target.operator_spec.source:
+            raise ValueError("source operators cannot be locally rescaled")
+        if old_target.operator_spec.transactional_sink:
+            raise ValueError("transactional sink operators cannot be locally rescaled")
+        if old_target.operator_spec.collecting:
+            raise ValueError("collecting sink operators cannot be locally rescaled")
+        source_count = len(old_graph.source_execution_vertices)
+        if source_count != 1:
+            raise ValueError(
+                "local rescaling currently requires the job to have exactly one physical source "
+                f"task; found {source_count}"
+            )
+        if self.coordinator is None or not self._coordinator_alive():
+            raise RuntimeError("checkpoint coordinator is unavailable")
+        return target_id, old_graph, old_target, new_target
+
+    def _apply_local_rescale(
+        self,
+        execution_graph: ExecutionGraph,
+        operation_id: str,
+        target_id: int,
+        old_graph: ExecutionGraph,
+        old_target,
+        new_target,
+        timeout: float,
+        attempt: _LocalRescaleAttempt,
+    ) -> None:
+        execution_graph.mark_rescale_epoch(target_id, operation_id)
+        klein.get(self.coordinator.begin_operator_rescale(operation_id, timeout), timeout=timeout)
+        if not self._recovery.clear_stable_rescale_metadata():
+            raise RuntimeError("could not retire the previous durable rescale identity")
+        participants = self._prepare_local_rescale(old_graph, target_id, operation_id, timeout)
+        snapshots = self._await_local_rescale_cut(old_target, participants, operation_id, timeout)
+        self._stage_local_rescale_state(old_target, snapshots, operation_id, target_id, timeout)
+        # Set before actor creation so rollback also cleans up a partially
+        # instantiated candidate when one of the later creates fails.
+        attempt.candidate_created = True
+        task_deployer.instantiate_job_vertex(
+            execution_graph,
+            new_target,
+            NativeStrategy().plan(execution_graph),
+            # Stateful candidates use this to find the transient local cut;
+            # stateless candidates retain it as recovery-fence metadata until
+            # the first new-topology checkpoint completes.
+            restore_operation_id=operation_id,
+        )
+        task_deployer.deploy_job_vertex(new_target)
+        task_deployer.start_job_vertex(
+            new_target,
+            timeout,
+            paused_operation_id=operation_id,
+        )
+        # From prepare through coordinator activation every task remains fenced,
+        # and old EdgeOutput objects remain available for an exact rollback.
+        attempt.routes_prepared = True
+        live_handles = self._prepare_live_task_topologies(
+            execution_graph,
+            target_id,
+            operation_id,
+            timeout,
+            live_graph=old_graph,
+        )
+        self._activate_live_task_topologies(live_handles, operation_id, timeout)
+        attempt.coordinator_reconfiguration_attempted = True
+        klein.get(self.coordinator.reconfigure_execution_graph(execution_graph), timeout=timeout)
+
+        # The first retained-journal commit is irreversible. Every operation
+        # below is idempotent/best-effort and rolls forward on the new graph.
+        attempt.committed = True
+        self._commit_live_task_topologies(live_handles, operation_id, timeout)
+        self.execution_graph = execution_graph
+        self._replace_recovery_graph(execution_graph)
+        try:
+            try:
+                # Install the recovery fence and reopen checkpoint admission
+                # before any participant can resume on the committed routes.
+                self._finish_local_rescale_gate(operation_id, committed=True)
+            except Exception:
+                self._recovery.require_global_recovery(
+                    "the committed operator topology could not install its checkpoint recovery fence"
+                )
+                raise
+            self._release_committed_rescale(
+                old_graph,
+                new_target,
+                target_id,
+                operation_id,
+                timeout,
+            )
+            self._request_rescale_stabilization_checkpoint(execution_graph)
+        finally:
+            try:
+                task_terminator.stop_job_vertex(old_target, old_graph.namespace, timeout, force=False)
+            except Exception:
+                logger.warning("Failed to clean up old rescaled operator actors", exc_info=True)
+
+    def _stage_local_rescale_state(
+        self,
+        old_target,
+        snapshots: list,
+        operation_id: str,
+        target_id: int,
+        timeout: float,
+    ) -> None:
+        if not old_target.operator_spec.stateful:
+            return
+        if len(snapshots) != old_target.concurrency or any(snapshot is None for snapshot in snapshots):
+            raise RuntimeError("managed-state rescale did not capture every old subtask")
+        klein.get(
+            self.coordinator.stage_operator_rescale_state(operation_id, target_id, tuple(snapshots)),
+            timeout=timeout,
+        )
+
+    def _rollback_local_rescale(
+        self,
+        execution_graph: ExecutionGraph,
+        operation_id: str,
+        target_id: int,
+        old_graph: ExecutionGraph,
+        new_target,
+        timeout: float,
+        attempt: _LocalRescaleAttempt,
+    ) -> None:
+        rollback_safe = self._restore_precommit_topologies(
+            execution_graph,
+            operation_id,
+            target_id,
+            old_graph,
+            timeout,
+            attempt,
+        )
+        try:
+            rollback_safe = (
+                self._restore_precommit_runtime(
+                    execution_graph,
+                    operation_id,
+                    target_id,
+                    old_graph,
+                    new_target,
+                    timeout,
+                    attempt,
+                )
+                and rollback_safe
+            )
+        finally:
+            if rollback_safe:
+                try:
+                    self._finish_local_rescale_gate(operation_id, committed=False)
+                except Exception:
+                    rollback_safe = False
+                    logger.warning("Failed to release the checkpoint gate after rescale rollback", exc_info=True)
+                else:
+                    self._release_rescale_participants(
+                        old_graph,
+                        target_id,
+                        operation_id,
+                        timeout,
+                        include_target=True,
+                    )
+            if not rollback_safe:
+                # Do not resume a possibly split topology. Fenced tasks make the
+                # health probe fail, and this explicit policy flag guarantees
+                # the supervisor skips Tier-0 and performs a global restore.
+                self._recovery.require_global_recovery("operator topology rollback was incomplete")
+                try:
+                    self._finish_local_rescale_gate(operation_id, committed=True)
+                except Exception:
+                    logger.warning("Failed to install the rollback recovery fence", exc_info=True)
+        if not rollback_safe:
+            raise RuntimeError("operator rescale rollback was incomplete; global recovery is required")
+
+    def _restore_precommit_runtime(
+        self,
+        execution_graph: ExecutionGraph,
+        operation_id: str,
+        target_id: int,
+        old_graph: ExecutionGraph,
+        new_target,
+        timeout: float,
+        attempt: _LocalRescaleAttempt,
+    ) -> bool:
+        restored = True
+        if attempt.candidate_created:
+            try:
+                task_terminator.stop_job_vertex(
+                    new_target,
+                    execution_graph.namespace,
+                    timeout,
+                    force=True,
+                )
+            except Exception:
+                logger.warning("Failed to stop replacement actors during rescale rollback", exc_info=True)
+        self.execution_graph = old_graph
+        try:
+            self._replace_recovery_graph(old_graph)
+        except Exception:
+            restored = False
+            logger.warning("Failed to restore the recovery graph during rescale rollback", exc_info=True)
+        try:
+            self._discard_local_rescale_state(operation_id, target_id)
+        except Exception:
+            logger.warning("Failed to discard local state during rescale rollback", exc_info=True)
+        return restored
+
+    def _restore_precommit_topologies(
+        self,
+        execution_graph: ExecutionGraph,
+        operation_id: str,
+        target_id: int,
+        old_graph: ExecutionGraph,
+        timeout: float,
+        attempt: _LocalRescaleAttempt,
+    ) -> bool:
+        restored = True
+        if attempt.coordinator_reconfiguration_attempted:
+            try:
+                klein.get(self.coordinator.reconfigure_execution_graph(old_graph), timeout=timeout)
+            except Exception:
+                restored = False
+                logger.warning("Failed to restore checkpoint topology during rescale rollback", exc_info=True)
+        if attempt.routes_prepared:
+            try:
+                restored = (
+                    self._rollback_live_task_topologies(
+                        execution_graph,
+                        target_id,
+                        operation_id,
+                        timeout,
+                        live_graph=old_graph,
+                    )
+                    and restored
+                )
+            except Exception:
+                restored = False
+                logger.warning("Failed to restore live task routes during rescale rollback", exc_info=True)
+        return restored
+
+    def _discard_local_rescale_state(self, operation_id: str, target_id: int) -> None:
+        try:
+            klein.get(
+                self.coordinator.discard_operator_rescale_state(operation_id, target_id),
+                timeout=self._coordinator_rpc_timeout,
+            )
+        except Exception:
+            logger.warning("Failed to discard transient rescale state", exc_info=True)
+
+    def _finish_local_rescale_gate(self, operation_id: str, *, committed: bool) -> None:
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                released = klein.get(
+                    self.coordinator.finish_operator_rescale(operation_id, committed),
+                    timeout=self._coordinator_rpc_timeout,
+                )
+                if released is True:
+                    return
+                last_error = RuntimeError(
+                    f"checkpoint coordinator rejected completion of operator rescale {operation_id}"
+                )
+            except Exception as error:
+                last_error = error
+            if attempt == 2:
+                raise RuntimeError(
+                    f"failed to release checkpoint gate for operator rescale {operation_id}"
+                ) from last_error
+
+    def _request_rescale_stabilization_checkpoint(self, execution_graph: ExecutionGraph) -> None:
+        """Prompt the job source to checkpoint the committed topology.
+
+        The RPC only sets a source-thread flag; the barrier itself is emitted at
+        the next record or idle callback, preserving record-boundary ordering.
+        Failure is non-fatal because the topology is already committed and the
+        coordinator's recovery fence remains active until a later checkpoint.
+        """
+
+        calls = [
+            vertex.stream_task.request_checkpoint()
+            for vertex in execution_graph.source_execution_vertices
+            if vertex.stream_task is not None and vertex.status == ExecutionVertexStatus.RUNNING
+        ]
+        if not calls:
+            return
+        try:
+            klein.get(calls, timeout=self._coordinator_rpc_timeout)
+        except Exception:
+            logger.warning("Failed to request the post-rescale stabilization checkpoint", exc_info=True)
+
+    def _prepare_local_rescale(
+        self,
+        graph: ExecutionGraph,
+        target_id: int,
+        operation_id: str,
+        timeout: float,
+    ) -> tuple[list, list]:
+        target = graph.job_vertex(target_id)
+        for vertex in target.execution_vertices.values():
+            klein.get(vertex.stream_task.prepare_rescale_target(operation_id), timeout=self._coordinator_rpc_timeout)
+
+        downstream_waits = []
+        for downstream_id in graph.downstream_job_vertices(target_id):
+            job_vertex = graph.job_vertex(downstream_id)
+            for vertex in job_vertex.execution_vertices.values():
+                descriptor = task_deployer.build_descriptor(graph, job_vertex, vertex)
+                expected = tuple(sender for sender in descriptor.input_vertex_ids if sender.job_vertex_id == target_id)
+                klein.get(
+                    vertex.stream_task.prepare_rescale_downstream(operation_id, expected),
+                    timeout=self._coordinator_rpc_timeout,
+                )
+                downstream_waits.append(vertex.stream_task.await_rescale_ready(operation_id, timeout))
+
+        upstream_waits = []
+        input_ids = {edge.source for edge in graph.input_job_edges(target_id)}
+        for upstream_id in input_ids:
+            job_vertex = graph.job_vertex(upstream_id)
+            edge_indices = tuple(
+                index for index, edge in enumerate(graph.output_job_edges(upstream_id)) if edge.target == target_id
+            )
+            upstream_waits.extend(
+                vertex.stream_task.prepare_rescale_upstream(
+                    operation_id,
+                    target_id,
+                    edge_indices,
+                    timeout,
+                )
+                for vertex in job_vertex.execution_vertices.values()
+            )
+        klein.get(upstream_waits, timeout=timeout)
+        return upstream_waits, downstream_waits
+
+    @staticmethod
+    def _await_local_rescale_cut(
+        old_target,
+        participants: tuple[list, list],
+        operation_id: str,
+        timeout: float,
+    ) -> list:
+        _upstream_waits, downstream_waits = participants
+        target_waits = [
+            vertex.stream_task.await_rescale_ready(operation_id, timeout)
+            for vertex in old_target.execution_vertices.values()
+        ]
+        snapshots = klein.get(target_waits, timeout=timeout)
+        if downstream_waits:
+            klein.get(downstream_waits, timeout=timeout)
+        return list(snapshots)
+
+    def _prepare_live_task_topologies(
+        self,
+        descriptor_graph: ExecutionGraph,
+        target_id: int,
+        operation_id: str,
+        timeout: float,
+        *,
+        live_graph: ExecutionGraph | None = None,
+    ) -> list[KleinActorHandle]:
+        handles = self._changed_live_task_handles(
+            descriptor_graph,
+            target_id,
+            live_graph=live_graph,
+        )
+        calls = [
+            handle.stream_task.prepare_topology_reconfiguration(
+                operation_id,
+                descriptor,
+                timeout,
+            )
+            for handle, descriptor in handles
+        ]
+        if calls:
+            klein.get(calls, timeout=timeout)
+        return [vertex.stream_task for vertex, _descriptor in handles]
+
+    def _changed_live_task_handles(
+        self,
+        descriptor_graph: ExecutionGraph,
+        target_id: int,
+        *,
+        live_graph: ExecutionGraph | None = None,
+    ) -> list[tuple[object, object]]:
+        live_graph = descriptor_graph if live_graph is None else live_graph
+        handles = []
+        for job_vertex_id, descriptor_job_vertex in descriptor_graph.job_vertices.items():
+            if job_vertex_id == target_id:
+                continue
+            live_job_vertex = live_graph.job_vertex(job_vertex_id)
+            for index, live_vertex in live_job_vertex.execution_vertices.items():
+                descriptor_vertex = descriptor_job_vertex.execution_vertex(index)
+                descriptor = task_deployer.build_descriptor(
+                    descriptor_graph,
+                    descriptor_job_vertex,
+                    descriptor_vertex,
+                )
+                current_descriptor = task_deployer.build_descriptor(
+                    live_graph,
+                    live_job_vertex,
+                    live_vertex,
+                )
+                if descriptor == current_descriptor:
+                    continue
+                handles.append((live_vertex, descriptor))
+        return handles
+
+    @staticmethod
+    def _activate_live_task_topologies(
+        handles: list[KleinActorHandle],
+        operation_id: str,
+        timeout: float,
+    ) -> None:
+        if handles:
+            klein.get(
+                [handle.activate_topology_reconfiguration(operation_id) for handle in handles],
+                timeout=timeout,
+            )
+
+    @staticmethod
+    def _commit_live_task_topologies(
+        handles: list[KleinActorHandle],
+        operation_id: str,
+        timeout: float,
+    ) -> None:
+        for handle in handles:
+            try:
+                klein.get(
+                    handle.commit_topology_reconfiguration(operation_id),
+                    timeout=timeout,
+                )
+            except Exception:
+                # The route is already active. A lost actor is rebuilt from the
+                # new ExecutionGraph; a lost response is safe to retry later.
+                logger.warning("Failed to confirm a committed task topology", exc_info=True)
+
+    def _rollback_live_task_topologies(
+        self,
+        descriptor_graph: ExecutionGraph,
+        target_id: int,
+        operation_id: str,
+        timeout: float,
+        *,
+        live_graph: ExecutionGraph,
+    ) -> bool:
+        restored = True
+        for vertex, _descriptor in self._changed_live_task_handles(
+            descriptor_graph,
+            target_id,
+            live_graph=live_graph,
+        ):
+            try:
+                result = klein.get(
+                    vertex.stream_task.rollback_topology_reconfiguration(operation_id),
+                    timeout=timeout,
+                )
+                if result is False:
+                    restored = False
+            except Exception:
+                restored = False
+                logger.warning("Failed to roll back one live task topology", exc_info=True)
+        return restored
+
+    @classmethod
+    def _release_committed_rescale(
+        cls,
+        old_graph: ExecutionGraph,
+        new_target,
+        target_id: int,
+        operation_id: str,
+        timeout: float,
+    ) -> None:
+        candidate_calls = [
+            vertex.stream_task.resume_rescale(operation_id)
+            for vertex in new_target.execution_vertices.values()
+            if vertex.stream_task is not None
+        ]
+        if candidate_calls:
+            try:
+                klein.get(candidate_calls, timeout=timeout)
+            except Exception:
+                logger.warning("Failed to activate one or more replacement tasks", exc_info=True)
+        cls._release_rescale_participants(
+            old_graph,
+            target_id,
+            operation_id,
+            timeout,
+            include_target=False,
+        )
+
+    @staticmethod
+    def _release_rescale_participants(
+        graph: ExecutionGraph,
+        target_id: int,
+        operation_id: str,
+        timeout: float,
+        *,
+        include_target: bool,
+    ) -> None:
+        participant_ids = set(graph.downstream_job_vertices(target_id))
+        participant_ids.update(edge.source for edge in graph.input_job_edges(target_id))
+        if include_target:
+            participant_ids.add(target_id)
+        calls = [
+            vertex.stream_task.resume_rescale(operation_id)
+            for job_vertex_id in participant_ids
+            for vertex in graph.job_vertex(job_vertex_id).execution_vertices.values()
+            if vertex.stream_task is not None
+        ]
+        if calls:
+            try:
+                klein.get(calls, timeout=timeout)
+            except Exception:
+                logger.warning("Failed to release one or more rescale participants", exc_info=True)
+
+    def _replace_recovery_graph(self, execution_graph: ExecutionGraph) -> None:
+        self._recovery = RecoveryManager(
+            execution_graph,
+            coordinator_provider=lambda: self.coordinator,
+            rpc_timeout=self._coordinator_rpc_timeout,
+            start_timeout=self._schedule_start_timeout,
+        )
+
     def on_task_status_report(
         self,
         vertex_id: ExecutionVertexId,
         status: ExecutionVertexStatus,
         error_message: str | None = None,
+        task_name: str | None = None,
+        task_generation: str | None = None,
     ) -> bool:
         """Apply a StreamTask's status report and report whether the job finished.
 
@@ -290,15 +883,39 @@ class JobMaster:
         recover, so this update + the all-sinks-finished scan can't interleave
         with any other execution-graph writer. Returns True iff every sink is FINISHED.
         """
+        _accepted, all_finished, _resolved_name = self.apply_task_status_report(
+            vertex_id,
+            status,
+            error_message,
+            task_name,
+            task_generation,
+        )
+        return all_finished
+
+    def apply_task_status_report(
+        self,
+        vertex_id: ExecutionVertexId,
+        status: ExecutionVertexStatus,
+        error_message: str | None = None,
+        task_name: str | None = None,
+        task_generation: str | None = None,
+    ) -> tuple[bool, bool, str | None]:
+        """Validate and apply a report against the writer-owned current graph."""
+
         vertex = self.execution_graph.find_execution_vertex(vertex_id)
         if vertex is None:
-            return False
+            return False, False, None
+        if task_name is not None and vertex.name != task_name:
+            return False, False, vertex.name
+        if task_generation is not None and vertex.task_generation != task_generation:
+            return False, False, vertex.name
         vertex.transition_to(status, error_message)
         if status != ExecutionVertexStatus.FINISHED:
-            return False
-        return all(
+            return True, False, vertex.name
+        all_finished = all(
             sink.status == ExecutionVertexStatus.FINISHED for sink in self.execution_graph.sink_execution_vertices
         )
+        return True, all_finished, vertex.name
 
     def restart_delay(self) -> float:
         """Fixed-delay (seconds) between two restart attempts.

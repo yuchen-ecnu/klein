@@ -29,12 +29,14 @@ class ExecutionGraph:
         namespace: str,
         job_vertices: Mapping[int, ExecutionJobVertex] | None = None,
         job_edges: Sequence[ExecutionJobEdge] = (),
+        topology_epochs: Mapping[tuple[int, int], str] | None = None,
     ) -> None:
         if not namespace:
             raise ValueError("ExecutionGraph namespace must not be empty")
         self._namespace = namespace
         self._job_vertices = dict(job_vertices or {})
         self._job_edges = tuple(job_edges)
+        self._topology_epochs = dict(topology_epochs or {})
         self._validate_topology()
         _ = self._topological_job_vertices
 
@@ -228,6 +230,63 @@ class ExecutionGraph:
             job_edges.append(ExecutionJobEdge(source_job_vertex, target_job_vertex, edge.partitioner))
 
         return ExecutionGraph(namespace, job_vertices, job_edges)
+
+    def rescale_operator(
+        self,
+        logical_graph: "LogicalGraph",
+        operator_id: int | str,
+    ) -> "ExecutionGraph":
+        """Build a replacement topology while retaining every unaffected task.
+
+        Only the resized job vertex gets fresh :class:`ExecutionVertex`
+        instances.  The other job vertices (including their live actor handles,
+        statuses, output queues and metric groups) are deliberately shared with
+        this graph so the scheduler can apply the topology as a local runtime
+        change instead of a global redeployment.
+        """
+
+        target_id = logical_graph.resolve_operator(operator_id).index
+        if {vertex_id.index for vertex_id in logical_graph.vertices} != set(self._job_vertices):
+            raise ValueError("rescale requires the logical and execution graphs to contain the same operators")
+        old_target = self.job_vertex(target_id)
+        new_spec = next(spec for vertex_id, spec in logical_graph.vertices.items() if vertex_id.index == target_id)
+        if old_target.concurrency == new_spec.concurrency:
+            return self
+
+        job_vertices = dict(self._job_vertices)
+        job_vertices[target_id] = ExecutionJobVertex(
+            new_spec,
+            old_target.config,
+            old_target.job_metric_group,
+        )
+        job_edges = [
+            ExecutionJobEdge(
+                job_vertices[edge.source.index],
+                job_vertices[edge.target.index],
+                edge.partitioner,
+            )
+            for edge in logical_graph.edges
+        ]
+        return ExecutionGraph(
+            self.namespace,
+            job_vertices,
+            job_edges,
+            topology_epochs=self._topology_epochs,
+        )
+
+    def mark_rescale_epoch(self, job_vertex_id: int, operation_id: str) -> None:
+        """Assign a new delivery-channel epoch to edges touching one operator."""
+
+        if job_vertex_id not in self._job_vertices:
+            raise KeyError(f"unknown job vertex {job_vertex_id}")
+        if not isinstance(operation_id, str) or not operation_id:
+            raise ValueError("topology epoch cannot be empty")
+        for edge in self._job_edges:
+            if job_vertex_id in {edge.source, edge.target}:
+                self._topology_epochs[edge.source, edge.target] = operation_id
+
+    def topology_epoch(self, source_job_vertex_id: int, target_job_vertex_id: int) -> str | None:
+        return self._topology_epochs.get((source_job_vertex_id, target_job_vertex_id))
 
     @property
     def execution_vertices(self) -> tuple[ExecutionVertex, ...]:

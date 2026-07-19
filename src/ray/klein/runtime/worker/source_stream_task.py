@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import threading
 from typing import TYPE_CHECKING, Any
 
 import ray.cloudpickle as cloudpickle
@@ -10,7 +11,7 @@ from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
-from ray.klein.runtime.message import MAX_WATERMARK, Barrier, Watermark
+from ray.klein.runtime.message import MAX_WATERMARK, Barrier, RescaleBarrier, Watermark
 from ray.klein.runtime.operator.source import SourceOperator
 from ray.klein.runtime.worker.stream_task import StreamTask
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
@@ -39,6 +40,14 @@ class SourceStreamTask(StreamTask):
     def __init__(self, descriptor: "TaskDeploymentDescriptor") -> None:
         super().__init__(descriptor)
         self._inflight_source_states: dict[int, Any] = {}
+        self._source_rescale_requested = threading.Event()
+        self._source_rescale_resume = threading.Event()
+        self._source_rescale_loop: asyncio.AbstractEventLoop | None = None
+        self._source_rescale_barrier: RescaleBarrier | None = None
+        # Set by the scheduler after a local topology commit. The source thread
+        # consumes it at its next record/idle boundary, where emitting an
+        # ordinary checkpoint barrier is ordered with source records.
+        self._forced_checkpoint_requested = threading.Event()
 
     @property
     def _source_operator(self) -> SourceOperator:
@@ -51,6 +60,7 @@ class SourceStreamTask(StreamTask):
         # Source delivery mode is fixed to INLINE when TaskOutput is built.
         source_operator = self._source_operator
         source_operator.bind_record_emitter(self._on_records_emitted)
+        self._source_rescale_loop = asyncio.get_running_loop()
         # Restore progress from the coordinator — works identically on a fresh
         # deploy and on a single-source restart (the coordinator holds the
         # latest source-owned state). Awaited so setup never blocks the actor
@@ -76,7 +86,34 @@ class SourceStreamTask(StreamTask):
         """
         if self._state is not None and self._state.operator is not None:
             self._source_operator.interrupt()
+        self._source_rescale_resume.set()
         await super().stop(timeout)
+
+    async def prepare_rescale_upstream(
+        self,
+        operation_id: str,
+        target_operator_id: int,
+        edge_indices: tuple[int, ...],
+        timeout: float,
+    ) -> bool:
+        self._begin_rescale(operation_id, "upstream")
+        self._rescale_edge_indices = tuple(edge_indices)
+        if not self._rescale_edge_indices:
+            raise ValueError("an upstream rescale participant needs a target output edge")
+        self._source_rescale_barrier = RescaleBarrier(operation_id, target_operator_id)
+        self._source_rescale_resume.clear()
+        self._source_rescale_requested.set()
+        await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
+        return True
+
+    def resume_rescale(self, operation_id: str) -> bool:
+        if self._rescale_operation_id != operation_id:
+            return False
+        self._source_rescale_requested.clear()
+        self._source_rescale_barrier = None
+        resumed = super().resume_rescale(operation_id)
+        self._source_rescale_resume.set()
+        return resumed
 
     def _run_source(self) -> None:
         """Executor-thread body: drive the source operator to completion.
@@ -90,7 +127,14 @@ class SourceStreamTask(StreamTask):
         if self._state.output is not None:
             self._state.output.collect(Watermark(MAX_WATERMARK))
             self._state.output.collect(self._generate_barrier(is_eof=True))
-        klein.get(self._job_manager.update_stream_task_status(self._vertex_id, ExecutionVertexStatus.FINISHED))
+        klein.get(
+            self._job_manager.update_stream_task_status(
+                self._vertex_id,
+                ExecutionVertexStatus.FINISHED,
+                task_name=self._task_name,
+                task_generation=self._task_generation,
+            )
+        )
         self._eof_reached = True
 
     def request_drain(self) -> None:
@@ -101,6 +145,14 @@ class SourceStreamTask(StreamTask):
         to FINISHED. Idempotent and cheap — safe to call from the JobManager RPC.
         """
         self._source_operator.interrupt()
+
+    def request_checkpoint(self) -> bool:
+        """Request a checkpoint at the next cooperative source boundary."""
+
+        if not self._running or self._eof_reached:
+            return False
+        self._forced_checkpoint_requested.set()
+        return True
 
     def notify_source_checkpoint_complete(self, barrier_id: int) -> tuple[bool, Any]:
         return self._notify_source_checkpoint_complete(barrier_id)
@@ -156,15 +208,32 @@ class SourceStreamTask(StreamTask):
     def _on_records_emitted(self, record_emitted: bool, record_count: int = 1) -> Barrier | None:
         if super()._check_end_of_stream():
             return None
-        if self._state.checkpoint_strategy.should_trigger(record_emitted, record_count):
-            barrier = self._generate_barrier()
+        if self._source_rescale_requested.is_set():
+            barrier = self._source_rescale_barrier
+            output = self._state.output
+            if barrier is None or output is None:
+                raise RuntimeError("source rescale fence was requested without an output")
+            output.flush(force=True)
+            output.collect_to_edges(barrier, self._rescale_edge_indices)
+            output.flush(force=True)
+            self._source_rescale_requested.clear()
+            loop = self._source_rescale_loop
+            if loop is None:
+                raise RuntimeError("source rescale event loop is unavailable")
+            loop.call_soon_threadsafe(self._rescale_ready.set)
+            self._source_rescale_resume.wait()
+        force_checkpoint = self._forced_checkpoint_requested.is_set()
+        if force_checkpoint or self._state.checkpoint_strategy.should_trigger(record_emitted, record_count):
+            barrier = self._generate_barrier(force=force_checkpoint)
             if barrier:
+                if force_checkpoint:
+                    self._forced_checkpoint_requested.clear()
                 self._state.metrics.barriers_out.inc()
             return barrier
         return None
 
-    def _generate_barrier(self, is_eof: bool = False) -> Barrier | None:
-        barrier = self._state.checkpoint_strategy.generate_next_barrier(is_eof)
+    def _generate_barrier(self, is_eof: bool = False, *, force: bool = False) -> Barrier | None:
+        barrier = self._state.checkpoint_strategy.generate_next_barrier(is_eof, force=force)
         if is_eof and barrier is None:
             raise RuntimeError("failed to generate the end-of-data barrier")
         if barrier is not None:

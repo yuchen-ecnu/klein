@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import ray.klein as klein
+from ray.klein._internal.deadline import Deadline
 from ray.klein._internal.logging import get_logger, log_event
 from ray.klein.runtime.coordinator.checkpoint_coordinator import CheckpointCoordinator
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
@@ -28,17 +29,21 @@ class JobHealthReport:
       * ``coordinator_healthy`` — the checkpoint coordinator's actor health.
     """
 
-    def __init__(self, execution_graph: ExecutionGraph) -> None:
-        self._task_status: dict[str, bool] = self._check_task_health(execution_graph)
+    def __init__(self, execution_graph: ExecutionGraph, rpc_timeout: float = 30.0) -> None:
+        deadline = Deadline(rpc_timeout)
+        self._task_status: dict[str, bool] = self._check_task_health(execution_graph, deadline)
         # Use the per-job Ray namespace pinned on the ExecutionGraph by
         # JobManager.submit so the health probe targets *this* job's
         # coordinator. Without it, two coexisting Klein jobs would both
         # probe the same cluster-global "CheckpointCoordinator" actor and
         # one job's restart would swing the other's health verdict.
-        self._coordinator_healthy = CheckpointCoordinator.coordinator_healthy(namespace=execution_graph.namespace)
+        self._coordinator_healthy = CheckpointCoordinator.coordinator_healthy(
+            namespace=execution_graph.namespace,
+            timeout=deadline.remaining(),
+        )
 
     @staticmethod
-    def _check_task_health(execution_graph: ExecutionGraph) -> dict[str, bool]:
+    def _check_task_health(execution_graph: ExecutionGraph, deadline: Deadline) -> dict[str, bool]:
         """Per-task liveness. Terminal vertices are settled from local state;
         the rest are probed with one batched health RPC.
 
@@ -64,7 +69,7 @@ class JobHealthReport:
 
         for name, (is_healthy, reason) in zip(
             probe_names,
-            JobHealthReport._gather_health(probe_requests),
+            JobHealthReport._gather_health(probe_requests, deadline),
             strict=True,
         ):
             task_status[name] = is_healthy
@@ -82,18 +87,21 @@ class JobHealthReport:
         return task_status
 
     @staticmethod
-    def _gather_health(requests: Sequence[Any]) -> list[tuple[bool, str]]:
+    def _gather_health(requests: Sequence[Any], deadline: Deadline) -> list[tuple[bool, str]]:
         """Resolve the batched health RPCs, degrading to per-request resolution
         if the batch fails (one dead actor must not blind us to the others)."""
         if not requests:
             return []
         try:
-            return klein.get(requests)
+            return klein.get(requests, timeout=deadline.remaining())
         except Exception:
             results = []
             for request in requests:
+                if deadline.expired():
+                    results.append((False, "Task health probe deadline exceeded"))
+                    continue
                 try:
-                    results.append(klein.get(request))
+                    results.append(klein.get(request, timeout=deadline.remaining()))
                 except Exception:
                     results.append((False, "Error when querying health info from actor"))
             return results
