@@ -9,6 +9,7 @@ from ray.klein.observability.metrics.metric_spec import MetricKind, MetricSpec
 
 _LATENCY_MS = (1, 2, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000, 60_000)
 _BATCH_RECORDS = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 5_000, 10_000)
+_BATCH_BYTES = (1_024, 4_096, 16_384, 65_536, 262_144, 1_048_576, 4_194_304, 16_777_216, 67_108_864)
 
 
 class KleinMetrics:
@@ -17,6 +18,8 @@ class KleinMetrics:
     # Operator throughput and execution.
     RECORDS_IN = MetricSpec("records_in", MetricKind.COUNTER, "Rows received by the operator.")
     RECORDS_OUT = MetricSpec("records_out", MetricKind.COUNTER, "Rows emitted by the operator.")
+    BYTES_IN = MetricSpec("bytes_in", MetricKind.COUNTER, "Estimated logical payload bytes received by the operator.")
+    BYTES_OUT = MetricSpec("bytes_out", MetricKind.COUNTER, "Estimated logical payload bytes emitted by the operator.")
     PROCESSING_DURATION_MS = MetricSpec(
         "processing_duration_ms",
         MetricKind.HISTOGRAM,
@@ -55,13 +58,46 @@ class KleinMetrics:
 
     # Task data plane, barriers and event time.
     INPUT_BUFFER_RECORDS = MetricSpec(
-        "input_buffer_records", MetricKind.GAUGE, "Envelopes currently queued in the task input buffer."
+        "input_buffer_records", MetricKind.GAUGE, "Logical rows currently queued in the task input buffer."
     )
     INPUT_BUFFER_CAPACITY_RECORDS = MetricSpec(
         "input_buffer_capacity_records", MetricKind.GAUGE, "Configured task input-buffer capacity."
     )
     INPUT_BUFFER_UTILIZATION = MetricSpec(
         "input_buffer_utilization", MetricKind.GAUGE, "Task input-buffer utilization as a ratio from 0 to 1."
+    )
+    INPUT_BUFFER_BYTES = MetricSpec(
+        "input_buffer_bytes", MetricKind.GAUGE, "Estimated payload bytes currently queued in the task input buffer."
+    )
+    INPUT_BUFFER_CAPACITY_BYTES = MetricSpec(
+        "input_buffer_capacity_bytes", MetricKind.GAUGE, "Configured task input-buffer byte capacity."
+    )
+    INPUT_BUFFER_BYTE_UTILIZATION = MetricSpec(
+        "input_buffer_byte_utilization",
+        MetricKind.GAUGE,
+        "Task input-buffer byte utilization as a ratio from 0 to 1.",
+    )
+    EMIT_QUEUE_BATCHES = MetricSpec(
+        "emit_queue_batches", MetricKind.GAUGE, "Detached output command batches waiting for transport."
+    )
+    EMIT_QUEUE_CAPACITY_BATCHES = MetricSpec(
+        "emit_queue_capacity_batches", MetricKind.GAUGE, "Configured emit-queue batch capacity."
+    )
+    TRANSPORT_REQUESTS = MetricSpec("transport_requests", MetricKind.COUNTER, "Downstream data admission RPC attempts.")
+    TRANSPORT_BATCH_ROWS = MetricSpec(
+        "transport_batch_rows", MetricKind.HISTOGRAM, "Logical rows per accepted transport batch.", _BATCH_RECORDS
+    )
+    TRANSPORT_BATCH_BYTES = MetricSpec(
+        "transport_batch_bytes", MetricKind.HISTOGRAM, "Estimated bytes per accepted transport batch.", _BATCH_BYTES
+    )
+    TRANSPORT_SEND_DURATION_MS = MetricSpec(
+        "transport_send_duration_ms",
+        MetricKind.HISTOGRAM,
+        "Downstream data admission RPC duration in milliseconds.",
+        _LATENCY_MS,
+    )
+    TRANSPORT_INFLIGHT_REQUESTS = MetricSpec(
+        "transport_inflight_requests", MetricKind.GAUGE, "Downstream data admission RPCs currently in flight."
     )
     BARRIERS_IN = MetricSpec("barriers_in", MetricKind.COUNTER, "Checkpoint barriers received by the task.")
     BARRIERS_OUT = MetricSpec("barriers_out", MetricKind.COUNTER, "Aligned checkpoint barriers emitted by the task.")
@@ -100,6 +136,9 @@ class KleinMetrics:
     )
     REPLAY_BUFFER_RECORDS = MetricSpec(
         "replay_buffer_records", MetricKind.GAUGE, "Unacknowledged records retained for replay."
+    )
+    REPLAY_BUFFER_BYTES = MetricSpec(
+        "replay_buffer_bytes", MetricKind.GAUGE, "Estimated bytes retained for downstream replay."
     )
     STATE_OBJECT_STORE_WRITES = MetricSpec(
         "state_object_store_writes", MetricKind.COUNTER, "Managed-state snapshots placed in the Ray Object Store."
@@ -218,4 +257,16 @@ class KleinMetrics:
     )
     KAFKA_ERRORS = MetricSpec(
         "kafka_errors", MetricKind.COUNTER, "Kafka discovery, consume, produce, or commit errors."
+    )
+    ROCKETMQ_RECEIVED_RECORDS = MetricSpec(
+        "rocketmq_received_records", MetricKind.COUNTER, "RocketMQ records accepted by the source callback."
+    )
+    ROCKETMQ_ACKNOWLEDGED_RECORDS = MetricSpec(
+        "rocketmq_acknowledged_records", MetricKind.COUNTER, "RocketMQ records acknowledged after downstream emit."
+    )
+    ROCKETMQ_PENDING_RECORDS = MetricSpec(
+        "rocketmq_pending_records", MetricKind.GAUGE, "RocketMQ callback records waiting for downstream emit."
+    )
+    ROCKETMQ_ERRORS = MetricSpec(
+        "rocketmq_errors", MetricKind.COUNTER, "RocketMQ callback, startup, or shutdown errors."
     )

@@ -25,10 +25,41 @@ Run it with:
 python examples/quick_start.py
 ```
 
+## Run batch SQL
+
+```{literalinclude} ../examples/sql_batch.py
+:language: python
+:caption: examples/sql_batch.py
+```
+
+```bash
+python examples/sql_batch.py
+```
+
+## Run managed state on a finite streaming source
+
+```{literalinclude} ../examples/stateful_streaming.py
+:language: python
+:caption: examples/stateful_streaming.py
+```
+
+```bash
+python examples/stateful_streaming.py
+```
+
+This example explicitly selects streaming because managed keyed state has no
+Ray Data batch lowering. The finite collection source reaches end-of-data and
+the interactive terminal operation returns.
+
 ## Explore feature examples
 
-The guides include focused examples next to the behavior they explain:
+The guides include focused examples next to the behavior they explain. Code
+containing placeholders or external URIs is illustrative; the standalone files
+under `examples/` are the smoke-tested local examples.
 
+- [Production streaming walkthrough](production-streaming.md) provides one
+  complete Kafka, watermark, window, checkpoint, file-sink, CLI, and restore
+  path and states all external prerequisites.
 - [Ray Data interoperability](ray-data-interop.md) shows native Dataset transforms and multi-stream dependencies.
 - [Connector catalog](connectors/index.md) includes runnable setup examples for
   Kafka, filesystems, Redis, collections, console, custom connectors, and Ray
@@ -37,4 +68,5 @@ The guides include focused examples next to the behavior they explain:
 - [Managed state](ray-native-state.md) shows a keyed running total and event-time windows.
 - [Event time](event-time.md) shows bounded-out-of-orderness watermarks and idle-input detection.
 
-Each example states whether it requires a bounded source, a streaming source, or an external service.
+Connector and production examples state whether they require a bounded source,
+a streaming source, or an external service.

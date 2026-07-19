@@ -8,6 +8,12 @@ from ray.data.block import UserDefinedFunction
 from ray.util.annotations import PublicAPI
 
 from ray.klein._internal.messages import ChineseMessages
+from ray.klein._internal.streaming_expression import (
+    DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE,
+    AsyncStreamingWithColumn,
+    StreamingExpressionFilter,
+    StreamingWithColumn,
+)
 from ray.klein.api.collect_function import CollectFunction
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.functions.ray_data_lowering import (
@@ -27,6 +33,7 @@ from ray.klein.api.sink_function import SinkFunction
 from ray.klein.api.stream import Stream
 from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 from ray.klein.integrations.filesystem.streaming_file_sink import StreamingFileSink
+from ray.klein.integrations.sql.streaming_sql_sink import StreamingSQLSink
 from ray.klein.runtime.backend.batch_only_sink import BatchOnlySink
 from ray.klein.runtime.backend.batch_only_transform import BatchOnlyTransform
 from ray.klein.runtime.operator.batch_process_operator import BatchProcessOperator
@@ -47,6 +54,8 @@ from ray.klein.runtime.partitioning.simple_partitioner import SimplePartitioner
 from ray.klein.runtime.resources import Resources
 
 if TYPE_CHECKING:
+    from ray.data.datasource import Connection
+
     from ray.klein.api.keyed_stream import KeyedStream
     from ray.klein.api.klein_context import KleinContext
     from ray.klein.api.row_kind import RowKind
@@ -145,22 +154,58 @@ class DataStream(Stream):
         )
 
     def _apply_ray_data(self, call: RayDataCall, dependencies: tuple["Stream", ...]) -> "DataStream":
-        """Attach a batch-only Dataset-producing call to the graph."""
+        """Attach a Dataset-producing call, using a native streaming form when available."""
 
-        resources = Resources()
+        resources = Resources(
+            num_cpus=call.kwargs.get("num_cpus"),
+            num_gpus=call.kwargs.get("num_gpus"),
+        )
+        streaming_operator = self._ray_data_expression_operator(call, resources)
         return DataStream(
             list(dependencies),
-            MapOperator(
-                LogicalFunction(
-                    BatchOnlyTransform,
-                    lowering=call,
-                    resources=resources,
-                )
-            ),
+            streaming_operator or MapOperator(LogicalFunction(BatchOnlyTransform, lowering=call, resources=resources)),
             f"RayData.{call.display_name}",
             NodeType.TRANSFORM,
             resources=resources,
         )
+
+    @staticmethod
+    def _ray_data_expression_operator(call: RayDataCall, resources: Resources) -> StreamOperator | None:
+        """Return a dual-mode operator for the Ray expression APIs Klein can stream."""
+
+        from ray.data.expressions import DownloadExpr, Expr
+
+        if call.dataset_method_name == "with_column":
+            name = call.args[0] if call.args else call.kwargs.get("column_name")
+            expression = call.args[1] if len(call.args) > 1 else call.kwargs.get("expr")
+            if isinstance(name, str) and isinstance(expression, Expr):
+                function = AsyncStreamingWithColumn if isinstance(expression, DownloadExpr) else StreamingWithColumn
+                async_buffer_size = (
+                    DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE if isinstance(expression, DownloadExpr) else None
+                )
+                return MapOperator(
+                    LogicalFunction(
+                        function,
+                        fn_constructor_args=[name, expression],
+                        lowering=call,
+                        resources=resources,
+                        async_buffer_size=async_buffer_size,
+                    )
+                )
+
+        if call.dataset_method_name == "filter":
+            fn = call.args[0] if call.args else call.kwargs.get("fn")
+            expression = call.args[1] if len(call.args) > 1 else call.kwargs.get("expr")
+            if fn is None and isinstance(expression, Expr) and not isinstance(expression, DownloadExpr):
+                return FilterOperator(
+                    LogicalFunction(
+                        StreamingExpressionFilter,
+                        fn_constructor_args=[expression],
+                        lowering=call,
+                        resources=resources,
+                    )
+                )
+        return None
 
     def _consume_ray_data(
         self,
@@ -589,7 +634,7 @@ class DataStream(Stream):
                     batch_process_fn=batch_process,
                     postprocess_fn=postprocess_fn,
                     concurrency=(2, 2, 2),
-                    process_batch_size=3,
+                    batch_process_size=3,
                 )
                 stream.write(ConsoleSinkFunction, num_cpus=0.1)
                 ctx.execute("test_map_reduce").wait()
@@ -617,8 +662,8 @@ class DataStream(Stream):
                 the system will automatically batch the data and pass it to ``batch_process_fn``. Taking the *val*
                 mentioned in ``preprocess_fn`` as an example, you can directly process the data of the *val* column in
                 the ``batch_process_fn`` in the batch data structure, where the structure is specified by the parameter
-                ``process_batch_format``. In addition, you can set the batch processing parameters through
-                ``process_batch_size`` and ``process_batch_timeout``.
+                ``batch_process_format``. In addition, you can set the batch processing parameters through
+                ``batch_process_size`` and ``batch_process_timeout``.
             postprocess_fn: A function for post-processing aggregated data, as shown in the sample code above, you can
                 use postprocess_fn to negate the result calculated by `batch_process_fn`.
             preprocess_fn_constructor_args:
@@ -639,7 +684,7 @@ class DataStream(Stream):
             preprocess_missing_data_strategy: The strategy for missing data during pre-processing.
                 `MissingDataStrategy.IGNORE` will omit the missing data, `MissingDataStrategy.WARNING`
                 will print a warning message, and `MissingDataStrategy.ERROR` will directly report an error.
-            batch_process_size: The max number of records for each batch, defaults to None.
+            batch_process_size: The maximum number of records for each batch, defaults to 1.
             batch_process_timeout: The maximum waiting time in seconds, defaults to 3s.
             batch_process_format: If ``"default"`` or ``"numpy"``, batches are
                 ``dict[str, numpy.ndarray]``. If ``"pandas"``, batches are
@@ -965,8 +1010,10 @@ class DataStream(Stream):
         of stream are partitioned by specified partition function.
 
         Args:
-            partition_func: partition function. If `func` is a python function instead of a subclass of Partition,
-                it will be wrapped as SimplePartition.
+            partition_func: Partition function. A callable is wrapped as a
+                ``SimplePartitioner``. A custom ``Partitioner`` must provide a
+                complete immutable ``to_spec()`` recipe; its static topology
+                defaults to all-to-all unless explicitly narrowed.
 
         Returns:
             The DataStream with specified partitioning set.
@@ -1186,6 +1233,42 @@ class DataStream(Stream):
         """Write Parquet files in batch or streaming mode."""
 
         return self.write_files(path, "parquet", **options)
+
+    @PublicAPI
+    def write_sql(
+        self,
+        sql: str,
+        connection_factory: Callable[[], "Connection"],
+        ray_remote_args: dict[str, Any] | None = None,
+        concurrency: int | None = None,
+    ) -> "StreamSink":
+        """Write this stream using a DB-API 2.0 SQL sink.
+
+        The arguments match :meth:`ray.data.Dataset.write_sql`. Batch jobs use
+        Ray Data's implementation. Streaming jobs buffer up to 128 records per
+        ``executemany`` call and flush at checkpoint barriers, providing
+        at-least-once delivery.
+        """
+
+        batch_lowering = RayDataCall.dataset_method(
+            "write_sql",
+            (sql, connection_factory),
+            {
+                "ray_remote_args": ray_remote_args,
+                "concurrency": concurrency,
+            },
+            expects_dataset=False,
+        )
+        remote_args = ray_remote_args or {}
+        return self.write(
+            StreamingSQLSink,
+            fn_constructor_args=[sql, connection_factory],
+            lowering=batch_lowering,
+            num_cpus=remote_args.get("num_cpus"),
+            num_gpus=remote_args.get("num_gpus"),
+            concurrency=concurrency,
+            name="SQLSink",
+        )
 
     @PublicAPI
     def write_text(self, path: str, **options: Any) -> "StreamSink":

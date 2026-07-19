@@ -14,7 +14,6 @@ from ray.klein._internal.deadline import Deadline
 from ray.klein._internal.logging import get_logger, log_event
 from ray.klein._internal.validation import is_blank
 from ray.klein.api.job_status import JobStatus
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.checkpoint_options import CheckpointOptions
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.job_manager_options import JobManagerOptions
@@ -152,7 +151,7 @@ class JobManager(AsyncWorker):
     async def submit(
         self,
         job_name: str,
-        stream_graph: StreamGraph,
+        logical_graph: LogicalGraph,
         config: Configuration = None,
     ) -> bool:
         job_config = Configuration()
@@ -173,9 +172,9 @@ class JobManager(AsyncWorker):
             job_id=self.namespace,
             job_name=job_name,
         )
-        logger.debug("Submitted stream graph:\n%s", stream_graph)
+        logger.debug("Submitted logical graph:\n%s", logical_graph)
 
-        self.logical_graph = LogicalOptimizer(job_config).optimize(stream_graph)
+        self.logical_graph = LogicalOptimizer(job_config).optimize(logical_graph)
 
         job_metric_group = JobMetricGroup(job_name=job_name, job_id=self.namespace)
         self.execution_graph = ExecutionGraph.expand(
@@ -253,7 +252,7 @@ class JobManager(AsyncWorker):
         if self.job_master is None:
             return
         if status == ExecutionVertexStatus.FAILED and not is_blank(error_message):
-            vertex = self.execution_graph.execution_vertex(vertex_id) if self.execution_graph is not None else None
+            vertex = self.execution_graph.find_execution_vertex(vertex_id) if self.execution_graph is not None else None
             task_name = vertex.name if vertex is not None else str(vertex_id)
             self._task_failure_details.setdefault(task_name, error_message)
         all_finished = await self.run_exclusive(
@@ -377,6 +376,8 @@ class JobManager(AsyncWorker):
                 "task_instances": sum(operator["parallelism"] for operator in operators),
                 "rows_in": sum(operator["rows_in"] for operator in operators),
                 "rows_out": sum(operator["rows_out"] for operator in operators),
+                "bytes_in": sum(operator["bytes_in"] for operator in operators),
+                "bytes_out": sum(operator["bytes_out"] for operator in operators),
                 "restarts": progress.restarts,
                 "max_restarts": progress.max_restarts,
                 "restart_window_seconds": progress.window_seconds,

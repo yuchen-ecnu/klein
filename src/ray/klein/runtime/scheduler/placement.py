@@ -148,7 +148,7 @@ def _node_pin_plan(
     """Resolve per-job-vertex node indices into physical vertex node IDs."""
     node_by_vertex: dict[ExecutionVertexId, str] = {}
     for job_vertex_id, subtask_nodes in assignments.items():
-        job_vertex = execution_graph.job_vertex(job_vertex_id)
+        job_vertex = execution_graph.find_job_vertex(job_vertex_id)
         if job_vertex is None:
             raise ValueError(f"Unknown job vertex {job_vertex_id}")
         for subtask_index, vertex in job_vertex.execution_vertices.items():

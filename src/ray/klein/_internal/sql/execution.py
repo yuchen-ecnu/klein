@@ -9,6 +9,7 @@ from sqlglot import exp
 
 from ray.klein._internal.frozen_mapping import FrozenMapping
 from ray.klein._internal.sql.expression import evaluate_expression
+from ray.klein._internal.sql.ray_data_expression import to_ray_data_expression
 from ray.klein.api.sql_query_error import SQLQueryError
 
 if TYPE_CHECKING:
@@ -64,6 +65,26 @@ class _ProjectRow:
             if output_name in result:
                 output_name = source_name
             result[output_name] = value
+
+
+class _FinalizeProjection:
+    """Select already-computed fields while preserving SQL star behavior."""
+
+    def __init__(self, fields: Sequence[tuple[str | None, str | None]]) -> None:
+        self._fields = tuple(fields)
+
+    def __call__(self, row: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for output_name, source_name in self._fields:
+            if output_name is None:
+                _ProjectRow._copy_star(result, row, table=source_name)
+            else:
+                if output_name in result:
+                    raise SQLQueryError(f"Duplicate SQL output column {output_name!r}; add an explicit alias")
+                if source_name is None:
+                    raise RuntimeError(f"SQL projection {output_name!r} has no computed source")
+                result[output_name] = row[source_name]
+        return result
 
 
 class _AddExpressions:
@@ -373,6 +394,7 @@ def _aggregate_select(
     select: exp.Select,
     dataset: Dataset,
     *,
+    aliases: Sequence[str],
     input_blocks: int | None,
     num_cpus: float,
 ) -> Dataset:
@@ -381,7 +403,12 @@ def _aggregate_select(
     group_fields = [(f"_klein_group_{index}", expression) for index, expression in enumerate(group_expressions)]
     computed, aggregators, outputs = _build_aggregate_plan(select.expressions, group_fields)
     if computed:
-        dataset = dataset.map(_AddExpressions(computed), num_cpus=num_cpus)
+        dataset = _add_sql_expressions(
+            dataset,
+            computed,
+            aliases=aliases,
+            num_cpus=num_cpus,
+        )
     grouped = dataset.groupby(
         _group_key(group_fields),
         num_partitions=_shuffle_partitions(dataset, known_blocks=(input_blocks,)),
@@ -396,6 +423,61 @@ def _has_aggregates(select: exp.Select) -> bool:
     return select.args.get("group") is not None or any(
         projection.find(exp.AggFunc) for projection in select.expressions
     )
+
+
+def _add_sql_expressions(
+    dataset: Dataset,
+    expressions: Sequence[tuple[str, exp.Expression]],
+    *,
+    aliases: Sequence[str],
+    num_cpus: float,
+) -> Dataset:
+    fallback: list[tuple[str, exp.Expression]] = []
+    for name, expression in expressions:
+        ray_expression = to_ray_data_expression(expression, aliases)
+        if ray_expression is None:
+            fallback.append((name, expression))
+        else:
+            dataset = dataset.with_column(name, ray_expression, num_cpus=num_cpus)
+    if fallback:
+        dataset = dataset.map(_AddExpressions(fallback), num_cpus=num_cpus)
+    return dataset
+
+
+def _project_select(
+    projections: Sequence[exp.Expression],
+    dataset: Dataset,
+    *,
+    aliases: Sequence[str],
+    num_cpus: float,
+) -> Dataset:
+    computed: list[tuple[str, exp.Expression]] = []
+    fields: list[tuple[str | None, str | None]] = []
+    output_names: set[str] = set()
+    for index, projection in enumerate(projections):
+        value = projection.this if isinstance(projection, exp.Alias) else projection
+        if isinstance(value, exp.Star):
+            fields.append((None, None))
+            continue
+        if isinstance(value, exp.Column) and value.name == "*":
+            fields.append((None, value.table or None))
+            continue
+
+        output_name = projection.alias_or_name or projection.sql()
+        if output_name in output_names:
+            raise SQLQueryError(f"Duplicate SQL output column {output_name!r}; add an explicit alias")
+        output_names.add(output_name)
+        temporary_name = f"_klein_projection_{index}"
+        computed.append((temporary_name, value))
+        fields.append((output_name, temporary_name))
+
+    dataset = _add_sql_expressions(
+        dataset,
+        computed,
+        aliases=aliases,
+        num_cpus=num_cpus,
+    )
+    return dataset.map(_FinalizeProjection(fields), num_cpus=num_cpus)
 
 
 def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
@@ -466,7 +548,11 @@ def _execute_select(
 
     where = select.args.get("where")
     if where is not None:
-        dataset = dataset.filter(_FilterRow(where.this), num_cpus=num_cpus)
+        predicate = to_ray_data_expression(where.this, aliases, predicate=True)
+        if predicate is None:
+            dataset = dataset.filter(_FilterRow(where.this), num_cpus=num_cpus)
+        else:
+            dataset = dataset.filter(expr=predicate, num_cpus=num_cpus)
     if select.args.get("having") is not None:
         raise SQLQueryError("HAVING is not supported yet")
     if select.args.get("distinct") is not None:
@@ -476,11 +562,17 @@ def _execute_select(
         dataset = _aggregate_select(
             select,
             dataset,
+            aliases=aliases,
             input_blocks=input_blocks,
             num_cpus=num_cpus,
         )
     else:
-        dataset = dataset.map(_ProjectRow(select.expressions), num_cpus=num_cpus)
+        dataset = _project_select(
+            select.expressions,
+            dataset,
+            aliases=aliases,
+            num_cpus=num_cpus,
+        )
     return _apply_order_and_limit(select, dataset)
 
 

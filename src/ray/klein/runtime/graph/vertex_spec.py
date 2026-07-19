@@ -46,4 +46,4 @@ class VertexSpec:
 
     @property
     def is_source(self) -> bool:
-        return self.node_type == NodeType.SOURCE
+        return self.operator.source

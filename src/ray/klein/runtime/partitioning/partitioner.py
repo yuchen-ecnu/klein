@@ -1,23 +1,36 @@
 # SPDX-License-Identifier: Apache-2.0
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from ray.klein.api.runtime_context import RuntimeContext
-from ray.klein.runtime.actor import KleinActorHandle
 from ray.klein.runtime.message import Record
+from ray.klein.runtime.partitioning.channel_topology import ALL_TO_ALL, ChannelTopology
+
+if TYPE_CHECKING:
+    from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 
 class Partitioner(ABC):
-    """Routes records and control messages to downstream partitions."""
+    """Task-local data routing policy.
+
+    Physical/control topology belongs to :attr:`topology`; retry candidates are
+    decided while still on the operator thread and are immutable afterwards.
+    The send layer therefore never calls back into a mutable partitioner.
+    """
+
+    topology: ChannelTopology = ALL_TO_ALL
 
     def __init__(self) -> None:
         self._partition_count: int | None = None
-        self._runtime_context: RuntimeContext | None = None
-        self._target_tasks: list[KleinActorHandle] = []
 
-    def open(self, runtime_context: RuntimeContext, target_tasks: list[KleinActorHandle]) -> None:
-        self._target_tasks = target_tasks
-        self._partition_count = len(target_tasks)
-        self._runtime_context = runtime_context
+    def open(self, runtime_context: RuntimeContext, partition_count: int) -> None:
+        if partition_count <= 0:
+            raise ValueError("partition count must be greater than zero")
+        self._partition_count = partition_count
+
+    @abstractmethod
+    def to_spec(self) -> "PartitionerSpec":
+        """Return an immutable recipe containing every constructor argument."""
 
     @abstractmethod
     def partition(self, record: Record) -> list[int]:
@@ -41,29 +54,11 @@ class Partitioner(ABC):
         """
         return [(index, None) for index in self.partition(record)]
 
-    def target_tasks(self, source_parallelism: int, target_parallelism: int, source_index: int) -> list[int]:
-        """Return control-message targets for one upstream subtask."""
-        return list(range(target_parallelism))
+    def retry_targets(self, initial_target: int) -> tuple[int, ...]:
+        """Return the finite retry ring, starting with ``initial_target``.
 
-    def on_record_emitted(self, target_task: int, buffer_size: int) -> None:
-        """Observe a successful emit and the target's resulting buffer size."""
-        return
-
-    def on_barrier_emitted(self, buffer_sizes: list[int]) -> None:
-        """Observe buffer sizes returned by a barrier broadcast."""
-        return
-
-    def on_record_emit_timeout(self, record: Record, target_task: int, buffer_size: int) -> int:
-        """Return the partition index to retry after backpressure."""
-        return target_task
-
-    @property
-    def can_reroute(self) -> bool:
-        """Whether a timed-out emit may be retried on a *different* downstream.
-
-        True for load-balancing partitioners (worker-pool / round-robin): a full
-        downstream can be skipped. False for partitioners with a fixed routing
-        contract (key/hash, forward) — rerouting would break key affinity, so a
-        full downstream must be waited on and retried with the same target.
+        The default preserves affinity. Load-balancing partitioners override it
+        with their static eligible channel ring. The RecordRouter validates and freezes
+        this decision before it crosses from the operator thread to the emit loop.
         """
-        return False
+        return (initial_target,)

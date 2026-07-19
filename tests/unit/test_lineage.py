@@ -20,15 +20,15 @@ def _make_mock_node(fn_cls=object, args=(), kwargs=None, lowering=None):
     return node
 
 
-def _make_mock_graph(source_nodes=None, sink_nodes=None):
+def _make_mock_graph(source_vertices=None, sink_vertices=None):
     graph = MagicMock()
-    source_ids = list(range(len(source_nodes or [])))
-    sink_ids = list(range(100, 100 + len(sink_nodes or [])))
-    graph.source_nodes = set(source_ids)
-    graph.sink_nodes = set(sink_ids)
-    nodes = dict(enumerate(source_nodes or []))
-    nodes.update(dict(enumerate(sink_nodes or [], start=100)))
-    graph.nodes = nodes
+    source_ids = tuple(range(len(source_vertices or [])))
+    sink_ids = tuple(range(100, 100 + len(sink_vertices or [])))
+    vertices = dict(enumerate(source_vertices or []))
+    vertices.update(dict(enumerate(sink_vertices or [], start=100)))
+    graph.sources = source_ids
+    graph.sinks = sink_ids
+    graph.get.side_effect = vertices.__getitem__
     return graph
 
 
@@ -44,7 +44,7 @@ class TestKafkaExtraction:
             {"bootstrap_servers": ["host1:9092", "host2:9092"]},
         )
         node = _make_mock_node(lowering=call)
-        graph = _make_mock_graph(source_nodes=[node])
+        graph = _make_mock_graph(source_vertices=[node])
         inputs, outputs = extract_datasets_from_klein_graph(graph)
         assert outputs == []
         assert inputs == [DatasetInfo("kafka", "topic-a,topic-b", "host1:9092,host2:9092")]
@@ -61,7 +61,7 @@ class TestKafkaExtraction:
             expects_dataset=False,
         )
         node = _make_mock_node(lowering=call)
-        graph = _make_mock_graph(sink_nodes=[node])
+        graph = _make_mock_graph(sink_vertices=[node])
         inputs, outputs = extract_datasets_from_klein_graph(graph)
 
         assert inputs == []
@@ -77,7 +77,7 @@ class TestRedisExtraction:
 
         connection = RedisConnectionConfig("10.0.0.1", port=6380, database=2)
         node = _make_mock_node(RedisSink, args=(connection,))
-        graph = _make_mock_graph(sink_nodes=[node])
+        graph = _make_mock_graph(sink_vertices=[node])
         _, outputs = extract_datasets_from_klein_graph(graph)
         assert outputs == [DatasetInfo("redis", "redis://10.0.0.1:6380/2")]
 
@@ -101,7 +101,7 @@ class TestKleinLineageTracker:
             tracker = KleinLineageTracker(submission_id, emitter=mock_emitter)
             tracker._run_id = "test-run-id"
             mock_extract.return_value = (inputs or [], outputs or [])
-            tracker.initialize(stream_graph=MagicMock())
+            tracker.initialize(graph=MagicMock())
         return tracker, mock_emitter
 
     def _make_disabled_tracker(self):

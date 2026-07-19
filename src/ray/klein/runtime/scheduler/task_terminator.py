@@ -53,9 +53,6 @@ def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, forc
     while pending_queue:
         job_vertex_id = pending_queue.popleft()
         job_vertex = execution_graph.job_vertex(job_vertex_id)
-        if job_vertex is None:
-            logger.warning("Execution job vertex %s was not found during task shutdown", job_vertex_id)
-            continue
         references.extend(_stop_worker(job_vertex, force))
         for downstream_job_vertex_id in execution_graph.downstream_job_vertices(job_vertex.id):
             pending_queue.append(downstream_job_vertex_id)

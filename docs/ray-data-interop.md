@@ -38,11 +38,41 @@ New Ray factories and Dataset methods are available automatically. Inspect the
 current installation with `ray.klein.current_context().data.available` and
 `stream.data.available`.
 
+## Ray Data expressions
+
+Klein forwards Ray 2.56 expression objects unchanged, so their exact AST,
+schema inference, optimizer rules, and execution operators remain owned by Ray
+Data in batch mode. The expression-bearing `with_column` and `filter(expr=...)`
+forms also have native Klein streaming implementations:
+
+```python
+from ray.data.expressions import col, download, random, uuid
+
+prepared = (
+    ray.klein.read_parquet("input/")
+    .data.with_column("total", col("price") * col("quantity"))
+    .data.with_column("body", download("uri"))
+    .data.with_column("sample", random(seed=7))
+    .data.with_column("request_id", uuid())
+    .data.filter(expr=col("total").is_not_null() & (col("total") > 0))
+)
+```
+
+This includes Ray 2.56's column/literal AST, arithmetic, comparison, boolean,
+null and membership operators, aliases, PyArrow and Python UDF expressions,
+string/list/array/map/struct/datetime namespaces, synthetic IDs/random/UUIDs,
+and the dedicated `download()` expression. In batch mode, `download()` is not
+converted to a row UDF: `Dataset.with_column()` retains Ray's URI partitioning
+and concurrent download plan. In streaming mode, Klein evaluates one URI per
+record in a bounded, order-preserving asynchronous window. A null or unreadable
+URI produces `None`, matching Ray 2.56's download operator.
+
 ## Choose Klein or Ray Data operations
 
-Use native Klein methods such as `stream.map` and `stream.filter` when an
-operation must work in an unbounded streaming pipeline. Calls under
-`stream.data` have exact Ray Data batch semantics and are batch-only.
+Use native Klein methods such as `stream.map` and `stream.filter` for general
+unbounded transformations. `stream.data.with_column(name, expr)` and
+`stream.data.filter(expr=expr)` work in both modes; other `stream.data`
+transforms and all terminal consumers remain batch-only.
 
 `ray.klein.read_kafka(..., trigger="once")` delegates to Ray Data, while
 `trigger="continuous"` selects Klein's unbounded, checkpoint-aware source. The
@@ -90,6 +120,8 @@ joined = left.data.join(right, join_keys="id")
 `KleinContext` can isolate multiple graph builders in one process. Its
 `context.data` namespace remains available for explicitly scoped graph builders,
 while application code should prefer the module-level readers. Ray Data methods
-are deliberately unavailable directly on `KleinContext` or `DataStream`;
-use `context.data.read_csv(...)` and `stream.data.random_shuffle(...)` when the
-explicit namespace is needed.
+are generally unavailable directly on `KleinContext` or `DataStream`; use
+`context.data.read_csv(...)` and `stream.data.random_shuffle(...)` when the
+explicit namespace is needed. The documented stable sink entry points are
+exceptions, including `stream.write_sql(...)`, which uses Ray Data in batch
+mode and Klein's at-least-once DB-API sink in streaming mode.

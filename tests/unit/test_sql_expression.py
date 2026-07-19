@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import pytest
+from ray.data.expressions import DownloadExpr, RandomExpr, col
 from sqlglot import parse_one
 
 from ray.klein._internal.sql.expression import evaluate_expression
+from ray.klein._internal.sql.ray_data_expression import to_ray_data_expression
 from ray.klein.api.sql_query_error import SQLQueryError
 
 
@@ -47,3 +49,41 @@ def test_evaluate_expression_rejects_unsupported_forms() -> None:
 
     with pytest.raises(SQLQueryError, match="Cannot CAST"):
         evaluate_expression(parse_one("CAST('not-a-boolean' AS BOOLEAN)"), {})
+
+
+def test_sql_expression_lowers_to_ray_data_expression_ast() -> None:
+    expression = to_ray_data_expression(parse_one("amount * 2 + 1"), ("orders",))
+
+    assert expression is not None
+    assert expression.structurally_equals(col("orders.amount") * 2 + 1)
+
+
+def test_sql_download_lowers_to_dedicated_ray_expression() -> None:
+    expression = to_ray_data_expression(parse_one("DOWNLOAD(uri)"), ("files",))
+
+    assert isinstance(expression, DownloadExpr)
+    assert expression.uri_column_name == "files.uri"
+    assert expression.filesystem is None
+
+
+def test_sql_supports_ray_synthetic_expressions() -> None:
+    expression = to_ray_data_expression(parse_one("RANDOM(42)"), ())
+
+    assert isinstance(expression, RandomExpr)
+    assert expression.seed == 42
+
+
+def test_sql_expression_keeps_three_valued_in_projection_semantics() -> None:
+    projected = to_ray_data_expression(parse_one("value IN (1, 2)"), ("rows",))
+    predicate = to_ray_data_expression(parse_one("value IN (1, 2)"), ("rows",), predicate=True)
+
+    assert projected is None
+    assert predicate is not None
+
+
+def test_sql_download_rejects_unsupported_composition_and_predicates() -> None:
+    with pytest.raises(SQLQueryError, match="standalone"):
+        to_ray_data_expression(parse_one("DOWNLOAD(uri) + 'suffix'"), ("files",))
+
+    with pytest.raises(SQLQueryError, match="predicate"):
+        to_ray_data_expression(parse_one("DOWNLOAD(uri)"), ("files",), predicate=True)

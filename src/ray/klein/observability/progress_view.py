@@ -465,9 +465,8 @@ def _resource_specs(resources, batch_size=None, async_buffer_size=None) -> str:
 
     Shows the knobs a user actually set — cpu, gpu, batch size, async buffer —
     omitting any that are unset/default (gpu=0, no batching, no async buffer) so
-    a plain operator stays compact. Shared by the StreamGraph and LogicalGraph
-    renderers so both surface the same fields. Returned without styling; the
-    caller wraps it (see ``_node_label``).
+    a plain operator stays compact. Returned without styling; the caller wraps
+    it (see ``_node_label``).
     """
     parts = [f"cpu={resources.cpus}"]
     if resources.gpus:
@@ -547,47 +546,6 @@ def render_logical_graph(graph) -> str | None:
             if sid in seen_root:
                 continue
             seen_root.add(sid)
-            node = root.add(label(sid))
-            build(sid, node)
-
-        console = Console(width=100, force_terminal=False)
-        with console.capture() as cap:
-            console.print(root)
-        return cap.get()
-    except ImportError:
-        return None
-
-
-def render_stream_graph(graph) -> str | None:
-    """Render an API-level StreamGraph as a rich tree string (sources at root).
-
-    Returns None if rich is unavailable so the caller falls back to plain text.
-    """
-    try:
-        from rich.console import Console
-        from rich.tree import Tree
-
-        def label(node_id, partitioner=None) -> str:
-            n = graph.nodes[node_id]
-            ntype = getattr(n.node_type, "value", str(n.node_type))
-            style = _NODE_STYLE.get(ntype, "white")
-            res = n.resources
-            rt = getattr(n.operator, "runtime_info", None)
-            specs = _resource_specs(
-                res,
-                batch_size=getattr(rt, "batch_size", None),
-                async_buffer_size=getattr(rt, "async_buffer_size", None),
-            )
-            return _node_label(n.name, ntype, style, res.effective_concurrency, specs, partitioner)
-
-        def build(node_id, tree) -> None:
-            for dst in graph.downstream_nodes(node_id):
-                part = graph.partitioner_for(node_id, dst)
-                child = tree.add(label(dst, part))
-                build(dst, child)
-
-        root = Tree(f"[bold]StreamGraph[/bold] [dim]{graph.job_name}[/dim]")
-        for sid in sorted(graph.source_nodes):
             node = root.add(label(sid))
             build(sid, node)
 

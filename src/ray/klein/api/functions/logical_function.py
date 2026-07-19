@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import inspect
 from collections.abc import Callable, Iterable
+from copy import copy
 from dataclasses import replace
 from typing import Any
 
@@ -8,6 +9,7 @@ from ray.data import Dataset
 from ray.data.block import UserDefinedFunction
 from ray.util.queue import Queue
 
+from ray.klein._internal.frozen_mapping import FrozenMapping
 from ray.klein.api.collect_function import CollectFunction
 from ray.klein.api.functions.function_kind import FunctionKind
 from ray.klein.api.functions.lowering_context import LoweringContext
@@ -42,8 +44,8 @@ class LogicalFunction:
         if isinstance(fn, (CollectFunction, SourceFunction, SinkFunction)):
             raise TypeError("Lifecycle functions must be passed as classes so each subtask owns its instance")
         self._function = fn
-        self._constructor_args = list(fn_constructor_args or [])
-        self._constructor_kwargs = dict(fn_constructor_kwargs or {})
+        self._constructor_args = tuple(fn_constructor_args or ())
+        self._constructor_kwargs = FrozenMapping(fn_constructor_kwargs or {})
         # The ray.data backend is described by a single lowering callable: either
         # a named transform fn (lower_map_batches…) or a RayDataCall.
         # ``to_batch`` builds a LoweringContext and hands it over; the resources
@@ -77,21 +79,32 @@ class LogicalFunction:
     def runtime_info(self) -> RuntimeInfo:
         return self._runtime_info
 
-    def apply_runtime_overrides(
+    def with_runtime_overrides(
         self,
         *,
         batch_size: int | None = None,
         async_buffer_size: int | None = None,
-    ) -> None:
-        """Replace validated runtime tuning without exposing mutable state."""
+    ) -> "LogicalFunction":
+        """Return an independent function recipe with validated runtime tuning."""
 
         changes: dict[str, int] = {}
         if batch_size is not None:
             changes["batch_size"] = batch_size
         if async_buffer_size is not None:
             changes["async_buffer_size"] = async_buffer_size
+        cloned = copy(self)
         if changes:
-            self._runtime_info = replace(self._runtime_info, **changes)
+            cloned._runtime_info = replace(self._runtime_info, **changes)
+        return cloned
+
+    def with_resources(self, resources: Resources) -> "LogicalFunction":
+        """Return an independent function recipe using ``resources`` for batch lowering."""
+
+        if not isinstance(resources, Resources):
+            raise TypeError("resources must be a Resources instance")
+        cloned = copy(self)
+        cloned._resources = resources
+        return cloned
 
     @staticmethod
     def _classify(fn) -> FunctionKind:
@@ -161,12 +174,3 @@ class LogicalFunction:
         """Return the immutable description of this function's Ray Data lowering."""
 
         return self._lowering
-
-    def apply_resources(self, resources: Resources) -> None:
-        """Replace the resources used to derive the batch lowering.
-
-        Called when a ResourcePlan override is applied so the batch path lowers
-        with the tuned resources, keeping it in lock-step with the streaming
-        scheduler (which reads the same values off the StreamNode).
-        """
-        self._resources = resources

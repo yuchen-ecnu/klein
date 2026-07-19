@@ -50,6 +50,16 @@ class InputActive(StreamControl):
 
 
 @dataclass(frozen=True, slots=True)
+class DeliveryChannel:
+    """Stable identity for one upstream edge's actual delivery target."""
+
+    sender_vertex_id: object
+    sender_task_name: str
+    edge_index: int
+    target_index: int
+
+
+@dataclass(frozen=True, slots=True)
 class PutAck:
     """Reply from a downstream ``StreamTask.put``.
 
@@ -58,6 +68,9 @@ class PutAck:
     The upstream may drop replay-buffer entries with ``batch_sequence <=
     forwarded_sequence`` — those records now exist on a second node, so a single
     downstream crash can't lose them. ``-1`` means "nothing acked yet".
+
+    ``buffer_size`` is the downstream inbox's queued logical-row weight, not
+    the number of transport envelopes.
     """
 
     accepted: bool
@@ -73,7 +86,7 @@ class Record:
     non-None value marks a
     *columnar batch*: the block holds equal-length column arrays spanning
     ``num_rows`` rows, shipped as one record instead of being exploded into
-    per-row dicts. The downstream InputBatcher uses this tag to decide whether
+    per-row dicts. The downstream InputBatchAccumulator uses this tag to decide whether
     to re-slice (columnar) or accumulate row-by-row.
     """
 

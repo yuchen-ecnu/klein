@@ -3,9 +3,10 @@ import pytest
 
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.resource_plan import ResourcePlan
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.environment_variables import EnvironmentVariables
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
+from ray.klein.runtime.graph.vertex_id import VertexId
 
 
 @pytest.fixture()
@@ -97,19 +98,20 @@ def test_resource_plan_overrides_execution(resource_plan_case, monkeypatch, tmp_
 
 def test_batch_size_override_reaches_runtime_info(resource_plan_case) -> None:
     context, _, _ = resource_plan_case
-    graph = StreamGraph.from_sinks(context.sinks, "batch-override", Configuration())
+    graph = LogicalGraph.from_sinks(context.sinks, "batch-override", Configuration())
     plan = graph.build_resource_plan()
     plan.update_node("TestInfer[2]", batch_size=64)
 
-    graph.apply_resource_plan(plan)
+    tuned_graph = graph.with_resource_plan(plan)
 
-    assert graph.nodes[2].resource_plan_node.batch_size == 64
-    assert graph.nodes[2].operator.logical_function.runtime_info.batch_size == 64
+    assert tuned_graph.build_resource_plan()["TestInfer[2]"].batch_size == 64
+    assert tuned_graph.get(VertexId("batch-override", 2)).operator.logical_function.runtime_info.batch_size == 64
+    assert graph.get(VertexId("batch-override", 2)).operator.logical_function.runtime_info.batch_size is None
 
 
 def test_resource_plan_updates_revalidate_immutable_nodes(resource_plan_case) -> None:
     context, _, _ = resource_plan_case
-    graph = StreamGraph.from_sinks(context.sinks, "validated-override", Configuration())
+    graph = LogicalGraph.from_sinks(context.sinks, "validated-override", Configuration())
     plan = graph.build_resource_plan()
 
     with pytest.raises(ValueError, match="batch_size"):

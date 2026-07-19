@@ -61,6 +61,8 @@ _EXPORTS = {
     "kill_actor_by_name": ("ray.klein._internal.ray", "kill_actor_by_name"),
     "list_job_snapshots": ("ray.klein.observability.state_api", "list_job_snapshots"),
     "read_kafka": ("ray.klein.api.read_api", "read_kafka"),
+    "read_canal": ("ray.klein.api.read_api", "read_canal"),
+    "read_rocketmq": ("ray.klein.api.read_api", "read_rocketmq"),
     "register_debug_actor": ("ray.klein._internal.ray", "register_debug_actor"),
     "reset_context": ("ray.klein.api.klein_context", "reset_context"),
     "source": ("ray.klein.api.read_api", "source"),

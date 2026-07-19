@@ -102,3 +102,7 @@ silently upgraded during recovery.
 The layout follows Flink's filesystem checkpoint storage conventions:
 [checkpoint storage](https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/state/checkpoints/)
 and [`_metadata` completion marker](https://nightlies.apache.org/flink/flink-docs-stable/api/java/org/apache/flink/runtime/state/filesystem/AbstractFsCheckpointStorageAccess.html).
+
+See [Restore and rescale a job](checkpoint-recovery.md) for checkpoint
+selection, `execution.savepoint.path`, compatibility checks, resubmission, and
+post-restore validation.

@@ -2,7 +2,7 @@
 
 from ray.klein.runtime.execution_graph.execution_edge import ExecutionEdge
 from ray.klein.runtime.execution_graph.execution_job_vertex import ExecutionJobVertex
-from ray.klein.runtime.partitioning.partitioner import Partitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 
 class ExecutionJobEdge:
@@ -14,12 +14,12 @@ class ExecutionJobEdge:
         self,
         source_job_vertex: ExecutionJobVertex,
         target_job_vertex: ExecutionJobVertex,
-        partitioner: Partitioner,
+        partitioner: PartitionerSpec,
     ) -> None:
         self.source = source_job_vertex.id
         self.target = target_job_vertex.id
         self.partitioner = partitioner
-        self.execution_edges = self._create_execution_edges(source_job_vertex, target_job_vertex)
+        self.execution_edges = tuple(self._create_execution_edges(source_job_vertex, target_job_vertex))
 
     def _create_execution_edges(
         self,
@@ -33,7 +33,7 @@ class ExecutionJobEdge:
                     source_job_vertex.execution_vertex(source_index),
                     target_job_vertex.execution_vertex(target_index),
                 )
-                for target_index in self.partitioner.target_tasks(
+                for target_index in self.partitioner.target_indices(
                     source_job_vertex.concurrency,
                     target_job_vertex.concurrency,
                     source_index,

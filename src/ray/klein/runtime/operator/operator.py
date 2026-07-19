@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from ray.klein._internal.block import block_num_rows
+from ray.klein._internal.memory import estimate_retained_size
 from ray.klein._internal.values import is_valid_column_values, truncated_repr
 from ray.klein.api.collector import Collector
 from ray.klein.api.function import Function
@@ -103,15 +104,17 @@ class StreamOperator(Operator, ABC):
         # collector, so its records_out would read 0; we fall back to this count
         # so the CLI progress view still shows throughput for terminal nodes.
         self._records_in_count: int = 0
+        self._bytes_in_count: int = 0
         # Readable monotonic processing time used by the dashboard's interval
         # busy percentage. Ray histograms are write-only from the task actor.
         self._processing_duration_ns: int = 0
-        # Columnar passthrough (opt-in): when True, a batched operator emits its
+        # Columnar passthrough: when enabled, a batched operator emits its
         # column-oriented output as a single Record(num_rows=N) instead of
         # exploding it into N per-row records. Set in open() from config.
         self._columnar_passthrough: bool = False
         self._metric_group: MetricGroup | None = None
         self._records_in_metric: Counter | None = None
+        self._bytes_in_metric: Counter | None = None
         self._processing_duration_metric: Histogram | None = None
 
     def open(self, collector: Collector, runtime_context: TaskRuntimeContext) -> None:
@@ -121,6 +124,7 @@ class StreamOperator(Operator, ABC):
         self._metric_group = metrics_group
         if isinstance(self, OneInputOperator):
             self._records_in_metric = metrics_group.builtin_counter(KleinMetrics.RECORDS_IN)
+            self._bytes_in_metric = metrics_group.builtin_counter(KleinMetrics.BYTES_IN)
             self._processing_duration_metric = metrics_group.builtin_histogram(KleinMetrics.PROCESSING_DURATION_MS)
 
         from ray.klein.config.pipeline_options import PipelineOptions
@@ -214,6 +218,12 @@ class StreamOperator(Operator, ABC):
         return self._records_in_count
 
     @property
+    def bytes_in(self) -> int:
+        """Estimated logical payload bytes consumed by this operator."""
+
+        return self._bytes_in_count
+
+    @property
     def metric_group(self) -> MetricGroup:
         """The operator-scoped metric group created during ``open``."""
 
@@ -234,6 +244,14 @@ class StreamOperator(Operator, ABC):
         if self._collector is not None:
             return self._collector.records_out
         return self._records_in_count
+
+    @property
+    def bytes_out(self) -> int:
+        """Estimated logical payload bytes emitted by this operator."""
+
+        if self._collector is not None:
+            return self._collector.bytes_out
+        return self._bytes_in_count
 
     @property
     def processing_duration_ns(self) -> int:
@@ -364,6 +382,10 @@ class StreamOperator(Operator, ABC):
         if self._records_in_metric is not None:
             self._records_in_metric.inc(rows)
         self._records_in_count += rows
+        size_bytes = estimate_retained_size(record)
+        if self._bytes_in_metric is not None:
+            self._bytes_in_metric.inc(size_bytes)
+        self._bytes_in_count += size_bytes
 
     def __str__(self) -> str:
         return f"{self.__class__.__name__} ({self.runtime_info})"

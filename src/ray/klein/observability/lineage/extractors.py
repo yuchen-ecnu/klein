@@ -1,32 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Klein StreamGraph lineage extraction for portable external integrations."""
+"""Klein logical-graph lineage extraction for portable integrations."""
 
 from ray.klein._internal.logging import get_logger
 from ray.klein.api.ray_data.call import RayDataCall
 from ray.klein.observability.lineage.models import DatasetInfo
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 
 logger = get_logger(__name__)
 
 
-def extract_datasets_from_klein_graph(
-    stream_graph,
-) -> tuple[list[DatasetInfo], list[DatasetInfo]]:
+def extract_datasets_from_klein_graph(graph: LogicalGraph) -> tuple[list[DatasetInfo], list[DatasetInfo]]:
     inputs: list[DatasetInfo] = []
     outputs: list[DatasetInfo] = []
 
     try:
-        for src_id in stream_graph.source_nodes:
-            node = stream_graph.nodes[src_id]
-            ds_info = _extract_klein_node_dataset(node, is_source=True)
+        for source_id in graph.sources:
+            vertex = graph.get(source_id)
+            ds_info = _extract_klein_node_dataset(vertex, is_source=True)
             if ds_info:
                 inputs.append(ds_info)
     except Exception:
         logger.debug("Failed to extract Klein source info", exc_info=True)
 
     try:
-        for sink_id in stream_graph.sink_nodes:
-            node = stream_graph.nodes[sink_id]
-            ds_info = _extract_klein_node_dataset(node, is_source=False)
+        for sink_id in graph.sinks:
+            vertex = graph.get(sink_id)
+            ds_info = _extract_klein_node_dataset(vertex, is_source=False)
             if ds_info:
                 outputs.append(ds_info)
     except Exception:
@@ -64,9 +63,11 @@ def _extract_ray_kafka_call(call: RayDataCall, *, is_source: bool) -> DatasetInf
     )
 
 
-def _extract_klein_node_dataset(node, is_source: bool) -> DatasetInfo | None:
+def _extract_klein_node_dataset(vertex, is_source: bool) -> DatasetInfo | None:
     try:
-        logical_function = node.operator.logical_function
+        logical_function = vertex.operator.logical_function
+        if logical_function is None:
+            return None
         lowering = logical_function.batch_lowering
         if isinstance(lowering, RayDataCall):
             dataset = _extract_ray_kafka_call(lowering, is_source=is_source)

@@ -31,8 +31,28 @@ jobs:
       - run: ruff format --check .
       - run: ruff check .
       - run: reuse lint
-      - run: pytest tests/unit tests/state tests/architecture --cov=ray.klein
-      - run: pytest tests/integration -m "integration and not external" --timeout=300
+      - name: Core component tests
+        run: make unit-core
+      - name: Runtime component tests
+        run: make unit-runtime
+      - name: State component tests
+        run: make unit-state
+      - name: SQL component tests
+        run: make unit-sql
+      - name: Connector component tests
+        run: make unit-connectors
+      - name: Combined coverage gate
+        run: pytest tests/unit tests/state tests/architecture --cov=ray.klein
+      - name: Runtime integration
+        run: make integration-runtime
+      - name: State and recovery integration
+        run: make integration-state
+      - name: SQL and SQL-state integration
+        run: make integration-sql
+      - name: Local connector integration
+        run: make integration-connectors
+      - name: External connector integration
+        run: make external
       - run: sphinx-build -W --keep-going -b html docs docs/_build/html
       - run: pip-audit --local --skip-editable --progress-spinner off
       - run: >-

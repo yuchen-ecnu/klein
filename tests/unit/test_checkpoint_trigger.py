@@ -29,6 +29,12 @@ class CheckpointTriggerTest(unittest.TestCase):
         # Fires on the 3rd and 6th record.
         self.assertEqual(fires, [False, False, True, False, False, True, False])
 
+    def test_columnar_batch_counts_rows_but_fires_one_barrier(self):
+        trig = CheckpointTrigger(interval_records=3, interval_seconds=0, clock=_FakeClock())
+
+        self.assertTrue(trig.should_trigger(record_emitted=True, record_count=5))
+        self.assertFalse(trig.should_trigger(record_emitted=True, record_count=1))
+
     def test_time_threshold_fires_while_idle(self):
         clock = _FakeClock()
         trig = CheckpointTrigger(interval_records=0, interval_seconds=10, clock=clock)

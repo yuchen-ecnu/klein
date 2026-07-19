@@ -40,6 +40,7 @@ _activate_source_klein()
 
 from ray.klein.api.klein_context import KleinContext  # noqa: E402
 from ray.klein.config.configuration import Configuration  # noqa: E402
+from tests.component_suites import component_for_test_path  # noqa: E402
 from tests.support.waiting import wait_until  # noqa: E402
 
 
@@ -53,14 +54,17 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """External-service tests are opt-in; test tier is never inferred by filename."""
+    """Assign exactly one CI component and keep external services opt-in."""
 
-    if config.getoption("--run-external"):
-        return
-    skip = pytest.mark.skip(reason="requires --run-external")
     for item in items:
-        if item.get_closest_marker("external") is not None:
-            item.add_marker(skip)
+        component = component_for_test_path(Path(item.path), Path(__file__).resolve().parent)
+        item.add_marker(getattr(pytest.mark, f"component_{component}"))
+
+    if not config.getoption("--run-external"):
+        skip = pytest.mark.skip(reason="requires --run-external")
+        for item in items:
+            if item.get_closest_marker("external") is not None:
+                item.add_marker(skip)
 
 
 @pytest.fixture()

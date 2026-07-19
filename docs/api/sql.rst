@@ -9,6 +9,7 @@ SQL and table API
    :nosignatures:
 
    sql
+   SQLQueryError
    SQLSession
    ChangelogRow
    RowKind

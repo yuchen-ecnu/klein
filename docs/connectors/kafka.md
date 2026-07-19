@@ -48,6 +48,8 @@ long-running checkpoint-aware source.
 | `concurrency` | `None` | Continuous source subtasks. Not accepted by `trigger="once"`. |
 | `partition_discovery_interval_ms` | `30000` | Continuous partition refresh interval. |
 | `max_batch_size` | `1000` | Maximum records emitted by a continuous poll batch. |
+| `value_format` | `"raw"` | `raw` or the continuous-only `canal-json` value format. |
+| `format_options` | `None` | Format-specific options; for `canal-json`, `include_metadata` and `ddl_handling`. |
 | `timeout_ms` | `None` | Poll/read timeout; continuous input uses 1000 ms when unset. |
 | `num_cpus`, `num_gpus` | `None` | Source task resources. |
 | `memory`, `ray_remote_args` | `None` | Bounded Ray Data resource options; unsupported for continuous input. |
@@ -68,7 +70,8 @@ addresses, and configured partition IDs are validated before polling.
 
 ### Input record schema
 
-Continuous input emits one mapping per Kafka record:
+With `value_format="raw"`, continuous input emits one mapping per Kafka
+record:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -83,6 +86,16 @@ Continuous input emits one mapping per Kafka record:
 
 Deserialize `key` and `value` explicitly in the next transform so schema and
 error handling remain application-owned.
+
+For an unchained source boundary, all valid raw records returned by one Kafka
+poll are emitted as one columnar transport block. A chained row operator still
+receives ordinary rows, because chaining already removes the actor RPC. Poll
+offsets are advanced before the block and any checkpoint barrier is ordered
+after it.
+
+For Canal Server FlatMessage JSON, select the [Canal JSON value
+format](canal.md) to obtain INSERT/UPDATE/DELETE changelog rows with
+checkpoint-safe recovery inside multi-row Kafka messages.
 
 ### Partition assignment and recovery
 
@@ -165,7 +178,9 @@ CREATE TABLE orders (
 Source tables require `topic` or `topics` plus `bootstrap_servers`. Sink tables
 require exactly one topic. Supported keys are the snake-case API names shown in
 the option tables: `trigger`, offsets, consumer/producer config, resources,
-block/concurrency settings, discovery and batch size, and serializers. See
+block/concurrency settings, discovery and batch size, `format`, and serializers.
+Format-specific source options use a prefix such as
+`canal-json.include-metadata`. See
 [SQL and Table DDL](../sql.md) for statement syntax and row-kind validation.
 
 ## Operational notes

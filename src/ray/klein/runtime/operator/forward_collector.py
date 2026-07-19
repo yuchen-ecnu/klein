@@ -9,18 +9,33 @@ class ForwardCollector(Collector):
 
     def __init__(self, succeeding_ops: list[StreamOperator]) -> None:
         super().__init__()
-        self.succeeding_ops: list[StreamOperator] = succeeding_ops
+        self._succeeding_operators = tuple(succeeding_ops)
 
     def collect(self, record: Record) -> None:
+        self._ensure_open()
         if isinstance(record, Barrier | StreamControl):
-            for op in self.succeeding_ops:
+            for op in self._succeeding_operators:
                 op.collect(record)
             return
-        for index, op in enumerate(self.succeeding_ops):
+        for index, op in enumerate(self._succeeding_operators):
             if index == 0:
                 self._process(op, record)
             else:
                 self._process(op, record.fork())
+
+    def flush(self, force: bool = False) -> None:
+        """Flush every chained branch through its final output collector."""
+        self._ensure_open()
+        flushed: set[int] = set()
+        for operator in self._succeeding_operators:
+            operator.flush()
+            collector = operator._collector
+            if collector is not None and id(collector) not in flushed:
+                collector.flush(force=force)
+                flushed.add(id(collector))
+
+    def _on_close(self) -> None:
+        """Operator lifecycle owns the succeeding operators."""
 
     @staticmethod
     def _process(op: StreamOperator, record: Record) -> None:

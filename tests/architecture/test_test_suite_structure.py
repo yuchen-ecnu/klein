@@ -4,7 +4,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import yaml
+from tests.component_suites import CI_COMPONENTS, component_for_test_path
+
 TEST_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = TEST_ROOT.parent
 UNIT_ROOT = TEST_ROOT / "unit"
 TEST_TIERS = ("architecture", "integration", "state", "unit")
 
@@ -79,3 +83,54 @@ def test_unit_tests_use_bounded_waits_and_pytest_temp_paths() -> None:
             if call_name in forbidden_calls:
                 offenders.append(f"{path.relative_to(TEST_ROOT)}:{node.lineno} ({call_name})")
     assert offenders == []
+
+
+def test_every_test_module_belongs_to_one_known_ci_component() -> None:
+    assignments = {path.relative_to(TEST_ROOT): component_for_test_path(path, TEST_ROOT) for path in _test_modules()}
+
+    assert assignments
+    assert set(assignments.values()) == set(CI_COMPONENTS)
+
+
+def test_critical_integration_modules_keep_their_component_boundary() -> None:
+    expected = {
+        "integration/test_sql.py": "sql",
+        "integration/test_stateful_streaming.py": "state",
+        "integration/connectors/test_file_sink.py": "connectors",
+        "integration/test_datastream_streaming.py": "runtime",
+        "architecture/test_package_structure.py": "core",
+    }
+
+    actual = {relative: component_for_test_path(TEST_ROOT / relative, TEST_ROOT) for relative in expected}
+    assert actual == expected
+
+
+def test_ci_workflow_declares_component_dependency_graph() -> None:
+    workflow = yaml.safe_load((PROJECT_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    expected_needs = {
+        "unit-core": {"quality"},
+        "unit-runtime": {"unit-core"},
+        "unit-state": {"unit-core"},
+        "unit-sql": {"unit-core", "unit-runtime", "unit-state"},
+        "unit-connectors": {"unit-core", "unit-runtime"},
+        "coverage": {"unit-core", "unit-runtime", "unit-state", "unit-sql", "unit-connectors"},
+        "integration-runtime": {"unit-runtime", "python-compat"},
+        "integration-state": {"unit-state", "integration-runtime"},
+        "integration-sql": {"unit-sql", "integration-state"},
+        "integration-connectors": {"unit-connectors", "integration-runtime"},
+        "external-connectors": {"integration-connectors"},
+    }
+
+    for job_name, expected in expected_needs.items():
+        needs = jobs[job_name]["needs"]
+        actual = {needs} if isinstance(needs, str) else set(needs)
+        assert actual == expected, job_name
+
+    for component in CI_COMPONENTS:
+        job = jobs[f"unit-{component}"]
+        commands = "\n".join(step.get("run", "") for step in job["steps"])
+        assert f"component_{component}" in commands
+
+    required_gate = set(jobs["ci-success"]["needs"])
+    assert set(expected_needs) <= required_gate

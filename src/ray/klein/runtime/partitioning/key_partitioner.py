@@ -4,6 +4,7 @@ from collections.abc import Callable
 from ray.klein._internal.block import block_row_dict
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.partitioning.partitioner import Partitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 from ray.klein.state.key_group_range import key_group_for_key, key_group_owner
 
 
@@ -24,10 +25,10 @@ class KeyPartitioner(Partitioner):
         self._configured_max_parallelism = max_parallelism
         self._max_parallelism: int | None = None
 
-    def open(self, runtime_context, target_tasks) -> None:
+    def open(self, runtime_context, partition_count: int) -> None:
         from ray.klein.config.state_options import StateOptions
 
-        super().open(runtime_context, target_tasks)
+        super().open(runtime_context, partition_count)
         configured = self._configured_max_parallelism
         self._max_parallelism = (
             configured if configured is not None else runtime_context.config.get(StateOptions.MAX_PARALLELISM)
@@ -69,6 +70,15 @@ class KeyPartitioner(Partitioner):
 
     def __str__(self) -> str:
         return "HASH"
+
+    def to_spec(self) -> PartitionerSpec:
+        return PartitionerSpec(
+            type(self),
+            (self._key_selector,),
+            {"max_parallelism": self._configured_max_parallelism},
+            str(self),
+            self.topology,
+        )
 
     def _target_for_key(self, key) -> int:
         if self._max_parallelism is None or self._partition_count is None:

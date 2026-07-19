@@ -7,14 +7,12 @@ from unittest import TestCase
 import ray.klein as klein
 from ray.klein.api.runtime_info import RuntimeInfo
 from ray.klein.config.configuration import Configuration
-from ray.klein.config.partitioner_options import PartitionerOptions
 from ray.klein.observability.metrics.metric_group import (
     JobMetricGroup,
     OperatorMetricGroup,
     TaskMetricGroup,
 )
 from ray.klein.runtime.actor import KleinActorHandle, create_remote_actor
-from ray.klein.runtime.collector.collector import OutputCollector
 from ray.klein.runtime.context.runtime_context import TaskRuntimeContext
 from ray.klein.runtime.coordinator.checkpoint_strategy import CheckpointStrategy
 from ray.klein.runtime.message import Barrier, EndOfData, PutAck, Record
@@ -24,6 +22,7 @@ from ray.klein.runtime.partitioning import (
     RescalePartitioner,
 )
 from ray.klein.state.key_group_range import key_group_for_key, key_group_owner
+from tests.unit.task_output_utils import open_task_output
 
 
 class ConsumerFunction:
@@ -39,6 +38,19 @@ class ConsumerFunction:
         except queue.Full:
             return PutAck(False, self.get_input_buffer_size())
         return PutAck(True, self.get_input_buffer_size())
+
+    def try_put(
+        self,
+        records,
+        sender_vertex_id=None,
+        batch_sequence=None,
+        delivery_channel=None,
+    ) -> PutAck:
+        return self.put(
+            records,
+            sender_vertex_id=sender_vertex_id,
+            batch_sequence=batch_sequence,
+        )
 
     def get_input_buffer_size(self):
         return self._input_buffer.qsize()
@@ -77,18 +89,7 @@ class MockCheckpointStrategy(CheckpointStrategy):
 
 
 def get_mock_configuration() -> Configuration:
-    configuration = Configuration()
-    configuration.set(
-        PartitionerOptions.BUSY_RATIO,
-        0.5,
-        # PartitionerOptions.BUSY_RATIO.default_value
-    )
-    configuration.set(
-        PartitionerOptions.BUFFER_BUSY_THRESHOLD,
-        0.5,
-        # PartitionerOptions.BUFFER_BUSY_THRESHOLD.default_value
-    )
-    return configuration
+    return Configuration()
 
 
 def create_mock_metric_group(job_name: str, task_index: str, subtask_index: int) -> OperatorMetricGroup:
@@ -121,14 +122,14 @@ def get_mock_runtime_context(
 def get_mock_adaptive_partitioner(subtask_index: int, target_tasks: list[KleinActorHandle], parallelism: int):
     mock_runtime_context = get_mock_runtime_context(f"partition_{subtask_index}", "2", subtask_index, parallelism)
     adaptive_partitioner = AdaptivePartitioner()
-    adaptive_partitioner.open(mock_runtime_context, target_tasks)
+    adaptive_partitioner.open(mock_runtime_context, len(target_tasks))
     return adaptive_partitioner
 
 
 def get_mock_rescale_partitioner(subtask_index: int, target_tasks: list[KleinActorHandle], parallelism: int):
     mock_runtime_context = get_mock_runtime_context(f"partition_{subtask_index}", "2", subtask_index, parallelism)
     adaptive_partitioner = RescalePartitioner()
-    adaptive_partitioner.open(mock_runtime_context, target_tasks)
+    adaptive_partitioner.open(mock_runtime_context, len(target_tasks))
     return adaptive_partitioner
 
 
@@ -141,6 +142,35 @@ def get_local_klein_handler_list(num: int, qsize: int) -> list[KleinActorHandle]
         )
         for i in range(1, num + 1)
     ]
+
+
+def get_flat_input_datas(handler: KleinActorHandle) -> list[Record]:
+    return [record for batch in klein.get(handler.get_input_datas()) for record in batch]
+
+
+def create_output(
+    targets,
+    partitioner,
+    control_targets,
+    max_rows,
+    names,
+    put_timeout,
+    namespace,
+    *,
+    task_index: int = 0,
+    parallelism: int = 1,
+):
+    return open_task_output(
+        targets,
+        partitioner,
+        control_targets,
+        names,
+        max_rows=max_rows,
+        put_timeout=put_timeout,
+        namespace=namespace,
+        task_index=task_index,
+        parallelism=parallelism,
+    )
 
 
 class CheckpointStatusTest(TestCase):
@@ -166,32 +196,34 @@ class CheckpointStatusTest(TestCase):
     def test_adaptive_data_sequence_from_1_to_4(self) -> None:
         handlers = get_local_klein_handler_list(4, 100)
         adaptive_partition = get_mock_adaptive_partitioner(0, handlers, 1)
-        collector = OutputCollector(
+        collector = create_output(
             handlers,
             adaptive_partition,
+            tuple(range(len(handlers))),
             100,
             ["1", "2", "3", "4"],
             5,
+            "test",
         )
 
         records = [Record({"id": i}) for i in range(10)]
         for record in records:
-            collector._collect(record)
+            collector.collect(record)
 
         self.assertEqual(
-            klein.get(handlers[0].get_input_datas()),
+            get_flat_input_datas(handlers[0]),
             [Record({"id": 0}), Record({"id": 4}), Record({"id": 8})],
         )
         self.assertEqual(
-            klein.get(handlers[1].get_input_datas()),
+            get_flat_input_datas(handlers[1]),
             [Record({"id": 1}), Record({"id": 5}), Record({"id": 9})],
         )
         self.assertEqual(
-            klein.get(handlers[2].get_input_datas()),
+            get_flat_input_datas(handlers[2]),
             [Record({"id": 2}), Record({"id": 6})],
         )
         self.assertEqual(
-            klein.get(handlers[3].get_input_datas()),
+            get_flat_input_datas(handlers[3]),
             [Record({"id": 3}), Record({"id": 7})],
         )
 
@@ -200,33 +232,37 @@ class CheckpointStatusTest(TestCase):
         collectors = []
         for i in range(2):
             rescale_partition = get_mock_rescale_partitioner(i, handlers, 2)
-            collector = OutputCollector(
+            collector = create_output(
                 handlers,
                 rescale_partition,
+                tuple(RescalePartitioner.distribute_tasks(2, len(handlers), i)),
                 100,
                 ["1", "2", "3", "4"],
                 5,
+                "test",
+                task_index=i,
+                parallelism=2,
             )
             collectors.append(collector)
 
         records = [Record({"id": i}) for i in range(10)]
         for i, record in enumerate(records):
-            collectors[i % len(collectors)]._collect(record)
+            collectors[i % len(collectors)].collect(record)
 
         self.assertEqual(
-            klein.get(handlers[0].get_input_datas()),
+            get_flat_input_datas(handlers[0]),
             [Record({"id": 0}), Record({"id": 4}), Record({"id": 8})],
         )
         self.assertEqual(
-            klein.get(handlers[1].get_input_datas()),
+            get_flat_input_datas(handlers[1]),
             [Record({"id": 1}), Record({"id": 5}), Record({"id": 9})],
         )
         self.assertEqual(
-            klein.get(handlers[2].get_input_datas()),
+            get_flat_input_datas(handlers[2]),
             [Record({"id": 2}), Record({"id": 6})],
         )
         self.assertEqual(
-            klein.get(handlers[3].get_input_datas()),
+            get_flat_input_datas(handlers[3]),
             [Record({"id": 3}), Record({"id": 7})],
         )
 
@@ -235,21 +271,25 @@ class CheckpointStatusTest(TestCase):
         collectors = []
         for i in range(4):
             rescale_partition = get_mock_rescale_partitioner(i, handlers, 4)
-            collector = OutputCollector(
+            collector = create_output(
                 handlers,
                 rescale_partition,
+                tuple(RescalePartitioner.distribute_tasks(4, len(handlers), i)),
                 100,
-                ["1", "2", "3", "4"],
+                ["1", "2"],
                 5,
+                "test",
+                task_index=i,
+                parallelism=4,
             )
             collectors.append(collector)
 
         records = [Record({"id": i}) for i in range(10)]
         for i, record in enumerate(records):
-            collectors[i % len(collectors)]._collect(record)
+            collectors[i % len(collectors)].collect(record)
 
         self.assertEqual(
-            klein.get(handlers[0].get_input_datas()),
+            get_flat_input_datas(handlers[0]),
             [
                 Record({"id": 0}),
                 Record({"id": 2}),
@@ -259,7 +299,7 @@ class CheckpointStatusTest(TestCase):
             ],
         )
         self.assertEqual(
-            klein.get(handlers[1].get_input_datas()),
+            get_flat_input_datas(handlers[1]),
             [
                 Record({"id": 1}),
                 Record({"id": 3}),
@@ -283,16 +323,18 @@ class CheckpointStatusTest(TestCase):
             expect[key_group_owner(key_group, 128, downstream_num)].append(r)
 
         key_partitioner = KeyPartitioner(key_selector=key_selector)
-        key_partitioner.open(get_mock_runtime_context("key_partitioner_test", "1", 1, 1), handlers)
-        collector = OutputCollector(
+        key_partitioner.open(get_mock_runtime_context("key_partitioner_test", "1", 1, 1), len(handlers))
+        collector = create_output(
             handlers,
             key_partitioner,
+            tuple(range(len(handlers))),
             100,
             ["1", "2", "3", "4"],
             5,
+            "test",
         )
         for record in records:
-            collector._collect(record)
+            collector.collect(record)
 
         for i in range(downstream_num):
-            self.assertEqual(klein.get(handlers[i].get_input_datas()), expect[i])
+            self.assertEqual(get_flat_input_datas(handlers[i]), expect[i])

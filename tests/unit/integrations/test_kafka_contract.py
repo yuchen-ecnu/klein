@@ -4,9 +4,10 @@ import ray.data
 
 from ray.klein.api.job_client import JobClient
 from ray.klein.api.klein_context import KleinContext
-from ray.klein.api.stream_graph import StreamGraph
+from ray.klein.api.row_kind import RowKind
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
 from ray.klein.integrations.kafka import KafkaSink, KafkaSource
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 
 
 def test_continuous_kafka_source_rejects_invalid_offsets() -> None:
@@ -122,8 +123,67 @@ def test_continuous_kafka_pipeline_uses_the_streaming_sink() -> None:
         start_offset="latest",
     )
     sink = source.write_kafka("output-events", "localhost:9092")
-    graph = StreamGraph.from_sinks(context.sinks, "continuous-kafka", context.config)
+    graph = LogicalGraph.from_sinks(context.sinks, "continuous-kafka", context.config)
 
     assert sink.stream_operator.logical_function.function is KafkaSink
     assert sink.stream_operator.logical_function.batch_supported is True
     assert JobClient._determine_runtime_mode(graph) is RuntimeExecutionMode.STREAMING
+
+
+def test_read_canal_builds_an_unbounded_changelog_source() -> None:
+    context = KleinContext()
+    stream = context.read_canal(
+        "canal-orders",
+        bootstrap_servers="localhost:9092",
+        start_offset="latest",
+        consumer_config={"group.id": "canal-consumer"},
+        concurrency=3,
+        include_metadata=False,
+        ddl_handling="fail",
+    )
+
+    logical_function = stream.stream_operator.logical_function
+    assert logical_function.function is KafkaSource
+    assert logical_function.constructor_args == ("canal-orders",)
+    assert logical_function.constructor_kwargs == {
+        "bootstrap_servers": "localhost:9092",
+        "start_offset": "latest",
+        "consumer_config": {"group.id": "canal-consumer"},
+        "timeout_ms": None,
+        "partition_discovery_interval_ms": 30_000,
+        "max_batch_size": 1_000,
+        "value_format": "canal-json",
+        "format_options": {"include_metadata": False, "ddl_handling": "fail"},
+    }
+    assert stream.stream_operator.bounded is False
+    assert stream.concurrency == 3
+    assert stream.changelog_mode == frozenset(RowKind)
+
+
+def test_read_kafka_accepts_canal_json_as_a_value_format() -> None:
+    context = KleinContext()
+    stream = context.read_kafka(
+        "canal-orders",
+        bootstrap_servers="localhost:9092",
+        trigger="continuous",
+        value_format="canal-json",
+        format_options={"include_metadata": False},
+    )
+
+    logical_function = stream.stream_operator.logical_function
+    assert logical_function.function is KafkaSource
+    assert logical_function.constructor_kwargs["value_format"] == "canal-json"
+    assert logical_function.constructor_kwargs["format_options"] == {
+        "include_metadata": False,
+        "ddl_handling": "ignore",
+    }
+    assert stream.changelog_mode == frozenset(RowKind)
+
+
+def test_canal_json_value_format_requires_continuous_kafka() -> None:
+    with pytest.raises(ValueError, match="requires trigger='continuous'"):
+        KleinContext().read_kafka(
+            "canal-orders",
+            bootstrap_servers="localhost:9092",
+            value_format="canal-json",
+        )

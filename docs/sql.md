@@ -172,6 +172,10 @@ Python methods reuse Ray Data 2.56 names: `topics`, `bootstrap_servers`,
 `key_field`, serializers, `producer_config`, `ray_remote_args`, and
 `concurrency` for writes. Complex option values use JSON strings.
 
+Message encodings remain formats owned by the physical connector. For example,
+Canal CDC uses `'connector'='kafka'`, `'format'='canal-json'`, with
+`canal-json.*` format options; it is not registered as a separate connector.
+
 The connector also validates the read-side `concurrency`,
 `partition_discovery_interval_ms`, and `max_batch_size` options used by the
 Python continuous source. A Kafka table with `'trigger' = 'continuous'`
@@ -207,6 +211,29 @@ regular inner equality joins, grouped `COUNT`/`SUM`/`MIN`/`MAX`/`AVG`, and
 Top-N. CTEs, `UNION ALL`, outer joins, time-attribute ordering, and SQL window
 syntax continue to use batch mode or fail during planning. All inputs must
 belong to the same `KleinContext`.
+
+Bounded SQL translates compatible SQLGlot nodes to native Ray 2.56 expression
+ASTs before falling back to Klein's row evaluator. This covers columns,
+literals, arithmetic/comparison/boolean/null predicates, casts, lower/upper,
+common numeric functions, `RANDOM([seed])`, `UUID()`, and
+`MONOTONICALLY_INCREASING_ID()`. The I/O form
+`DOWNLOAD(uri_column)` is supported as a standalone projection or aggregate
+input, for example:
+
+```sql
+SELECT id, DOWNLOAD(uri) AS body
+FROM files
+WHERE status = 'ready'
+```
+
+In batch mode, `DOWNLOAD` lowers to Ray Data's dedicated URI download operator.
+In streaming mode, Klein uses a bounded, order-preserving asynchronous operator
+so downloads do not block the task actor and a full in-flight window propagates
+backpressure. Composing `DOWNLOAD` inside another scalar expression or using it
+as a predicate is rejected. `RANDOM([seed])`, `UUID()`, and
+`MONOTONICALLY_INCREASING_ID()` are task-local streaming expressions and work in
+projections, predicates, grouping, and aggregate inputs where their SQL types
+are valid.
 
 Data definition language (DDL) and data manipulation language (DML) support `CREATE [TEMPORARY] TABLE`, `DROP TABLE`, and
 `INSERT INTO ... SELECT`. Catalog-qualified names, computed columns,

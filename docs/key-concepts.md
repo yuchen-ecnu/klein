@@ -10,6 +10,50 @@ myst:
 
 Klein for Ray represents a pipeline as a lazy dataflow graph. Sources produce records, transformations create new streams, partitioners route data, and sinks trigger execution.
 
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#087EA4',
+    'primaryTextColor': '#FFFFFF',
+    'primaryBorderColor': '#044E68',
+    'secondaryColor': '#E6F7FF',
+    'secondaryTextColor': '#23272F',
+    'secondaryBorderColor': '#99D6F0',
+    'tertiaryColor': '#F6F7F9',
+    'tertiaryTextColor': '#23272F',
+    'lineColor': '#99A1B3',
+    'textColor': '#23272F',
+    'fontSize': '13px',
+    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
+  },
+  'flowchart': {
+    'nodeSpacing': 30,
+    'rankSpacing': 50,
+    'padding': 15,
+    'wrappingWidth': 120
+  }
+}}%%
+flowchart LR
+    classDef primary fill:#087EA4,stroke:#044E68,color:#FFFFFF,stroke-width:2px,rx:12,ry:12
+    classDef secondary fill:#E6F7FF,stroke:#99D6F0,color:#23272F,stroke-width:1.5px,rx:8,ry:8
+    classDef accent fill:#149ECA,stroke:#0D7EA8,color:#FFFFFF,stroke-width:2px,rx:8,ry:8
+    classDef neutral fill:#F6F7F9,stroke:#E0E3E8,color:#23272F,stroke-width:1px,rx:8,ry:8
+
+    Source[Source]:::primary --> Transform[Transform]:::secondary
+    Transform --> Partition[Partition]:::accent
+    Partition --> Stateful[Stateful operator]:::secondary
+    Stateful --> Sink[Sink]:::primary
+    Time[Watermarks]:::neutral -. ordered control .-> Stateful
+    Checkpoint[Barriers]:::neutral -. ordered control .-> Stateful
+```
+
+The solid path is the record flow. Partitioning determines which physical task
+receives each record. Watermarks and checkpoint barriers use the same ordered
+edges, so they describe all records that precede them. The
+[architecture guide](architecture.md) expands this logical view into planning,
+control-plane, data-plane, and recovery components.
+
 ## What is a DataStream?
 
 A `DataStream` is a logical collection of records and the operations needed to produce them. Methods such as `map()`, `filter()`, `key_by()`, and `join()` add operators to the graph. They don't run work when you call them.

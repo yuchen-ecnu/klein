@@ -40,6 +40,7 @@ class ChainedOperator(StreamOperator, ABC):
                     logger.exception("Failed to roll back operator %s after chain open failed", operator)
             raise
         self._collector = ForwardCollector([self._root_operator])
+        self._collector.open(runtime_context)
         # The chain wires its own collectors, so it adopts the root operator's
         # exception policy instead of running StreamOperator.open itself.
         self._handle_udf_exception_func = self._root_operator._handle_udf_exception_func
@@ -55,6 +56,14 @@ class ChainedOperator(StreamOperator, ABC):
     @property
     def records_out(self) -> int:
         return sum(operator.records_out for operator in self.operators)
+
+    @property
+    def bytes_in(self) -> int:
+        return self._root_operator.bytes_in
+
+    @property
+    def bytes_out(self) -> int:
+        return sum(operator.bytes_out for operator in self.operators)
 
     @property
     def processing_duration_ns(self) -> int:
@@ -76,6 +85,8 @@ class ChainedOperator(StreamOperator, ABC):
                     first_error = error
                 else:
                     logger.exception("Failed to close chained operator %s", operator)
+        if self._collector is not None:
+            self._collector.close()
         if first_error is not None:
             raise first_error.with_traceback(first_error.__traceback__)
 

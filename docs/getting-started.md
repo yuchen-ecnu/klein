@@ -22,10 +22,11 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-Kafka, Redis, RocksDB, and Serve are optional integrations. Install only the
-extra required by the application, for example `.[kafka]`, `.[redis]`,
-`.[rocksdb]`, or `.[serve]`. Use `.[all]` for an integration development
-environment.
+Kafka, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install
+only the extra required by the application, for example `.[kafka]`,
+`.[rocketmq]`, `.[redis]`, `.[rocksdb]`, or `.[serve]`. Use `.[all]` for an
+integration development environment. RocketMQ also requires the native
+`librocketmq` runtime on every worker.
 
 ## Run a bounded pipeline
 
@@ -153,5 +154,10 @@ supported key, default, constraint, and environment variable.
 ## Next steps
 
 - Read [Key concepts](key-concepts.md) to understand execution, state, event time, and recovery.
+- Build the [production streaming walkthrough](production-streaming.md) when
+  you are ready to connect Kafka, watermarks, state, checkpoints, and
+  transactional file output.
+- Check the [operator compatibility matrix](operator-compatibility.md) before
+  mixing Ray Data and native streaming operations.
 - Follow the [user guides](user-guides.md) to build stateful pipelines and configure production storage.
 - Browse the {doc}`API reference <api/api>` for public methods and configuration options.

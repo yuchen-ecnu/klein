@@ -53,12 +53,13 @@ class CheckpointStrategy(ABC):
         return self.restore_source_state()
 
     @abstractmethod
-    def should_trigger(self, record_emitted: bool) -> bool:
+    def should_trigger(self, record_emitted: bool, record_count: int = 1) -> bool:
         """Source-only: whether a barrier should be emitted now.
 
         ``record_emitted`` True on the data path (a record was just emitted),
         False on the idle path (connector poll returned nothing) — the latter
-        only consults the time threshold."""
+        only consults the time threshold. ``record_count`` accounts for an
+        atomic columnar source batch without generating adjacent barriers."""
 
     @abstractmethod
     def generate_next_barrier(self, is_eof: bool) -> Barrier | None:
@@ -332,10 +333,10 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
     async def restore_durable_operator_states_async(self) -> tuple[StateSnapshotReference, ...]:
         return await self._coordinator.durable_operator_states_async()
 
-    def should_trigger(self, record_emitted: bool) -> bool:
+    def should_trigger(self, record_emitted: bool, record_count: int = 1) -> bool:
         if self._operator_type != OperatorType.SOURCE:
             return False
-        return self._trigger.should_trigger(record_emitted)
+        return self._trigger.should_trigger(record_emitted, record_count)
 
     def generate_next_barrier(self, is_eof=False) -> Barrier | EndOfData | None:
         registration = self._coordinator.register_barrier(force=is_eof)

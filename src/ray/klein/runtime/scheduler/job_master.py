@@ -290,7 +290,7 @@ class JobMaster:
         recover, so this update + the all-sinks-finished scan can't interleave
         with any other execution-graph writer. Returns True iff every sink is FINISHED.
         """
-        vertex = self.execution_graph.execution_vertex(vertex_id)
+        vertex = self.execution_graph.find_execution_vertex(vertex_id)
         if vertex is None:
             return False
         vertex.transition_to(status, error_message)

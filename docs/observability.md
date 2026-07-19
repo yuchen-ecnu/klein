@@ -21,8 +21,15 @@ Use the CLI to discover or attach to jobs from another process:
 ray-klein list
 ray-klein status klein-orders-0123abcd
 ray-klein attach klein-orders-0123abcd
-ray-klein cancel klein-orders-0123abcd
+ray-klein stop klein-orders-0123abcd
 ```
+
+Omit the namespace when exactly one job is running, or when you want the CLI
+to present an interactive picker. Use `ray-klein stop --force <namespace>` in
+non-interactive automation; without `--force`, `stop` asks for confirmation.
+`ray-klein cancel` is an equivalent spelling that matches the Python API.
+Use `list --all` to include retained terminal jobs, and add `--json` to `list`
+or `status` when another program will consume the result.
 
 Operations integrations can consume the stable Python state API:
 
@@ -127,11 +134,11 @@ The main built-in metrics are:
 | Area | Metrics |
 |---|---|
 | Throughput | `records_in`, `records_out`, `filter_records_in`, `filter_records_dropped` |
-| Execution | `processing_duration_ms`, `input_buffer_records`, `input_buffer_utilization`, `backpressure_events`, `backpressure_duration_ms` |
+| Execution | `processing_duration_ms`, `input_buffer_records`, `input_buffer_bytes`, `input_buffer_utilization`, `input_buffer_byte_utilization`, `emit_queue_batches`, `transport_requests`, `transport_batch_rows`, `transport_batch_bytes`, `transport_send_duration_ms`, `transport_inflight_requests`, `backpressure_events`, `backpressure_duration_ms` |
 | Event time | `current_input_watermark_ms`, `current_output_watermark_ms`, `watermark_lag_ms`, `idle_inputs`, `late_records_dropped`, `timers_fired` |
 | Checkpoints | `barriers_in`, `barriers_out`, `checkpoint_alignment_duration_ms`, `checkpoint_barrier_latency_ms`, `checkpoints_triggered`, `checkpoints_completed`, `checkpoints_failed`, `checkpoints_in_progress`, `checkpoint_duration_ms`, `checkpoint_persist_duration_ms`, `sink_transactions_pending`, `sink_transactions_committed`, `sink_transaction_commit_failures`, `sink_transaction_commit_duration_ms` |
-| State | `managed_state_size_bytes`, `state_snapshot_duration_ms`, `state_restore_duration_ms`, `ttl_entries_cleaned`, `replay_buffer_records`, `state_object_store_writes`, `state_object_store_restores`, `state_durable_restore_fallbacks` |
-| Connectors | `redis_flush_duration_ms`, `redis_flush_batch_records`, `redis_lookup_duration_ms`, `redis_failures`, `kafka_poll_duration_ms`, `kafka_poll_batch_records`, `kafka_assigned_partitions`, `kafka_consumer_lag_records`, `kafka_commits`, `kafka_commit_duration_ms`, `kafka_errors`, `serve_request_duration_ms`, `serve_request_failures` |
+| State | `managed_state_size_bytes`, `state_snapshot_duration_ms`, `state_restore_duration_ms`, `ttl_entries_cleaned`, `replay_buffer_records`, `replay_buffer_bytes`, `state_object_store_writes`, `state_object_store_restores`, `state_durable_restore_fallbacks` |
+| Connectors | `redis_flush_duration_ms`, `redis_flush_batch_records`, `redis_lookup_duration_ms`, `redis_failures`, `kafka_poll_duration_ms`, `kafka_poll_batch_records`, `kafka_assigned_partitions`, `kafka_consumer_lag_records`, `kafka_commits`, `kafka_commit_duration_ms`, `kafka_errors`, `rocketmq_received_records`, `rocketmq_acknowledged_records`, `rocketmq_pending_records`, `rocketmq_errors`, `serve_request_duration_ms`, `serve_request_failures` |
 
 Latencies and batch sizes are histograms rather than last-value gauges. For
 example, a Prometheus query for operator p95 processing latency is:
@@ -161,12 +168,18 @@ latency = runtime_context.metric_group.histogram(
     boundaries=[1, 5, 10, 50, 100, 500, 1000],
     description="External service call duration in milliseconds.",
 )
+with latency.time():
+    call_external_service()
 ```
 
 Use Ray's Prometheus and Grafana integration for retention, alerting, and
 cross-job dashboards. Klein snapshots derive short-interval row rates, busy
 percentage, and backpressure percentage from monotonic task counters without a
 Prometheus dependency.
+
+For symptom-oriented interpretation, see
+[Performance tuning](performance-tuning.md) and
+[Troubleshooting](troubleshooting.md).
 
 ## State publication architecture
 

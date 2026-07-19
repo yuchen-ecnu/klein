@@ -2,10 +2,10 @@
 from types import SimpleNamespace
 
 from ray.klein.api.klein_context import KleinContext
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
 from ray.klein.runtime.scheduler.assignment import WorkerNode, round_robin_allocate
 from tests.support.execution_graph import expand_execution_graph
@@ -61,9 +61,9 @@ def test_round_robin():
         .write(ConsoleSinkFunction, num_cpus=1, concurrency=2, name="ConsoleSink")
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
 
     job_vertices = sorted(exec_graph.job_vertices.values(), key=lambda job_vertex: job_vertex.id)
     worker_nodes = [
@@ -90,9 +90,9 @@ def test_round_robin_2():
         .write(ConsoleSinkFunction, num_cpus=2, concurrency=1, name="ConsoleSink")
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
 
     job_vertices = sorted(exec_graph.job_vertices.values(), key=lambda job_vertex: job_vertex.id)
     worker_nodes = [
@@ -122,9 +122,9 @@ def test_round_robin_3():
         .write(ConsoleSinkFunction, num_cpus=2, concurrency=4, name="ConsoleSink")
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
 
     job_vertices = sorted(exec_graph.job_vertices.values(), key=lambda job_vertex: job_vertex.id)
     worker_nodes = [
@@ -154,9 +154,9 @@ def test_round_robin_4():
         .write(ConsoleSinkFunction, num_cpus=5, concurrency=3, name="ConsoleSink")
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
 
     job_vertices = sorted(exec_graph.job_vertices.values(), key=lambda job_vertex: job_vertex.id)
     worker_nodes = [

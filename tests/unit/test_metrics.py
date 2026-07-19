@@ -5,15 +5,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from ray.klein.api.collector import Collector
+from ray.klein._internal.memory import estimate_retained_size
 from ray.klein.api.runtime_info import RuntimeInfo
 from ray.klein.config.configuration import Configuration
 from ray.klein.observability.metrics.metric_catalog import KleinMetrics
 from ray.klein.observability.metrics.metric_group import JobMetricGroup
 from ray.klein.observability.metrics.metric_spec import MetricKind, MetricSpec
+from ray.klein.runtime.collector.edge_output import DeliveryMode
 from ray.klein.runtime.context.runtime_context import TaskRuntimeContext
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.operator.operator import OneInputOperator, StreamOperator
+from ray.klein.runtime.partitioning import ForwardPartitioner
+from tests.unit.task_output_utils import open_task_output
 
 
 class _FakeRayMetric:
@@ -127,21 +130,29 @@ def test_operator_facade_counts_columnar_rows_and_observes_duration(fake_ray_met
     operator.name = "Map"
     operator.open(None, context)
 
-    operator.invoke_process(Record({"value": [1, 2, 3]}, num_rows=3))
+    record = Record({"value": [1, 2, 3]}, num_rows=3)
+    expected_bytes = estimate_retained_size(record)
+    operator.invoke_process(record)
 
     assert operator.records_in == 3
+    assert operator.bytes_in == expected_bytes
     by_name = {metric.name: metric for metric in fake_ray_metrics}
     assert by_name["ray_klein_operator_records_in"].values == [(3, None)]
+    assert by_name["ray_klein_operator_bytes_in"].values == [(expected_bytes, None)]
     assert len(by_name["ray_klein_operator_processing_duration_ms"].values) == 1
     assert by_name["ray_klein_operator_processing_duration_ms"].values[0][0] >= 0
 
 
-class _CountingCollector(Collector):
-    def collect(self, record: Record) -> None:
-        self._count_out(self._record_rows(record))
-
-
-def test_collector_counts_columnar_rows() -> None:
-    collector = _CountingCollector()
-    collector.collect(Record({"value": [1, 2, 3, 4]}, num_rows=4))
-    assert collector.records_out == 4
+def test_task_output_counts_columnar_rows() -> None:
+    output = open_task_output(
+        [object()],
+        ForwardPartitioner(),
+        (0,),
+        ["downstream"],
+        delivery_mode=DeliveryMode.PIPELINED,
+    )
+    record = Record({"value": [1, 2, 3, 4]}, num_rows=4)
+    expected_bytes = estimate_retained_size(record)
+    output.collect(record)
+    assert output.records_out == 4
+    assert output.bytes_out == expected_bytes

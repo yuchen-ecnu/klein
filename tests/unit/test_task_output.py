@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: Apache-2.0
+
+import asyncio
+from unittest.mock import patch
+
+import pytest
+
+from ray.klein.runtime.collector.delivery_command import (
+    BarrierCommand,
+    DataCommand,
+    DeliveryCommand,
+    EdgeCommand,
+)
+from ray.klein.runtime.collector.downstream_batcher import DownstreamBatcher
+from ray.klein.runtime.collector.edge_output import DeliveryMode, EdgeOutput
+from ray.klein.runtime.collector.task_output import TaskOutput
+from ray.klein.runtime.message import Barrier, PutAck, Record
+from ray.klein.runtime.partitioning import BroadcastPartitioner
+from tests.unit.task_output_utils import open_task_output
+
+
+class _BlockingEdge:
+    def __init__(self, blocked: bool = False) -> None:
+        self.blocked = blocked
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.received = []
+
+    async def send_commands(self, commands) -> None:
+        self.received.extend(commands)
+        self.started.set()
+        if self.blocked:
+            await self.release.wait()
+
+
+@pytest.mark.asyncio
+async def test_fan_out_edges_progress_concurrently_without_losing_per_edge_order() -> None:
+    slow = _BlockingEdge(blocked=True)
+    fast = _BlockingEdge()
+    output = TaskOutput([slow, fast])
+    slow_commands = [EdgeCommand(), EdgeCommand()]
+    fast_commands = [EdgeCommand(), EdgeCommand()]
+    commands = [
+        DeliveryCommand(0, slow_commands[0]),
+        DeliveryCommand(1, fast_commands[0]),
+        DeliveryCommand(0, slow_commands[1]),
+        DeliveryCommand(1, fast_commands[1]),
+    ]
+
+    sending = asyncio.create_task(output.send_commands(commands))
+    await slow.started.wait()
+    await fast.started.wait()
+
+    assert fast.received == fast_commands
+    assert slow.received == slow_commands
+    assert not sending.done()
+
+    slow.release.set()
+    await sending
+
+
+class _LaneEdge(EdgeOutput):
+    def __init__(self) -> None:
+        self.started = {0: asyncio.Event(), 1: asyncio.Event()}
+        self.release = {0: asyncio.Event(), 1: asyncio.Event()}
+        self.events: list[tuple[str, int | None]] = []
+
+    async def _send_async(self, command) -> None:
+        if isinstance(command, DataCommand):
+            self.events.append(("data", command.target))
+            self.started[command.target].set()
+            await self.release[command.target].wait()
+        elif isinstance(command, BarrierCommand):
+            self.events.append(("barrier", None))
+
+
+@pytest.mark.asyncio
+async def test_edge_targets_progress_concurrently_and_barrier_is_a_fence() -> None:
+    edge = _LaneEdge()
+    first = Record({"id": 1})
+    sending = asyncio.create_task(
+        edge.send_commands(
+            [
+                DataCommand(0, (0,), (first,)),
+                DataCommand(1, (1,), (first,)),
+                BarrierCommand(Barrier(1)),
+                DataCommand(0, (0,), (Record({"id": 2}),)),
+            ]
+        )
+    )
+
+    await edge.started[0].wait()
+    await edge.started[1].wait()
+    assert ("barrier", None) not in edge.events
+
+    edge.release[0].set()
+    await asyncio.sleep(0)
+    assert ("barrier", None) not in edge.events
+    edge.release[1].set()
+    await sending
+
+    barrier_index = edge.events.index(("barrier", None))
+    assert all(event[0] == "data" for event in edge.events[:barrier_index])
+    assert edge.events[barrier_index + 1 :] == [("data", 0)]
+
+
+def test_downstream_batcher_uses_independent_target_idle_clocks() -> None:
+    batcher = DownstreamBatcher(target_count=2, batch_size=10, idle_timeout=5)
+    with patch(
+        "ray.klein.runtime.collector.downstream_batcher.time.monotonic",
+        side_effect=[0.0, 3.0, 6.0],
+    ):
+        batcher.append(0, Record({"id": 0}))
+        batcher.append(1, Record({"id": 1}))
+        ready = list(batcher.drain(force=False))
+
+    assert ready == [(0, (Record({"id": 0}),))]
+
+
+def test_downstream_batcher_flushes_a_large_columnar_record_by_rows() -> None:
+    batcher = DownstreamBatcher(target_count=1, batch_size=10, max_rows=3)
+    record = Record({"id": [1, 2, 3]}, num_rows=3)
+
+    batcher.append(0, record)
+
+    assert batcher.take_full(0) == (record,)
+
+
+def test_downstream_batcher_flushes_wide_records_by_bytes() -> None:
+    batcher = DownstreamBatcher(target_count=1, batch_size=10, max_bytes=1)
+    record = Record({"blob": b"wide"})
+
+    batcher.append(0, record)
+
+    assert batcher.take_full(0) == (record,)
+
+
+@pytest.mark.asyncio
+async def test_large_broadcast_batch_is_put_in_object_store_once(monkeypatch) -> None:
+    payload_ref = object()
+    payloads = []
+
+    class Target:
+        def try_put(self, records, **_kwargs):
+            payloads.append(records)
+            return PutAck(True, 0)
+
+    monkeypatch.setattr("ray.klein.runtime.collector.edge_output.ray.is_initialized", lambda: True)
+    monkeypatch.setattr("ray.klein.runtime.collector.edge_output.klein.is_debug_mode", lambda: False)
+    put = patch("ray.klein.runtime.collector.edge_output.ray.put", return_value=payload_ref)
+    with put as ray_put:
+        output = open_task_output(
+            [Target(), Target()],
+            BroadcastPartitioner(),
+            (0, 1),
+            ["d0", "d1"],
+            delivery_mode=DeliveryMode.PIPELINED,
+            config_values={"pipeline.transport.object-store-threshold-bytes": 1},
+        )
+        output.collect(Record({"blob": b"x" * 1024}))
+        await output.send_commands(output.take_pending_commands())
+
+    ray_put.assert_called_once()
+    assert payloads == [payload_ref, payload_ref]

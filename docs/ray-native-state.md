@@ -73,6 +73,99 @@ class RunningTotal(KeyedProcessFunction):
 totals = orders.key_by(lambda row: row["customer_id"]).process(RunningTotal())
 ```
 
+### Choose a state handle
+
+Descriptors are stable state schema. Give every logical value a unique,
+unchanging name and declare descriptors on the function class rather than
+creating a new descriptor per record.
+
+| Descriptor | Returned handle | Operations |
+|---|---|---|
+| `ValueStateDescriptor` | `ValueState` | Read/write `.value`; `None` means absent; `clear()` deletes it. |
+| `ListStateDescriptor` | `ListState` | Standard mutable-sequence operations such as `append`, `extend`, indexing, deletion, and `clear`. |
+| `MapStateDescriptor` | `MapState` | Standard mutable-mapping operations such as item get/set/delete, `update`, iteration, and `clear`. |
+
+Every handle is isolated by the current key and an optional namespace. Windows
+use the window object as a namespace, so two windows for the same key do not
+share an aggregate.
+
+### Configure state TTL
+
+```python
+from datetime import timedelta
+
+from ray.klein.state import (
+    StateTTLConfig,
+    StateTTLUpdateType,
+    StateVisibility,
+    ValueStateDescriptor,
+)
+
+profile = ValueStateDescriptor(
+    "profile",
+    ttl_config=StateTTLConfig(
+        timedelta(hours=6),
+        update_type=StateTTLUpdateType.ON_READ_AND_WRITE,
+        visibility=StateVisibility.NEVER_RETURN_EXPIRED,
+    ),
+)
+```
+
+`ON_CREATE_AND_WRITE` refreshes expiry only on writes;
+`ON_READ_AND_WRITE` also refreshes it on a successful read.
+`NEVER_RETURN_EXPIRED` treats an expired value as absent even before background
+cleanup deletes its bytes. `RETURN_EXPIRED_IF_NOT_CLEANED_UP` can expose such a
+value until cleanup runs and should be used only when that weaker visibility is
+intentional. Cleanup processes at most `state.ttl.cleanup.batch-size` entries
+after one operator input.
+
+TTL uses processing time. It is independent of event-time watermarks and can
+make results incomplete if a key returns after expiration.
+
+### Register timers
+
+Processing-time timers fire from worker wall-clock progress. Event-time timers
+fire only when the aggregate input watermark reaches their timestamp. Timer
+timestamps are integer milliseconds and are deduplicated by key, namespace,
+domain, and timestamp.
+
+```python
+from datetime import timedelta
+
+from ray.klein import KeyedProcessFunction
+from ray.klein.state import ValueStateDescriptor
+
+
+class InactivityAlert(KeyedProcessFunction):
+    deadline = ValueStateDescriptor("inactivity-deadline")
+    timeout_ms = int(timedelta(minutes=10).total_seconds() * 1000)
+
+    def process(self, row, context):
+        state = context.state(self.deadline)
+        if state.value is not None:
+            context.timer_service.delete_event_time_timer(state.value)
+        deadline = row["event_time_ms"] + self.timeout_ms
+        state.value = deadline
+        context.timer_service.register_event_time_timer(deadline)
+
+    def on_timer(self, event, context):
+        state = context.state(self.deadline)
+        if state.value != event.timestamp:
+            return None
+        state.clear()
+        return {"customer_id": context.current_key, "inactive_at": event.timestamp}
+
+
+alerts = orders.key_by(lambda row: row["customer_id"]).process(
+    InactivityAlert(),
+    timestamp_selector=lambda row: row["event_time_ms"],
+)
+```
+
+Pass a `KeyedProcessFunction` instance or a plain two-argument callable to
+`process()`. Use a class when `on_timer()` behavior is required. Timer state and
+the operator watermark are included in managed-state checkpoints.
+
 ## Use stateful operators
 
 The streaming runtime provides:
@@ -133,7 +226,10 @@ rehashing keys or depending on the previous subtask count.
 ## Configure managed state
 
 ```python
+from ray.klein import Configuration
 from ray.klein.config import StateOptions
+
+config = Configuration()
 
 config.set(StateOptions.BACKEND, "rocksdb")
 config.set(StateOptions.LOCAL_DIRECTORY, "/mnt/nvme/klein-state")
@@ -155,7 +251,11 @@ source. Managed-state snapshots participate in that same protocol. Arbitrary
 non-transactional sinks are therefore not exactly-once. Event-time timers
 advance only from explicit aggregate watermarks; record timestamps alone never
 move event time. Watermark and idle-input semantics are described in
-[Event time and idle inputs](event-time.md). Savepoints remain future work.
+[Event time and idle inputs](event-time.md). Klein can restore a new submission
+from an existing completed checkpoint through `execution.savepoint.path`.
+Creating a named, user-triggered savepoint independently of the periodic
+checkpoint lifecycle remains future work; see
+[Restore and rescale a job](checkpoint-recovery.md).
 
 `ObjectStoreStateBackend` remains available as a low-level immutable MVCC
 primitive for coarse state partitions. The Object Store is used where its

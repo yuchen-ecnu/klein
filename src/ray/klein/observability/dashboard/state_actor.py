@@ -240,6 +240,8 @@ def _apply_interval_metrics(
             {
                 "rows_in_per_second": 0.0,
                 "rows_out_per_second": 0.0,
+                "bytes_in_per_second": 0.0,
+                "bytes_out_per_second": 0.0,
                 "busy_percent": 0.0,
                 "backpressure_percent": 0.0,
             }
@@ -251,6 +253,8 @@ def _apply_interval_metrics(
         {
             "rows_in_per_second": _nonnegative_delta(current, previous, "rows_in") / elapsed_seconds,
             "rows_out_per_second": _nonnegative_delta(current, previous, "rows_out") / elapsed_seconds,
+            "bytes_in_per_second": _nonnegative_delta(current, previous, "bytes_in") / elapsed_seconds,
+            "bytes_out_per_second": _nonnegative_delta(current, previous, "bytes_out") / elapsed_seconds,
             "busy_percent": _percent_delta(current, previous, "busy_ns", available_ns),
             "backpressure_percent": _percent_delta(current, previous, "backpressure_ns", available_ns),
         }

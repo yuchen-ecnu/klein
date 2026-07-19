@@ -56,16 +56,20 @@ class CheckpointTrigger:
                 interval_seconds,
             )
 
-    def should_trigger(self, record_emitted: bool) -> bool:
+    def should_trigger(self, record_emitted: bool, record_count: int = 1) -> bool:
         """Return whether a barrier should be emitted now.
 
         ``record_emitted`` True on the data path (a record was just emitted, so
         the record counter advances), False on the idle path (only the time
         branch is consulted).
         """
+        if isinstance(record_count, bool) or not isinstance(record_count, int):
+            raise TypeError("record_count must be an integer")
+        if record_count <= 0:
+            raise ValueError("record_count must be greater than zero")
         now = self._clock()
         if record_emitted and self._interval_records > 0:
-            self._counter += 1
+            self._counter += record_count
             if self._counter >= self._interval_records:
                 self._reset(now)
                 return True

@@ -29,8 +29,21 @@ def block_num_rows(block: dict[str, Any] | None) -> int:
     return len(next(iter(block.values())))
 
 
-def slice_block_rows(block: dict[str, Any], indices: Sequence[int]) -> dict[str, Any]:
+def slice_block_rows(block: dict[str, Any], indices: Sequence[int] | slice) -> dict[str, Any]:
     """Select the same row indices from every column."""
+
+    contiguous = _contiguous_slice(indices)
+    if contiguous is not None:
+        start, stop = contiguous
+        result: dict[str, Any] = {}
+        for column, values in block.items():
+            if isinstance(values, pa.Array):
+                result[column] = values.slice(start, max(0, stop - start))
+            else:
+                # NumPy basic slicing returns a view. Preserve the original
+                # sequence for a full-span slice to avoid copying Python lists.
+                result[column] = values if start == 0 and stop == len(values) else values[start:stop]
+        return result
 
     selected = list(indices)
     result: dict[str, Any] = {}
@@ -42,6 +55,19 @@ def slice_block_rows(block: dict[str, Any], indices: Sequence[int]) -> dict[str,
         else:
             result[column] = [values[index] for index in selected]
     return result
+
+
+def _contiguous_slice(indices: Sequence[int] | slice) -> tuple[int, int] | None:
+    if isinstance(indices, slice):
+        if indices.step not in (None, 1) or indices.start is None or indices.stop is None:
+            return None
+        return indices.start, indices.stop
+    if not indices:
+        return 0, 0
+    start = indices[0]
+    if any(index != start + offset for offset, index in enumerate(indices)):
+        return None
+    return start, start + len(indices)
 
 
 def block_row_dict(block: dict[str, Any], index: int) -> dict[str, Any]:

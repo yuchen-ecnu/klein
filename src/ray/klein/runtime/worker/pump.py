@@ -26,8 +26,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ray.klein._internal.memory import estimate_retained_size
 from ray.klein.runtime.message import (
     Barrier,
+    DeliveryChannel,
     EndOfData,
     InputActive,
     InputIdle,
@@ -49,10 +51,25 @@ class InboxEnvelope:
     payload: Record | Sequence[Record] | Barrier | StreamControl
     sender_vertex_id: object | None = None
     sequence: int | None = None
+    delivery_channel: DeliveryChannel | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.payload, Sequence):
             object.__setattr__(self, "payload", tuple(self.payload))
+
+
+def inbox_envelope_rows(envelope: InboxEnvelope) -> int:
+    """Logical rows retained by one inbox envelope; controls weighted capacity."""
+    payload = envelope.payload
+    if isinstance(payload, Barrier | StreamControl):
+        return 1
+    records = payload if isinstance(payload, Sequence) else (payload,)
+    return max(1, sum(1 if record.num_rows is None else record.num_rows for record in records))
+
+
+def inbox_envelope_bytes(envelope: InboxEnvelope) -> int:
+    """Estimated bytes retained by one inbox envelope."""
+    return estimate_retained_size(envelope.payload)
 
 
 class InboxPump:
@@ -95,7 +112,12 @@ class InboxPump:
             # inside would deadlock), so only on EndOfData do we drain the runner
             # via barrier() and then finalize here. EndOfData is terminal, so the
             # one-time stall there costs nothing.
-            await self._handle_async(payload, envelope.sender_vertex_id, envelope.sequence)
+            await self._handle_async(
+                payload,
+                envelope.sender_vertex_id,
+                envelope.sequence,
+                envelope.delivery_channel,
+            )
             if isinstance(payload, EndOfData):
                 await self._state.async_runner.barrier()
                 await self._check_eof_and_stop()
@@ -106,7 +128,12 @@ class InboxPump:
             payload,
             envelope.sender_vertex_id,
         )
-        await self._emit_drain_and_watermark(payload, envelope.sender_vertex_id, envelope.sequence)
+        await self._emit_drain_and_watermark(
+            payload,
+            envelope.sender_vertex_id,
+            envelope.sequence,
+            envelope.delivery_channel,
+        )
         await self._check_eof_and_stop()
 
     async def _emit_drain_and_watermark(
@@ -114,6 +141,7 @@ class InboxPump:
         payload,
         sender_vertex_id: object | None,
         sequence: int | None,
+        delivery_channel: DeliveryChannel | None,
     ) -> None:
         """Drain buffered emit-ops and advance the replay watermark after process.
 
@@ -128,7 +156,7 @@ class InboxPump:
         # configured number of batches, force a flush + emit a watermark marker so the
         # upstream learns this batch's output has left the task.
         if not isinstance(payload, Barrier | StreamControl) and self._watermark.note_processed(
-            sender_vertex_id, sequence
+            delivery_channel or sender_vertex_id, sequence
         ):
             await self._watermark.advance()
 
@@ -145,23 +173,25 @@ class InboxPump:
     # --- operator dispatch ---
 
     def _handle_sync(self, payload, sender_vertex_id: object | None) -> None:
-        """Runs in the executor thread — batcher + operator (buffers emit-ops)."""
+        """Runs in the executor thread — accumulator + operator + output commands."""
         for record in payload if isinstance(payload, Sequence) else (payload,):
             if isinstance(record, StreamControl):
-                self._state.batching_strategy.force_flush()
+                self.flush_input()
                 self.handle_stream_control(record, sender_vertex_id)
                 continue
             if not isinstance(record, Barrier | StreamControl):
                 record.sender = sender_vertex_id
-            self._state.batching_strategy.accumulate_then_flush(record)
+            for emitted in self._state.input_batches.accept(record):
+                self.data_handler(emitted)
         if isinstance(payload, EndOfData):
-            self._state.batching_strategy.force_flush()
+            self.flush_input()
 
     async def _handle_async(
         self,
         payload,
         sender_vertex_id: object | None,
         sequence: int | None,
+        delivery_channel: DeliveryChannel | None,
     ) -> None:
         # Async path producer: input flows through the batcher first (same as the
         # sync path) so a batched async operator — e.g. the serve
@@ -170,14 +200,14 @@ class InboxPump:
         # compute; barriers and the per-envelope post-process bookkeeping are
         # submitted as in-order control actions. The runner's FIFO consumer then
         # emits results in submit order (ORDERED), so up to async_buffer_size
-        # requests are in flight at once without racing the collector.
+        # requests are in flight at once without racing TaskOutput.
         loop = asyncio.get_running_loop()
         runner = self._state.async_runner
         for record in payload if isinstance(payload, Sequence) else (payload,):
             if isinstance(record, StreamControl):
                 emitted = await loop.run_in_executor(
                     self._state.executor,
-                    self._state.batching_strategy.collect_force_flush,
+                    lambda: self._state.input_batches.flush(force=True),
                 )
                 await self._dispatch_async(emitted)
                 await runner.submit_control(
@@ -193,21 +223,28 @@ class InboxPump:
                 record.sender = sender_vertex_id
             emitted = await loop.run_in_executor(
                 self._state.executor,
-                self._state.batching_strategy.collect_accumulate_then_flush,
+                self._state.input_batches.accept,
                 record,
             )
             await self._dispatch_async(emitted)
         if isinstance(payload, EndOfData):
             emitted = await loop.run_in_executor(
                 self._state.executor,
-                self._state.batching_strategy.collect_force_flush,
+                lambda: self._state.input_batches.flush(force=True),
             )
             await self._dispatch_async(emitted)
         # Per-envelope emit-drain + watermark runs in order behind this
         # envelope's data, once its output has actually been emitted. The eof
         # check + stop is NOT submitted here — it runs on the pump loop after
         # runner.barrier() (see run_once) to avoid a stop()/consumer deadlock.
-        await runner.submit_control(lambda: self._emit_drain_and_watermark(payload, sender_vertex_id, sequence))
+        await runner.submit_control(
+            lambda: self._emit_drain_and_watermark(
+                payload,
+                sender_vertex_id,
+                sequence,
+                delivery_channel,
+            )
+        )
 
     async def _dispatch_async(self, records) -> None:
         """Route batcher-flushed records to the ordered runner.
@@ -245,8 +282,8 @@ class InboxPump:
 
         The runner's consumer calls this for each completed compute. ``collect``
         applies the operator's batch-expand / columnar / validation logic and
-        buffers emit-ops; it runs on the executor thread because the collector's
-        ``_pending`` buffer is not loop-safe. Because the consumer is a single
+        buffers delivery commands; it runs on the executor thread because the
+        edge command buffers are not loop-safe. Because the consumer is a single
         task, these collects are serialized — emission order == submit order.
         """
         if not records:
@@ -259,7 +296,7 @@ class InboxPump:
         await asyncio.get_running_loop().run_in_executor(self._state.executor, collect_all)
 
     def data_handler(self, record) -> None:
-        """The InputBatcher's sink: route a flushed record/barrier to the operator.
+        """Route one accumulator output to the operator or barrier handler.
 
         Runs on the executor thread (sync path) or the loop (async barrier path).
         """
@@ -269,6 +306,11 @@ class InboxPump:
             self.handle_stream_control(record, None)
         else:
             self._state.runner.process(record)
+
+    def flush_input(self, force: bool = True) -> None:
+        """Drain ready input batches and dispatch them on the executor thread."""
+        for record in self._state.input_batches.flush(force=force):
+            self.data_handler(record)
 
     def handle_stream_control(self, control: StreamControl, sender_vertex_id: object | None) -> None:
         tracker = self._state.event_time_tracker
@@ -315,7 +357,7 @@ class InboxPump:
 
     def _idle_flush(self) -> None:
         """Executor thread on inbox idle: flush input batcher + buffered micro-batches."""
-        self._state.batching_strategy.flush()
+        self.flush_input(force=False)
         self._state.operator.on_idle()
-        if self._state.collector is not None:
-            self._state.collector.flush()
+        if self._state.output is not None:
+            self._state.output.flush()

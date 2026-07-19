@@ -7,8 +7,14 @@ from typing import Any
 import pytest
 import ray.data
 from ray.data import Dataset
+from ray.data.expressions import col, download
 
 import ray.klein as klein
+from ray.klein._internal.streaming_expression import (
+    AsyncStreamingWithColumn,
+    StreamingExpressionFilter,
+    StreamingWithColumn,
+)
 from ray.klein.api.data_stream import DataStream
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.ray_data import (
@@ -19,6 +25,7 @@ from ray.klein.api.ray_data import (
     public_dataset_factories,
     public_dataset_methods,
 )
+from ray.klein.integrations.sql import StreamingSQLSink
 from tests.support.ray_data import FakeDataset, logical_function_of
 
 
@@ -92,6 +99,77 @@ def test_names_are_resolved_at_execution_and_arguments_are_forwarded_verbatim(mo
     ]
 
 
+def test_ray_data_expression_is_forwarded_without_wrapping(monkeypatch) -> None:
+    dataset = FakeDataset()
+    stream = KleinContext().data.source(lambda: dataset)
+    expression = download("uri")
+    captured = []
+
+    def replacement_with_column(dataset, name, expr, **kwargs):
+        captured.append((dataset, name, expr, kwargs))
+        return dataset
+
+    transformed = stream.data.with_column("body", expression, num_cpus=0.5)
+    monkeypatch.setattr(Dataset, "with_column", replacement_with_column)
+
+    assert logical_function_of(transformed).to_batch([dataset]) is dataset
+    assert len(captured) == 1
+    captured_dataset, captured_name, captured_expression, captured_options = captured[0]
+    assert captured_dataset is dataset
+    assert captured_name == "body"
+    assert captured_expression is expression
+    assert captured_options == {"num_cpus": 0.5}
+
+
+def test_ray_data_expression_transforms_have_streaming_implementations() -> None:
+    stream = KleinContext().from_values({"uri": "local:///tmp/file", "value": 2})
+
+    computed = stream.data.with_column(column_name="doubled", expr=col("value") * 2)
+    downloaded = stream.data.with_column("body", download("uri"))
+    filtered = stream.data.filter(expr=col("value") > 1)
+
+    assert logical_function_of(computed).function is StreamingWithColumn
+    assert logical_function_of(downloaded).function is AsyncStreamingWithColumn
+    assert logical_function_of(downloaded).runtime_info.async_buffer_size == 32
+    assert logical_function_of(filtered).function is StreamingExpressionFilter
+
+
+def test_write_sql_matches_ray_data_arguments_and_lowers_to_its_consumer(monkeypatch) -> None:
+    ray_parameters = tuple(inspect.signature(Dataset.write_sql).parameters.values())[1:]
+    klein_parameters = tuple(inspect.signature(DataStream.write_sql).parameters.values())[1:]
+    assert [(parameter.name, parameter.kind, parameter.default) for parameter in klein_parameters] == [
+        (parameter.name, parameter.kind, parameter.default) for parameter in ray_parameters
+    ]
+
+    dataset = FakeDataset()
+    stream = KleinContext().data.source(lambda: dataset)
+    captured = []
+
+    def connection_factory():
+        return object()
+
+    def replacement_write_sql(dataset, *args, **kwargs):
+        captured.append((dataset, args, kwargs))
+
+    sink = stream.write_sql(
+        "INSERT INTO test VALUES(?)",
+        connection_factory,
+        ray_remote_args={"num_cpus": 2},
+        concurrency=3,
+    )
+    monkeypatch.setattr(Dataset, "write_sql", replacement_write_sql)
+
+    assert logical_function_of(sink).function is StreamingSQLSink
+    assert logical_function_of(sink).to_batch([dataset]) is None
+    assert captured == [
+        (
+            dataset,
+            ("INSERT INTO test VALUES(?)", connection_factory),
+            {"ray_remote_args": {"num_cpus": 2}, "concurrency": 3},
+        )
+    ]
+
+
 def test_source_callable_is_lazy_and_validates_its_result() -> None:
     expected = FakeDataset()
     stream = KleinContext().data.source(lambda value: value, expected)
@@ -149,6 +227,7 @@ def test_other_klein_streams_become_dataset_dependencies_even_when_nested() -> N
         ("rename_columns", RayDataMethodKind.TRANSFORM),
         ("take_all", RayDataMethodKind.CONSUME),
         ("write_csv", RayDataMethodKind.CONSUME),
+        ("write_sql", RayDataMethodKind.CONSUME),
         ("groupby", RayDataMethodKind.CONSUME),
     ],
 )
@@ -193,13 +272,15 @@ def test_manual_ray_data_api_mirrors_do_not_grow_back() -> None:
     stream_methods = set(DataStream.__dict__)
 
     assert {name for name in context_methods if name.startswith(("read_", "from_"))} == {
+        "read_canal",
         "read_kafka",
+        "read_rocketmq",
         "from_items",
         "from_values",
     }
-    # These are intentional Klein-native sinks with streaming semantics. File
-    # methods share Ray Data's familiar spelling but add checkpointed 2PC; the
-    # generic ``stream.data`` adapter remains the batch-only mirror.
+    # These are intentional Klein sink APIs. File methods share Ray Data's
+    # familiar spelling but add checkpointed 2PC, while write_sql selects Ray
+    # Data in batch mode and Klein's native SQL sink in streaming mode.
     assert {name for name in stream_methods if name.startswith("write_")} == {
         "write_csv",
         "write_files",
@@ -207,5 +288,6 @@ def test_manual_ray_data_api_mirrors_do_not_grow_back() -> None:
         "write_kafka",
         "write_parquet",
         "write_redis",
+        "write_sql",
         "write_text",
     }

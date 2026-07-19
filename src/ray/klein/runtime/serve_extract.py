@@ -9,7 +9,7 @@ that script just so the server can read it — one script, one image, one flag.
 So we run the user's original script unchanged with :func:`runpy.run_path`
 (``run_name="__main__"``, so ``if __name__ == "__main__"`` blocks fire and the
 graph actually gets built), and intercept the moment ``execute()`` is called:
-at that point the StreamGraph is fully built but nothing has been submitted yet.
+at that point the LogicalGraph can be captured but nothing has been submitted yet.
 :class:`JobClient.execute` consults :func:`extracting` and, when set, hands the
 sink list here, then raises :class:`_ServeExtractDone` to unwind the script
 before it submits a job / sleeps / loops.
@@ -53,12 +53,12 @@ def capture_from_sinks(sinks: Sequence[StreamSink], config: Configuration) -> No
     Called from ``JobClient.execute`` while the user script is mid-run. Raises
     :class:`_ServeExtractDone` so the script never reaches job submission.
     """
-    from ray.klein.api.stream_graph import StreamGraph
+    from ray.klein.runtime.graph.logical_graph import LogicalGraph
     from ray.klein.runtime.graph.serve_rewriter import ServeRewriter
     from ray.klein.runtime.serve_functions import instantiate_logical_functions
 
-    stream_graph = StreamGraph.from_sinks(sinks, "klein-serve-extract", config)
-    serve_fns = ServeRewriter(stream_graph).extract_serve_functions()
+    graph = LogicalGraph.from_sinks(sinks, "klein-serve-extract", config)
+    serve_fns = ServeRewriter(graph).extract_serve_functions()
     if not serve_fns:
         raise RuntimeError(
             "Workflow has no ray_serve_enabled region to extract. Mark the serve "

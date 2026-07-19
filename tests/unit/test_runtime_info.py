@@ -22,8 +22,9 @@ def test_runtime_info_requires_a_format_when_batching() -> None:
 def test_logical_function_runtime_overrides_are_revalidated() -> None:
     logical = LogicalFunction(lambda value: value, batch_timeout=3)
 
-    logical.apply_runtime_overrides(batch_size=8)
+    tuned = logical.with_runtime_overrides(batch_size=8)
 
-    assert logical.runtime_info.batch_size == 8
+    assert tuned.runtime_info.batch_size == 8
+    assert logical.runtime_info.batch_size is None
     with pytest.raises(ValueError, match="async_buffer_size"):
-        logical.apply_runtime_overrides(async_buffer_size=0)
+        logical.with_runtime_overrides(async_buffer_size=0)

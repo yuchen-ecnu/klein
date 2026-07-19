@@ -10,10 +10,10 @@ import numpy as np
 
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.resource_plan import ResourcePlan
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.environment_variables import EnvironmentVariables
 from ray.klein.config.serve_options import ServeOptions
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.serve_rewriter import ServeRewriter
 from ray.klein.runtime.serve import (
     decode_batch,
@@ -85,11 +85,12 @@ class TestRayServe(unittest.TestCase):
         # 添加Sink以构建完整管道
         embedding.show()
 
-        # 创建StreamGraph
-        graph = StreamGraph.from_sinks(ctx.sinks, "test_ray_serve_job", self.config)
+        # 创建LogicalGraph
+        graph = LogicalGraph.from_sinks(ctx.sinks, "test_ray_serve_job", self.config)
 
-        # 调用convert_to_ray_serve函数
-        ray_serve_operators = ServeRewriter(graph).rewrite()
+        rewriter = ServeRewriter(graph)
+        ray_serve_operators = rewriter.extract_serve_functions()
+        rewritten = rewriter.rewrite()
 
         # 验证结果
         # 1. 检查Ray Serve区域是否被正确识别并转换
@@ -100,7 +101,7 @@ class TestRayServe(unittest.TestCase):
         # 3. 检查图中的节点变化情况
         # 验证ray_serve_enabled的节点已被移除，并替换为EmbeddedProxyClient
         has_proxy_client = False
-        for node in graph.nodes.values():
+        for node in rewritten.vertices.values():
             if node.name.startswith("EmbeddedProxyClient"):
                 has_proxy_client = True
                 break
@@ -108,8 +109,9 @@ class TestRayServe(unittest.TestCase):
         self.assertTrue(has_proxy_client, "EmbeddedProxyClient节点未创建")
 
         # 4. 检查是否有任何节点仍包含ray_serve_enabled=True
-        for node in graph.nodes.values():
+        for node in rewritten.vertices.values():
             self.assertFalse(node.ray_serve_enabled, f"节点 {node.name} 仍然标记为ray_serve_enabled=True")
+        self.assertTrue(any(node.ray_serve_enabled for node in graph.vertices.values()))
 
     def test_complex_ray_serve_pipeline(self):
         """测试包含多个Ray Serve节点的复杂管道"""
@@ -137,11 +139,12 @@ class TestRayServe(unittest.TestCase):
         # 添加Sink
         node2.show()
 
-        # 创建StreamGraph
-        graph = StreamGraph.from_sinks(ctx.sinks, "test_complex_ray_serve", self.config)
+        # 创建LogicalGraph
+        graph = LogicalGraph.from_sinks(ctx.sinks, "test_complex_ray_serve", self.config)
 
-        # 调用convert_to_ray_serve函数
-        ray_serve_operators = ServeRewriter(graph).rewrite()
+        rewriter = ServeRewriter(graph)
+        ray_serve_operators = rewriter.extract_serve_functions()
+        rewritten = rewriter.rewrite()
 
         # 验证结果
         # 由于有两个连续的Ray Serve节点，应该会生成两个operator
@@ -149,7 +152,7 @@ class TestRayServe(unittest.TestCase):
 
         # 验证Ray Serve区域是否被正确识别并转换为一个EmbeddedProxyClient
         has_proxy_client = False
-        for node in graph.nodes.values():
+        for node in rewritten.vertices.values():
             if node.name.startswith("EmbeddedProxyClient"):
                 has_proxy_client = True
                 break
@@ -158,7 +161,7 @@ class TestRayServe(unittest.TestCase):
 
         # 测试管道中节点总数是否正确（原始4节点 source/node1/node2/sink → 转换后3节点 source/proxy/sink）
         expected_node_count = 3  # 转换后应为source, proxy, sink共3个节点
-        self.assertEqual(len(graph.nodes), expected_node_count)
+        self.assertEqual(len(rewritten.vertices), expected_node_count)
 
     def test_serve_operators_instantiation(self):
         """抽取的 Ray Serve 算子可直接进程内实例化并链式调用。"""
@@ -172,7 +175,7 @@ class TestRayServe(unittest.TestCase):
         embedding = preprocessed.map_batches(embedding_function, ray_serve_enabled=True)
         embedding.show()
 
-        graph = StreamGraph.from_sinks(ctx.sinks, "test_instantiation", self.config)
+        graph = LogicalGraph.from_sinks(ctx.sinks, "test_instantiation", self.config)
         serve_fns = ServeRewriter(graph).extract_serve_functions()
         operators = instantiate_logical_functions(serve_fns)
 
@@ -245,8 +248,8 @@ class TestRayServe(unittest.TestCase):
 
     @patch.dict(os.environ, {EnvironmentVariables.COMPILE_ONLY: "1"})
     def test_serve_config_not_setted(self):
-        stream_graph_path = Path(self.temp_dir.name) / "test_serve_config_not_setted.json"
-        os.environ[EnvironmentVariables.RESOURCE_PLAN_OUTPUT] = str(stream_graph_path)
+        logical_graph_path = Path(self.temp_dir.name) / "test_serve_config_not_setted.json"
+        os.environ[EnvironmentVariables.RESOURCE_PLAN_OUTPUT] = str(logical_graph_path)
 
         # 创建KleinContext
         ctx = KleinContext()
@@ -263,8 +266,8 @@ class TestRayServe(unittest.TestCase):
 
     @patch.dict(os.environ, {EnvironmentVariables.COMPILE_ONLY: "1"})
     def test_obey_serve_config_for_multi_serve_node(self):
-        stream_graph_path = Path(self.temp_dir.name) / "test_obey_serve_config_for_multi_serve_node.json"
-        os.environ[EnvironmentVariables.RESOURCE_PLAN_OUTPUT] = str(stream_graph_path)
+        logical_graph_path = Path(self.temp_dir.name) / "test_obey_serve_config_for_multi_serve_node.json"
+        os.environ[EnvironmentVariables.RESOURCE_PLAN_OUTPUT] = str(logical_graph_path)
 
         # 创建KleinContext
         ctx = KleinContext(self.config)
@@ -277,9 +280,9 @@ class TestRayServe(unittest.TestCase):
         )
         transformed.show()
 
-        # Compile StreamGraph
+        # Compile LogicalGraph
         ctx.execute().wait()
-        rp = ResourcePlan.read(stream_graph_path)
+        rp = ResourcePlan.read(logical_graph_path)
         self.assertEqual(1.0, rp["EmbeddedProxyClient[2]"].cpus)
         self.assertEqual(0.0, rp["EmbeddedProxyClient[2]"].gpus)
         self.assertEqual(2, rp["EmbeddedProxyClient[2]"].effective_concurrency)
@@ -290,8 +293,8 @@ class TestRayServe(unittest.TestCase):
 
     @patch.dict(os.environ, {EnvironmentVariables.COMPILE_ONLY: "1"})
     def test_obey_operator_config_for_single_serve_node(self):
-        stream_graph_path = Path(self.temp_dir.name) / "test_obey_operator_config_for_single_serve_node.json"
-        os.environ[EnvironmentVariables.RESOURCE_PLAN_OUTPUT] = str(stream_graph_path)
+        logical_graph_path = Path(self.temp_dir.name) / "test_obey_operator_config_for_single_serve_node.json"
+        os.environ[EnvironmentVariables.RESOURCE_PLAN_OUTPUT] = str(logical_graph_path)
 
         # 创建KleinContext
         ctx = KleinContext(self.config)
@@ -308,9 +311,9 @@ class TestRayServe(unittest.TestCase):
         )
         transformed.show()
 
-        # Compile StreamGraph
+        # Compile LogicalGraph
         ctx.execute().wait()
-        rp = ResourcePlan.read(stream_graph_path)
+        rp = ResourcePlan.read(logical_graph_path)
         self.assertEqual(1.5, rp["EmbeddedProxyClient[2]"].cpus)
         self.assertEqual(0.0, rp["EmbeddedProxyClient[2]"].gpus)
         self.assertEqual(4, rp["EmbeddedProxyClient[2]"].effective_concurrency)

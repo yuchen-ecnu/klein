@@ -10,8 +10,7 @@ from ray.klein.config.configuration import Configuration
 from ray.klein.observability.metrics.metric_group import TaskMetricGroup
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
-from ray.klein.runtime.operator.operator_type import OperatorType
-from ray.klein.runtime.partitioning.partitioner import Partitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,9 +18,10 @@ class OutputEdgeDescriptor:
     """Routing and buffering settings for one outbound task edge."""
 
     target_task_names: tuple[str, ...]
-    partitioner: Partitioner
-    output_buffer_size: int
-    put_timeout: int
+    partitioner: PartitionerSpec
+    control_target_indices: tuple[int, ...]
+    output_buffer_max_rows: int
+    put_timeout: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,7 +35,6 @@ class TaskDeploymentDescriptor:
     parallelism: int
     config: Configuration
     metric_group: TaskMetricGroup
-    operator_type: OperatorType
     barrier_split: Mapping[ExecutionVertexId, int]
     is_committer: bool
     out_edges: tuple[OutputEdgeDescriptor, ...]

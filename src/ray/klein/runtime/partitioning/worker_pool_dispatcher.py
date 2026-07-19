@@ -24,3 +24,17 @@ class WorkerPoolDispatcher:
     def advance(self) -> int:
         self._cursor = (self._cursor + 1) % len(self._tasks)
         return self.current()
+
+    def take(self) -> int:
+        """Return the current task and advance the cursor for the next record."""
+        current = self.current()
+        self.advance()
+        return current
+
+    def ring_from(self, task: int) -> tuple[int, ...]:
+        """Return every eligible task once, beginning with ``task``."""
+        try:
+            start = self._tasks.index(task)
+        except ValueError as error:
+            raise ValueError(f"task {task} is not assigned to this dispatcher") from error
+        return tuple(self._tasks[start:] + self._tasks[:start])

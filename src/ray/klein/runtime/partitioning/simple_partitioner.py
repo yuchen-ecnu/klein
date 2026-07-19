@@ -4,6 +4,7 @@ from collections.abc import Callable
 from ray.klein._internal.block import block_row_dict
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.partitioning.partitioner import Partitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 
 class SimplePartitioner(Partitioner):
@@ -40,3 +41,6 @@ class SimplePartitioner(Partitioner):
 
     def __str__(self) -> str:
         return "CUSTOM"
+
+    def to_spec(self) -> PartitionerSpec:
+        return PartitionerSpec(type(self), (self.fn,), name=str(self), topology=self.topology)

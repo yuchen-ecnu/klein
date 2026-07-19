@@ -13,8 +13,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Component dependency graph:
+# quality -> unit-core -> {unit-runtime, unit-state}
+# unit-runtime + unit-state -> unit-sql
+# unit-runtime -> unit-connectors
+# unit-* -> coverage
+# unit-runtime -> integration-runtime -> {integration-state, integration-connectors}
+# integration-state + unit-sql -> integration-sql
+# integration-connectors -> external-connectors
+# every required leaf -> ci-success
 jobs:
-  lint:
+  quality:
+    name: Quality / lint and repository policy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -30,14 +40,143 @@ jobs:
       - run: ruff check .
       - run: reuse lint
 
-  test:
-    permissions:
-      contents: read
-      id-token: write
+  unit-core:
+    name: Unit / core API, config, graph, architecture
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - name: Core component tests
+        run: >-
+          pytest tests/unit tests/state tests/architecture
+          -m "component_core and not slow"
+          --junitxml=test-results/unit-core.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: unit-core-results
+          path: test-results/
+          if-no-files-found: error
+
+  unit-runtime:
+    name: Unit / runtime, scheduler, data plane, failover
+    needs: unit-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - name: Runtime component tests
+        run: >-
+          pytest tests/unit tests/state tests/architecture
+          -m "component_runtime and not slow"
+          --junitxml=test-results/unit-runtime.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: unit-runtime-results
+          path: test-results/
+          if-no-files-found: error
+
+  unit-state:
+    name: Unit / state, checkpoint, event time
+    needs: unit-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - name: State component tests
+        run: >-
+          pytest tests/unit tests/state tests/architecture
+          -m "component_state and not slow"
+          --junitxml=test-results/unit-state.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: unit-state-results
+          path: test-results/
+          if-no-files-found: error
+
+  unit-sql:
+    name: Unit / batch and streaming SQL
+    needs: [unit-core, unit-runtime, unit-state]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - name: SQL component tests
+        run: >-
+          pytest tests/unit tests/state tests/architecture
+          -m "component_sql and not slow"
+          --junitxml=test-results/unit-sql.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: unit-sql-results
+          path: test-results/
+          if-no-files-found: error
+
+  unit-connectors:
+    name: Unit / connectors and format contracts
+    needs: [unit-core, unit-runtime]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - name: Connector component tests
+        run: >-
+          pytest tests/unit tests/state tests/architecture
+          -m "component_connectors and not slow"
+          --junitxml=test-results/unit-connectors.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: unit-connectors-results
+          path: test-results/
+          if-no-files-found: error
+
+  python-compat:
+    name: Python ${{ matrix.python-version }} compatibility
+    needs: quality
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -49,23 +188,53 @@ jobs:
           cache: pip
       - run: python -m pip install -U pip
       - run: python -m pip install -e ".[all,test]"
-      - name: Unit, state, and architecture tests
+      - name: All unit components
         run: >-
           pytest tests/unit tests/state tests/architecture -m "not slow"
+          --junitxml=test-results/python-${{ matrix.python-version }}.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: python-${{ matrix.python-version }}-results
+          path: test-results/
+          if-no-files-found: error
+
+  coverage:
+    name: Coverage / all unit components
+    needs: [unit-core, unit-runtime, unit-state, unit-sql, unit-connectors]
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: >-
+          pytest tests/unit tests/state tests/architecture -m "not slow"
           --cov=ray.klein --cov-report=xml
-          --junitxml=test-results/unit-${{ matrix.python-version }}.xml
+          --junitxml=test-results/coverage.xml
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f
-        if: matrix.python-version == '3.12'
         with:
           use_oidc: true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: unit-test-results-${{ matrix.python-version }}
-          path: test-results/
+          name: coverage-results
+          path: |
+            coverage.xml
+            test-results/
           if-no-files-found: error
 
-  integration:
+  integration-runtime:
+    name: Integration / real Ray runtime
+    needs: [unit-runtime, python-compat]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -78,18 +247,20 @@ jobs:
       - run: python -m pip install -U pip
       - run: python -m pip install -e ".[all,test]"
       - run: python -m pip install "ray[data,serve]==2.56.1"
-      - name: Ray integration tests
-        run: >-
-          pytest tests/integration -m "integration and not external"
-          --timeout=300 --junitxml=test-results/integration.xml
+      - run: >-
+          pytest tests/integration
+          -m "integration and component_runtime and not external"
+          --timeout=300 --junitxml=test-results/integration-runtime.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: integration-test-results
+          name: integration-runtime-results
           path: test-results/
           if-no-files-found: error
 
-  external:
+  integration-state:
+    name: Integration / real Ray state and recovery
+    needs: [unit-state, integration-runtime]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -101,18 +272,98 @@ jobs:
           cache: pip
       - run: python -m pip install -U pip
       - run: python -m pip install -e ".[all,test]"
-      - name: External connector tests
-        run: >-
-          pytest tests/integration/external -m external --run-external
-          --timeout=300 --junitxml=test-results/external.xml
+      - run: python -m pip install "ray[data,serve]==2.56.1"
+      - run: >-
+          pytest tests/integration
+          -m "integration and component_state and not external"
+          --timeout=300 --junitxml=test-results/integration-state.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: external-test-results
+          name: integration-state-results
+          path: test-results/
+          if-no-files-found: error
+
+  integration-sql:
+    name: Integration / real Ray SQL and state restore
+    needs: [unit-sql, integration-state]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: python -m pip install "ray[data,serve]==2.56.1"
+      - run: >-
+          pytest tests/integration
+          -m "integration and component_sql and not external"
+          --timeout=300 --junitxml=test-results/integration-sql.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: integration-sql-results
+          path: test-results/
+          if-no-files-found: error
+
+  integration-connectors:
+    name: Integration / local connectors
+    needs: [unit-connectors, integration-runtime]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: python -m pip install "ray[data,serve]==2.56.1"
+      - run: >-
+          pytest tests/integration
+          -m "integration and component_connectors and not external"
+          --timeout=300 --junitxml=test-results/integration-connectors.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: integration-connectors-results
+          path: test-results/
+          if-no-files-found: error
+
+  external-connectors:
+    name: External / Kafka and Redis services
+    needs: integration-connectors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: >-
+          pytest tests/integration/external
+          -m "external and component_connectors" --run-external
+          --timeout=300 --junitxml=test-results/external-connectors.xml
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: external-connectors-results
           path: test-results/
           if-no-files-found: error
 
   docs:
+    name: Documentation / strict build
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -127,6 +378,8 @@ jobs:
       - run: sphinx-build -W --keep-going -b html docs docs/_build/html
 
   security:
+    name: Security / dependencies and licenses
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -144,13 +397,15 @@ jobs:
           --license Apache-2.0 --extras all --zero
 
   package:
+    name: Package / ${{ matrix.os }} wheel
+    needs: [quality, python-compat]
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-14]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@9c091bb21b7c1d1991bb908d89e4e9dddfe3e0
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
@@ -171,3 +426,31 @@ jobs:
           name: distributions
           path: dist/
           if-no-files-found: error
+
+  ci-success:
+    name: CI / required gate
+    if: always()
+    needs:
+      - quality
+      - unit-core
+      - unit-runtime
+      - unit-state
+      - unit-sql
+      - unit-connectors
+      - python-compat
+      - coverage
+      - integration-runtime
+      - integration-state
+      - integration-sql
+      - integration-connectors
+      - external-connectors
+      - docs
+      - security
+      - package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every CI module to succeed
+        run: |
+          test "${{ contains(needs.*.result, 'failure') }}" = "false"
+          test "${{ contains(needs.*.result, 'cancelled') }}" = "false"
+          test "${{ contains(needs.*.result, 'skipped') }}" = "false"

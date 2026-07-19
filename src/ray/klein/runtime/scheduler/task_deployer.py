@@ -8,15 +8,26 @@ StreamTask actors and drives them to RUNNING. Teardown lives in
 — there is no (bool, err) return.
 """
 
+from ray.util.queue import Queue
+
 import ray.klein as klein
 from ray.klein._internal.logging import get_logger
+from ray.klein.config.pipeline_options import PipelineOptions
+from ray.klein.runtime.actor import create_remote_actor
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_job_vertex import ExecutionJobVertex
+from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
 from ray.klein.runtime.scheduler.errors import DeploymentError
 from ray.klein.runtime.scheduler.placement import PlacementPlan, PlacementStrategy
+from ray.klein.runtime.scheduler.task_deployment_descriptor import (
+    OutputEdgeDescriptor,
+    TaskDeploymentDescriptor,
+)
+from ray.klein.runtime.worker.source_stream_task import SourceStreamTask
+from ray.klein.runtime.worker.stream_task import StreamTask
 
 logger = get_logger(__name__)
 
@@ -59,13 +70,114 @@ def place_workers(
     plan = strategy.plan(execution_graph)
     try:
         for job_vertex in execution_graph.job_vertices.values():
-            job_vertex.instantiate(execution_graph, plan=plan)
+            _instantiate_job_vertex(execution_graph, job_vertex, plan)
     except Exception as error:
         for job_vertex in execution_graph.job_vertices.values():
-            job_vertex.cancel_all_tasks()
+            _cancel_created_tasks(job_vertex)
         plan.rollback()
         raise DeploymentError("create workers", error) from error
     return plan
+
+
+def _instantiate_job_vertex(
+    graph: ExecutionGraph,
+    job_vertex: ExecutionJobVertex,
+    plan: PlacementPlan,
+) -> None:
+    """Create every actor for one physical job vertex.
+
+    Actor creation is deployment mechanism, not graph data, so it lives in the
+    deployer rather than on :class:`ExecutionJobVertex`.
+    """
+
+    job_vertex.output_queue = Queue() if job_vertex.operator_spec.collecting else None
+    for vertex in job_vertex.execution_vertices.values():
+        vertex.reset()
+        descriptor = _build_descriptor(graph, job_vertex, vertex)
+        remote_args = {
+            "name": vertex.name,
+            "num_cpus": vertex.resources.cpus,
+            "num_gpus": vertex.resources.gpus,
+            "max_restarts": -1,
+            "namespace": graph.namespace,
+        }
+        placement_group = None
+        bundle_index = -1
+        schedule_node_id = None
+        if plan.uses_placement_group:
+            placement_group = plan.placement_group
+            bundle_index = plan.bundle_for(vertex.id)
+        elif plan.node_by_vertex:
+            schedule_node_id = plan.node_for(vertex.id)
+        vertex.stream_task = create_remote_actor(
+            _task_class_for(vertex),
+            construct_args={"descriptor": descriptor},
+            ray_remote_args=remote_args,
+            schedule_node_id=schedule_node_id,
+            placement_group=placement_group,
+            placement_group_bundle_index=bundle_index,
+        )
+        placement = f"pg[bundle={bundle_index}]" if placement_group is not None else f"node={schedule_node_id}"
+        logger.debug("Created execution vertex %s with placement %s", vertex.name, placement)
+
+
+def _build_descriptor(
+    graph: ExecutionGraph,
+    job_vertex: ExecutionJobVertex,
+    vertex: ExecutionVertex,
+) -> TaskDeploymentDescriptor:
+    config = job_vertex.config
+    output_buffer_max_rows = config.get(PipelineOptions.OUTPUT_BUFFER_MAX_ROWS)
+    put_timeout = config.get(PipelineOptions.INPUT_BUFFER_PUT_TIMEOUT).total_seconds()
+    out_edges = tuple(
+        OutputEdgeDescriptor(
+            target_task_names=tuple(
+                target.name for target in graph.job_vertex(output_edge.target).execution_vertices.values()
+            ),
+            partitioner=output_edge.partitioner,
+            control_target_indices=output_edge.partitioner.target_indices(
+                job_vertex.concurrency,
+                graph.job_vertex(output_edge.target).concurrency,
+                vertex.index,
+            ),
+            output_buffer_max_rows=output_buffer_max_rows,
+            put_timeout=put_timeout,
+        )
+        for output_edge in graph.output_job_edges(job_vertex.id)
+    )
+    input_vertex_ids = tuple(
+        edge.source.id
+        for input_edge in graph.input_job_edges(job_vertex.id)
+        for edge in input_edge.execution_edges
+        if edge.target.id == vertex.id
+    )
+    return TaskDeploymentDescriptor(
+        operator=job_vertex.operator_spec,
+        vertex_id=vertex.id,
+        task_name=vertex.name,
+        task_index=vertex.index,
+        parallelism=vertex.concurrency,
+        config=config,
+        metric_group=vertex.task_metric_group,
+        barrier_split=graph.barrier_splits[vertex.id],
+        is_committer=job_vertex.id in graph.sink_job_vertices,
+        out_edges=out_edges,
+        input_buffer_size=config.get(PipelineOptions.INPUT_BUFFER_SIZE),
+        output_queue=job_vertex.output_queue,
+        namespace=graph.namespace,
+        input_vertex_ids=input_vertex_ids,
+    )
+
+
+def _task_class_for(vertex: ExecutionVertex) -> type[StreamTask]:
+    return SourceStreamTask if vertex.operator_spec.source else StreamTask
+
+
+def _cancel_created_tasks(job_vertex: ExecutionJobVertex) -> None:
+    for vertex in job_vertex.execution_vertices.values():
+        if vertex.stream_task is not None:
+            klein.kill(vertex.stream_task)
+            vertex.stream_task = None
 
 
 def deploy_workers(execution_graph: ExecutionGraph) -> None:
@@ -97,9 +209,7 @@ def start_workers(execution_graph: ExecutionGraph, timeout: float) -> None:
     """
     levels = _sink_first_levels(execution_graph)
     for level in levels:
-        job_vertices = [
-            vertex for vertex in (execution_graph.job_vertex(vertex_id) for vertex_id in level) if vertex is not None
-        ]
+        job_vertices = [execution_graph.job_vertex(vertex_id) for vertex_id in level]
         try:
             _start_wave(job_vertices, timeout=timeout)
         except Exception as error:

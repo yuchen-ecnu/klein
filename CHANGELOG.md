@@ -15,11 +15,19 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   issue templates, and Apache-2.0 licensing artifacts.
 - Ray-style module readers such as `ray.klein.read_csv`, plus the
   version-adaptive `stream.data` namespace for installed Dataset methods.
+- A `DataStream.write_sql` API matching Ray Data's DB-API 2.0 writer arguments,
+  with Ray Data batch lowering and an at-least-once native streaming sink.
 - Unified configuration from `RAY_KLEIN_*`, mappings, JSON or `key=value`
   strings, and an explicit process-global `KleinContext`.
 - SQLGlot-based SQL over bounded DataStreams with caller-scope discovery,
   explicit table bindings, persistent temporary views, and native Ray Dataset
   lowering for filters, joins, aggregates, ordering, limits, and unions.
+- Ray Data 2.56 expression passthrough through `stream.data`, plus native SQL
+  expression lowering for predicates/projections and `DOWNLOAD(uri_column)`.
+- Dual-mode Ray Data expression execution: streaming SQL and
+  `stream.data.with_column/filter(expr=...)` now support `download`, synthetic
+  IDs, random values, UUIDs, and composable Ray expression ASTs; streaming
+  downloads use bounded ordered concurrency and backpressure.
 - Flink-style `CREATE TABLE ... WITH`, `DROP TABLE`, and `INSERT INTO` syntax
   backed by lazy, extensible source/sink connector factories.
 - URI-aware durable checkpoints for local filesystems, S3-compatible object
@@ -36,9 +44,17 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 - PEP 561 typing metadata, a lazy top-level API, signed-off contribution checks,
   documentation deployment, dependency review, CodeQL, secret scanning,
   OpenSSF Scorecard, nightly integration, and release SBOM generation.
+- Continuous Apache RocketMQ input through the official remoting-protocol
+  Python client, including Tag filters, clustering/broadcasting modes, ACL,
+  SSL, bounded callback handoff, metrics, and an explicit broker-managed
+  recovery contract.
 
 ### Changed
 
+- The operations CLI now discovers stable custom namespaces without requiring
+  the Ray Dashboard, reads retained status from the cluster state actor, exits
+  `attach` on terminal transitions, reports cancellation races accurately, and
+  supports `cancel`/`stop`, `list --all`, and JSON output.
 - The generic KV connector was replaced by an explicit Redis API built around
   `RedisConnectionConfig`, `RedisSinkConfig`, `RedisSink`, and
   `DataStream.write_redis`. Redis hashes, lists, and sets now use idempotent,

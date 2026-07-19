@@ -6,7 +6,17 @@ from ray.klein.config.config_option import ConfigOption
 
 class PipelineOptions:
     INPUT_BUFFER_SIZE = ConfigOption(
-        "pipeline.input-buffer.size", 200, int, description="maximum input buffer size for each task."
+        "pipeline.input-buffer.size",
+        200,
+        int,
+        description="Maximum logical rows retained in each task input buffer; an oversized columnar block is exclusive.",
+    )
+
+    INPUT_BUFFER_MAX_BYTES = ConfigOption(
+        "pipeline.input-buffer.max-bytes",
+        64 * 1024 * 1024,
+        int,
+        description="Maximum estimated bytes retained in each task input buffer; an oversized block is exclusive.",
     )
 
     PLACEMENT_GROUP_ENABLED = ConfigOption(
@@ -43,8 +53,25 @@ class PipelineOptions:
         description="maximum waiting time for each put request of input buffer.",
     )
 
-    OUTPUT_BUFFER_SIZE = ConfigOption(
-        "pipeline.output-buffer.size", 1000, int, description="maximum output buffer size for each task."
+    OUTPUT_BUFFER_MAX_ROWS = ConfigOption(
+        "pipeline.output-buffer.max-rows",
+        1000,
+        int,
+        description="Maximum logical rows an operator invocation may buffer before handing output to the emit queue.",
+    )
+
+    OUTPUT_BUFFER_MAX_BYTES = ConfigOption(
+        "pipeline.output-buffer.max-bytes",
+        64 * 1024 * 1024,
+        int,
+        description="Maximum estimated bytes an operator invocation may retain before handing output to the emit queue.",
+    )
+
+    EMIT_QUEUE_MAX_BATCHES = ConfigOption(
+        "pipeline.emit-queue.max-batches",
+        2,
+        int,
+        description="Maximum detached output batches waiting in a task's FIFO emit queue.",
     )
 
     OPERATOR_CHAINING = ConfigOption(
@@ -59,35 +86,53 @@ class PipelineOptions:
         "pipeline.internal.batch-size",
         10,
         int,
-        description="The number of batches in upstream operator to reduce the number of drop requests.",
+        description="Number of emitted records grouped into one downstream put request per target.",
+    )
+
+    INTERNAL_BATCH_MAX_ROWS = ConfigOption(
+        "pipeline.internal.batch-max-rows",
+        1000,
+        int,
+        description="Flush a downstream micro-batch after it reaches this many logical rows.",
+    )
+
+    INTERNAL_BATCH_MAX_BYTES = ConfigOption(
+        "pipeline.internal.batch-max-bytes",
+        4 * 1024 * 1024,
+        int,
+        description="Flush a downstream micro-batch after it reaches this estimated payload size.",
+    )
+
+    TRANSPORT_OBJECT_STORE_THRESHOLD_BYTES = ConfigOption(
+        "pipeline.transport.object-store-threshold-bytes",
+        128 * 1024,
+        int,
+        description="Minimum duplicated broadcast payload size shared through one Ray Object Store reference.",
     )
 
     # Columnar passthrough: keep a batched operator's output column-oriented all
     # the way to the next operator instead of exploding it into per-row records
-    # (operator.collect) and re-columnarising downstream (InputBatcher). Removes
+    # (operator.collect) and re-columnarising downstream (InputBatchAccumulator). Removes
     # the column->row->column copy at every batched hop. Key/custom-partitioned
     # edges stay correct by slicing the columnar batch per target by row key.
-    # Default OFF: the explode/re-accumulate path is the verified failover
-    # behaviour; this opt-in changes the on-wire record shape (Record.num_rows).
+    # Enabled by default: the transport, routing, replay and input accumulator
+    # all preserve Record.num_rows and have row-slicing coverage.
     COLUMNAR_PASSTHROUGH_ENABLED = ConfigOption(
         "pipeline.columnar-passthrough.enabled",
-        False,
+        True,
         bool,
         description="Pass batched operator output downstream column-oriented (no per-row "
-        "explode + re-columnarise). Off = row-oriented wire format.",
+        "explode + re-columnarise). Disable for a legacy row-oriented wire format.",
     )
 
     # --- Single-fault at-least-once replay buffer (data-plane watermark) ---
-    # Each OutputCollector retains records it has already put() downstream until
+    # Each EdgeOutput retains records it has already put() downstream until
     # the downstream confirms (via the put() return watermark) that it has in
     # turn forwarded their derived output onward — i.e. the records exist on two
     # nodes. On a downstream single-task crash the upstream replays its buffer to
     # the rebuilt task, giving at-least-once without a full-job restart. The
-    # buffer is bounded by backpressure (a full downstream inbox blocks put, which
-    # propagates upstream to the source) plus the watermark-flush cadence — NOT by
-    # a record cap: a slow downstream must never trigger failover, and the only
-    # way the buffer grows unbounded is a watermark that never advances (a bug),
-    # which surfaces as OOM -> Ray rebuild, the same recovery path as any crash.
+    # buffer is drained by per-sender durability watermarks and guarded by a hard
+    # retained-memory limit before a stalled watermark can exhaust the process.
     REPLAY_BUFFER_ENABLED = ConfigOption(
         "pipeline.replay-buffer.enabled",
         True,
@@ -106,20 +151,12 @@ class PipelineOptions:
         "downstream micro-batches; higher = the opposite.",
     )
 
-    # Soft byte cap for the replay buffer. The buffer's current/high-water byte
-    # footprint is always exported as a gauge; this option additionally PACES
-    # emission once the retained bytes exceed the cap. Pacing only ever slows the
-    # producer (a bounded sleep AFTER a batch has landed), never blocks the put
-    # itself — the put carries back the forwarded-watermark that trims the buffer,
-    # so blocking puts would starve the very signal that drains it. The pacing
-    # propagates upstream through the bounded emit-queue -> inbox -> source, the
-    # same backpressure path a full downstream inbox uses. ``0`` keeps the
-    # unbounded behaviour (gauge only, no pacing).
+    # Hard retained-memory guard for the replay buffer. Once an acknowledgement
+    # has trimmed old entries, admitting a new batch must still fit under this
+    # bound or the task fails into normal recovery before the process reaches OOM.
     REPLAY_BUFFER_MAX_BYTES = ConfigOption(
         "pipeline.replay-buffer.max-bytes",
-        0,
+        256 * 1024 * 1024,
         int,
-        description="Soft byte cap on retained replay-buffer records. Above this the "
-        "producer is paced (never blocked) so backpressure flows to the "
-        "source. 0 = unbounded (gauge exported, no pacing).",
+        description="Hard estimated-memory bound for retained replay records. Must be positive when replay is enabled.",
     )

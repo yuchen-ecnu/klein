@@ -45,5 +45,34 @@ class LoopSourceFunction(SourceFunction):
         self._interrupted = True
 
 
+class ReplayCollectionSource(SourceFunction):
+    """Finite source that intentionally replays records after restoration.
+
+    Production collection sources restore their cursor and correctly emit no
+    duplicates. Recovery tests use this source when they need new input after a
+    restore in order to prove that downstream managed state was recovered.
+    """
+
+    def __init__(self, values: list[dict[str, Any]]) -> None:
+        self._values = values
+        self._interrupted = False
+
+    def run(self, context: SourceContext) -> None:
+        for value in self._values:
+            if self._interrupted:
+                break
+            context.collect(value)
+
+    def cancel(self) -> None:
+        self._interrupted = True
+
+    def snapshot_state(self, checkpoint_id: int) -> None:
+        return None
+
+    def restore_state(self, state: None) -> None:
+        if state is not None:
+            raise ValueError("ReplayCollectionSource state must remain empty")
+
+
 def flat_map_identity(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
     yield data
