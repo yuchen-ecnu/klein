@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-.PHONY: audit build clean docs external format integration integration-connectors integration-runtime \
+.PHONY: audit benchmark build clean coverage docs external format integration integration-connectors integration-runtime \
 	integration-sql integration-state lint test unit unit-connectors unit-core unit-runtime unit-sql unit-state
 
 format:
@@ -9,9 +9,18 @@ format:
 lint:
 	ruff format --check .
 	ruff check .
+	mypy
 
 test:
 	$(MAKE) unit
+
+coverage:
+	python -m pytest tests/unit tests/state tests/architecture -m "not slow" \
+		--cov=ray.klein --cov-report=term --cov-report=json:coverage.json
+	python scripts/check_coverage_policy.py coverage.json
+
+benchmark:
+	python scripts/benchmark_data_plane.py --quick --min-speedup 0.9
 
 unit:
 	python -m pytest tests/unit tests/state tests/architecture -m "not slow"
@@ -52,7 +61,7 @@ external:
 audit:
 	reuse lint
 	pip-audit --local --skip-editable --progress-spinner off
-	licensecheck --requirements-paths pyproject.toml --license Apache-2.0 --extras all --zero
+	python scripts/check_dependency_licenses.py
 
 docs:
 	sphinx-build -W --keep-going -b html docs docs/_build/html
@@ -60,6 +69,7 @@ docs:
 build:
 	python -m build
 	python -m twine check dist/*
+	python scripts/check_distribution.py dist/*
 
 clean:
-	rm -rf build dist docs/_build .coverage coverage.xml htmlcov .pytest_cache .ruff_cache .mypy_cache
+	rm -rf build dist docs/_build .coverage coverage.json coverage.xml htmlcov .pytest_cache .ruff_cache .mypy_cache

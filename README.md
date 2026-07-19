@@ -75,31 +75,32 @@ not install `ray/__init__.py` or replace files owned by Ray.
 
 ## Installation
 
-Klein for Ray currently targets Python 3.10–3.12 and Ray 2.56.1. Install it from
-a source checkout:
+Klein for Ray currently targets Python 3.10–3.12 and Ray 2.56.1. Install the
+Alpha release from PyPI:
 
 ```bash
-git clone https://github.com/yuchen-ecnu/klein.git
-cd klein
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install "ray-klein==0.1.0a1"
 ```
 
 Install connector dependencies only when needed:
 
 ```bash
-python -m pip install -e ".[kafka]"   # continuous Kafka source/sink
-python -m pip install -e ".[rocketmq]" # continuous RocketMQ source
-python -m pip install -e ".[redis]"   # Redis lookup/sink
-python -m pip install -e ".[rocksdb]" # local RocksDB state backend
-python -m pip install -e ".[serve]"   # Ray Serve bridge
+python -m pip install "ray-klein[kafka]==0.1.0a1"   # continuous Kafka source/sink
+python -m pip install "ray-klein[rocketmq]==0.1.0a1" # continuous RocketMQ source
+python -m pip install "ray-klein[redis]==0.1.0a1"   # Redis lookup/sink
+python -m pip install "ray-klein[rocksdb]==0.1.0a1" # local RocksDB state backend
+python -m pip install "ray-klein[serve]==0.1.0a1"   # Ray Serve bridge
 ```
 
-For development, install the test, documentation, and tooling dependencies:
+For development, clone the repository and install the test, documentation, and
+tooling dependencies:
 
 ```bash
+git clone https://github.com/yuchen-ecnu/klein.git
+cd klein
 python -m pip install -e ".[dev]"
 pre-commit install
 ```
@@ -139,6 +140,12 @@ Data reader. Native methods such as `stream.map(...)` use Klein semantics;
 For continuous execution, see the
 [Kafka walkthrough](docs/getting-started.md#submit-a-dataflow) and the complete
 [connector catalog](docs/connectors/index.md).
+
+Connect to a Ray cluster and open the build-free operations dashboard with:
+
+```bash
+ray-klein dashboard --host 127.0.0.1 --port 8266
+```
 
 ## Documentation
 

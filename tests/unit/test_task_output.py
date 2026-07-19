@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -133,6 +134,47 @@ def test_downstream_batcher_flushes_wide_records_by_bytes() -> None:
     batcher.append(0, record)
 
     assert batcher.take_full(0) == (record,)
+
+
+def test_edge_swap_rejects_invalid_transactions_without_losing_the_live_route() -> None:
+    old = MagicMock(spec=EdgeOutput)
+    replacement = MagicMock(spec=EdgeOutput)
+    output = TaskOutput([old])
+    output.open(SimpleNamespace(metric_group=None))
+
+    with pytest.raises(ValueError, match="logical output edge count"):
+        output.prepare_edge_swap("resize-1", [])
+
+    output.prepare_edge_swap("resize-1", [replacement])
+    output.prepare_edge_swap("resize-1", [replacement])
+    with pytest.raises(RuntimeError, match="already prepared"):
+        output.prepare_edge_swap("resize-2", [replacement])
+    with pytest.raises(RuntimeError, match="does not belong"):
+        output.activate_edge_swap("resize-2")
+    with pytest.raises(RuntimeError, match="has not been activated"):
+        output.commit_edge_swap("resize-1")
+
+    assert output.rollback_edge_swap("resize-1") is True
+    assert output.rollback_edge_swap("resize-1") is False
+    assert output._edges == (old,)
+    replacement.close.assert_called_once_with()
+
+
+def test_edge_swap_closes_prepared_edges_when_later_open_fails() -> None:
+    old_first = MagicMock(spec=EdgeOutput)
+    old_second = MagicMock(spec=EdgeOutput)
+    first = MagicMock(spec=EdgeOutput)
+    second = MagicMock(spec=EdgeOutput)
+    second.open.side_effect = RuntimeError("open failed")
+    output = TaskOutput([old_first, old_second])
+    output.open(SimpleNamespace(metric_group=None))
+
+    with pytest.raises(RuntimeError, match="open failed"):
+        output.prepare_edge_swap("resize-1", [first, second])
+
+    first.close.assert_called_once_with()
+    assert output._edge_swap is None
+    assert output._edges == (old_first, old_second)
 
 
 @pytest.mark.asyncio

@@ -8,11 +8,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -20,8 +24,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -U pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[dev]"
       - name: Verify tag and release ancestry
         run: |
           git fetch origin main
@@ -30,6 +34,7 @@ jobs:
           test "${GITHUB_REF_NAME#v}" = "$package_version"
       - run: ruff format --check .
       - run: ruff check .
+      - run: mypy
       - run: reuse lint
       - name: Core component tests
         run: make unit-core
@@ -42,7 +47,9 @@ jobs:
       - name: Connector component tests
         run: make unit-connectors
       - name: Combined coverage gate
-        run: pytest tests/unit tests/state tests/architecture --cov=ray.klein
+        run: |
+          pytest tests/unit tests/state tests/architecture --cov=ray.klein --cov-report=json:coverage.json
+          python scripts/check_coverage_policy.py coverage.json
       - name: Runtime integration
         run: make integration-runtime
       - name: State and recovery integration
@@ -55,9 +62,7 @@ jobs:
         run: make external
       - run: sphinx-build -W --keep-going -b html docs docs/_build/html
       - run: pip-audit --local --skip-editable --progress-spinner off
-      - run: >-
-          licensecheck --requirements-paths pyproject.toml
-          --license Apache-2.0 --extras all --zero
+      - run: python scripts/check_dependency_licenses.py
 
   build:
     needs: verify
@@ -67,22 +72,38 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
-      - run: python -m pip install -U pip build pip-audit twine
-      - run: python -m pip install ".[all]"
-      - run: python -m build
-      - run: python -m twine check dist/*
+          cache: pip
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
+      - run: python -m build --outdir release/python
+      - run: python -m twine check release/python/*
+      - run: python scripts/check_distribution.py release/python/*
+      - name: Verify the wheel in a clean environment
+        run: |
+          python -m venv /tmp/ray-klein-release
+          /tmp/ray-klein-release/bin/python -m pip install "pip==26.1.2"
+          /tmp/ray-klein-release/bin/python -m pip install --constraint requirements/ci-constraints.txt release/python/*.whl
+          /tmp/ray-klein-release/bin/python -c "import ray, ray.klein; print(ray.klein.__version__)"
       - name: Generate dependency SBOM
-        run: pip-audit --format cyclonedx-json --output dist/sbom.cdx.json --progress-spinner off
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        run: |
+          mkdir -p release/metadata
+          pip-audit --format cyclonedx-json --output release/metadata/sbom.cdx.json --progress-spinner off
+          cd release
+          sha256sum python/* > metadata/SHA256SUMS
+      - name: Attest Python distributions
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
         with:
-          name: distributions
-          path: dist/
+          subject-path: release/python/*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-artifacts
+          path: release/
           if-no-files-found: error
 
   publish:
@@ -94,9 +115,36 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
-          name: distributions
-          path: dist/
-      - run: rm dist/sbom.cdx.json
+          name: release-artifacts
+          path: release/
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        with:
+          packages-dir: release/python/
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: release-artifacts
+          path: release/
+      - name: Publish immutable GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_flags=()
+          if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            release/python/* release/metadata/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            --title "Klein for Ray ${GITHUB_REF_NAME}" \
+            "${release_flags[@]}"

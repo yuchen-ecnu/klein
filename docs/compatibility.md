@@ -15,10 +15,11 @@ Every supported Python version is tested against the latest compatible Ray
 2.56 patch. Before widening the range, CI must run the full unit and integration
 suite against the new Ray minor and the API inventory must be reviewed.
 
-The distributed package contains no direct Ray private imports. New
-private imports are compatibility debt and require a documented compatibility
-shim, fallback behavior, and tests against the minimum and maximum supported Ray
-versions. See [the inventory](private-api-inventory.md).
+The distributed package keeps its small set of unavoidable Ray Data private
+imports inside `ray.klein._compat`. New private imports are compatibility debt
+and require an exact inventory entry, an isolated adapter, and tests against
+the supported Ray line. Normal Klein modules are forbidden from importing them.
+See [the inventory](private-api-inventory.md).
 
 The Ray Data bridge discovers Dataset factories and methods at runtime rather
 than maintaining a version-specific list. It preserves the installed method's

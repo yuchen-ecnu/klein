@@ -22,6 +22,7 @@ ray-klein list
 ray-klein status klein-orders-0123abcd
 ray-klein attach klein-orders-0123abcd
 ray-klein stop klein-orders-0123abcd
+ray-klein dashboard
 ```
 
 Omit the namespace when exactly one job is running, or when you want the CLI

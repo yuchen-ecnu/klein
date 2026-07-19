@@ -12,20 +12,20 @@ This guide creates a bounded `DataStream`, runs it interactively, and shows how 
 
 ## Install Klein
 
-Create an isolated Python environment and install Klein from the project checkout:
+Create an isolated Python environment and install the Alpha release:
 
 ```bash
-cd ray-klein
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install "ray-klein==0.1.0a1"
 ```
 
 Kafka, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install
-only the extra required by the application, for example `.[kafka]`,
-`.[rocketmq]`, `.[redis]`, `.[rocksdb]`, or `.[serve]`. Use `.[all]` for an
-integration development environment. RocketMQ also requires the native
+only the extra required by the application, for example `ray-klein[kafka]`,
+`ray-klein[rocketmq]`, `ray-klein[redis]`, `ray-klein[rocksdb]`, or
+`ray-klein[serve]`. Use `ray-klein[all]` for an integration development
+environment. RocketMQ also requires the native
 `librocketmq` runtime on every worker.
 
 ## Run a bounded pipeline
@@ -139,7 +139,7 @@ ray.klein.reset_context(
     {
         "execution.checkpointing.dir": "s3://<bucket>/klein-checkpoints",
         "state.backend.type": "rocksdb",
-        "state.keyed.max-parallelism": 128,
+        "state.keyed.max-parallelism": 32768,
     }
 )
 ```

@@ -17,15 +17,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -U pip
-      - run: python -m pip install -e ".[all,test]"
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-runtime
 
   integration-state:
@@ -34,15 +34,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -U pip
-      - run: python -m pip install -e ".[all,test]"
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-state
 
   integration-sql:
@@ -51,15 +51,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -U pip
-      - run: python -m pip install -e ".[all,test]"
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-sql
 
   integration-connectors:
@@ -68,34 +68,55 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -U pip
-      - run: python -m pip install -e ".[all,test]"
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-connectors
 
   runtime-soak:
-    name: One-minute backpressure soak
+    name: Ten-minute backpressure soak
     needs: [integration-state, integration-sql, integration-connectors]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install -U pip
-      - run: python -m pip install -e ".[all,test]"
-      - name: One-minute unbounded runtime soak
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
+      - name: Ten-minute unbounded runtime soak
         env:
-          RAY_KLEIN_SOAK_SECONDS: "60"
+          RAY_KLEIN_SOAK_SECONDS: "600"
           KLEIN_NO_RICH_UI: "1"
         run: python tests/run_klein_1min_job.py
+
+  performance:
+    name: Data-plane regression smoke
+    needs: integration-runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
+      - run: python scripts/benchmark_data_plane.py --quick --min-speedup 0.9 --json benchmark-results.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: data-plane-benchmark
+          path: benchmark-results.json
+          if-no-files-found: error

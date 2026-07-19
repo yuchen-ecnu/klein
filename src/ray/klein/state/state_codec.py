@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 import hashlib
 import struct
-from typing import Any
+from typing import Any, cast
 
 from ray.klein.state.pickle_state_serializer import PickleStateSerializer
 from ray.klein.state.state_descriptor import StateDescriptor
 from ray.klein.state.timer_domain import TimerDomain
 
-_KEY_SERIALIZER = PickleStateSerializer()
+_KEY_SERIALIZER: PickleStateSerializer[Any] = PickleStateSerializer()
 _NO_EXPIRY = -1
 
 
@@ -82,7 +82,7 @@ def timer_prefix(domain: TimerDomain) -> bytes:
 
 
 def encode_timer_value(key: Any, namespace: Any) -> bytes:
-    return _KEY_SERIALIZER.dumps((key, namespace))
+    return cast(bytes, _KEY_SERIALIZER.dumps((key, namespace)))
 
 
 def decode_timer(encoded_key: bytes, encoded_value: bytes) -> tuple[int, Any, Any]:

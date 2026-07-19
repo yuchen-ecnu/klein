@@ -7,7 +7,7 @@ import os
 import shlex
 from collections.abc import Mapping
 from datetime import timedelta
-from typing import Any, TypeAlias, TypeVar, Union
+from typing import Any, TypeAlias, TypeVar, Union, cast
 
 from ray.klein._internal.duration import parse_duration
 from ray.klein.config.config_option import ConfigOption, environment_variable_for, normalize_config_key
@@ -81,6 +81,7 @@ class Configuration:
         include_environment: bool = True,
     ) -> None:
         self._values: dict[str, Any] = {}
+        self._environment: dict[str, str]
         if isinstance(options, Configuration):
             self._environment = dict(options._environment)
             self._values.update(options._values)
@@ -136,6 +137,7 @@ class Configuration:
     def update(self, options: ConfigInput = None) -> Configuration:
         if options is None:
             return self
+        values: Mapping[str, Any]
         if isinstance(options, Configuration):
             self._environment.update(options._environment)
             values = options._values
@@ -201,6 +203,6 @@ class Configuration:
     def convert_value(option: ConfigOption[T], raw_value: Any) -> T:
         target = option.value_type
         try:
-            return _convert_config_value(target, raw_value)
+            return cast(T, _convert_config_value(target, raw_value))
         except (TypeError, ValueError) as exc:
             raise ValueError(f"unable to convert {raw_value!r} for {option.key!r} to {target.__name__}") from exc

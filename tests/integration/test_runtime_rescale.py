@@ -76,7 +76,11 @@ def _unrelated_actor_ids(snapshot: dict, target_id: int) -> dict[int, tuple[str 
 def _collect_sequence_phase(output_queue: Queue, expected_indices: range) -> list[dict]:
     expected = set(expected_indices)
     received: dict[int, dict] = {}
-    deadline = time.monotonic() + 20
+    # Ray Queue performs one actor RPC per source record. Keep a fixed failure
+    # budget for small phases and scale it for the intentionally overloaded
+    # continuous-producer case, whose input queue may still contain thousands
+    # of accepted records after the topology transaction has committed.
+    deadline = time.monotonic() + max(20, len(expected) / 100)
     while set(received) != expected:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
