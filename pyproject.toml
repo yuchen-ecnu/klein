@@ -48,15 +48,13 @@ redis = ["redis>=5,<7"]
 rocksdb = ["rocksdict>=0.3.29,<0.4"]
 serve = [
   "aiohttp>=3.13.3,<4",
-  "orjson>=3.9; python_version < '3.12'",
-  "orjson>=3.9.10; python_version >= '3.12'",
+  "orjson>=3.11.6",
   "ray[serve]>=2.56.1,<2.57",
 ]
 all = [
   "aiohttp>=3.13.3,<4",
   "confluent-kafka>=2.3,<3",
-  "orjson>=3.9; python_version < '3.12'",
-  "orjson>=3.9.10; python_version >= '3.12'",
+  "orjson>=3.11.6",
   "ray[serve]>=2.56.1,<2.57",
   "redis>=5,<7",
   "rocksdict>=0.3.29,<0.4",
