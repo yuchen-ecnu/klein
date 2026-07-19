@@ -70,7 +70,7 @@ def build_pipeline():
             "execution.checkpointing.trigger.interval-records": 10_000,
             "state.backend.type": "rocksdb",
             "state.backend.local-dir": "/mnt/nvme/klein-state",
-            "state.keyed.max-parallelism": 128,
+            "state.keyed.max-parallelism": 32768,
             "job.namespace": "orders-production",
         }
     )
@@ -210,4 +210,3 @@ Keep the graph, operator names, state descriptors, serializers, and
 See [Delivery guarantees](delivery-semantics.md),
 [Performance tuning](performance-tuning.md), and
 [Troubleshooting](troubleshooting.md) before production rollout.
-

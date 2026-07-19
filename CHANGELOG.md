@@ -8,6 +8,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+## [0.1.0a1] - 2026-07-20
+
 ### Added
 
 - Standalone `ray-klein` distribution contributing the `ray.klein` subpackage.
@@ -35,7 +37,14 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   `_metadata` commit markers, integrity checks, discovery, and retention.
 - A stable cluster state API for job inventory, operator graphs, throughput,
   backpressure, checkpoints, redacted configuration, failure details, and
-  cancellation, backed by a detached head-node actor and last-good snapshots.
+  cancellation and local operator rescaling, backed by a detached head-node
+  actor and last-good snapshots.
+- A build-free standalone jobs dashboard with a Ray-style operations layout,
+  Flink-style operator and checkpoint views, secure response headers, JSON
+  endpoints, retained-state handling, and guarded operator-rescaling controls.
+- Transactional local operator rescaling with aligned topology fences, exact
+  route rollback before commit, generation fencing, and a post-commit durable
+  stabilization checkpoint.
 - Component-scoped text and JSON operational logging with stable event names,
   Ray job/task context, credential-field redaction, and architecture checks for
   logging and stdout boundaries.
@@ -43,7 +52,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   Ray actor, plus a documented durable-checkpoint recovery boundary.
 - PEP 561 typing metadata, a lazy top-level API, signed-off contribution checks,
   documentation deployment, dependency review, CodeQL, secret scanning,
-  OpenSSF Scorecard, nightly integration, and release SBOM generation.
+  OpenSSF Scorecard, minimum/latest dependency resolution, property tests,
+  nightly and long-running reliability soaks, performance regression artifacts,
+  release SBOM/checksums, and build-provenance attestations.
 - Continuous Apache RocketMQ input through the official remoting-protocol
   Python client, including Tag filters, clustering/broadcasting modes, ACL,
   SSL, bounded callback handoff, metrics, and an explicit broker-managed
@@ -51,6 +62,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
+- The default keyed-state max parallelism is now 32768, allowing a larger
+  stable key-group space for operator rescaling.
 - The operations CLI now discovers stable custom namespaces without requiring
   the Ray Dashboard, reads retained status from the cluster state actor, exits
   `attach` on terminal transitions, reports cancellation races accurately, and
@@ -71,7 +84,7 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   applications can pre-initialize Ray when custom runtime settings are needed.
 - Protobuf is constrained below 7 because supported Ray Serve versions use a descriptor
   attribute removed by protobuf 7.
-- CI enforces a 65% branch-coverage floor with focused unit, state,
+- CI enforces a 68% branch-coverage floor with focused unit, state,
   architecture, integration, and external connector tiers.
 - Handwritten Ray Data source and sink mirrors were replaced by lazy dynamic
   calls through the `data` adapters.

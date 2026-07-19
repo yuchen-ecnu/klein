@@ -98,14 +98,14 @@ class ContentIndependentRoutingTest(unittest.TestCase):
 class KeyRoutingTest(unittest.TestCase):
     def test_single_key_whole_batch_no_slice(self):
         # All rows share a key -> one whole-batch route (copy-free fast path).
-        part = _open(KeyPartitioner(key_selector=lambda r: r["k"]), 4)
+        part = _open(KeyPartitioner(key_selector=lambda r: r["k"], max_parallelism=128), 4)
         rec = Record({"k": [7, 7, 7]}, num_rows=3)
         routes = part.partition_columnar(rec, 3)
         self.assertEqual(len(routes), 1)
         self.assertIsNone(routes[0][1])
 
     def test_rows_split_by_key_preserve_affinity(self):
-        part = _open(KeyPartitioner(key_selector=lambda r: r["k"]), 4)
+        part = _open(KeyPartitioner(key_selector=lambda r: r["k"], max_parallelism=128), 4)
         block = {"k": [1, 2, 1, 2, 3]}
         rec = Record(block, num_rows=5)
         routes = part.partition_columnar(rec, 5)
@@ -175,7 +175,7 @@ class CollectorColumnarRoutingTest(unittest.TestCase):
     def test_keyby_columnar_splits_per_target(self):
         d0, d1, d2, d3 = (_CapturingDownstream() for _ in range(4))
         targets = [d0, d1, d2, d3]
-        part = _open(KeyPartitioner(key_selector=lambda r: r["k"]), 4)
+        part = _open(KeyPartitioner(key_selector=lambda r: r["k"], max_parallelism=128), 4)
         c = self._collector(targets, ["d0", "d1", "d2", "d3"], part)
         block = {"k": [1, 2, 1, 2]}
         c.collect(Record(block, num_rows=4))

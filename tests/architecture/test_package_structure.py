@@ -17,11 +17,9 @@ FORBIDDEN_NAMESPACES = (
     "ray.klein.runtime.utils",
     "ray.klein.connectors",
     "ray.klein.builtin",
-    "ray.klein._compat",
 )
 FORBIDDEN_PACKAGE_PATHS = (
     "_internal/utils",
-    "_compat",
     "connectors",
     "builtin",
     "runtime/common",

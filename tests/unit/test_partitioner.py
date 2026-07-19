@@ -323,7 +323,7 @@ class CheckpointStatusTest(TestCase):
             key_group = key_group_for_key(key_selector(r.block), 128)
             expect[key_group_owner(key_group, 128, downstream_num)].append(r)
 
-        key_partitioner = KeyPartitioner(key_selector=key_selector)
+        key_partitioner = KeyPartitioner(key_selector=key_selector, max_parallelism=128)
         key_partitioner.open(get_mock_runtime_context("key_partitioner_test", "1", 1, 1), len(handlers))
         collector = create_output(
             handlers,

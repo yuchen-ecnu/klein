@@ -19,7 +19,6 @@
 * { box-sizing: border-box; }
 
 body {
-  min-width: 720px;
   min-height: 100vh;
   margin: 0;
   color: var(--text);
@@ -123,6 +122,7 @@ main { width: min(1480px, calc(100% - 48px)); margin: 38px auto 70px; }
   margin-bottom: 20px;
 }
 .summary article, .panel {
+  min-width: 0;
   border: 1px solid var(--border);
   background: linear-gradient(145deg, rgb(17 35 45 / 94%), rgb(10 25 33 / 94%));
   box-shadow: var(--shadow);
@@ -226,4 +226,17 @@ tbody tr:hover { background: rgb(79 176 165 / 5%); }
   .topology-panel .panel-heading { align-items: flex-start; gap: 14px; flex-direction: column; }
   .topology-heading-detail { text-align: left; }
   .topology-legend { justify-content: flex-start; }
+}
+
+@media (max-width: 600px) {
+  .topbar { align-items: stretch; flex-direction: column; padding: 16px; }
+  .toolbar { align-items: stretch; flex-direction: row; }
+  .toolbar select { width: 100%; min-width: 0; }
+  main { width: calc(100% - 32px); margin-top: 26px; }
+  .job-heading { align-items: flex-start; gap: 14px; flex-direction: column; }
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary article { padding: 16px; }
+  .panel-heading { padding-right: 16px; padding-left: 16px; }
+  .topology-legend { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .toast { right: 16px; bottom: 16px; left: 16px; max-width: none; }
 }

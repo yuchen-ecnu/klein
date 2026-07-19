@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2024-2026 Klein for Ray Authors
+# SPDX-License-Identifier: Apache-2.0
+# Direct CI and release dependencies are pinned for reproducible resolution.
+# Dependabot updates this file; the supported lower-bound job is intentionally
+# separate from this known-good toolchain.
+aiohttp==3.14.1
+build==1.5.0
+click==8.4.2
+confluent-kafka==2.15.0
+hypothesis==6.142.5
+licensecheck==2025.1.0
+mypy==1.18.2
+numpy==2.2.6
+orjson==3.11.9
+pandas==2.3.3
+pip==26.1.2
+pip-audit==2.10.1
+protobuf==6.33.6
+pyarrow==19.0.1
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+pytest-timeout==2.4.0
+PyYAML==6.0.3
+ray==2.56.1
+redis==6.4.0
+reuse==6.2.0
+rich==15.0.0
+rocksdict==0.3.29
+rocketmq-client-python==2.0.0
+ruff==0.15.22
+setuptools==83.0.0
+sqlglot==30.12.0
+testcontainers==4.13.3
+twine==6.2.0

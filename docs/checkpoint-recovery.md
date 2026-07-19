@@ -29,7 +29,7 @@ ray.klein.reset_context({
     "execution.runtime.mode": "streaming",
     "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
     "execution.checkpointing.num-retained": 3,
-    "state.keyed.max-parallelism": 128,
+    "state.keyed.max-parallelism": 32768,
 })
 ```
 
@@ -80,7 +80,7 @@ ctx = ray.klein.reset_context({
         "s3://data-platform/klein-checkpoints/"
         "klein-orders-0123abcd/chk-42"
     ),
-    "state.keyed.max-parallelism": 128,
+    "state.keyed.max-parallelism": 32768,
 })
 
 # Build the same sources, transforms, operator names, and sinks here.
@@ -150,4 +150,3 @@ Use `ray-klein status <namespace>` for a summary and
 Klein does not yet expose a user-triggered command that creates an independently
 named savepoint. `execution.savepoint.path` restores from an already completed
 checkpoint or compatible savepoint URI.
-

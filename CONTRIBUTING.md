@@ -34,7 +34,7 @@ Run `make integration` before changing streaming runtime behavior and
 `make external` before changing Kafka, Redis, or other service integrations.
 See the [testing guide](docs/testing.md) for fixture and test-writing rules.
 
-The project enforces a 65% branch-coverage floor. New and changed behavior must
+The project enforces a 68% branch-coverage floor. New and changed behavior must
 have focused tests; do not weaken the threshold or add exclusions to land a
 change.
 

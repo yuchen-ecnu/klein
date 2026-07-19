@@ -129,12 +129,16 @@ ray-klein list
 ray-klein status orders-production
 ray-klein attach orders-production
 ray-klein stop --force orders-production
+ray-klein dashboard --host 127.0.0.1 --port 8266
 ```
 
 `attach` requires a TTY and detaches on Ctrl+C without stopping the job.
 `stop` is cancellation, not savepoint creation. Confirm that an acceptable
 completed checkpoint exists before an upgrade or cluster shutdown when the job
 must be restored later.
+
+The standalone dashboard has no authentication. Keep its default loopback bind,
+or publish it only behind the cluster's authenticated operations proxy.
 
 ## Upgrade procedure
 
@@ -149,4 +153,3 @@ must be restored later.
 Alpha releases do not promise automatic checkpoint-schema migration. Test an
 upgrade against a copy of production-shaped state before using it as the only
 recovery path.
-

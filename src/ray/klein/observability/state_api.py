@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, cast
 
 import ray
 from ray.klein.observability.dashboard.state_actor import get_state_actor
@@ -17,7 +17,7 @@ def list_job_snapshots() -> list[dict[str, Any]]:
     actor = get_state_actor()
     if actor is None:
         return []
-    return ray.get(actor.get_jobs.remote())
+    return cast(list[dict[str, Any]], ray.get(actor.get_jobs.remote()))
 
 
 def get_job_snapshot(job_id: str) -> dict[str, Any] | None:
@@ -27,7 +27,7 @@ def get_job_snapshot(job_id: str) -> dict[str, Any] | None:
     actor = get_state_actor()
     if actor is None:
         return None
-    return ray.get(actor.get_job.remote(job_id))
+    return cast(dict[str, Any] | None, ray.get(actor.get_job.remote(job_id)))
 
 
 def cancel_job(job_id: str, *, timeout: int = 60) -> bool:
@@ -39,7 +39,7 @@ def cancel_job(job_id: str, *, timeout: int = 60) -> bool:
     actor = get_state_actor()
     if actor is None:
         return False
-    return ray.get(actor.cancel_job.remote(job_id, timeout))
+    return cast(bool, ray.get(actor.cancel_job.remote(job_id, timeout)))
 
 
 def rescale_operator(
@@ -62,9 +62,12 @@ def rescale_operator(
     actor = get_state_actor()
     if actor is None:
         return None
-    return ray.get(
-        actor.rescale_operator.remote(job_id, operator_id, parallelism, timeout),
-        timeout=timeout + _CONTROL_RESPONSE_GRACE_SECONDS,
+    return cast(
+        dict[str, Any] | None,
+        ray.get(
+            actor.rescale_operator.remote(job_id, operator_id, parallelism, timeout),
+            timeout=timeout + _CONTROL_RESPONSE_GRACE_SECONDS,
+        ),
     )
 
 

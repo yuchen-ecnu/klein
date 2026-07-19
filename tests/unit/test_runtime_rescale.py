@@ -79,6 +79,26 @@ def _mark_running(graph: ExecutionGraph) -> None:
         vertex.transition_to(ExecutionVertexStatus.RUNNING)
 
 
+def _bare_rescale_task(name: str = "task") -> StreamTask:
+    task = object.__new__(StreamTask)
+    task._task_name = name
+    task._rescale_operation_id = None
+    task._rescale_role = None
+    task._rescale_expected_senders = set()
+    task._rescale_seen_senders = set()
+    task._rescale_edge_indices = ()
+    task._rescale_ready_obj = None
+    task._rescale_resume_obj = None
+    task._rescale_snapshot = None
+    task._rescale_tombstones = []
+    task._topology_operation_id = None
+    task._topology_previous_descriptor = None
+    task._topology_pending_descriptor = None
+    task._topology_active = False
+    task._topology_commit_tombstones = []
+    return task
+
+
 def test_physical_rescale_replaces_only_target_and_epochs_incident_edges() -> None:
     logical, physical = _graphs()
     source_handle = object()
@@ -465,6 +485,198 @@ async def test_downstream_fence_advances_durability_boundary_and_pauses() -> Non
     task._watermark.advance.assert_awaited_once_with()
     task._emit.wait_idle.assert_awaited()
     executor.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare() -> None:
+    input_id = ExecutionVertexId(1, 0)
+    previous = SimpleNamespace(
+        vertex_id=ExecutionVertexId(2, 0),
+        parallelism=1,
+        task_name="target",
+        task_generation="generation-1",
+        operator=SimpleNamespace(source=False),
+        out_edges=("old",),
+        barrier_split={input_id: 1},
+        input_vertex_ids=(input_id,),
+    )
+    pending = SimpleNamespace(
+        vertex_id=previous.vertex_id,
+        parallelism=previous.parallelism,
+        task_name=previous.task_name,
+        task_generation=previous.task_generation,
+        operator=previous.operator,
+        out_edges=("new",),
+        barrier_split={input_id: 2},
+        input_vertex_ids=(input_id, ExecutionVertexId(1, 1)),
+    )
+    output = MagicMock(spec=TaskOutput)
+    checkpoint = MagicMock()
+    tracker = MagicMock()
+    task = _bare_rescale_task("target")
+    task._descriptor = previous
+    task._vertex_id = previous.vertex_id
+    task._task_generation = previous.task_generation
+    task._running = True
+    task._task = asyncio.current_task()
+    task._emit = None
+    task._state = SimpleNamespace(
+        output=output,
+        checkpoint_strategy=checkpoint,
+        event_time_tracker=tracker,
+        metrics=MagicMock(),
+        pipelined=False,
+    )
+    task._build_output_edge = MagicMock(return_value="replacement")
+    task._configure_output_replay = MagicMock()
+
+    assert await task.prepare_topology_reconfiguration("resize-1", pending) is True
+    assert await task.prepare_topology_reconfiguration("resize-1", pending) is True
+    with pytest.raises(RuntimeError, match="already active"):
+        await task.prepare_topology_reconfiguration("resize-2", pending)
+
+    assert task.activate_topology_reconfiguration("resize-1") is True
+    assert task.activate_topology_reconfiguration("resize-1") is True
+    assert task._descriptor is pending
+    output.prepare_edge_swap.assert_called_once_with("resize-1", ["replacement"])
+    output.activate_edge_swap.assert_called_once_with("resize-1")
+    checkpoint.reconfigure_barrier_split.assert_called_once_with(dict(pending.barrier_split))
+    tracker.reconfigure_inputs.assert_called_once_with(pending.input_vertex_ids)
+
+    assert task.commit_topology_reconfiguration("resize-1") is True
+    assert task.commit_topology_reconfiguration("resize-1") is True
+    assert task.rollback_topology_reconfiguration("resize-1") is False
+    output.commit_edge_swap.assert_called_once_with("resize-1")
+
+
+def test_topology_transaction_validates_actor_identity_and_lifecycle() -> None:
+    vertex_id = ExecutionVertexId(2, 0)
+    descriptor = SimpleNamespace(
+        vertex_id=vertex_id,
+        parallelism=2,
+        task_name="target",
+        task_generation="generation-1",
+    )
+    task = _bare_rescale_task("target")
+    task._descriptor = descriptor
+    task._vertex_id = vertex_id
+    task._task_generation = descriptor.task_generation
+    task._state = None
+    task._running = False
+
+    with pytest.raises(RuntimeError, match="not running"):
+        task._validate_topology_reconfiguration(descriptor)
+
+    task._state = SimpleNamespace()
+    task._running = True
+    for override, message in (
+        ({"vertex_id": ExecutionVertexId(9, 0)}, "same execution vertex"),
+        ({"parallelism": 3}, "cannot resize"),
+        ({"task_name": "renamed"}, "cannot rename"),
+        ({"task_generation": "generation-2"}, "cannot change"),
+    ):
+        candidate = SimpleNamespace(**(descriptor.__dict__ | override))
+        with pytest.raises(ValueError, match=message):
+            task._validate_topology_reconfiguration(candidate)
+
+
+@pytest.mark.asyncio
+async def test_rescale_participant_lifecycle_is_fenced_and_idempotent() -> None:
+    task = _bare_rescale_task("target")
+    task._descriptor = SimpleNamespace(input_vertex_ids=())
+    task._begin_rescale("resize-1", "target")
+
+    with pytest.raises(RuntimeError, match="already participates"):
+        task._begin_rescale("resize-2", "target")
+    with pytest.raises(ValueError, match="source operators"):
+        task.prepare_rescale_target("resize-1")
+    with pytest.raises(ValueError, match="at least one target input"):
+        task.prepare_rescale_downstream("resize-1", ())
+    with pytest.raises(ValueError, match="not participating"):
+        await task.await_rescale_ready("resize-2", 0.01)
+    assert task.resume_rescale("resize-2") is False
+
+    task._topology_operation_id = "resize-1"
+    task._topology_active = True
+    task.commit_topology_reconfiguration = MagicMock(return_value=True)
+    assert task.resume_rescale("resize-1") is True
+    task.commit_topology_reconfiguration.assert_called_once_with("resize-1")
+    assert task._rescale_operation_id is None
+    assert task._rescale_tombstones == ["resize-1"]
+
+
+@pytest.mark.asyncio
+async def test_upstream_and_target_barriers_preserve_order_and_ignore_duplicates() -> None:
+    executor = ThreadPoolExecutor(max_workers=1)
+    upstream = _bare_rescale_task("upstream")
+    upstream._state = SimpleNamespace(
+        async_runner=None,
+        executor=executor,
+        inbox=asyncio.Queue(),
+        output=MagicMock(),
+    )
+    upstream._pump = Mock(flush_input=Mock())
+    upstream._emit = AsyncMock()
+    upstream._begin_rescale("resize-1", "upstream")
+    upstream._rescale_edge_indices = (0,)
+    barrier = RescaleBarrier("resize-1", 2)
+
+    await upstream.handle_rescale_barrier(barrier, None)
+
+    upstream._state.output.collect_to_edges.assert_called_once_with(barrier, (0,))
+    assert upstream._rescale_ready.is_set()
+
+    target = _bare_rescale_task("target")
+    first = ExecutionVertexId(1, 0)
+    second = ExecutionVertexId(1, 1)
+    output = MagicMock()
+    operator = MagicMock(stateful=False)
+    target._state = SimpleNamespace(
+        async_runner=None,
+        executor=executor,
+        output=output,
+        operator=operator,
+        state_snapshot_cache=None,
+    )
+    target._pump = Mock(flush_input=Mock())
+    target._emit = AsyncMock()
+    target._begin_rescale("resize-1", "target")
+    target._rescale_expected_senders = {first, second}
+
+    await target.handle_rescale_barrier(barrier, first)
+    await target.handle_rescale_barrier(barrier, first)
+    assert target._rescale_ready.is_set() is False
+    with pytest.raises(RuntimeError, match="unexpected rescale sender"):
+        await target.handle_rescale_barrier(barrier, ExecutionVertexId(9, 0))
+
+    await target.handle_rescale_barrier(barrier, second)
+
+    assert target._rescale_ready.is_set()
+    assert target._rescale_snapshot is None
+    operator.flush.assert_called_once_with()
+    output.flush.assert_called_once_with(force=True)
+    output.collect.assert_called_once_with(barrier)
+
+    target._rescale_tombstones.append("old-resize")
+    await target.handle_rescale_barrier(RescaleBarrier("old-resize", 2), first)
+    with pytest.raises(RuntimeError, match="unexpected rescale barrier"):
+        await target.handle_rescale_barrier(RescaleBarrier("resize-2", 2), first)
+    executor.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_prepare_upstream_requires_an_edge_and_enqueues_the_fence() -> None:
+    task = _bare_rescale_task("upstream")
+    task._state = SimpleNamespace(inbox=asyncio.Queue())
+
+    with pytest.raises(ValueError, match="needs a target output edge"):
+        await task.prepare_rescale_upstream("resize-1", 2, (), 0.01)
+
+    waiting = asyncio.create_task(task.prepare_rescale_upstream("resize-1", 2, (1,), 1.0))
+    envelope = await task._state.inbox.get()
+    assert envelope.payload == RescaleBarrier("resize-1", 2)
+    task._rescale_ready.set()
+    assert await waiting is True
 
 
 @pytest.mark.asyncio

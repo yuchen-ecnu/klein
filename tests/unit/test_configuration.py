@@ -131,6 +131,8 @@ def test_environment_is_typed_snapshotted_and_lower_priority(monkeypatch: pytest
 
 
 def test_key_group_and_idle_input_options_use_standard_environment_style(monkeypatch) -> None:
+    assert Configuration(include_environment=False).get(StateOptions.MAX_PARALLELISM) == 32768
+
     monkeypatch.setenv("RAY_KLEIN_STATE_KEYED_MAX_PARALLELISM", "256")
     monkeypatch.setenv("RAY_KLEIN_EVENT_TIME_IDLE_INPUT_CHECK_INTERVAL", "250ms")
 

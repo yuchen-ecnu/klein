@@ -17,7 +17,7 @@ graphs.
 Install the optional dependencies:
 
 ```bash
-python -m pip install -e ".[serve]"
+python -m pip install "ray-klein[serve]"
 ```
 
 ## Mark a Serve region

@@ -10,13 +10,15 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           persist-credentials: false
       - uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a

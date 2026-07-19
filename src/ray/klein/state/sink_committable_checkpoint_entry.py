@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from ray.klein.api.sink_committable import SinkCommittable
 
@@ -26,4 +27,4 @@ class SinkCommittableCheckpointEntry:
 
     @property
     def transaction_id(self) -> str:
-        return self.committable.transaction_id
+        return cast(str, self.committable.transaction_id)

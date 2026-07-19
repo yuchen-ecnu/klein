@@ -236,7 +236,7 @@ config.set(StateOptions.LOCAL_DIRECTORY, "/mnt/nvme/klein-state")
 config.set(StateOptions.OBJECT_STORE_CACHE_ENABLED, True)
 config.set(StateOptions.OBJECT_STORE_CACHE_MIN_BYTES, 4 * 1024 * 1024)
 config.set(StateOptions.TTL_CLEANUP_BATCH_SIZE, 1000)
-config.set(StateOptions.MAX_PARALLELISM, 128)
+config.set(StateOptions.MAX_PARALLELISM, 32768)
 ```
 
 Install `ray-klein[rocksdb]` before selecting the RocksDB backend.
