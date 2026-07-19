@@ -11,7 +11,6 @@ from ray.klein.api.completed_job_handle import CompletedJobHandle
 from ray.klein.api.job_handle import JobHandle
 from ray.klein.api.live_job_handle import LiveJobHandle
 from ray.klein.api.resource_plan import ResourcePlan
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.api.stream_sink import StreamSink
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.environment_variables import EnvironmentVariables
@@ -20,8 +19,8 @@ from ray.klein.config.job_manager_options import JobManagerOptions
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
 from ray.klein.exceptions import KleinError
 from ray.klein.observability.lineage.tracker import KleinLineageTracker
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.job_manager.job_manager import JobManager
-from ray.klein.runtime.operator.source import SourceOperator
 
 logger = get_logger(__name__)
 
@@ -64,7 +63,7 @@ class JobClient:
         if serve_extract.extracting():
             serve_extract.capture_from_sinks(sinks, self._config)
 
-        stream_graph = self._get_stream_graph(sinks, job_name, self._config)
+        logical_graph = self._get_logical_graph(sinks, job_name, self._config)
 
         if os.environ.get(EnvironmentVariables.COMPILE_ONLY) is not None:
             logger.warning(
@@ -72,31 +71,31 @@ class JobClient:
                 "If you do not need that, please remove it",
                 EnvironmentVariables.COMPILE_ONLY,
             )
-            return CompletedJobHandle(stream_graph)
+            return CompletedJobHandle(logical_graph)
 
         mode = self._config.get(ExecutionOptions.MODE)
         if mode == RuntimeExecutionMode.AUTO:
-            mode = self._determine_runtime_mode(stream_graph)
+            mode = self._determine_runtime_mode(logical_graph)
             logger.info("Job will run in %s by auto detection", mode)
 
         lineage_tracker = KleinLineageTracker(job_name)
-        lineage_tracker.initialize(stream_graph)
+        lineage_tracker.initialize(logical_graph)
 
         if mode == RuntimeExecutionMode.BATCH:
-            return self._execute_batch(stream_graph, lineage_tracker)
+            return self._execute_batch(logical_graph, lineage_tracker)
 
-        return self._execute_streaming(job_name, stream_graph, mode, lineage_tracker)
+        return self._execute_streaming(job_name, logical_graph, mode, lineage_tracker)
 
     def _execute_batch(
         self,
-        stream_graph: StreamGraph,
+        logical_graph: LogicalGraph,
         lineage_tracker: KleinLineageTracker,
     ) -> "JobHandle":
         from ray.klein.runtime.graph.batch_compiler import BatchCompiler
 
         try:
             lineage_tracker.report_start()
-            result = BatchCompiler(stream_graph).execute()
+            result = BatchCompiler(logical_graph).execute()
             lineage_tracker.report_complete()
             return CompletedJobHandle(result)
         except (SystemExit, KeyboardInterrupt) as error:
@@ -109,7 +108,7 @@ class JobClient:
     def _execute_streaming(
         self,
         job_name: str,
-        stream_graph: StreamGraph,
+        logical_graph: LogicalGraph,
         mode: RuntimeExecutionMode,
         lineage_tracker: KleinLineageTracker,
     ) -> "JobHandle":
@@ -137,7 +136,7 @@ class JobClient:
         lineage_tracker.report_start()
         submit_timeout = self._config.get(JobManagerOptions.SCHEDULER_START_TIMEOUT)
         submit_result: bool = klein.get(
-            jobmanager.submit(job_name, stream_graph, config=self._config),
+            jobmanager.submit(job_name, logical_graph, config=self._config),
             timeout=submit_timeout,
         )
         if submit_result is False:
@@ -169,26 +168,30 @@ class JobClient:
         job_name: str,
         sinks: Sequence[StreamSink],
     ) -> str:
-        sg = self._get_stream_graph(sinks, job_name, self._config)
-        logger.debug("%s", sg)
-        return str(sg.build_resource_plan())
+        graph = self._get_logical_graph(sinks, job_name, self._config)
+        logger.debug("%s", graph)
+        return str(graph.build_resource_plan())
 
     @staticmethod
-    def _get_stream_graph(sinks: Sequence[StreamSink], job_name: str, config: Configuration) -> StreamGraph:
+    def _get_logical_graph(
+        sinks: Sequence[StreamSink],
+        job_name: str,
+        config: Configuration,
+    ) -> LogicalGraph:
         from ray.klein.runtime.graph.serve_rewriter import ServeRewriter
 
-        stream_graph = StreamGraph.from_sinks(sinks, job_name, config)
+        graph = LogicalGraph.from_sinks(sinks, job_name, config)
 
         # Replace any ray_serve region with an embedded proxy node. The serve
         # deployment harvests its operators by re-running this same script and
         # intercepting execute() (see ``serve_extract``), so the client side
         # only ever needs the proxy rewrite.
-        ServeRewriter(stream_graph).rewrite()
+        graph = ServeRewriter(graph).rewrite()
 
         resource_plan_path = os.environ.get(EnvironmentVariables.RESOURCE_PLAN_INPUT)
         if resource_plan_path is not None:
             rp = ResourcePlan.read(resource_plan_path)
-            stream_graph = stream_graph.apply_resource_plan(rp)
+            graph = graph.with_resource_plan(rp)
             logger.info(
                 "Loaded ResourcePlan from '%s', since you have set environment variable `%s`. "
                 "If you do not need that, please remove it",
@@ -204,22 +207,10 @@ class JobClient:
                 plan_output_path,
                 EnvironmentVariables.RESOURCE_PLAN_OUTPUT,
             )
-            stream_graph.build_resource_plan().write(plan_output_path)
+            graph.build_resource_plan().write(plan_output_path)
 
-        return stream_graph
+        return graph
 
     @staticmethod
-    def _determine_runtime_mode(stream_graph: StreamGraph) -> RuntimeExecutionMode:
-        for source in stream_graph.source_nodes:
-            operator = stream_graph.nodes[source].operator
-            if not isinstance(operator, SourceOperator):
-                raise TypeError(f"Source node {source!r} does not contain a SourceOperator")
-            # Unbounded source.
-            if not operator.bounded:
-                return RuntimeExecutionMode.STREAMING
-        for sink in stream_graph.sink_nodes:
-            operator = stream_graph.nodes[sink].operator
-            # Unsupported sink.
-            if not operator.logical_function.batch_supported:
-                return RuntimeExecutionMode.STREAMING
-        return RuntimeExecutionMode.BATCH
+    def _determine_runtime_mode(graph: LogicalGraph) -> RuntimeExecutionMode:
+        return RuntimeExecutionMode.STREAMING if graph.runtime_mode_requires_streaming else RuntimeExecutionMode.BATCH

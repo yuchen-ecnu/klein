@@ -9,8 +9,11 @@ on:
 permissions:
   contents: read
 
+# Nightly preserves the same component order as pull-request CI:
+# runtime -> state -> SQL, while connectors branch from runtime.
 jobs:
-  runtime-soak:
+  integration-runtime:
+    name: Runtime integration
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -23,7 +26,74 @@ jobs:
           cache: pip
       - run: python -m pip install -U pip
       - run: python -m pip install -e ".[all,test]"
-      - run: pytest tests/integration -m "integration and not external" --timeout=300
+      - run: make integration-runtime
+
+  integration-state:
+    name: State and recovery integration
+    needs: integration-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: make integration-state
+
+  integration-sql:
+    name: SQL and SQL-state integration
+    needs: integration-state
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: make integration-sql
+
+  integration-connectors:
+    name: Local connector integration
+    needs: integration-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
+      - run: make integration-connectors
+
+  runtime-soak:
+    name: One-minute backpressure soak
+    needs: [integration-state, integration-sql, integration-connectors]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip
+      - run: python -m pip install -e ".[all,test]"
       - name: One-minute unbounded runtime soak
         env:
           RAY_KLEIN_SOAK_SECONDS: "60"

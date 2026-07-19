@@ -86,18 +86,24 @@ you intentionally don't need periodic recovery points.
 
 | Key | Type | Default | Meaning and constraints |
 | --- | --- | --- | --- |
-| `pipeline.input-buffer.size` | int | `200` | Maximum records queued in each streaming task inbox. Values at or below `0` make the underlying asyncio queue unbounded. |
-| `pipeline.input-buffer.put-timeout` | duration | `1s` | Time allowed for a downstream inbox write before the emitter treats it as backpressure and retries or reroutes. The current runtime uses whole seconds. |
-| `pipeline.output-buffer.size` | int | `1000` | Reserved output-buffer capacity. The current collector carries this value in deployment descriptors but doesn't use it to bound a queue. |
+| `pipeline.input-buffer.size` | int | `200` | Maximum logical rows queued in each streaming task inbox. Must be positive. A single oversized columnar block is admitted only while the inbox is otherwise empty. |
+| `pipeline.input-buffer.max-bytes` | int | `67108864` | Maximum estimated payload bytes queued in each task inbox. Must be positive. One oversized block is admitted exclusively so progress remains possible. |
+| `pipeline.input-buffer.put-timeout` | duration | `1s` | Compatibility timeout for targets without immediate admission support. Native tasks use non-blocking capacity probes and backoff. |
+| `pipeline.output-buffer.max-rows` | int | `1000` | Hard per-edge bound on logical rows retained before transfer to the emit queue. Exceeding it fails fast instead of growing task memory without limit. |
+| `pipeline.output-buffer.max-bytes` | int | `67108864` | Hard per-edge estimated-byte bound before transfer to the emit queue. One oversized block is allowed only when exclusive. |
+| `pipeline.emit-queue.max-batches` | int | `2` | Maximum detached output batches waiting in the FIFO emit queue. Must be positive. |
 | `pipeline.internal.batch-size` | int | `10` | Records accumulated per downstream target before a micro-batch is emitted. Must be non-negative; `0` effectively emits each record immediately. |
+| `pipeline.internal.batch-max-rows` | int | `1000` | Flushes a transport micro-batch once it reaches this many logical rows. Must be positive. |
+| `pipeline.internal.batch-max-bytes` | int | `4194304` | Flushes a transport micro-batch once its estimated payload reaches this size. Must be positive. |
+| `pipeline.transport.object-store-threshold-bytes` | int | `131072` | Duplicated broadcast batches at or above this size use one shared Ray Object Store reference. `0` shares every duplicated batch. |
 | `pipeline.operator-chaining.enabled` | bool | `true` | Co-locates compatible non-shuffle operators in one task to avoid serialization between them. |
-| `pipeline.columnar-passthrough.enabled` | bool | `false` | Keeps batched output column-oriented across compatible downstream edges instead of converting it to rows and back. Keyed and custom-partitioned edges are sliced by row key. |
+| `pipeline.columnar-passthrough.enabled` | bool | `true` | Keeps batched output column-oriented across compatible downstream edges instead of converting it to rows and back. Keyed and custom-partitioned edges are sliced by row key. Disable only for the legacy row-oriented wire shape. |
 | `pipeline.placement-group.enabled` | bool | `true` | Tries to gang-schedule the streaming job in a Ray placement group. If reservation fails, Klein falls back to round-robin and then native placement. Ignored by `balanced` deployment mode and local debug mode. |
 | `pipeline.placement-group.strategy` | string | `PACK` | Ray placement-group strategy. Klein documents and tests `PACK` and `SPREAD`; invalid values are rejected by Ray. |
 | `pipeline.placement-group.ready-timeout` | duration | `120s` | Maximum wait for placement-group reservation before Klein tries a fallback placement strategy. |
 | `pipeline.replay-buffer.enabled` | bool | `true` | Retains emitted records until downstream progress confirms they can be dropped, enabling single-task at-least-once replay. `false` leaves full-job restart as the recovery path. |
-| `pipeline.replay-buffer.watermark-flush-batches` | int | `32` | Forces an output flush and replay-watermark advance after this many processed input batches. Lower values reduce retained replay data at the cost of smaller downstream batches. Values below `1` are clamped to `1`. |
-| `pipeline.replay-buffer.max-bytes` | int | `0` | Reserved soft byte limit for replay data; `0` is documented as unlimited. The current runtime records replay size but doesn't yet apply this limit or pacing behavior. |
+| `pipeline.replay-buffer.watermark-flush-batches` | int | `32` | Forces the complete input/operator/output durability boundary and advances every pending sender after this many processed input batches. Must be positive. |
+| `pipeline.replay-buffer.max-bytes` | int | `268435456` | Hard estimated-memory guard for retained replay data. After old acknowledgements are applied, a new batch that would cross the bound fails the task into normal recovery before process OOM. Must be positive while replay is enabled. |
 
 ## Managed state, SQL state, event time, and UDFs
 

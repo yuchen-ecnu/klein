@@ -19,6 +19,16 @@ Stateful stream API
    TimeWindow
    WindowedStream
 
+.. currentmodule:: ray.klein.api.keyed_process_function
+
+.. autoclass:: KeyedProcessFunction
+
+.. autosummary::
+   :nosignatures:
+
+   KeyedProcessFunction.process
+   KeyedProcessFunction.on_timer
+
 .. currentmodule:: ray.klein.api.keyed_stream
 
 .. autosummary::

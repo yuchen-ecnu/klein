@@ -16,7 +16,7 @@ async def test_failure_detail_preserves_the_error_that_triggered_restart() -> No
     vertex = Mock(error_message=None)
     vertex.name = "map (1/1)"
     graph = Mock(execution_vertices=[vertex])
-    graph.execution_vertex.return_value = vertex
+    graph.find_execution_vertex.return_value = vertex
     manager.execution_graph = graph
     manager.job_master = Mock()
     manager.run_exclusive = AsyncMock(return_value=False)

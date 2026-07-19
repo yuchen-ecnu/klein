@@ -17,6 +17,8 @@ class SubtaskCounts:
 
     rows_in: int = 0  # records consumed so far (0 for a source)
     rows_out: int = 0  # records emitted so far
+    bytes_in: int = 0  # estimated logical payload bytes consumed so far
+    bytes_out: int = 0  # estimated logical payload bytes emitted so far
     queued: int = 0  # records in the inbox, arrived but not yet processed
     capacity: int = 0  # inbox maxsize; queued/capacity is the backlog ratio
     # Monotonic ns counters for Flink-style time accounting; the view diffs two
@@ -38,8 +40,11 @@ class SubtaskProgress:
 
     subtask_index: int
     status: str
+    actor_id: str | None = None
     rows_in: int = 0
     rows_out: int = 0
+    bytes_in: int = 0
+    bytes_out: int = 0
     queued: int = 0
     capacity: int = 0
     busy_ns: int = 0
@@ -78,6 +83,8 @@ class OperatorProgress:
     status: str
     rows_out: int  # total data records emitted across the operator's subtasks
     rows_in: int = 0  # total data records consumed (0 for sources)
+    bytes_in: int = 0  # estimated logical payload bytes consumed
+    bytes_out: int = 0  # estimated logical payload bytes emitted
     queued: int = 0  # records sitting in subtask inboxes, not yet processed
     capacity: int = 0  # summed inbox maxsize; queued/capacity = backlog ratio
     # Summed monotonic ns counters across subtasks; the view diffs two samples

@@ -7,7 +7,12 @@ from types import SimpleNamespace
 
 from ray.klein._internal import ray as klein_ray
 from ray.klein._internal.constants import ComponentName
-from ray.klein.runtime.actor import create_remote_actor
+from ray.klein.runtime.actor import KleinActorHandle, create_remote_actor
+from ray.klein.runtime.execution_graph.execution_vertex_status import (
+    ExecutionVertexStatus,
+)
+from ray.klein.runtime.job_manager.progress import SubtaskCounts
+from ray.klein.runtime.job_manager.progress_reporter import ProgressReporter
 
 
 class _AsyncActor:
@@ -21,6 +26,35 @@ class _StuckActor:
 
     async def stop(self) -> None:
         await asyncio.Event().wait()
+
+
+class _ActorId:
+    def hex(self) -> str:
+        return "actor-id-for-dashboard"
+
+
+def test_actor_handle_exposes_only_real_ray_actor_ids() -> None:
+    inner_actor = SimpleNamespace(_actor_id=_ActorId())
+
+    assert KleinActorHandle(inner_actor).actor_id == "actor-id-for-dashboard"
+    assert KleinActorHandle(inner_actor, debug_mode=True).actor_id is None
+
+
+def test_subtask_progress_exposes_actor_id_for_dashboard_navigation() -> None:
+    vertex = SimpleNamespace(
+        index=2,
+        status=ExecutionVertexStatus.RUNNING,
+        stream_task=KleinActorHandle(SimpleNamespace(_actor_id=_ActorId())),
+    )
+
+    progress = ProgressReporter._subtask_progress(
+        vertex,
+        SubtaskCounts(),
+        progress_failed=False,
+        job_running=True,
+    )
+
+    assert progress.actor_id == "actor-id-for-dashboard"
 
 
 def test_debug_actor_loop_is_released_on_kill() -> None:

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-.PHONY: audit build clean docs external format integration lint test unit
+.PHONY: audit build clean docs external format integration integration-connectors integration-runtime \
+	integration-sql integration-state lint test unit unit-connectors unit-core unit-runtime unit-sql unit-state
 
 format:
 	ruff format .
@@ -15,11 +16,38 @@ test:
 unit:
 	python -m pytest tests/unit tests/state tests/architecture -m "not slow"
 
+unit-core:
+	python -m pytest tests/unit tests/state tests/architecture -m "component_core and not slow"
+
+unit-runtime:
+	python -m pytest tests/unit tests/state tests/architecture -m "component_runtime and not slow"
+
+unit-state:
+	python -m pytest tests/unit tests/state tests/architecture -m "component_state and not slow"
+
+unit-sql:
+	python -m pytest tests/unit tests/state tests/architecture -m "component_sql and not slow"
+
+unit-connectors:
+	python -m pytest tests/unit tests/state tests/architecture -m "component_connectors and not slow"
+
 integration:
 	python -m pytest tests/integration -m "integration and not external" --timeout=300
 
+integration-runtime:
+	python -m pytest tests/integration -m "integration and component_runtime and not external" --timeout=300
+
+integration-state:
+	python -m pytest tests/integration -m "integration and component_state and not external" --timeout=300
+
+integration-sql:
+	python -m pytest tests/integration -m "integration and component_sql and not external" --timeout=300
+
+integration-connectors:
+	python -m pytest tests/integration -m "integration and component_connectors and not external" --timeout=300
+
 external:
-	python -m pytest tests/integration/external -m external --run-external --timeout=300
+	python -m pytest tests/integration/external -m "external and component_connectors" --run-external --timeout=300
 
 audit:
 	reuse lint

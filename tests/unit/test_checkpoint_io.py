@@ -8,7 +8,6 @@ from unittest import TestCase
 import numpy
 
 from ray.klein.api.klein_context import KleinContext
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.checkpoint_trigger_options import (
     CheckpointTriggerOptions,
 )
@@ -18,6 +17,7 @@ from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 from ray.klein.runtime.coordinator import checkpoint_io
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
 from ray.klein.state.checkpoint_file_system import CheckpointFileSystem
 from ray.klein.state.checkpoint_layout import CheckpointLayout
@@ -41,9 +41,9 @@ class CheckpointIOTest(TestCase):
         )
         stream.write(ConsoleSinkFunction, concurrency=2)
         stream.write(ConsoleSinkFunction, concurrency=3)
-        # Translate DataStream to JobGraph
-        StreamGraph.from_sinks(ctx.sinks, "test_job_name", Configuration())
-        # JobGraph:
+        # Translate DataStream to LogicalGraph
+        LogicalGraph.from_sinks(ctx.sinks, "test_job_name", Configuration())
+        # LogicalGraph:
         # Source(concurrency=1) -[Rescale]--> Map(concurrency=2)
         #                       -[Adaptive]-> Map(concurrency=3)--[Adaptive]-> Sink(concurrency=2)
         #                                                       \-[Forward]--> Sink(concurrency=3)
@@ -78,7 +78,7 @@ class CheckpointIOTest(TestCase):
         )
         stream.write(ConsoleSinkFunction, concurrency=2)
         stream.write(ConsoleSinkFunction, concurrency=3)
-        # JobGraph:
+        # LogicalGraph:
         # Source(concurrency=1) -[Rescale]--> Map(concurrency=2)
         #                       -[Adaptive]-> Map(concurrency=3)
         #                       -[Rescale]--> Map(concurrency=4)--[Rescale]--> Sink(concurrency=2)
@@ -127,7 +127,7 @@ class CheckpointIOTest(TestCase):
         )
         # 1C
         stream.rescale().write(ConsoleSinkFunction, num_cpus=0.25, concurrency=1, name="ConsoleSink")
-        # JobGraph:
+        # LogicalGraph:
         # Source(concurrency=2) -[Forward]-> Map(concurrency=2)
         #                       -[Rescale]-> Flat_Map(concurrency=3) -[Rescale]-> Sink(concurrency=1)
         exec_graph = self._to_exec_graph(ctx.sinks)
@@ -167,7 +167,7 @@ class CheckpointIOTest(TestCase):
         )
         # 1C
         stream.rescale().write(ConsoleSinkFunction, num_cpus=0.25, concurrency=1, name="ConsoleSink")
-        # Translate DataStream to JobGraph
+        # Translate DataStream to LogicalGraph
         exec_graph = self._to_exec_graph(ctx.sinks)
         ev_aligns = checkpoint_io.barrier_split_counts(exec_graph)
         source = ExecutionVertexId(1, 0)
@@ -200,7 +200,7 @@ class CheckpointIOTest(TestCase):
         )
         # 1C
         stream.write(ConsoleSinkFunction, num_cpus=0.25, concurrency=1, name="ConsoleSink")
-        # JobGraph:
+        # LogicalGraph:
         # Source(concurrency=2) -[Rescale]-> Map(concurrency=4)
         #                       -[Rescale]-> Flat_Map(concurrency=1)
         #                       -[Forward]-> Map(concurrency=1) -[Forward]-> Sink(concurrency=1)
@@ -239,7 +239,7 @@ class CheckpointIOTest(TestCase):
         )
         stream.write(ConsoleSinkFunction, concurrency=2, name="ConsoleSink")
         stream.show()
-        # JobGraph:
+        # LogicalGraph:
         # Source(concurrency=5) -[Adaptive]-> Map(concurrency=2)
         #                       -[Forward]--> Flat_Map(concurrency=2)--[Forward]-> Sink(concurrency=2)
         #                                                            \-[Rescale]-> Show(concurrency=1)
@@ -295,7 +295,7 @@ class CheckpointIOTest(TestCase):
             name="MapOperator",
         )
         stream.write(ConsoleSinkFunction, concurrency=2, name="ConsoleSink")
-        # JobGraph:
+        # LogicalGraph:
         # Source(concurrency=2) -[Rescale]-> Map(concurrency=6) -[Rescale]-> Sink(concurrency=2)
         exec_graph = self._to_exec_graph(ctx.sinks)
         ev_aligns = checkpoint_io.barrier_split_counts(exec_graph)
@@ -330,7 +330,7 @@ class CheckpointIOTest(TestCase):
         )
         stream.write(ConsoleSinkFunction, concurrency=2, name="ConsoleSink")
         stream.show()
-        # JobGraph:
+        # LogicalGraph:
         # Source(concurrency=2) -[Rescale]-> Map(concurrency=6)--[Rescale]-> Sink(concurrency=2)
         #                                                      \-[Rescale]-> Show(concurrency=1)
         exec_graph = self._to_exec_graph(ctx.sinks)
@@ -438,8 +438,8 @@ class CheckpointIOTest(TestCase):
 
     @staticmethod
     def _to_exec_graph(sinks) -> ExecutionGraph:
-        stream_graph = StreamGraph.from_sinks(sinks, "test_job_name", Configuration())
+        logical_graph = LogicalGraph.from_sinks(sinks, "test_job_name", Configuration())
         config = Configuration()
         config.set(PipelineOptions.OPERATOR_CHAINING, False)
-        job_graph = LogicalOptimizer(config=config).optimize(stream_graph)
-        return expand_execution_graph(job_graph)
+        optimized_graph = LogicalOptimizer(config=config).optimize(logical_graph)
+        return expand_execution_graph(optimized_graph)

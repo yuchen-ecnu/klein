@@ -16,7 +16,7 @@ def _vertex() -> ExecutionVertex:
         vertex_resources=Resources(),
         index=0,
         concurrency=1,
-        operator=MagicMock(),
+        operator_spec=MagicMock(),
         config=Configuration(include_environment=False),
         task_metric_group=MagicMock(),
     )

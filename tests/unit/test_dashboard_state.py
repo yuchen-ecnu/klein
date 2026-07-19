@@ -57,6 +57,8 @@ def test_interval_metrics_are_derived_from_monotonic_counters() -> None:
                 "op_id": 1,
                 "rows_in": 100,
                 "rows_out": 50,
+                "bytes_in": 1_000,
+                "bytes_out": 500,
                 "busy_ns": 1_000_000_000,
                 "backpressure_ns": 0,
                 "subtasks": [
@@ -64,6 +66,8 @@ def test_interval_metrics_are_derived_from_monotonic_counters() -> None:
                         "subtask_index": 0,
                         "rows_in": 50,
                         "rows_out": 25,
+                        "bytes_in": 500,
+                        "bytes_out": 250,
                         "busy_ns": 500_000_000,
                         "backpressure_ns": 0,
                     }
@@ -78,6 +82,8 @@ def test_interval_metrics_are_derived_from_monotonic_counters() -> None:
                 "parallelism": 2,
                 "rows_in": 140,
                 "rows_out": 70,
+                "bytes_in": 1_400,
+                "bytes_out": 700,
                 "busy_ns": 2_000_000_000,
                 "backpressure_ns": 500_000_000,
                 "subtasks": [
@@ -85,6 +91,8 @@ def test_interval_metrics_are_derived_from_monotonic_counters() -> None:
                         "subtask_index": 0,
                         "rows_in": 70,
                         "rows_out": 35,
+                        "bytes_in": 700,
+                        "bytes_out": 350,
                         "busy_ns": 1_000_000_000,
                         "backpressure_ns": 250_000_000,
                     }
@@ -97,10 +105,14 @@ def test_interval_metrics_are_derived_from_monotonic_counters() -> None:
 
     assert operator["rows_in_per_second"] == 40
     assert operator["rows_out_per_second"] == 20
+    assert operator["bytes_in_per_second"] == 400
+    assert operator["bytes_out_per_second"] == 200
     assert operator["busy_percent"] == 50
     assert operator["backpressure_percent"] == 25
     assert operator["subtasks"][0]["rows_in_per_second"] == 20
     assert operator["subtasks"][0]["rows_out_per_second"] == 10
+    assert operator["subtasks"][0]["bytes_in_per_second"] == 200
+    assert operator["subtasks"][0]["bytes_out_per_second"] == 100
     assert operator["subtasks"][0]["busy_percent"] == 50
     assert operator["subtasks"][0]["backpressure_percent"] == 25
 

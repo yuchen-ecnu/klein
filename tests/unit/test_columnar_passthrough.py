@@ -18,7 +18,6 @@ from ray.klein._internal.block import (
     slice_block_rows,
 )
 from ray.klein.config.configuration import Configuration
-from ray.klein.runtime.collector.collector import OutputCollector
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.partitioning import (
     BroadcastPartitioner,
@@ -26,6 +25,7 @@ from ray.klein.runtime.partitioning import (
     KeyPartitioner,
     SimplePartitioner,
 )
+from tests.unit.task_output_utils import open_task_output
 
 
 class _RC:
@@ -35,7 +35,7 @@ class _RC:
 
 
 def _open(part, n):
-    part.open(_RC(), [object()] * n)
+    part.open(_RC(), n)
     return part
 
 
@@ -149,21 +149,16 @@ class _CapturingDownstream:
 
 
 class CollectorColumnarRoutingTest(unittest.TestCase):
-    """OutputCollector routes a columnar Record through the batch holder, keeping
+    """TaskOutput routes a columnar Record through one edge, keeping
     the data column-oriented and (for keyBy) sliced per target."""
 
     def _collector(self, targets, names, partitioner):
-        c = OutputCollector(
+        return open_task_output(
             targets,
             partitioner,
-            output_buffer_size=100,
-            target_operator_names=names,
-            put_timeout=1,
+            tuple(range(len(targets))),
+            names,
         )
-        # The collector defaults to an internal batch size of 1 before open(),
-        # so every push flushes immediately (inline path) — no override needed.
-        c.configure_pipelining(False)
-        return c
 
     def test_forward_columnar_ships_whole_batch(self):
         d = _CapturingDownstream()

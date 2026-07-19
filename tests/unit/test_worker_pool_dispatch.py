@@ -9,7 +9,12 @@ without Ray actors.
 
 import unittest
 
-from ray.klein.runtime.partitioning import RescalePartitioner, WorkerPoolDispatcher
+from ray.klein.runtime.partitioning import (
+    ForwardPartitioner,
+    RescalePartitioner,
+    RoundRobinPartitioner,
+    WorkerPoolDispatcher,
+)
 
 
 class WorkerPoolDispatcherTest(unittest.TestCase):
@@ -67,3 +72,16 @@ class DistributeTasksTest(unittest.TestCase):
 
     def test_scale_up_3_to_7_disjoint_cover(self):
         self._assert_full_disjoint_cover(3, 7)
+
+    def test_spec_and_runtime_share_the_same_rescale_topology(self):
+        spec = RescalePartitioner().to_spec()
+        self.assertEqual(spec.target_indices(2, 5, 1), (1, 3))
+
+    def test_forward_topology_rejects_parallelism_drift(self):
+        with self.assertRaisesRegex(ValueError, "equal source and target parallelism"):
+            ForwardPartitioner().to_spec().target_indices(1, 2, 0)
+
+    def test_round_robin_starts_at_partition_zero(self):
+        partitioner = RoundRobinPartitioner()
+        partitioner.open(type("Context", (), {"task_index": 0, "parallelism": 1})(), 3)
+        self.assertEqual([partitioner.partition(None)[0] for _ in range(4)], [0, 1, 2, 0])

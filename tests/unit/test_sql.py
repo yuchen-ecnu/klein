@@ -8,6 +8,7 @@ from sqlglot import parse_one
 
 from ray.klein import KleinContext, SQLQueryError, SQLSession, TableFactory, sql
 from ray.klein._internal.sql.execution import _build_aggregate_plan, _shuffle_partitions
+from ray.klein._internal.sql.kafka_table_factory import KafkaTableFactory
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
 from ray.klein.integrations.filesystem.streaming_file_sink import StreamingFileSink
@@ -260,6 +261,40 @@ def test_flink_style_create_and_drop_table() -> None:
     session.execute_sql("DROP TABLE events")
     assert session.tables == ()
     session.execute_sql("DROP TABLE IF EXISTS events")
+
+
+def test_canal_json_is_a_kafka_format_and_validates_options() -> None:
+    context = KleinContext()
+    session = SQLSession(context)
+
+    table = session.execute_sql(
+        """
+        CREATE TABLE canal_orders (id STRING, status STRING) WITH (
+            'connector' = 'kafka',
+            'format' = 'canal-json',
+            'topic' = 'canal-orders',
+            'bootstrap_servers' = 'kafka:9092',
+            'canal-json.include-metadata' = 'false',
+            'canal-json.ddl-handling' = 'fail'
+        )
+        """
+    )
+
+    assert "canal" not in session.table_factories
+    assert table.connector == "kafka"
+    assert table.options["format"] == "canal-json"
+    source = KafkaTableFactory().create_source(context, table)
+    assert source.stream_operator.logical_function.constructor_kwargs["value_format"] == "canal-json"
+    assert source.stream_operator.logical_function.constructor_kwargs["format_options"] == {
+        "include_metadata": False,
+        "ddl_handling": "fail",
+    }
+    assert source.stream_operator.bounded is False
+    with pytest.raises(SQLQueryError, match="must be 'raw' or 'canal-json'"):
+        session.execute_sql(
+            "CREATE TABLE bad_canal (id STRING) WITH ("
+            "'connector'='kafka', 'topic'='events', 'bootstrap_servers'='kafka:9092', 'format'='protobuf')"
+        )
 
 
 def test_filesystem_insert_builds_transactional_stream_sink(tmp_path) -> None:

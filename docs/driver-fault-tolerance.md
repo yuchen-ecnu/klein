@@ -39,8 +39,11 @@ The JobManager actor can restart after its process fails, but Python actor
 constructor state alone cannot reconstruct a submitted graph. Worker and
 coordinator failures are recovered in place from checkpoints; recovery after
 loss of the JobManager process currently requires resubmission with the same
-job definition and `execution.checkpointing.restore-path`. This limitation is
+job definition and `execution.savepoint.path`. This limitation is
 part of the alpha compatibility contract.
+
+Follow [Restore and rescale a job](checkpoint-recovery.md) for the complete
+resubmission procedure and checkpoint-compatibility checks.
 
 ## Why Klein does not require Ray Compiled Graph
 

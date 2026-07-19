@@ -8,7 +8,7 @@ from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVerte
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
-from ray.klein.runtime.operator.operator import StreamOperator
+from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.resources import Resources
 
 
@@ -22,7 +22,7 @@ class ExecutionVertex:
         vertex_resources: Resources,
         index: int,
         concurrency: int,
-        operator: StreamOperator,
+        operator_spec: OperatorSpec,
         config: Configuration,
         task_metric_group: TaskMetricGroup,
     ) -> None:
@@ -31,7 +31,7 @@ class ExecutionVertex:
         self.id: ExecutionVertexId = ExecutionVertexId(vertex_id, index)
         self.index = index
         self.concurrency = concurrency
-        self.operator = operator
+        self.operator_spec = operator_spec
         self.config = config
         self.stream_task: KleinActorHandle | None = None
         self.task_metric_group = task_metric_group

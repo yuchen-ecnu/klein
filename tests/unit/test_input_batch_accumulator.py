@@ -6,8 +6,8 @@ import pyarrow
 import pytest
 
 from ray.klein.api.runtime_info import RuntimeInfo
-from ray.klein.runtime.collector.input_batcher import InputBatcher
 from ray.klein.runtime.message import Barrier, Record, Watermark
+from ray.klein.runtime.worker.input_batch_accumulator import InputBatchAccumulator
 
 BATCH_FORMATS = ("default", "native", "pyarrow", "numpy")
 
@@ -23,20 +23,24 @@ def make_batcher(
     batch_size: int | None,
     batch_timeout: int = 300,
     batch_format: str = "native",
-) -> InputBatcher:
-    return InputBatcher(
+) -> InputBatchAccumulator:
+    del output_buffer
+    return InputBatchAccumulator(
         RuntimeInfo(
             batch_size=batch_size,
             batch_timeout=batch_timeout,
             batch_format=batch_format,
-        ),
-        output_buffer.append,
+        )
     )
 
 
-def simulate(batcher: InputBatcher, records: Iterable[Record]) -> None:
+def push(batcher: InputBatchAccumulator, output: list[Record], record: Record) -> None:
+    output.extend(batcher.accept(record))
+
+
+def simulate(batcher: InputBatchAccumulator, output: list[Record], records: Iterable[Record]) -> None:
     for record in records:
-        batcher.accumulate_then_flush(record)
+        push(batcher, output, record)
 
 
 def target(values: list[int], batch_format: str):
@@ -61,6 +65,7 @@ def test_no_batching_passes_records_through(output_buffer: list[Record], batch_f
 
     simulate(
         make_batcher(output_buffer, batch_size=None, batch_format=batch_format),
+        output_buffer,
         records,
     )
 
@@ -71,6 +76,7 @@ def test_no_batching_passes_records_through(output_buffer: list[Record], batch_f
 def test_single_row_batching(output_buffer: list[Record], batch_format: str) -> None:
     simulate(
         make_batcher(output_buffer, batch_size=1, batch_format=batch_format),
+        output_buffer,
         [
             Barrier(1),
             Record({"id": 1}),
@@ -99,6 +105,7 @@ def test_single_row_batching(output_buffer: list[Record], batch_format: str) -> 
 def test_barrier_flushes_partial_batch(output_buffer: list[Record], batch_format: str) -> None:
     simulate(
         make_batcher(output_buffer, batch_size=4, batch_format=batch_format),
+        output_buffer,
         [
             Barrier(1),
             Record({"id": 1}),
@@ -125,9 +132,9 @@ def test_barrier_flushes_partial_batch(output_buffer: list[Record], batch_format
 def test_watermark_flushes_partial_batch_before_control(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=4)
 
-    batcher.accumulate_then_flush(Record({"id": 1}))
-    batcher.accumulate_then_flush(Record({"id": 2}))
-    batcher.accumulate_then_flush(Watermark(10))
+    push(batcher, output_buffer, Record({"id": 1}))
+    push(batcher, output_buffer, Record({"id": 2}))
+    push(batcher, output_buffer, Watermark(10))
 
     assert output_buffer == [Record({"id": [1, 2]}), Watermark(10)]
 
@@ -185,8 +192,8 @@ def test_barrier_flush_is_independent_of_timeout(
         batch_format=batch_format,
     )
 
-    simulate(batcher, input_records)
-    batcher.flush()
+    simulate(batcher, output_buffer, input_records)
+    output_buffer.extend(batcher.flush())
 
     expected: list[Record] = [Barrier(1)]
     for values, barrier_id in expected_batches:
@@ -197,8 +204,8 @@ def test_barrier_flush_is_independent_of_timeout(
 def test_heterogeneous_columns_are_null_filled(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=2)
 
-    batcher.accumulate_then_flush(Record({"a": 1}))
-    batcher.accumulate_then_flush(Record({"b": 2}))
+    push(batcher, output_buffer, Record({"a": 1}))
+    push(batcher, output_buffer, Record({"b": 2}))
 
     assert [record.block for record in output_buffer] == [{"a": [1, None], "b": [None, 2]}]
 
@@ -206,9 +213,9 @@ def test_heterogeneous_columns_are_null_filled(output_buffer: list[Record]) -> N
 def test_force_flush_emits_trailing_partial_batch(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=2)
     for value in (1, 2, 3):
-        batcher.accumulate_then_flush(Record({"id": value}))
+        push(batcher, output_buffer, Record({"id": value}))
 
-    batcher.force_flush()
+    output_buffer.extend(batcher.flush(force=True))
 
     assert [record.block for record in output_buffer] == [{"id": [1, 2]}, {"id": [3]}]
 
@@ -216,21 +223,18 @@ def test_force_flush_emits_trailing_partial_batch(output_buffer: list[Record]) -
 def test_force_flush_on_empty_batch_is_noop(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=2)
 
-    batcher.force_flush()
+    output_buffer.extend(batcher.flush(force=True))
 
     assert output_buffer == []
 
 
-def test_data_handler_can_be_redirected(output_buffer: list[Record]) -> None:
-    redirected: list[Record] = []
+def test_accept_returns_outputs_without_mutable_callback(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=1)
-    batcher.accumulate_then_flush(Record({"id": 1}))
+    first = batcher.accept(Record({"id": 1}))
+    second = batcher.accept(Record({"id": 2}))
 
-    batcher.data_handler = redirected.append
-    batcher.accumulate_then_flush(Record({"id": 2}))
-
-    assert [record.block for record in output_buffer] == [{"id": [1]}]
-    assert [record.block for record in redirected] == [{"id": [2]}]
+    assert [record.block for record in first] == [{"id": [1]}]
+    assert [record.block for record in second] == [{"id": [2]}]
 
 
 def columnar(values: list[int]) -> Record:
@@ -244,21 +248,21 @@ def non_barrier_blocks(records: list[Record]) -> list[dict]:
 def test_columnar_input_is_resliced_with_a_carried_tail(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=4)
 
-    batcher.accumulate_then_flush(columnar([1, 2, 3]))
+    push(batcher, output_buffer, columnar([1, 2, 3]))
     assert output_buffer == []
-    batcher.accumulate_then_flush(columnar([4, 5, 6]))
+    push(batcher, output_buffer, columnar([4, 5, 6]))
     assert non_barrier_blocks(output_buffer) == [{"id": [1, 2, 3, 4]}]
     assert output_buffer[0].num_rows == 4
 
-    batcher.accumulate_then_flush(Barrier(1))
+    push(batcher, output_buffer, Barrier(1))
     assert non_barrier_blocks(output_buffer) == [{"id": [1, 2, 3, 4]}, {"id": [5, 6]}]
 
 
 def test_barrier_force_drains_partial_columnar_input(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=10)
 
-    batcher.accumulate_then_flush(columnar([1, 2, 3]))
-    batcher.accumulate_then_flush(Barrier(7))
+    push(batcher, output_buffer, columnar([1, 2, 3]))
+    push(batcher, output_buffer, Barrier(7))
 
     assert output_buffer[0].block == {"id": [1, 2, 3]}
     assert output_buffer[0].num_rows == 3
@@ -268,7 +272,7 @@ def test_barrier_force_drains_partial_columnar_input(output_buffer: list[Record]
 def test_columnar_input_is_exploded_for_unbatched_downstream(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=None)
 
-    batcher.accumulate_then_flush(columnar([10, 20, 30]))
+    push(batcher, output_buffer, columnar([10, 20, 30]))
 
     assert [record.block for record in output_buffer] == [{"id": 10}, {"id": 20}, {"id": 30}]
     assert all(record.num_rows is None for record in output_buffer)
@@ -277,7 +281,32 @@ def test_columnar_input_is_exploded_for_unbatched_downstream(output_buffer: list
 def test_exact_multiple_leaves_no_carried_rows(output_buffer: list[Record]) -> None:
     batcher = make_batcher(output_buffer, batch_size=2)
 
-    batcher.accumulate_then_flush(columnar([1, 2, 3, 4]))
-    batcher.accumulate_then_flush(Barrier(1))
+    push(batcher, output_buffer, columnar([1, 2, 3, 4]))
+    push(batcher, output_buffer, Barrier(1))
 
     assert non_barrier_blocks(output_buffer) == [{"id": [1, 2]}, {"id": [3, 4]}]
+
+
+def test_mixed_row_and_columnar_inputs_preserve_arrival_order(output_buffer: list[Record]) -> None:
+    batcher = make_batcher(output_buffer, batch_size=10)
+
+    push(batcher, output_buffer, Record({"id": "row-1"}))
+    push(batcher, output_buffer, Record({"id": ["columnar-2"]}, num_rows=1))
+    push(batcher, output_buffer, Record({"id": "row-3"}))
+    push(batcher, output_buffer, Barrier(1))
+
+    assert output_buffer[0].block == {"id": ["row-1", "columnar-2", "row-3"]}
+    assert output_buffer[0].num_rows == 3
+    assert isinstance(output_buffer[1], Barrier)
+
+
+def test_input_tags_are_never_merged_across_two_input_sides(output_buffer: list[Record]) -> None:
+    batcher = make_batcher(output_buffer, batch_size=4)
+    records = [Record({"id": index}) for index in range(4)]
+    for record, tag in zip(records, (0, 1, 1, 1), strict=True):
+        record.input_tag = tag
+        push(batcher, output_buffer, record)
+    output_buffer.extend(batcher.flush(force=True))
+
+    assert [record.block for record in output_buffer] == [{"id": [0]}, {"id": [1, 2, 3]}]
+    assert [record.input_tag for record in output_buffer] == [0, 1]

@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Klein lineage tracker: extracts source/sink info from StreamGraph and reports OpenLineage events."""
+"""Extract logical-graph source/sink lineage and report OpenLineage events."""
 
 import uuid
 
 from ray.klein._internal.logging import get_logger
 from ray.klein.observability.lineage.extractors import extract_datasets_from_klein_graph
 from ray.klein.observability.lineage.models import DatasetInfo, LineageEmitter
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 
 logger = get_logger(__name__)
 
@@ -23,11 +24,11 @@ class KleinLineageTracker:
         self._emitter = emitter
         self._enabled = emitter is not None
 
-    def initialize(self, stream_graph) -> None:
-        """Extract source/sink lineage from the StreamGraph. No-op when lineage is disabled."""
+    def initialize(self, graph: LogicalGraph) -> None:
+        """Extract source/sink lineage from the graph. No-op when disabled."""
         if not self._enabled:
             return
-        self._inputs, self._outputs = self._extract(stream_graph)
+        self._inputs, self._outputs = self._extract(graph)
 
     @property
     def has_lineage(self) -> bool:
@@ -116,9 +117,9 @@ class KleinLineageTracker:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract(stream_graph) -> tuple[list[DatasetInfo], list[DatasetInfo]]:
+    def _extract(graph: LogicalGraph) -> tuple[list[DatasetInfo], list[DatasetInfo]]:
         try:
-            return extract_datasets_from_klein_graph(stream_graph)
+            return extract_datasets_from_klein_graph(graph)
         except Exception:
-            logger.debug("Failed to extract lineage from Klein StreamGraph", exc_info=True)
+            logger.debug("Failed to extract lineage from Klein LogicalGraph", exc_info=True)
             return [], []

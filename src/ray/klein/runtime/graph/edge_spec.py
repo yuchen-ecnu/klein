@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 
 from ray.klein.runtime.graph.vertex_id import VertexId
-from ray.klein.runtime.partitioning.partitioner import Partitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,4 +11,4 @@ class EdgeSpec:
 
     source: VertexId
     target: VertexId
-    partitioner: Partitioner
+    partitioner: PartitionerSpec

@@ -7,6 +7,8 @@ from ray.klein.runtime.context.source_context import RuntimeSourceContext
 from ray.klein.runtime.event_time.input_watermark_tracker import InputWatermarkTracker
 from ray.klein.runtime.message import InputActive, InputIdle, Record, Watermark
 from ray.klein.runtime.operator.watermark_operator import WatermarkOperator
+from ray.klein.runtime.partitioning import ForwardPartitioner
+from tests.unit.task_output_utils import open_task_output
 
 
 class RecordingCollector(Collector):
@@ -66,6 +68,41 @@ def test_source_context_emits_idle_active_and_watermark_in_order():
         InputActive(10),
         Record({"id": 1}),
     ]
+
+
+def test_source_context_collect_many_uses_one_columnar_transport_record():
+    class Downstream:
+        def __init__(self):
+            self.received = []
+
+        def put(self, records, **_kwargs):
+            from ray.klein.runtime.message import PutAck
+
+            self.received.append(records)
+            return PutAck(True, 0)
+
+    downstream = Downstream()
+    output = open_task_output([downstream], ForwardPartitioner(), (0,), ["downstream"])
+    context = RuntimeSourceContext(output)
+    emissions = []
+    context.bind_record_emitter(lambda emitted, count: emissions.append((emitted, count)))
+
+    context.collect_many([{"id": 1, "value": "a"}, {"id": 2, "value": "b"}])
+
+    assert len(downstream.received) == 1
+    record = downstream.received[0][0]
+    assert record.block == {"id": [1, 2], "value": ["a", "b"]}
+    assert record.num_rows == 2
+    assert emissions == [(True, 2)]
+
+
+def test_source_context_collect_many_keeps_rows_for_a_chained_collector():
+    collector = RecordingCollector()
+    context = RuntimeSourceContext(collector)
+
+    context.collect_many([{"id": 1}, {"id": 2}])
+
+    assert collector.records == [Record({"id": 1}), Record({"id": 2})]
 
 
 def test_watermark_strategy_generates_bounded_progress_and_idleness():

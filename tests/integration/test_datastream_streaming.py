@@ -12,7 +12,6 @@ from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.api.sink_function import SinkFunction
 from ray.klein.config.checkpoint_trigger_options import CheckpointTriggerOptions
-from ray.klein.config.partitioner_options import PartitionerOptions
 from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 from tests.support.streaming import LoopSourceFunction, flat_map_identity
@@ -104,8 +103,6 @@ def test_multiple_sinks_finish() -> None:
 
 def test_adaptive_partitioning_finishes() -> None:
     config = KleinContext().config
-    config.set(PartitionerOptions.BUFFER_BUSY_THRESHOLD, 0.5)
-    config.set(PartitionerOptions.UPDATE_INTERVAL, 0.1)
     config.set(PipelineOptions.INPUT_BUFFER_SIZE, 30)
     context = KleinContext(config)
     stream = context.source(

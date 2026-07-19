@@ -51,6 +51,37 @@ def _continuous_kafka_source_class() -> type[SourceFunction]:
     return KafkaSource
 
 
+def _normalize_kafka_value_format(
+    value_format: str,
+    format_options: Mapping[str, Any] | None,
+    *,
+    trigger: str,
+) -> dict[str, Any] | None:
+    if value_format not in {"raw", "canal-json"}:
+        raise ValueError("value_format must be 'raw' or 'canal-json'")
+    if value_format == "raw":
+        if format_options:
+            raise ValueError("format_options require a non-raw value_format")
+        return None
+    if trigger != "continuous":
+        raise ValueError("value_format='canal-json' requires trigger='continuous'")
+    from ray.klein.formats.canal_json import _normalize_canal_json_options
+
+    return _normalize_canal_json_options(format_options)
+
+
+def _rocketmq_source_class() -> type[SourceFunction]:
+    try:
+        import rocketmq.client  # noqa: F401
+
+        from ray.klein.integrations.rocketmq import RocketMQSource
+    except (ImportError, OSError) as error:
+        raise ModuleNotFoundError(
+            "RocketMQ input requires `ray-klein[rocketmq]` and a compatible `librocketmq` runtime."
+        ) from error
+    return RocketMQSource
+
+
 class KleinContext:
     """Configuration and graph builder for one Klein pipeline.
 
@@ -213,44 +244,44 @@ class KleinContext:
         concurrency: int | None = None,
         partition_discovery_interval_ms: int = 30_000,
         max_batch_size: int = 1_000,
+        value_format: Literal["raw", "canal-json"] = "raw",
+        format_options: dict[str, Any] | None = None,
     ) -> "DataStream":
         """Read a bounded Kafka snapshot or an unbounded Kafka stream.
 
         ``trigger="once"`` preserves :func:`ray.data.read_kafka` semantics.
         ``trigger="continuous"`` runs a checkpoint-aware Klein source and
-        keeps polling until the job is drained. Both modes emit Ray Data's raw
-        Kafka schema (byte ``key``/``value`` plus topic, partition, offset,
-        timestamp, timestamp type, and headers).
+        keeps polling until the job is drained. ``value_format="raw"`` emits
+        Ray Data's byte-oriented Kafka schema. ``value_format="canal-json"``
+        is continuous-only and expands Canal FlatMessage values into native
+        INSERT/UPDATE/DELETE changelog rows.
         """
 
         if trigger not in {"once", "continuous"}:
             raise ValueError("trigger must be 'once' or 'continuous'")
+        normalized_format_options = _normalize_kafka_value_format(
+            value_format,
+            format_options,
+            trigger=trigger,
+        )
         if trigger == "continuous":
-            if end_offset != "latest":
-                raise ValueError("end_offset is not supported when trigger='continuous'")
-            if memory is not None:
-                raise ValueError("memory is not supported by the continuous streaming backend")
-            if ray_remote_args:
-                raise ValueError("ray_remote_args is not supported by the continuous streaming backend")
-            if concurrency is not None and override_num_blocks is not None and concurrency != override_num_blocks:
-                raise ValueError("concurrency and override_num_blocks must match when both are provided")
-            source_parallelism = concurrency if concurrency is not None else override_num_blocks
-            return self.source(
-                _continuous_kafka_source_class(),
-                fn_constructor_args=[topics],
-                fn_constructor_kwargs={
-                    "bootstrap_servers": bootstrap_servers,
-                    "start_offset": start_offset,
-                    "consumer_config": consumer_config,
-                    "timeout_ms": timeout_ms,
-                    "partition_discovery_interval_ms": partition_discovery_interval_ms,
-                    "max_batch_size": max_batch_size,
-                },
+            return self._read_continuous_kafka(
+                topics,
+                bootstrap_servers=bootstrap_servers,
+                start_offset=start_offset,
+                end_offset=end_offset,
+                consumer_config=consumer_config,
                 num_cpus=num_cpus,
                 num_gpus=num_gpus,
-                concurrency=source_parallelism,
-                name="KafkaSource",
-                bounded=False,
+                memory=memory,
+                ray_remote_args=ray_remote_args,
+                override_num_blocks=override_num_blocks,
+                timeout_ms=timeout_ms,
+                concurrency=concurrency,
+                partition_discovery_interval_ms=partition_discovery_interval_ms,
+                max_batch_size=max_batch_size,
+                value_format=value_format,
+                format_options=normalized_format_options,
             )
 
         if concurrency is not None:
@@ -272,6 +303,165 @@ class KleinContext:
             ray_remote_args=ray_remote_args,
             override_num_blocks=override_num_blocks,
             timeout_ms=timeout_ms,
+        )
+
+    def _read_continuous_kafka(
+        self,
+        topics: str | list[str],
+        *,
+        bootstrap_servers: str | list[str],
+        start_offset: int | datetime | Literal["earliest", "latest"] | dict[Any, Any],
+        end_offset: int | datetime | Literal["latest"] | dict[Any, Any],
+        consumer_config: dict[str, Any] | None,
+        num_cpus: float | None,
+        num_gpus: float | None,
+        memory: float | None,
+        ray_remote_args: dict[str, Any] | None,
+        override_num_blocks: int | None,
+        timeout_ms: int | None,
+        concurrency: int | None,
+        partition_discovery_interval_ms: int,
+        max_batch_size: int,
+        value_format: Literal["raw", "canal-json"],
+        format_options: dict[str, Any] | None,
+    ) -> "DataStream":
+        if end_offset != "latest":
+            raise ValueError("end_offset is not supported when trigger='continuous'")
+        if memory is not None:
+            raise ValueError("memory is not supported by the continuous streaming backend")
+        if ray_remote_args:
+            raise ValueError("ray_remote_args is not supported by the continuous streaming backend")
+        if concurrency is not None and override_num_blocks is not None and concurrency != override_num_blocks:
+            raise ValueError("concurrency and override_num_blocks must match when both are provided")
+        source_parallelism = concurrency if concurrency is not None else override_num_blocks
+        source_options = {
+            "bootstrap_servers": bootstrap_servers,
+            "start_offset": start_offset,
+            "consumer_config": consumer_config,
+            "timeout_ms": timeout_ms,
+            "partition_discovery_interval_ms": partition_discovery_interval_ms,
+            "max_batch_size": max_batch_size,
+        }
+        if value_format != "raw":
+            source_options["value_format"] = value_format
+            source_options["format_options"] = format_options
+        changelog_mode = None
+        if value_format == "canal-json":
+            from ray.klein.api.row_kind import RowKind
+
+            changelog_mode = RowKind
+        return self.source(
+            _continuous_kafka_source_class(),
+            fn_constructor_args=[topics],
+            fn_constructor_kwargs=source_options,
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            concurrency=source_parallelism,
+            name="KafkaSource" if value_format == "raw" else f"KafkaSource[{value_format}]",
+            bounded=False,
+            changelog_mode=changelog_mode,
+        )
+
+    @PublicAPI
+    def read_canal(
+        self,
+        topics: str | list[str],
+        *,
+        bootstrap_servers: str | list[str],
+        start_offset: int | datetime | Literal["earliest", "latest"] | dict[Any, Any] = "earliest",
+        consumer_config: dict[str, Any] | None = None,
+        num_cpus: float | None = None,
+        num_gpus: float | None = None,
+        concurrency: int | None = None,
+        timeout_ms: int | None = None,
+        partition_discovery_interval_ms: int = 30_000,
+        max_batch_size: int = 1_000,
+        include_metadata: bool = True,
+        ddl_handling: Literal["ignore", "emit", "fail"] = "ignore",
+    ) -> "DataStream":
+        """Read Canal FlatMessage JSON continuously from Kafka.
+
+        The Canal server must use an MQ mode with ``canal.mq.flatMessage=true``.
+        INSERT and DELETE events emit one changelog row per row image; UPDATE
+        events emit ``UPDATE_BEFORE`` followed by ``UPDATE_AFTER``. Values keep
+        Canal's string-or-null representation and are not coerced from MySQL
+        type metadata.
+        """
+
+        return self.read_kafka(
+            topics,
+            bootstrap_servers=bootstrap_servers,
+            trigger="continuous",
+            start_offset=start_offset,
+            consumer_config=consumer_config,
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            concurrency=concurrency,
+            timeout_ms=timeout_ms,
+            partition_discovery_interval_ms=partition_discovery_interval_ms,
+            max_batch_size=max_batch_size,
+            value_format="canal-json",
+            format_options={"include_metadata": include_metadata, "ddl_handling": ddl_handling},
+        )
+
+    @PublicAPI
+    def read_rocketmq(
+        self,
+        topic: str,
+        *,
+        name_server_address: str,
+        consumer_group: str,
+        tag_expression: str = "*",
+        message_model: Literal["clustering", "broadcasting"] = "clustering",
+        orderly: bool = False,
+        access_key: str | None = None,
+        access_secret: str | None = None,
+        channel: str = "KLEIN",
+        ssl_enabled: bool = False,
+        ssl_property_file: str | None = None,
+        consumer_threads: int = 20,
+        max_pending_messages: int = 1_000,
+        poll_timeout_ms: int = 1_000,
+        message_trace_enabled: bool = False,
+        num_cpus: float | None = None,
+        num_gpus: float | None = None,
+        concurrency: int | None = None,
+    ) -> "DataStream":
+        """Read an unbounded stream from an Apache RocketMQ topic.
+
+        The source uses RocketMQ's remoting-protocol PushConsumer. Consumer
+        progress is owned by the RocketMQ consumer group; Klein waits until a
+        record has entered the downstream collector before acknowledging the
+        callback. The emitted mapping contains raw byte ``key``, ``value``, and
+        ``tags`` fields together with RocketMQ message and queue metadata.
+        """
+
+        if message_model == "broadcasting" and concurrency not in {None, 1}:
+            raise ValueError("broadcasting RocketMQ input requires concurrency=1 to avoid duplicate source copies")
+        return self.source(
+            _rocketmq_source_class(),
+            fn_constructor_args=[topic],
+            fn_constructor_kwargs={
+                "name_server_address": name_server_address,
+                "consumer_group": consumer_group,
+                "tag_expression": tag_expression,
+                "message_model": message_model,
+                "orderly": orderly,
+                "access_key": access_key,
+                "access_secret": access_secret,
+                "channel": channel,
+                "ssl_enabled": ssl_enabled,
+                "ssl_property_file": ssl_property_file,
+                "consumer_threads": consumer_threads,
+                "max_pending_messages": max_pending_messages,
+                "poll_timeout_ms": poll_timeout_ms,
+                "message_trace_enabled": message_trace_enabled,
+            },
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            concurrency=concurrency,
+            name="RocketMQSource",
+            bounded=False,
         )
 
     @PublicAPI

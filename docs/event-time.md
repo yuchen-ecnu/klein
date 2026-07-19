@@ -51,10 +51,70 @@ out-of-orderness bound, marks the operator idle after the configured timeout,
 and emits active before the next record. Idle strategies are checked according
 to `event-time.idle-input.check-interval` (one second by default).
 
+The timestamp assigner must return a non-negative integer in milliseconds.
+Boolean, floating-point, negative, and second-based values are rejected or
+produce the wrong window scale. With bounded out-of-orderness `d`, the candidate
+watermark is `max_timestamp_seen - d`; Klein emits it only when it is
+non-negative and greater than the previous watermark.
+
+| Strategy | Use when | Watermark behavior |
+|---|---|---|
+| `for_monotonous_timestamps(assigner)` | Each physical input's timestamps never decrease. | Tracks the maximum observed timestamp directly. |
+| `for_bounded_out_of_orderness(delay, assigner)` | Records may arrive late within a known bound. | Subtracts the bound from the maximum observed timestamp. |
+| `.with_idleness(timeout)` | A physical input can stay empty while others continue. | Marks that input idle after the timeout and active before its next record. |
+
+Apply one strategy after decoding the field that owns event time and before a
+stateful window or join. A later transform preserves the attached record
+timestamp, but an explicit timestamp selector on the stateful operator remains
+the authoritative timestamp for that operator.
+
 Stateful window and join timestamp selectors remain supported and can use the
 same timestamp field. Their event-time timers fire only when the aggregate
 watermark advances. A bounded source emits the maximum watermark before
 `EndOfData`, closing all event-time windows in normal control-message order.
+
+## Windows, allowed lateness, and late records
+
+Klein windows use half-open intervals `[start, end)`:
+
+- a tumbling window assigns each record to exactly one fixed-size interval;
+- a sliding window assigns it to every overlapping `size` interval starting at
+  the configured `slide` cadence;
+- a session window creates `[timestamp, timestamp + gap)` and merges overlapping
+  windows for the same key.
+
+`allowed_lateness` delays cleanup and final emission beyond the window end. A
+record is dropped when its window cleanup timestamp is already at or behind the
+current watermark. Increasing allowed lateness retains state longer; it does
+not rewind a watermark.
+
+```python
+from datetime import timedelta
+from ray.klein import SlidingWindow
+
+rolling = (
+    events.key_by(lambda row: row["customer_id"])
+    .window(
+        SlidingWindow(
+            size=timedelta(minutes=10),
+            slide=timedelta(minutes=1),
+        ),
+        timestamp_selector=lambda row: row["event_time_ms"],
+        allowed_lateness=timedelta(seconds=30),
+        state_ttl=timedelta(hours=1),
+    )
+    .reduce(lambda left, right: {**right, "amount": left["amount"] + right["amount"]})
+)
+```
+
+The window `state_ttl` is a processing-time safety bound. Set it longer than
+the maximum expected window lifetime plus lateness; premature TTL expiry can
+make an emitted result incomplete.
+
+Interval joins apply the same lateness principle independently to their left
+and right buffered records. A left record at time `t` can match right records
+whose timestamp difference falls between `lower_bound` and `upper_bound`.
+Watermarks remove records once no future on-time match is possible.
 
 ## Control event time from a source
 

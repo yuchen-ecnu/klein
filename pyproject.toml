@@ -40,6 +40,7 @@ dependencies = [
 
 [project.optional-dependencies]
 kafka = ["confluent-kafka>=2.3,<3"]
+rocketmq = ["rocketmq-client-python>=2,<3"]
 redis = ["redis>=5,<7"]
 rocksdb = ["rocksdict>=0.3.29,<0.4"]
 serve = [
@@ -54,6 +55,7 @@ all = [
   "ray[serve]>=2.56.1,<2.57",
   "redis>=5,<7",
   "rocksdict>=0.3.29,<0.4",
+  "rocketmq-client-python>=2,<3",
 ]
 test = [
   "build>=1.2,<2",
@@ -79,6 +81,7 @@ docs = [
   "sphinx==7.3.7",
   "sphinx-copybutton==0.5.2",
   "sphinx-design==0.5.0",
+  "sphinxcontrib-mermaid==2.0.3",
 ]
 
 [project.scripts]
@@ -111,6 +114,11 @@ markers = [
   "integration: exercises a managed local Ray cluster",
   "external: requires Docker or an external service and is opt-in",
   "slow: takes more than a few seconds",
+  "component_core: public API, configuration, graph, and architecture contracts",
+  "component_runtime: actor runtime, scheduling, data plane, and failover",
+  "component_state: managed state, event time, checkpoints, and recovery",
+  "component_sql: batch and streaming SQL planning and execution",
+  "component_connectors: filesystem, Kafka, Redis, RocketMQ, and SQL connectors",
 ]
 filterwarnings = [
   "error",

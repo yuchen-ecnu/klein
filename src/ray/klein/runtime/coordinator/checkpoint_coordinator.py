@@ -950,7 +950,9 @@ class CheckpointCoordinator(AsyncWorker):
             key=lambda item: (item[0].job_vertex_id, item[0].index),
         ):
             job_vertex = (
-                None if self._execution_graph is None else self._execution_graph.job_vertex(vertex_id.job_vertex_id)
+                None
+                if self._execution_graph is None
+                else self._execution_graph.find_job_vertex(vertex_id.job_vertex_id)
             )
             operator = operators.setdefault(
                 vertex_id.job_vertex_id,

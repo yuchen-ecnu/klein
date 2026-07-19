@@ -2,7 +2,6 @@
 """Logical graph optimizer."""
 
 from ray.klein._internal.logging import get_logger
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.runtime.graph.logical_graph import LogicalGraph
@@ -26,10 +25,9 @@ class LogicalOptimizer:
             rule_types = tuple(rule_type for rule_type in rule_types if rule_type is not ChainingRule)
         return tuple(rule_type() for rule_type in rule_types)
 
-    def optimize(self, stream_graph: StreamGraph) -> LogicalGraph:
-        """Return the optimized logical graph for ``stream_graph``."""
+    def optimize(self, graph: LogicalGraph) -> LogicalGraph:
+        """Return an optimized copy of ``graph``."""
 
-        graph = LogicalGraph.from_stream_graph(stream_graph)
         rules = self.rules
         for rule in rules:
             graph = rule.apply(graph)

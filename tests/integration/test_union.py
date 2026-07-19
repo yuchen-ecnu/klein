@@ -11,11 +11,11 @@ from ray.klein.api.node_type import NodeType
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.runtime.coordinator import checkpoint_io
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
 from tests.support.execution_graph import expand_execution_graph
 
@@ -112,9 +112,9 @@ def test_common_union():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
 
     expect_barrier_splits: dict[ExecutionVertexId, dict[ExecutionVertexId, int]] = {
@@ -314,9 +314,9 @@ def test_chain_union():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
     expect_barrier_splits = {
         gen_evi(1, 0): {gen_evi(1, 0): 1},
@@ -402,9 +402,9 @@ def test_union_union():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
     expect_barrier_splits = {
         gen_evi(1, 0): {gen_evi(1, 0): 1},
@@ -495,9 +495,9 @@ def test_neighbor_union1():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
     expect_barrier_splits = {
         gen_evi(1, 0): {gen_evi(1, 0): 1},
@@ -585,9 +585,9 @@ def test_neighbor_union2():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST1", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
     expect_barrier_splits = {
         gen_evi(1, 0): {gen_evi(1, 0): 1},
@@ -660,9 +660,9 @@ def test_complex_union1():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
 
     expect_barrier_splits: dict[ExecutionVertexId, dict[ExecutionVertexId, int]] = {
@@ -747,9 +747,9 @@ def test_complex_union2():
         name="Take",
     )
 
-    stream_graph: StreamGraph = StreamGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
-    job_graph = LogicalOptimizer(config).optimize(stream_graph)
-    exec_graph = expand_execution_graph(job_graph)
+    logical_graph: LogicalGraph = LogicalGraph.from_sinks(ctx.sinks, "TEST", ctx.config)
+    optimized_graph = LogicalOptimizer(config).optimize(logical_graph)
+    exec_graph = expand_execution_graph(optimized_graph)
     barrier_splits = checkpoint_io.barrier_split_counts(exec_graph)
 
     expect_barrier_splits: dict[ExecutionVertexId, dict[ExecutionVertexId, int]] = {

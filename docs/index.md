@@ -21,6 +21,7 @@ endorsed by, or maintained by the Ray project.
 
 getting-started
 key-concepts
+architecture
 user-guides
 examples
 api/api
@@ -66,11 +67,26 @@ Build and run your first bounded pipeline, then learn how to submit a streaming 
 Learn how Klein represents a dataflow, chooses an execution mode, tracks event time, and recovers state.
 :::
 
+:::{grid-item-card} Architecture
+:link: architecture
+:link-type: doc
+
+Follow a graph from public APIs through planning, Ray Data or streaming actors,
+ordered transport, checkpoints, and recovery.
+:::
+
 :::{grid-item-card} User guides
 :link: user-guides
 :link-type: doc
 
 Configure jobs, use Ray Data and SQL, manage state, store checkpoints, and operate pipelines.
+:::
+
+:::{grid-item-card} Production walkthrough
+:link: production-streaming
+:link-type: doc
+
+Build, observe, stop, and restore a Kafka pipeline with event-time state and checkpoint-transactional output.
 :::
 
 :::{grid-item-card} Connector catalog

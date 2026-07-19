@@ -55,7 +55,9 @@ through a convenience re-export. This keeps dependency cycles visible.
    those contracts. An integration depends on contracts, configuration, and
    source-owned state rather than scheduler internals.
 5. `_internal` is not a compatibility promise. New application code must not
-   import it.
+   import it. Some top-level bridge names currently resolve into `_internal`
+   for the bundled CLI/runtime; they remain non-application APIs as described
+   in the {doc}`top-level namespace reference <api/top_level>`.
 6. Generic buckets such as `common`, `core`, `utils`, and `entity` are not
    architectural layers. A helper moves to the domain that owns it, or into
    `_internal` when it is genuinely cross-cutting and private.
@@ -66,3 +68,6 @@ Architecture tests enforce package boundaries and the one-public-class
 convention in stable packages. Ruff validates imports, exception handling, and
 cyclomatic complexity. Full verification also imports the top-level API, builds
 the wheel and source distribution, and runs documentation checks.
+
+See [Architecture](architecture.md) for how these packages collaborate during
+planning, streaming execution, checkpointing, and recovery.

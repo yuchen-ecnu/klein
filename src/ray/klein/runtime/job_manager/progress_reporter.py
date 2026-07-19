@@ -116,6 +116,8 @@ class ProgressReporter:
             status=self._aggregate_status(statuses, job_running, failed_progress_requests),
             rows_in=totals.rows_in,
             rows_out=totals.rows_out,
+            bytes_in=totals.bytes_in,
+            bytes_out=totals.bytes_out,
             queued=totals.queued,
             capacity=totals.capacity,
             busy_ns=totals.busy_ns,
@@ -167,6 +169,7 @@ class ProgressReporter:
         return SubtaskProgress(
             subtask_index=vertex.index,
             status=status,
+            actor_id=getattr(vertex.stream_task, "actor_id", None),
             **{field.name: getattr(counts, field.name) for field in fields(SubtaskCounts)},
         )
 

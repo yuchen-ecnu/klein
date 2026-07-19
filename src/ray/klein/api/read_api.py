@@ -35,6 +35,8 @@ def _context_method(name: str) -> Callable[..., Any]:
 from_items = _context_method("from_items")
 from_values = _context_method("from_values")
 read_kafka = _context_method("read_kafka")
+read_canal = _context_method("read_canal")
+read_rocketmq = _context_method("read_rocketmq")
 
 
 def source(operation: str | Callable[..., Any], /, *args: Any, **kwargs: Any) -> DataStream:

@@ -32,8 +32,8 @@ class SourceStreamTask(StreamTask):
     the StreamTask executor thread so it doesn't pin the actor event loop, while
     the actor stays responsive to checkpoint and health-check RPCs. Barrier
     generation and downstream emission happen on that
-    same executor thread (sync ``klein.get``), consistent with the collector
-    emit path.
+    same executor thread (sync ``klein.get``), consistent with inline
+    ``TaskOutput`` delivery.
     """
 
     def __init__(self, descriptor: "TaskDeploymentDescriptor") -> None:
@@ -48,12 +48,7 @@ class SourceStreamTask(StreamTask):
         return operator
 
     async def _on_setup_done(self, runtime_context: RuntimeContext) -> None:
-        # Source emits inline: collect() is driven from inside the blocking
-        # operator.run() loop on the executor thread, so there's no pump to drain
-        # a pipelined buffer.
-        self._state.pipelined = False
-        if self._state.collector is not None:
-            self._state.collector.configure_pipelining(False)
+        # Source delivery mode is fixed to INLINE when TaskOutput is built.
         source_operator = self._source_operator
         source_operator.bind_record_emitter(self._on_records_emitted)
         # Restore progress from the coordinator — works identically on a fresh
@@ -92,10 +87,9 @@ class SourceStreamTask(StreamTask):
         commit a final checkpoint and reach FINISHED.
         """
         self._source_operator.run()
-        if self._state.collector is not None:
-            self._state.collector.collect(Watermark(MAX_WATERMARK))
-            self._state.collector.collect(self._generate_barrier(is_eof=True))
-            self._state.collector.close()
+        if self._state.output is not None:
+            self._state.output.collect(Watermark(MAX_WATERMARK))
+            self._state.output.collect(self._generate_barrier(is_eof=True))
         klein.get(self._job_manager.update_stream_task_status(self._vertex_id, ExecutionVertexStatus.FINISHED))
         self._eof_reached = True
 
@@ -159,10 +153,10 @@ class SourceStreamTask(StreamTask):
             logger.exception("Checkpoint completion notification failed for barrier %s", barrier_id)
             return False, None
 
-    def _on_records_emitted(self, record_emitted: bool) -> Barrier | None:
+    def _on_records_emitted(self, record_emitted: bool, record_count: int = 1) -> Barrier | None:
         if super()._check_end_of_stream():
             return None
-        if self._state.checkpoint_strategy.should_trigger(record_emitted):
+        if self._state.checkpoint_strategy.should_trigger(record_emitted, record_count):
             barrier = self._generate_barrier()
             if barrier:
                 self._state.metrics.barriers_out.inc()
@@ -174,6 +168,14 @@ class SourceStreamTask(StreamTask):
         if is_eof and barrier is None:
             raise RuntimeError("failed to generate the end-of-data barrier")
         if barrier is not None:
+            # A source can be operator-chained directly with a sink. In that
+            # layout the barrier never enters InboxPump, so the source task must
+            # perform the same aligned sink lifecycle that the pump performs
+            # for ordinary downstream tasks.
+            self._state.operator.flush()
+            self.prepare_sink_commit(barrier.id)
+            if is_eof:
+                self._state.operator.finish()
             state = self._source_operator.snapshot_state(barrier.id)
             self._inflight_source_states[barrier.id] = state
             logger.debug("Triggering checkpoint barrier %s with source-owned state", barrier.id)

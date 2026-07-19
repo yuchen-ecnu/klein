@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+from ray.data.expressions import col, download
+
 from ray.klein.api.collect_function import CollectFunction
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.node_type import NodeType
@@ -43,6 +45,92 @@ def test_query_without_input_tables() -> None:
     context.enable_interactive_mode()
 
     assert context.sql("SELECT 40 + 2 AS answer", tables={}).data.take_all() == [{"answer": 42}]
+
+
+def test_download_expression_uses_ray_data_operator(tmp_path) -> None:
+    payload = b"ray-klein expression download"
+    source_file = tmp_path / "payload.bin"
+    source_file.write_bytes(payload)
+    context = KleinContext()
+    context.enable_interactive_mode()
+    files = context.data.from_items([{"id": 1, "uri": f"local://{source_file}"}])
+
+    result = context.sql(
+        "SELECT id, DOWNLOAD(uri) AS body FROM files",
+        tables={"files": files},
+    )
+
+    assert result.data.take_all() == [{"id": 1, "body": payload}]
+
+
+def test_ray_data_scalar_expressions_execute_natively() -> None:
+    context = KleinContext()
+    context.enable_interactive_mode()
+    rows = context.data.from_items(
+        [
+            {"value": -5, "name": "ADA"},
+            {"value": 2, "name": "Lin"},
+        ]
+    )
+
+    result = context.sql(
+        "SELECT value / 2 AS ratio, ABS(value) AS magnitude, LOWER(name) AS normalized, "
+        "RANDOM(42) AS sample, UUID() AS uid, MONOTONICALLY_INCREASING_ID() AS mid FROM rows",
+        tables={"rows": rows},
+    ).data.take_all()
+
+    assert [row["ratio"] for row in result] == [-2.5, 1.0]
+    assert [row["magnitude"] for row in result] == [5, 2]
+    assert [row["normalized"] for row in result] == ["ada", "lin"]
+    assert all(0 <= row["sample"] < 1 for row in result)
+    assert len({row["uid"] for row in result}) == 2
+    assert len({row["mid"] for row in result}) == 2
+
+
+def test_streaming_sql_executes_download_and_synthetic_expressions(ray_cluster, tmp_path) -> None:
+    first = tmp_path / "first.bin"
+    second = tmp_path / "second.bin"
+    first.write_bytes(b"first")
+    second.write_bytes(b"second")
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    files = context.from_values(
+        {"id": 1, "uri": f"local://{first}"},
+        {"id": 2, "uri": f"local://{second}"},
+    )
+
+    result = context.sql(
+        "SELECT *, DOWNLOAD(uri) AS body, RANDOM(42) AS sample, UUID() AS uid, "
+        "MONOTONICALLY_INCREASING_ID() AS mid FROM files",
+        tables={"files": files},
+    )
+    result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLStreamingExpressions")
+
+    handle = context.execute("streaming-sql-expressions")
+    handle.wait()
+    rows = sorted(handle.get(), key=lambda row: row["id"])
+
+    assert [row["body"] for row in rows] == [b"first", b"second"]
+    assert all(0 <= row["sample"] < 1 for row in rows)
+    assert len({row["uid"] for row in rows}) == 2
+    assert len({row["mid"] for row in rows}) == 2
+
+
+def test_stream_data_expressions_execute_in_streaming_mode(ray_cluster, tmp_path) -> None:
+    payload = tmp_path / "payload.bin"
+    payload.write_bytes(b"payload")
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    result = (
+        context.from_values({"uri": f"local://{payload}", "value": 3})
+        .data.with_column("body", download("uri"))
+        .data.with_column("doubled", col("value") * 2)
+        .data.filter(expr=col("doubled") == 6)
+    )
+    result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="StreamDataExpressions")
+
+    handle = context.execute("stream-data-expressions")
+    handle.wait()
+
+    assert handle.get() == [{"uri": f"local://{payload}", "value": 3, "body": b"payload", "doubled": 6}]
 
 
 def test_streaming_join_group_by_emits_flink_changelog(ray_cluster) -> None:

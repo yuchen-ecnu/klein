@@ -50,7 +50,7 @@ status.
 | Managed state | Keyed state, TTL, key groups, rescaling, and checkpoint restore. |
 | Recovery | Durable checkpoints, source-position restore, and replay-aware sinks. |
 | Relational APIs | Bounded SQL plus dynamic tables and explicit changelog rows for continuous queries. |
-| Connectors | Ray Data, collections, Kafka, filesystems, Redis, console, custom connectors, and Ray Serve integration. |
+| Connectors | Ray Data, collections, Kafka, RocketMQ, filesystems, Redis, console, custom connectors, and Ray Serve integration. |
 | Operations | Structured logs, Ray metrics, checkpoint inspection, CLI attach, and a JSON-safe state API. |
 
 ### How Klein fits into Ray
@@ -60,6 +60,55 @@ status.
 | Ray Core | Runs distributed operators and coordinates streaming recovery. |
 | Ray Data | Executes bounded sources, transformations, shuffles, and sinks. |
 | Ray Object Store | Shares immutable checkpoint fragments to accelerate recovery. |
+
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#087EA4',
+    'primaryTextColor': '#FFFFFF',
+    'primaryBorderColor': '#044E68',
+    'secondaryColor': '#E6F7FF',
+    'secondaryTextColor': '#23272F',
+    'secondaryBorderColor': '#99D6F0',
+    'tertiaryColor': '#F6F7F9',
+    'tertiaryTextColor': '#23272F',
+    'lineColor': '#99A1B3',
+    'textColor': '#23272F',
+    'fontSize': '13px',
+    'fontFamily': '"JetBrains Mono", "Fira Code", monospace'
+  },
+  'flowchart': {
+    'nodeSpacing': 30,
+    'rankSpacing': 50,
+    'padding': 15,
+    'wrappingWidth': 120
+  }
+}}%%
+flowchart LR
+    classDef primary fill:#087EA4,stroke:#044E68,color:#FFFFFF,stroke-width:2px,rx:12,ry:12
+    classDef secondary fill:#E6F7FF,stroke:#99D6F0,color:#23272F,stroke-width:1.5px,rx:8,ry:8
+    classDef accent fill:#149ECA,stroke:#0D7EA8,color:#FFFFFF,stroke-width:2px,rx:8,ry:8
+    classDef neutral fill:#F6F7F9,stroke:#E0E3E8,color:#23272F,stroke-width:1px,rx:8,ry:8
+    classDef decision fill:#F6F7F9,stroke:#087EA4,color:#23272F,stroke-width:2px
+
+    API[DataStream and SQL]:::primary --> Plan[Logical graph]:::secondary
+    Plan --> Mode{Runtime?}:::decision
+    Mode -->|bounded| Data[Ray Data]:::accent
+    Mode -->|continuous| Manager[JobManager]:::accent
+    Manager --> Master[JobMaster]:::secondary
+    Master --> Tasks[Stream tasks]:::primary
+    Master --> Coordinator[Checkpoint coordinator]:::secondary
+    Tasks --> Objects[Object Store cache]:::neutral
+    Coordinator --> Durable[Durable checkpoints]:::neutral
+```
+
+The same lazy graph therefore has two execution paths: bounded-compatible work
+lowers to Ray Data, while continuous work expands into long-lived Ray actors.
+The streaming control plane stays outside the record path; workers exchange
+ordered micro-batches directly and use durable checkpoints for cluster-loss
+recovery. See the [architecture guide](docs/architecture.md) for the planning,
+data-plane, checkpoint, and extension boundaries behind this overview.
 
 The distribution contributes only the `ray.klein` namespace package. It does
 not install `ray/__init__.py` or replace files owned by Ray.
@@ -82,6 +131,7 @@ Install connector dependencies only when needed:
 
 ```bash
 python -m pip install -e ".[kafka]"   # continuous Kafka source/sink
+python -m pip install -e ".[rocketmq]" # continuous RocketMQ source
 python -m pip install -e ".[redis]"   # Redis lookup/sink
 python -m pip install -e ".[rocksdb]" # local RocksDB state backend
 python -m pip install -e ".[serve]"   # Ray Serve bridge
@@ -136,11 +186,15 @@ For continuous execution, see the
 | --- | --- |
 | [Getting started](docs/getting-started.md) | Installation, bounded pipelines, streaming submission, and configuration. |
 | [Key concepts](docs/key-concepts.md) | Execution modes, state, event time, and recovery. |
-| [User guides](docs/user-guides.md) | SQL, Ray Data interoperation, checkpoint storage, deployment, and operations. |
+| [Architecture](docs/architecture.md) | Planning, batch and streaming runtimes, the ordered data plane, checkpoints, recovery, and extension boundaries. |
+| [User guides](docs/user-guides.md) | Production streaming, SQL, state, delivery semantics, recovery, deployment, tuning, and operations. |
+| [Operator compatibility](docs/operator-compatibility.md) | Batch/streaming support, partitioning, state, changelog, and sink behavior. |
+| [Production walkthrough](docs/production-streaming.md) | Kafka input through event-time state, checkpoints, file output, CLI operations, and restore. |
 | [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
 | [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
 | [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
 | [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and dashboard integration boundaries. |
+| [Troubleshooting](docs/troubleshooting.md) | Installation, planning, connector, watermark, checkpoint, backpressure, and CLI failures. |
 
 Build the documentation locally with:
 

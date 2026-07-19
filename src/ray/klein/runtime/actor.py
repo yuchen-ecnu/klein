@@ -173,10 +173,14 @@ class _KleinActorMethod:
         self._debug_mode = debug_mode
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        args = copy.deepcopy(args)
-        kwargs = copy.deepcopy(kwargs)
         method = getattr(self._inner_actor, self._method_name)
         if self._debug_mode:
+            # Local actors share the caller's process and need an explicit copy to
+            # emulate Ray's process isolation. A real Ray call already serializes
+            # its arguments; copying here only duplicates payload memory and can
+            # block the actor loop before the RPC is submitted.
+            args = copy.deepcopy(args)
+            kwargs = copy.deepcopy(kwargs)
             return _LocalFunctionProxy(method, *args, **kwargs)
         return method.remote(*args, **kwargs)
 
@@ -196,6 +200,18 @@ class KleinActorHandle:
 
     def __getattr__(self, item: str) -> _KleinActorMethod:
         return _KleinActorMethod(self.inner_actor, item, self.debug_mode)
+
+    @property
+    def actor_id(self) -> str | None:
+        """Ray Actor ID used by the native Dashboard actor detail route."""
+
+        if self.debug_mode:
+            return None
+        actor_id = getattr(self.inner_actor, "_actor_id", None)
+        if actor_id is None:
+            actor_id = getattr(self.inner_actor, "_ray_actor_id", None)
+        to_hex = getattr(actor_id, "hex", None)
+        return to_hex() if callable(to_hex) else None
 
     def __reduce__(self) -> tuple[Any, tuple[Any, bool]]:
         return KleinActorHandle, (self.inner_actor, self.debug_mode)

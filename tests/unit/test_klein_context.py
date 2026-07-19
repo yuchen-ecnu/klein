@@ -8,11 +8,11 @@ from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.execution_options import ExecutionOptions
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
 from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.partitioning.broadcast_partitioner import BroadcastPartitioner
 
 
@@ -98,7 +98,7 @@ class TestKleinContext:
         ctx = KleinContext(config)
         stream = ctx.from_values({"id": 1}, {"id": 2}, {"id": 3}).map(lambda x: {"id": x["id"] * x["id"]})
         stream.write(ConsoleSinkFunction)
-        sg = StreamGraph.from_sinks(ctx.sinks, "test_auto_detection_stream", config)
+        sg = LogicalGraph.from_sinks(ctx.sinks, "test_auto_detection_stream", config)
         mode = JobClient._determine_runtime_mode(sg)
         assert mode is RuntimeExecutionMode.STREAMING
 
@@ -107,7 +107,7 @@ class TestKleinContext:
         ctx = KleinContext(config)
         stream = ctx.data.read_csv("mock_src.csv").map(lambda x: {"id": x["id"] * x["id"]})
         stream.data.write_csv("mock_dst.csv")
-        sg = StreamGraph.from_sinks(ctx.sinks, "test_auto_detection_batch", config)
+        sg = LogicalGraph.from_sinks(ctx.sinks, "test_auto_detection_batch", config)
         mode = JobClient._determine_runtime_mode(sg)
 
         assert mode is RuntimeExecutionMode.BATCH

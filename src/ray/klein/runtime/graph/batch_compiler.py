@@ -1,105 +1,93 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Batch execution compiler.
+"""Compile the immutable logical graph into a Ray Data batch pipeline."""
 
-Extracted from StreamGraph (graph refactor G5): compiling a StreamGraph into a
-Ray Data pipeline and executing it is a *consumer* of the graph, not an
-intrinsic graph responsibility. Keeping it here lets StreamGraph be a pure data
-structure.
-"""
-
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ray.data import Dataset
 
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.observability.metrics.metric_group import JobMetricGroup
 from ray.klein.runtime.context.runtime_context import BatchRuntimeContext
-
-if TYPE_CHECKING:
-    from ray.klein.api.stream_graph import StreamGraph
-    from ray.klein.api.stream_node import StreamNode
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
+from ray.klein.runtime.graph.vertex_id import VertexId
+from ray.klein.runtime.graph.vertex_spec import VertexSpec
 
 
 class BatchCompiler:
-    """Compile + execute a StreamGraph as a Ray Data batch job."""
+    """Compile and execute a :class:`LogicalGraph` with Ray Data."""
 
-    def __init__(self, stream_graph: "StreamGraph") -> None:
-        self._stream_graph = stream_graph
+    def __init__(self, graph: LogicalGraph) -> None:
+        self._graph = graph
 
     def execute(self) -> Any:
-        job_metric_group = JobMetricGroup(job_name=self._stream_graph.job_name)
-        results = self._compile_and_execute(job_metric_group)
-        # single sink: preserve original single result; multiple sinks: list.
-        if len(self._stream_graph.sink_nodes) == 1 and len(results) == 1:
-            return results[0]
-        return results
+        results = self._compile_and_execute(JobMetricGroup(job_name=self._graph.job_name))
+        return results[0] if len(self._graph.sinks) == 1 and len(results) == 1 else results
 
     def _compile_and_execute(self, job_metric_group: JobMetricGroup) -> list[Any]:
-        compiled_datasets: dict[int, Dataset] = {}
-        materialized_datasets: dict[int, Dataset] = {}
+        compiled: dict[VertexId, Dataset] = {}
+        materialized: dict[VertexId, Dataset] = {}
         results: list[Any] = []
-        for source_id in self._stream_graph.source_nodes:
-            logical_function = self._stream_graph.nodes[source_id].operator.logical_function
-            if logical_function is None:
-                raise ValueError(f"Source node {source_id} has no logical function")
-            compiled_datasets[source_id] = logical_function.to_batch([])
-            self._compile_node(
-                source_id,
-                job_metric_group,
-                compiled_datasets,
-                materialized_datasets,
-                results,
-            )
+        for source_id in self._graph.sources:
+            function = self._graph.get(source_id).operator.logical_function
+            if function is None:
+                raise ValueError(f"Source vertex {source_id} has no logical function")
+            compiled[source_id] = function.to_batch([])
+            self._compile_vertex(source_id, job_metric_group, compiled, materialized, results)
         return results
 
-    def _compile_node(
+    def _compile_vertex(
         self,
-        node_id: int,
+        vertex_id: VertexId,
         job_metric_group: JobMetricGroup,
-        compiled_datasets: dict[int, Dataset],
-        materialized_datasets: dict[int, Dataset],
+        compiled: dict[VertexId, Dataset],
+        materialized: dict[VertexId, Dataset],
         results: list[Any],
     ) -> None:
-        upstream_ids = self._stream_graph.upstream_nodes(node_id)
-        if not all(upstream_id in compiled_datasets for upstream_id in upstream_ids):
+        upstream_ids = self._graph.upstream(vertex_id)
+        if not all(upstream_id in compiled for upstream_id in upstream_ids):
             return
-        dataset = compiled_datasets.get(node_id)
+
+        dataset = compiled.get(vertex_id)
         if dataset is None:
-            node = self._stream_graph.nodes[node_id]
-            batch_runtime_context = self._batch_runtime_context(node, job_metric_group)
-            upstream_datasets = [compiled_datasets[upstream_id] for upstream_id in upstream_ids]
-            logical_function = node.operator.logical_function
-            if logical_function is None:
-                raise ValueError(f"Node {node_id} has no logical function")
-            dataset = logical_function.to_batch(
-                upstream_ds=upstream_datasets,
-                runtime_context=batch_runtime_context,
+            vertex = self._graph.get(vertex_id)
+            function = vertex.operator.logical_function
+            if function is None:
+                raise ValueError(f"Vertex {vertex_id} has no logical function")
+            dataset = function.to_batch(
+                upstream_ds=[compiled[upstream_id] for upstream_id in upstream_ids],
+                runtime_context=self._batch_runtime_context(vertex, job_metric_group),
             )
-            compiled_datasets[node_id] = dataset
-        downstream_ids = self._stream_graph.downstream_nodes(node_id)
+            compiled[vertex_id] = dataset
+
+        downstream_ids = self._graph.downstream(vertex_id)
         if not downstream_ids:
             results.append(dataset)
-        if len(downstream_ids) > 1 and node_id not in materialized_datasets:
-            materialized_dataset = dataset.materialize()
-            materialized_datasets[node_id] = materialized_dataset
-            compiled_datasets[node_id] = materialized_dataset
+        if len(downstream_ids) > 1 and vertex_id not in materialized:
+            dataset = dataset.materialize()
+            materialized[vertex_id] = dataset
+            compiled[vertex_id] = dataset
         for downstream_id in downstream_ids:
-            self._compile_node(
-                downstream_id,
-                job_metric_group,
-                compiled_datasets,
-                materialized_datasets,
-                results,
-            )
+            self._compile_vertex(downstream_id, job_metric_group, compiled, materialized, results)
 
-    def _batch_runtime_context(self, node: "StreamNode", job_metric_group: JobMetricGroup) -> RuntimeContext:
-        task_metric_group = job_metric_group.add_task_group(task_id=str(node.id), task_name=node.name, subtask_index=-1)
-        operator_metric_group = task_metric_group.add_operator_group(operator_id=str(node.id), operator_name=node.name)
+    def _batch_runtime_context(
+        self,
+        vertex: VertexSpec,
+        job_metric_group: JobMetricGroup,
+    ) -> RuntimeContext:
+        task_metrics = job_metric_group.add_task_group(
+            task_id=str(vertex.id),
+            task_name=vertex.name,
+            subtask_index=-1,
+        )
+        operator_metrics = task_metrics.add_operator_group(
+            operator_id=str(vertex.id),
+            operator_name=vertex.name,
+        )
         return BatchRuntimeContext(
-            f"{node.name}[{node.id}]",
+            vertex.name,
             -1,
             -1,
-            operator_metric_group,
-            self._stream_graph.config,
-            node.operator.runtime_info,
+            operator_metrics,
+            self._graph.config,
+            vertex.operator.runtime_info,
         )

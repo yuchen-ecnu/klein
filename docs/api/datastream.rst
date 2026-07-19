@@ -12,9 +12,11 @@ DataStream API
 .. autosummary::
    :nosignatures:
 
+   DataStream.changelog_mode
    DataStream.map
    DataStream.map_batches
    DataStream.flat_map
+   DataStream.map_reduce
    DataStream.filter
    DataStream.union
    DataStream.assign_timestamps_and_watermarks
@@ -38,6 +40,7 @@ DataStream API
    DataStream.write_csv
    DataStream.write_parquet
    DataStream.write_text
+   DataStream.write_sql
    DataStream.write_kafka
    DataStream.write_redis
    DataStream.write

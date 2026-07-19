@@ -2,6 +2,7 @@
 
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.partitioning.partitioner import Partitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 
 class BroadcastPartitioner(Partitioner):
@@ -17,6 +18,9 @@ class BroadcastPartitioner(Partitioner):
         if len(self._partitions) != self._partition_count:
             self._partitions = list(range(self._partition_count))
         return self._partitions
+
+    def to_spec(self) -> PartitionerSpec:
+        return PartitionerSpec(type(self), name=str(self), topology=self.topology)
 
     def __str__(self) -> str:
         return "BROADCAST"

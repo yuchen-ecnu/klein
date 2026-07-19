@@ -180,6 +180,28 @@ class GetActorByNameNamespaceTest(unittest.TestCase):
             w_mod.get_actor_by_name("X")
         p.assert_called_once_with("X", namespace=None)
 
+    def test_collector_reresolve_keeps_job_namespace(self):
+        from ray.klein.runtime.collector import downstream_sender as sender_module
+        from ray.klein.runtime.collector.delivery_journal import DeliveryJournal
+        from ray.klein.runtime.collector.downstream_sender import DownstreamSender
+
+        sender = DownstreamSender(
+            [mock.sentinel.stale],
+            ["downstream-0"],
+            (0,),
+            DeliveryJournal(1),
+            1.0,
+            "job-ns",
+        )
+        with mock.patch.object(
+            sender_module.klein,
+            "get_actor_by_name",
+            return_value=mock.sentinel.live,
+        ) as lookup:
+            sender.refresh_target(0)
+
+        lookup.assert_called_once_with("downstream-0", namespace="job-ns")
+
 
 class ConfigurationNamespaceOptionTest(unittest.TestCase):
     def test_explicit_namespace_from_config_used_by_build(self):

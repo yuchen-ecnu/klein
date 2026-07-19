@@ -38,16 +38,6 @@ Checkpoint trigger options
 
    CheckpointTriggerOptions
 
-Partitioner options
--------------------
-
-.. currentmodule:: ray.klein.config.partitioner_options
-
-.. autosummary::
-   :nosignatures:
-
-   PartitionerOptions
-
 Checkpoint options
 ------------------
 
@@ -147,3 +137,19 @@ Ray Serve options
    :nosignatures:
 
    ServeOptions
+
+Execution enums
+---------------
+
+.. currentmodule:: ray.klein.config
+
+.. autosummary::
+   :nosignatures:
+
+   DeploymentMode
+   RuntimeExecutionMode
+   EnvironmentVariables
+
+``ConfigInput`` is the accepted union of ``Configuration``, mappings, JSON or
+``key=value`` strings, and ``None``. See :doc:`../configuration` for parsing,
+conversion, precedence, and environment capture.

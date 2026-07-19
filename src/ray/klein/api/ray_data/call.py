@@ -124,6 +124,14 @@ class RayDataCall:
             return self.target
         return getattr(self.target, "__name__", self.target.__class__.__name__)
 
+    @property
+    def dataset_method_name(self) -> str | None:
+        """Return the bound Dataset method name, if this call targets one."""
+
+        if self.target_kind is _TargetKind.DATASET_METHOD:
+            return str(self.target)
+        return None
+
     def _callable_target(self) -> Callable[..., Any]:
         if not callable(self.target):
             raise RayDataAPIError(f"Ray Data call target {self.target!r} is not callable")

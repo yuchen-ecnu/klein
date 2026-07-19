@@ -81,7 +81,7 @@ class ChainingRule(LogicalRule):
         target: VertexId,
         edge: EdgeSpec | None,
     ) -> bool:
-        if edge is None or not isinstance(edge.partitioner, ForwardPartitioner):
+        if edge is None or not edge.partitioner.is_type(ForwardPartitioner):
             return False
         if len(builder.upstream(target)) > 1:
             return False
@@ -165,7 +165,7 @@ class UnionRule(LogicalRule):
                     partitioner = default_partitioner(
                         upstream.concurrency,
                         downstream.concurrency,
-                    )
+                    ).to_spec()
                     builder.add_edge(EdgeSpec(upstream_id, downstream_id, partitioner))
             builder.remove_vertex(union_id)
         return builder.build()

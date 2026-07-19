@@ -5,6 +5,11 @@ import pytest
 from sqlglot import parse_one
 
 from ray.klein import ChangelogRow, KleinContext, RowKind, SQLQueryError
+from ray.klein._internal.sql.streaming import (
+    _AsyncAddStreamingExpressions,
+    _AsyncRayProjectChangelogRow,
+    _RayProjectChangelogRow,
+)
 from ray.klein.api.collector import Collector
 from ray.klein.api.runtime_info import RuntimeInfo
 from ray.klein.config.configuration import Configuration
@@ -15,6 +20,7 @@ from ray.klein.runtime.message import Record
 from ray.klein.runtime.operator.sql_aggregate_operator import SQLAggregateOperator
 from ray.klein.runtime.operator.sql_join_operator import SQLRegularJoinOperator
 from ray.klein.runtime.operator.sql_top_n_operator import SQLTopNOperator
+from tests.support.ray_data import logical_function_of
 
 
 class _RecordingCollector(Collector):
@@ -138,6 +144,46 @@ def test_streaming_global_order_by_follows_flink_restriction() -> None:
 
     with pytest.raises(SQLQueryError, match="ascending time attribute"):
         context.sql("SELECT * FROM orders ORDER BY amount", tables={"orders": orders})
+
+
+@pytest.mark.parametrize(
+    ("expression", "function", "async_buffer_size"),
+    [
+        ("DOWNLOAD(uri)", _AsyncRayProjectChangelogRow, 32),
+        ("RANDOM()", _RayProjectChangelogRow, None),
+        ("UUID()", _RayProjectChangelogRow, None),
+        ("MONOTONICALLY_INCREASING_ID()", _RayProjectChangelogRow, None),
+    ],
+)
+def test_streaming_sql_plans_ray_data_expressions(
+    expression: str,
+    function: type,
+    async_buffer_size: int | None,
+) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    files = context.from_items([{"uri": "local:///tmp/file"}])
+
+    result = context.sql(f"SELECT {expression} AS value FROM files", tables={"files": files})
+
+    logical = logical_function_of(result)
+    assert logical.function is function
+    assert logical.runtime_info.async_buffer_size == async_buffer_size
+
+
+def test_streaming_aggregate_precomputes_download_inputs_asynchronously() -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    files = context.from_items([{"uri": "local:///tmp/file"}])
+
+    result = context.sql(
+        "SELECT COUNT(DOWNLOAD(uri)) AS downloaded FROM files",
+        tables={"files": files},
+    )
+
+    assert isinstance(result.stream_operator, SQLAggregateOperator)
+    inputs = result.input_streams[0]
+    logical = logical_function_of(inputs)
+    assert logical.function is _AsyncAddStreamingExpressions
+    assert logical.runtime_info.async_buffer_size == 32
 
 
 def test_streaming_top_n_emits_retractions_when_rank_changes() -> None:

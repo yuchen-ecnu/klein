@@ -4,7 +4,6 @@ import pytest
 
 from ray.klein.api.job_handle import JobHandle
 from ray.klein.api.klein_context import KleinContext
-from ray.klein.api.stream_graph import StreamGraph
 from ray.klein.config.checkpoint_options import CheckpointOptions
 from ray.klein.config.checkpoint_trigger_options import (
     CheckpointTriggerOptions,
@@ -14,6 +13,7 @@ from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.config.restart_strategy_options import RestartStrategyOptions
 from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 from ray.klein.runtime.coordinator import checkpoint_io
+from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
 from ray.klein.runtime.partitioning import (
     AdaptivePartitioner,
@@ -49,9 +49,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1]", "op2[2]", "op3[3]", "op4[4]"], [1, 2, 3, 4])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1]", "op2[2]", "op3[3]", "op4[4]"], [1, 2, 3, 4])
         ctx.execute("TEST").wait()
 
     def test_chain_into_one_op(self):
@@ -63,9 +63,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1] -> op2[2] -> op3[3] -> op4[4]"], [1])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1] -> op2[2] -> op3[3] -> op4[4]"], [1])
         ctx.execute("TEST").wait()
 
     def test_restore_from_chain_to_unchain(self):
@@ -134,9 +134,9 @@ class TestOperatorChaining:
                 (1.1, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1] -> op2[2]", "op3[3] -> op4[4]"], [1, 3])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1] -> op2[2]", "op3[3] -> op4[4]"], [1, 3])
         ctx.execute("TEST").wait()
 
     def test_middle_chaining(self):
@@ -148,9 +148,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1]", "op2[2] -> op3[3]", "op4[4]"], [1, 2, 4])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1]", "op2[2] -> op3[3]", "op4[4]"], [1, 2, 4])
         ctx.execute("TEST").wait()
 
     def test_sink_chaining(self):
@@ -162,9 +162,9 @@ class TestOperatorChaining:
                 (1.2, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1]", "op2[2]", "op3[3] -> op4[4]"], [1, 2, 3])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1]", "op2[2]", "op3[3] -> op4[4]"], [1, 2, 3])
         ctx.execute("TEST").wait()
 
     def test_unchainable_caused_by_diff_parallelism(self):
@@ -176,9 +176,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 2, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1]", "op2[2]", "op3[3]", "op4[4]"], [1, 2, 3, 4])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1]", "op2[2]", "op3[3]", "op4[4]"], [1, 2, 3, 4])
         ctx.execute("TEST").wait()
 
     def test_unchainable_caused_by_shuffle_partitioner(self):
@@ -190,9 +190,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1]", "op2[2]", "op3[3] -> op4[4]"], [1, 2, 3])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1]", "op2[2]", "op3[3] -> op4[4]"], [1, 2, 3])
         ctx.execute("TEST").wait()
 
     def test_unchainable_caused_by_batch_size(self):
@@ -204,9 +204,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, None),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["op1[1] -> op2[2]", "op3[3]", "op4[4]"], [1, 3, 4])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["op1[1] -> op2[2]", "op3[3]", "op4[4]"], [1, 3, 4])
         ctx.execute("TEST").wait()
 
     def test_multi_sink_operator_chaining_disabled(self):
@@ -220,10 +220,10 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, ForwardPartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
         self.assert_chaining_result(
-            job_graph,
+            optimized_graph,
             ["source[1]", "map1[2]", "map2[3]", "sink1[4]", "sink2[5]"],
             [1, 2, 3, 4, 5],
         )
@@ -239,9 +239,9 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, ForwardPartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["source[1] -> map1[2] -> map2[3] -> sink1[4], sink2[5]"], [1])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["source[1] -> map1[2] -> map2[3] -> sink1[4], sink2[5]"], [1])
         ctx.execute("TEST").wait()
 
     def test_multi_sink_datasource_chaining(self):
@@ -254,10 +254,10 @@ class TestOperatorChaining:
                 (1.1, 0.0, 1, ForwardPartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
         self.assert_chaining_result(
-            job_graph,
+            optimized_graph,
             ["source[1] -> map1[2]", "map2[3] -> sink1[4]", "sink2[5]"],
             [1, 3, 5],
         )
@@ -273,10 +273,10 @@ class TestOperatorChaining:
                 (1.0, 0.0, 1, ForwardPartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
         self.assert_chaining_result(
-            job_graph,
+            optimized_graph,
             ["source[1]", "map1[2]", "map2[3]", "sink1[4]", "sink2[5]"],
             [1, 2, 3, 4, 5],
         )
@@ -292,9 +292,9 @@ class TestOperatorChaining:
                 (1.2, 0.0, 1, ForwardPartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
-        self.assert_chaining_result(job_graph, ["source[1]", "map1[2] -> map2[3] -> sink1[4], sink2[5]"], [1, 2])
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
+        self.assert_chaining_result(optimized_graph, ["source[1]", "map1[2] -> map2[3] -> sink1[4], sink2[5]"], [1, 2])
         ctx.execute("TEST").wait()
 
     def test_multi_sink_unchainable_caused_by_diff_parallelism(self):
@@ -307,10 +307,10 @@ class TestOperatorChaining:
                 (1.0, 0.0, 2, RescalePartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
         self.assert_chaining_result(
-            job_graph,
+            optimized_graph,
             ["source[1]", "map1[2]", "map2[3]", "sink1[4]", "sink2[5]"],
             [1, 2, 3, 4, 5],
         )
@@ -326,10 +326,10 @@ class TestOperatorChaining:
                 (1.0, 0.0, 2, AdaptivePartitioner()),
             ]
         )
-        stream_graph = StreamGraph.from_sinks(ctx.sinks, "TEST", self.config)
-        job_graph = LogicalOptimizer(self.config).optimize(stream_graph)
+        logical_graph = LogicalGraph.from_sinks(ctx.sinks, "TEST", self.config)
+        optimized_graph = LogicalOptimizer(self.config).optimize(logical_graph)
         self.assert_chaining_result(
-            job_graph,
+            optimized_graph,
             ["source[1] -> map1[2]", "map2[3]", "sink1[4]", "sink2[5]"],
             [1, 3, 4, 5],
         )

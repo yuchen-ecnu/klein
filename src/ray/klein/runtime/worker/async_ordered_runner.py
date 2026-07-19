@@ -10,7 +10,7 @@ Why this exists
 ``OperatorRunner.process_async`` only *computes* a record's output and returns
 it — it never touches the shared emit buffer. That split (Flink's
 ``AsyncFunction`` returning via ``ResultFuture`` rather than emitting inline) is
-what lets us have many requests in flight at once without racing the collector:
+what lets us have many requests in flight at once without racing TaskOutput:
 
 * **producer** — pulls records the batcher flushed, starts one ``process_async``
   coroutine per record *without awaiting it* (so the event loop runs them

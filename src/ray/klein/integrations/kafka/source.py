@@ -11,9 +11,11 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
 from ray.klein._internal.logging import get_logger
+from ray.klein.api.changelog_row import ChangelogRow
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
+from ray.klein.formats.canal_json import _normalize_canal_json_options, decode_canal_json
 from ray.klein.observability.metrics.metric_catalog import KleinMetrics
 from ray.klein.observability.metrics.metrics import Counter, Gauge, Histogram
 
@@ -25,10 +27,13 @@ logger = get_logger(__name__)
 _OFFSET_INVALID = -1001
 _STATE_VERSION = 1
 _METADATA_TIMEOUT_SECONDS = 10.0
+_FORMAT_STATE_KEY = "value_format"
+_INFLIGHT_STATE_KEY = "format_inflight"
 
 PartitionKey = tuple[str, int]
 PartitionOffsets = dict[str, dict[int, int | str]]
 StartOffset = int | datetime | Literal["earliest", "latest"] | PartitionOffsets
+ValueFormat = Literal["raw", "canal-json"]
 
 
 class _KafkaSourceMetrics:
@@ -63,6 +68,8 @@ class KafkaSource(SourceFunction):
         timeout_ms: int | None = None,
         partition_discovery_interval_ms: int = 30_000,
         max_batch_size: int = 1_000,
+        value_format: ValueFormat = "raw",
+        format_options: dict[str, Any] | None = None,
     ) -> None:
         self._topics = _normalize_nonempty_strings(topics, "topics")
         self._bootstrap_servers = _normalize_nonempty_strings(bootstrap_servers, "bootstrap_servers")
@@ -70,12 +77,18 @@ class KafkaSource(SourceFunction):
         _validate_positive_integer("timeout_ms", timeout_ms, optional=True)
         _validate_positive_integer("partition_discovery_interval_ms", partition_discovery_interval_ms)
         _validate_positive_integer("max_batch_size", max_batch_size)
+        if value_format not in {"raw", "canal-json"}:
+            raise ValueError("value_format must be 'raw' or 'canal-json'")
+        if value_format == "raw" and format_options:
+            raise ValueError("format_options require a non-raw value_format")
         self._start_offset = start_offset
         self._consumer_config = dict(consumer_config or {})
         self._poll_timeout_seconds = (timeout_ms or 1_000) / 1_000.0
         self._discovery_interval_seconds = partition_discovery_interval_ms / 1_000.0
         self._lag_update_interval_seconds = min(10.0, self._discovery_interval_seconds)
         self._max_batch_size = max_batch_size
+        self._value_format: ValueFormat = value_format
+        self._format_options = _normalize_canal_json_options(format_options) if value_format == "canal-json" else {}
 
         self._consumer: Consumer | None = None
         self._metrics: _KafkaSourceMetrics | None = None
@@ -88,6 +101,7 @@ class KafkaSource(SourceFunction):
         self._restored_positions: dict[PartitionKey, int] = {}
         self._checkpoint_positions: dict[int, dict[PartitionKey, int]] = {}
         self._completed_checkpoints: deque[int] = deque()
+        self._format_inflight: dict[PartitionKey, tuple[int, int]] = {}
         self._next_discovery_at = 0.0
         self._next_lag_update_at = 0.0
 
@@ -137,16 +151,28 @@ class KafkaSource(SourceFunction):
         with self._state_lock:
             positions = dict(self._positions)
             self._checkpoint_positions[checkpoint_id] = positions
-        return {
+            inflight = dict(self._format_inflight)
+        state = {
             "version": _STATE_VERSION,
             "positions": _encode_positions(positions),
         }
+        if self._value_format != "raw":
+            state[_FORMAT_STATE_KEY] = self._value_format
+            state[_INFLIGHT_STATE_KEY] = _encode_inflight(inflight)
+        return state
 
     def restore_state(self, state: Any) -> None:
         positions = _decode_state(state)
+        checkpoint_format = self._value_format if state is None else _decode_value_format(state)
+        if checkpoint_format != self._value_format:
+            raise ValueError(
+                f"Kafka checkpoint value format {checkpoint_format!r} does not match source format {self._value_format!r}"
+            )
+        inflight = _decode_inflight(state, positions) if checkpoint_format != "raw" else {}
         with self._state_lock:
             self._restored_positions = positions
             self._positions.update(positions)
+            self._format_inflight = inflight
         if self._consumer is not None:
             self._refresh_assignment(force=True)
 
@@ -189,6 +215,18 @@ class KafkaSource(SourceFunction):
                 self._metrics.poll_duration_ms.observe_elapsed(started_at)
 
     def _emit_messages(self, context: SourceContext, messages: list) -> int:
+        if self._value_format == "canal-json":
+            return self._emit_canal_json_messages(context, messages)
+        if getattr(context, "batch_collect_supported", False):
+            records = []
+            for message in messages:
+                record = self._message_record(message)
+                if record is not None:
+                    records.append(record)
+                if self._stop_event.is_set():
+                    break
+            context.collect_many(records)
+            return len(records)
         emitted = 0
         for message in messages:
             record = self._message_record(message)
@@ -200,15 +238,82 @@ class KafkaSource(SourceFunction):
                 break
         return emitted
 
-    def _message_record(self, message) -> dict[str, Any] | None:
-        from confluent_kafka import KafkaError, KafkaException
+    def _emit_canal_json_messages(self, context: SourceContext, messages: list) -> int:
+        emitted = 0
+        for message in messages:
+            if not self._check_message(message):
+                continue
+            key = (message.topic(), message.partition())
+            offset = message.offset()
+            rows = self._decode_canal_json_rows(message, key, offset)
+            start_index = self._resume_format_index(key, offset, len(rows))
+            if not rows:
+                self._finish_formatted_message(key, offset)
+                continue
 
-        error = message.error()
-        if error is not None:
-            if error.code() == KafkaError._PARTITION_EOF:
-                return None
+            for index in range(start_index, len(rows)):
+                self._prepare_formatted_collect(key, offset, index, len(rows))
+                context.collect(rows[index])
+                emitted += 1
+                if self._stop_event.is_set():
+                    break
+            if self._stop_event.is_set():
+                break
+        return emitted
+
+    def _decode_canal_json_rows(self, message, key: PartitionKey, offset: int) -> list[ChangelogRow]:
+        try:
+            rows = decode_canal_json(message.value(), **self._format_options)
+        except (TypeError, ValueError) as error:
             self._record_error()
-            raise KafkaException(error)
+            raise ValueError(f"Unable to decode canal-json at {key[0]}[{key[1]}] offset {offset}: {error}") from error
+        if not self._format_options["include_metadata"]:
+            return rows
+        return [
+            ChangelogRow(
+                {
+                    **row,
+                    "__canal_kafka_topic": message.topic(),
+                    "__canal_kafka_partition": message.partition(),
+                    "__canal_kafka_offset": message.offset(),
+                },
+                row_kind=row.row_kind,
+            )
+            for row in rows
+        ]
+
+    def _resume_format_index(self, key: PartitionKey, offset: int, row_count: int) -> int:
+        with self._state_lock:
+            cursor = self._format_inflight.get(key)
+        if cursor is None:
+            return 0
+        expected_offset, next_index = cursor
+        if offset != expected_offset:
+            raise RuntimeError(
+                f"Formatted Kafka checkpoint expected {key[0]}[{key[1]}] offset {expected_offset}, received {offset}"
+            )
+        if next_index < 0 or next_index >= row_count:
+            raise ValueError("Formatted Kafka checkpoint row cursor is outside the decoded message")
+        return next_index
+
+    def _prepare_formatted_collect(self, key: PartitionKey, offset: int, index: int, row_count: int) -> None:
+        # Advance before collect(): collect may synchronously take a checkpoint.
+        with self._state_lock:
+            if index + 1 == row_count:
+                self._positions[key] = offset + 1
+                self._format_inflight.pop(key, None)
+            else:
+                self._positions[key] = offset
+                self._format_inflight[key] = (offset, index + 1)
+
+    def _finish_formatted_message(self, key: PartitionKey, offset: int) -> None:
+        with self._state_lock:
+            self._positions[key] = offset + 1
+            self._format_inflight.pop(key, None)
+
+    def _message_record(self, message) -> dict[str, Any] | None:
+        if not self._check_message(message):
+            return None
 
         key = (message.topic(), message.partition())
         # Advance before collect(): collect may synchronously emit a barrier,
@@ -226,6 +331,19 @@ class KafkaSource(SourceFunction):
             "timestamp_type": timestamp_type,
             "headers": dict(message.headers() or []),
         }
+
+    def _check_message(self, message) -> bool:
+        """Raise for Kafka errors and return false for partition EOF markers."""
+
+        from confluent_kafka import KafkaError, KafkaException
+
+        error = message.error()
+        if error is None:
+            return True
+        if error.code() == KafkaError._PARTITION_EOF:
+            return False
+        self._record_error()
+        raise KafkaException(error)
 
     def _refresh_assignment(self, *, force: bool = False) -> None:
         from confluent_kafka import TopicPartition
@@ -253,6 +371,8 @@ class KafkaSource(SourceFunction):
         with self._state_lock:
             self._assigned = selected
             self._positions = next_positions
+            for key in selected:
+                self._restored_positions.pop(key, None)
         if self._metrics is not None:
             self._metrics.assigned_partitions.set(len(selected))
         logger.info(
@@ -491,6 +611,49 @@ def _encode_positions(positions: dict[PartitionKey, int]) -> dict[str, dict[int,
     for (topic, partition), offset in positions.items():
         encoded.setdefault(topic, {})[partition] = offset
     return encoded
+
+
+def _encode_inflight(inflight: dict[PartitionKey, tuple[int, int]]) -> dict[str, dict[int, dict[str, int]]]:
+    encoded: dict[str, dict[int, dict[str, int]]] = {}
+    for (topic, partition), (offset, next_index) in inflight.items():
+        encoded.setdefault(topic, {})[partition] = {"offset": offset, "next_index": next_index}
+    return encoded
+
+
+def _decode_value_format(state: Any) -> ValueFormat:
+    if state is None:
+        return "raw"
+    value = state.get(_FORMAT_STATE_KEY, "raw")
+    if value not in {"raw", "canal-json"}:
+        raise ValueError("Unsupported Kafka source checkpoint value format")
+    return value
+
+
+def _decode_inflight(state: Any, positions: dict[PartitionKey, int]) -> dict[PartitionKey, tuple[int, int]]:
+    if state is None:
+        return {}
+    raw_inflight = state.get(_INFLIGHT_STATE_KEY, {})
+    if not isinstance(raw_inflight, Mapping):
+        raise ValueError("Kafka source checkpoint format in-flight state must be a mapping")
+    result: dict[PartitionKey, tuple[int, int]] = {}
+    for topic, partitions in raw_inflight.items():
+        if not isinstance(topic, str) or not isinstance(partitions, Mapping):
+            raise ValueError("Invalid Kafka source checkpoint format in-flight state")
+        for partition, cursor in partitions.items():
+            partition_id = int(partition) if isinstance(partition, str) and partition.isdigit() else partition
+            if isinstance(partition_id, bool) or not isinstance(partition_id, int) or not isinstance(cursor, Mapping):
+                raise ValueError("Invalid Kafka source checkpoint format in-flight cursor")
+            offset = cursor.get("offset")
+            next_index = cursor.get("next_index")
+            if any(
+                isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in (offset, next_index)
+            ):
+                raise ValueError("Invalid Kafka source checkpoint format in-flight cursor")
+            key = (topic, partition_id)
+            if positions.get(key) != offset or next_index == 0:
+                raise ValueError("Kafka source checkpoint format cursor does not match its partition position")
+            result[key] = (offset, next_index)
+    return result
 
 
 def _decode_state(state: Any) -> dict[PartitionKey, int]:

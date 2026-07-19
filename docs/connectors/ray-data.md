@@ -14,9 +14,11 @@ expose it without a Klein wrapper release.
 
 ## Availability and execution mode
 
-Ray Data sources, `stream.data` transforms, and `stream.data` consumers are
-batch-only. A pipeline containing only batch-lowerable nodes can execute on Ray
-Data; forcing `execution.runtime.mode=streaming` rejects these nodes.
+Ray Data sources, general `stream.data` transforms, and `stream.data` consumers
+are batch-only. The expression forms `stream.data.with_column(name, expr)` and
+`stream.data.filter(expr=expr)` are dual-mode: batch execution delegates to Ray
+Data unchanged, while streaming execution uses Klein's native expression
+operator. `download()` runs with bounded ordered concurrency and backpressure.
 
 Check availability before relying on an API that differs across Ray versions:
 
@@ -106,6 +108,17 @@ For JSON, CSV, and Parquet, `stream.write_json`, `write_csv`, and
 batch and uses checkpoint-transactional native output in streaming. See
 [Filesystem](filesystem.md) before choosing between the APIs.
 
+`stream.write_sql(sql, connection_factory, ray_remote_args=None,
+concurrency=None)` is also available with the same arguments as
+`ray.data.Dataset.write_sql`. Batch execution uses Ray Data's writer. Streaming
+execution owns one DB-API 2.0 connection per sink subtask, preserves the first
+record's column order, and commits `executemany` batches of up to 128 rows at
+full batches and checkpoint flushes.
+
+Streaming SQL output is at-least-once: a database commit can succeed before
+the matching Klein checkpoint becomes durable. Use an idempotent statement or
+database-native upsert when replayed rows must not create duplicates.
+
 ## Adapt an existing Dataset
 
 Use `from_ray_dataset` when another library has already constructed a Dataset:
@@ -125,7 +138,8 @@ arguments to the selected Ray Data method. Klein's job-wide
 `execution.runtime.mode`, retry, and Ray initialization options still apply;
 see the [configuration reference](../configuration-reference.md).
 
-Data partitioning, retries, commit behavior, and filesystem semantics are those
-of the invoked public Ray Data operation. They are not Klein streaming
-checkpoints. Use a native connector when the external system must participate
-in Klein checkpoint recovery.
+Except for the native `stream.write_sql` path described above, data
+partitioning, retries, commit behavior, and filesystem semantics are those of
+the invoked public Ray Data operation. They are not Klein streaming
+checkpoints. Use a transactional native connector when the external system
+must commit only after a Klein checkpoint becomes durable.

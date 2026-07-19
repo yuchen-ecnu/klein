@@ -35,6 +35,31 @@ class ExecutionGraph:
         self._namespace = namespace
         self._job_vertices = dict(job_vertices or {})
         self._job_edges = tuple(job_edges)
+        self._validate_topology()
+        _ = self._topological_job_vertices
+
+    def _validate_topology(self) -> None:
+        for vertex_id, vertex in self._job_vertices.items():
+            if vertex.id != vertex_id:
+                raise ValueError(f"execution vertex key {vertex_id} does not match vertex id {vertex.id}")
+        pairs: set[tuple[int, int]] = set()
+        for edge in self._job_edges:
+            if edge.source not in self._job_vertices or edge.target not in self._job_vertices:
+                raise ValueError(f"execution edge {edge.source} -> {edge.target} has a missing endpoint")
+            pair = (edge.source, edge.target)
+            if pair in pairs:
+                raise ValueError(f"duplicate execution edge {edge.source} -> {edge.target}")
+            pairs.add(pair)
+
+        targets = {edge.target for edge in self._job_edges}
+        roots = self._job_vertices.keys() - targets
+        declared_sources = {
+            vertex_id for vertex_id, vertex in self._job_vertices.items() if vertex.operator_spec.source
+        }
+        if self._job_vertices and roots != declared_sources:
+            raise ValueError(
+                f"ExecutionGraph roots must exactly match source operators; roots={roots}, sources={declared_sources}"
+            )
 
     @property
     def namespace(self) -> str:
@@ -135,7 +160,7 @@ class ExecutionGraph:
         return tuple(ordered)
 
     @cached_property
-    def affinity_groups(self) -> list[list[ExecutionVertexId]]:
+    def affinity_groups(self) -> tuple[tuple[ExecutionVertexId, ...], ...]:
         """Co-location groups: connected components over FORWARD edges only.
 
         A FORWARD edge is 1:1 same-parallelism (``ev_i -> ev_i``, no shuffle), so
@@ -145,7 +170,7 @@ class ExecutionGraph:
         unit (a no-forward-neighbour subtask is its own singleton).
         """
         adjacency = self._forward_adjacency()
-        return self._connected_components(adjacency)
+        return tuple(tuple(group) for group in self._connected_components(adjacency))
 
     def _forward_adjacency(self) -> dict[ExecutionVertexId, list[ExecutionVertexId]]:
         from ray.klein.runtime.partitioning.forward_partitioner import ForwardPartitioner
@@ -154,7 +179,7 @@ class ExecutionGraph:
             vertex.id: [] for vertex in self.execution_vertices
         }
         for edge in self.job_edges:
-            if isinstance(edge.partitioner, ForwardPartitioner):
+            if edge.partitioner.is_type(ForwardPartitioner):
                 for exec_edge in edge.execution_edges:
                     src_id, dst_id = exec_edge.source.id, exec_edge.target.id
                     adjacency[src_id].append(dst_id)
@@ -205,67 +230,70 @@ class ExecutionGraph:
         return ExecutionGraph(namespace, job_vertices, job_edges)
 
     @property
-    def execution_vertices(self) -> set[ExecutionVertex]:
-        vertices = []
-        for job_vertex in self.job_vertices.values():
-            vertices.extend(job_vertex.execution_vertices.values())
-        return set(vertices)
+    def execution_vertices(self) -> tuple[ExecutionVertex, ...]:
+        return tuple(
+            vertex for job_vertex in self.job_vertices.values() for vertex in job_vertex.execution_vertices.values()
+        )
 
-    def execution_vertex(self, vertex_id: ExecutionVertexId) -> ExecutionVertex | None:
-        job_vertex = self.job_vertex(vertex_id.job_vertex_id)
-        if job_vertex is not None:
-            return job_vertex.execution_vertices.get(vertex_id.index)
-        return None
+    def execution_vertex(self, vertex_id: ExecutionVertexId) -> ExecutionVertex:
+        return self.job_vertex(vertex_id.job_vertex_id).execution_vertex(vertex_id.index)
+
+    def find_execution_vertex(self, vertex_id: ExecutionVertexId) -> ExecutionVertex | None:
+        job_vertex = self._job_vertices.get(vertex_id.job_vertex_id)
+        return None if job_vertex is None else job_vertex.execution_vertices.get(vertex_id.index)
 
     @property
-    def sink_execution_vertices(self) -> set[ExecutionVertex]:
+    def sink_execution_vertices(self) -> tuple[ExecutionVertex, ...]:
         # A sink job vertex (out-degree 0) contributes all its subtasks as sinks.
-        sink_ids = set(self.sink_job_vertices)
-        return {
+        return tuple(
             vertex
-            for job_vertex_id in sink_ids
+            for job_vertex_id in self.sink_job_vertices
             for vertex in self.job_vertices[job_vertex_id].execution_vertices.values()
-        }
+        )
 
     @property
-    def source_execution_vertices(self) -> set[ExecutionVertex]:
+    def source_execution_vertices(self) -> tuple[ExecutionVertex, ...]:
         """Return every physical subtask belonging to a source vertex."""
 
-        source_ids = set(self.source_job_vertices)
-        return {
+        return tuple(
             vertex
-            for job_vertex_id in source_ids
+            for job_vertex_id in self.source_job_vertices
             for vertex in self.job_vertices[job_vertex_id].execution_vertices.values()
-        }
+        )
 
     @property
-    def source_job_vertices(self) -> list[int]:
-        in_degree, _ = self._job_vertex_degrees
-        return [vertex_id for vertex_id in self.job_vertices if in_degree[vertex_id] == 0]
+    def source_job_vertices(self) -> tuple[int, ...]:
+        return tuple(vertex_id for vertex_id, vertex in self.job_vertices.items() if vertex.operator_spec.source)
 
     @property
-    def sink_job_vertices(self) -> list[int]:
+    def sink_job_vertices(self) -> tuple[int, ...]:
         _, out_degree = self._job_vertex_degrees
-        return [vertex_id for vertex_id in self.job_vertices if out_degree[vertex_id] == 0]
+        return tuple(vertex_id for vertex_id in self.job_vertices if out_degree[vertex_id] == 0)
 
-    def downstream_job_vertices(self, exec_job_vertex_id: int) -> list[int]:
-        return [edge.target for edge in self._out_edges_by_job_vertex.get(exec_job_vertex_id, [])]
+    def downstream_job_vertices(self, exec_job_vertex_id: int) -> tuple[int, ...]:
+        self.job_vertex(exec_job_vertex_id)
+        return tuple(edge.target for edge in self._out_edges_by_job_vertex[exec_job_vertex_id])
 
-    def job_vertex(self, job_vertex_id: int) -> ExecutionJobVertex | None:
-        return self.job_vertices.get(job_vertex_id)
+    def job_vertex(self, job_vertex_id: int) -> ExecutionJobVertex:
+        return self._job_vertices[job_vertex_id]
 
-    def output_job_edges(self, exec_job_vertex_id: int) -> list[ExecutionJobEdge]:
+    def find_job_vertex(self, job_vertex_id: int) -> ExecutionJobVertex | None:
+        return self._job_vertices.get(job_vertex_id)
+
+    def output_job_edges(self, exec_job_vertex_id: int) -> tuple[ExecutionJobEdge, ...]:
         """Outbound ExecutionJobEdges of the given ExecutionJobVertex."""
-        return list(self._out_edges_by_job_vertex.get(exec_job_vertex_id, []))
+        self.job_vertex(exec_job_vertex_id)
+        return tuple(self._out_edges_by_job_vertex[exec_job_vertex_id])
 
-    def input_job_edges(self, exec_job_vertex_id: int) -> list[ExecutionJobEdge]:
+    def input_job_edges(self, exec_job_vertex_id: int) -> tuple[ExecutionJobEdge, ...]:
         """Inbound ExecutionJobEdges of the given ExecutionJobVertex."""
-        return list(self._in_edges_by_job_vertex.get(exec_job_vertex_id, []))
+        self.job_vertex(exec_job_vertex_id)
+        return tuple(self._in_edges_by_job_vertex[exec_job_vertex_id])
 
     def __repr__(self) -> str:
         # Plain edge-list repr for debugging. The ExecutionGraph is the
         # per-subtask physical plan and is intentionally not pretty-printed in
-        # the job logs (the StreamGraph / LogicalGraph already show the operator
+        # the job logs (the LogicalGraph already shows the operator
         # plan); this keeps a readable repr() for ad-hoc inspection.
         lines = [f"ExecutionGraph({len(self.job_vertices)} vertices, {len(self.job_edges)} edges)"]
         for edge in self.job_edges:
