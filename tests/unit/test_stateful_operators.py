@@ -179,6 +179,32 @@ def test_keyed_state_checkpoint_rescales_by_stable_key_group():
         operator.close()
 
 
+def test_pending_state_restore_metrics_are_published_only_on_commit() -> None:
+    source = KeyedProcessOperator(
+        key_selector=lambda row: row["key"],
+        process_function=RunningTotal(),
+    )
+    _open(source, "metric-source")
+    source.process_element(Record({"key": "a", "value": 1}))
+    snapshot = source.snapshot_state()
+
+    pending = KeyedProcessOperator(
+        key_selector=lambda row: row["key"],
+        process_function=RunningTotal(),
+    )
+    _open(pending, "metric-pending")
+    pending.restore_state_fragments((snapshot,), publish_metrics=False)
+
+    assert pending._state_size_metric.value == 0
+    assert pending._restore_duration_metric.count == 0
+    pending.publish_deferred_restore_metrics()
+    assert pending._state_size_metric.value == len(snapshot)
+    assert pending._restore_duration_metric.count == 1
+
+    source.close()
+    pending.close()
+
+
 def test_keyed_process_dispatches_processing_time_timer():
     operator = KeyedProcessOperator(
         key_selector=lambda row: row["key"],

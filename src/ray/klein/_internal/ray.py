@@ -194,7 +194,7 @@ def get_actor_status(task_name: str, namespace: str | None = None) -> StreamTask
     Klein's namespace isolation; ``None`` uses Ray's current namespace.
     """
     if is_debug_mode():
-        return StreamTaskStatus.ALIVE
+        return StreamTaskStatus.ALIVE if task_name in KLEIN_DEBUG_OBJECT_STORE else StreamTaskStatus.NOT_EXIST
     try:
         actor = ray.get_actor(task_name, namespace=namespace)
     except Exception:

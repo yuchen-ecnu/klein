@@ -414,14 +414,16 @@ async def test_cancel_waits_for_the_local_rescale_lifecycle_transaction() -> Non
 
 
 @pytest.mark.asyncio
-async def test_reused_task_name_rejects_a_stale_generation_status_report() -> None:
-    logical_two, first_graph = _graphs(parallelism=2)
-    first_vertex = first_graph.job_vertex(2).execution_vertex(0)
+async def test_removed_then_recreated_task_rejects_a_stale_generation_status_report() -> None:
+    logical_two, graph_two = _graphs(parallelism=2)
     logical_four = logical_two.rescale_operator(2, 4)
-    graph_four = first_graph.rescale_operator(logical_four, 2)
+    first_graph_four = graph_two.rescale_operator(logical_four, 2)
+    first_vertex = first_graph_four.job_vertex(2).execution_vertex(2)
     logical_two_again = logical_four.rescale_operator(2, 2)
-    current_graph = graph_four.rescale_operator(logical_two_again, 2)
-    current_vertex = current_graph.job_vertex(2).execution_vertex(0)
+    graph_two_again = first_graph_four.rescale_operator(logical_two_again, 2)
+    logical_four_again = logical_two_again.rescale_operator(2, 4)
+    current_graph = graph_two_again.rescale_operator(logical_four_again, 2)
+    current_vertex = current_graph.job_vertex(2).execution_vertex(2)
 
     assert current_vertex.id == first_vertex.id
     assert current_vertex.name == first_vertex.name
@@ -845,16 +847,28 @@ def test_actor_topology_activation_failure_restores_every_local_component() -> N
     ]
 
 
-def test_committed_release_never_resumes_the_old_target() -> None:
-    logical, old_graph = _graphs()
-    new_logical = logical.rescale_operator(2, 3)
-    new_graph = old_graph.rescale_operator(new_logical, 2)
+def test_topology_rollback_is_idempotent_when_prepare_never_reached_the_actor() -> None:
+    task = object.__new__(StreamTask)
+    task._topology_commit_tombstones = []
+    task._topology_operation_id = None
+
+    assert task.rollback_topology_reconfiguration("resize-1") is True
+
+
+def test_committed_release_resumes_retained_target_and_not_removed_target() -> None:
+    logical_two, graph_two = _graphs()
+    logical = logical_two.rescale_operator(2, 4)
+    old_graph = graph_two.rescale_operator(logical, 2)
     for vertex in old_graph.execution_vertices:
         vertex.stream_task = MagicMock()
-    for vertex in new_graph.job_vertex(2).execution_vertices.values():
-        vertex.stream_task = MagicMock()
+    new_logical = logical.rescale_operator(2, 2)
+    new_graph = old_graph.rescale_operator(new_logical, 2)
 
-    with patch.object(job_master_module.klein, "get", side_effect=lambda value, **_kwargs: value):
+    with patch.object(
+        job_master_module.klein,
+        "get",
+        side_effect=lambda value, **_kwargs: [True] * len(value),
+    ):
         JobMaster._release_committed_rescale(
             old_graph,
             new_graph.job_vertex(2),
@@ -863,13 +877,16 @@ def test_committed_release_never_resumes_the_old_target() -> None:
             1,
         )
 
-    for vertex in old_graph.job_vertex(2).execution_vertices.values():
-        vertex.stream_task.resume_rescale.assert_not_called()
+    for index, vertex in old_graph.job_vertex(2).execution_vertices.items():
+        if index < 2:
+            vertex.stream_task.resume_rescale.assert_called_once_with("resize-1")
+        else:
+            vertex.stream_task.resume_rescale.assert_not_called()
     for job_vertex_id in (1, 3):
         for vertex in old_graph.job_vertex(job_vertex_id).execution_vertices.values():
             vertex.stream_task.resume_rescale.assert_called_once_with("resize-1")
-    for vertex in new_graph.job_vertex(2).execution_vertices.values():
-        vertex.stream_task.resume_rescale.assert_called_once_with("resize-1")
+    for index, vertex in new_graph.job_vertex(2).execution_vertices.items():
+        assert vertex.stream_task is old_graph.job_vertex(2).execution_vertex(index).stream_task
 
 
 def test_checkpoint_gate_release_rejects_a_false_coordinator_response() -> None:
@@ -897,6 +914,9 @@ def test_incomplete_rescale_rollback_stays_fenced_and_forces_global_recovery() -
         coordinator_reconfiguration_attempted=True,
         routes_prepared=True,
         candidate_created=False,
+        runtime_prepare_attempted=False,
+        checkpoint_gate_attempted=True,
+        participants_prepare_attempted=True,
     )
 
     with (

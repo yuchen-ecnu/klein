@@ -505,8 +505,10 @@ class CheckpointCoordinator(AsyncWorker):
     def finish_operator_rescale(self, operation_id: str, committed: bool = False) -> bool:
         """Release checkpoint admission and optionally fence local recovery.
 
-        The committed form is idempotent so a caller can safely retry after a
-        lost RPC response.
+        Both forms are idempotent so a caller can safely retry after a lost RPC
+        response.  An aborted operation that never acquired the gate is also a
+        successful no-op while the coordinator is otherwise idle; this matters
+        when replacement-actor prewarming fails before ``begin`` is attempted.
         """
 
         if self._rescale_operation_id == operation_id:
@@ -517,6 +519,8 @@ class CheckpointCoordinator(AsyncWorker):
                     vertex.id for vertex in self._execution_graph.source_execution_vertices
                 }
                 self._rescale_recovery_required_state_revision = None
+            return True
+        if not committed and self._rescale_operation_id is None:
             return True
         return committed and self._rescale_recovery_fence == operation_id
 

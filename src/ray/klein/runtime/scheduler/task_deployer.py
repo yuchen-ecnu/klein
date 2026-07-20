@@ -8,6 +8,8 @@ StreamTask actors and drives them to RUNNING. Teardown lives in
 — there is no (bool, err) return.
 """
 
+from collections.abc import Iterable
+
 from ray.util.queue import Queue
 
 import ray.klein as klein
@@ -84,15 +86,17 @@ def instantiate_job_vertex(
     job_vertex: ExecutionJobVertex,
     plan: PlacementPlan,
     restore_operation_id: str | None = None,
+    *,
+    vertices: Iterable[ExecutionVertex] | None = None,
 ) -> None:
-    """Create every actor for one physical job vertex.
+    """Create actors for one physical job vertex or an explicit subset.
 
     Actor creation is deployment mechanism, not graph data, so it lives in the
     deployer rather than on :class:`ExecutionJobVertex`.
     """
 
     job_vertex.output_queue = Queue() if job_vertex.operator_spec.collecting else None
-    for vertex in job_vertex.execution_vertices.values():
+    for vertex in _select_vertices(job_vertex, vertices):
         vertex.reset()
         vertex.renew_task_generation()
         vertex.restore_operation_id = restore_operation_id
@@ -168,7 +172,7 @@ def build_descriptor(
         task_name=vertex.name,
         task_generation=vertex.task_generation,
         task_index=vertex.index,
-        parallelism=vertex.concurrency,
+        parallelism=job_vertex.concurrency,
         config=config,
         metric_group=vertex.task_metric_group,
         barrier_split=graph.barrier_splits[vertex.id],
@@ -182,35 +186,67 @@ def build_descriptor(
     )
 
 
-def deploy_job_vertex(job_vertex: ExecutionJobVertex) -> None:
-    """Move one locally-created operator's tasks to DEPLOYED."""
+def deploy_job_vertex(
+    job_vertex: ExecutionJobVertex,
+    *,
+    vertices: Iterable[ExecutionVertex] | None = None,
+) -> None:
+    """Move one locally-created operator's tasks (or a subset) to DEPLOYED."""
 
-    for vertex in job_vertex.execution_vertices.values():
+    for vertex in _select_vertices(job_vertex, vertices):
         if vertex.stream_task is None:
             vertex.transition_to(ExecutionVertexStatus.FAILED)
             raise DeploymentError("deploy operator", f"ExecutionVertex '{vertex}' has not been created yet.")
         vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
 
 
+def wait_job_vertex_created(
+    job_vertex: ExecutionJobVertex,
+    timeout: float,
+    *,
+    vertices: Iterable[ExecutionVertex] | None = None,
+) -> None:
+    """Wait until selected actors are scheduled, constructed and serving RPCs.
+
+    Ray actor creation is asynchronous.  A successful ``ping`` is the readiness
+    fence a rescale coordinator can place before emitting its local barrier, so a
+    resource-starved candidate fails while the old data path is still flowing.
+    """
+
+    selected = _select_vertices(job_vertex, vertices)
+    try:
+        references = []
+        for vertex in selected:
+            if vertex.stream_task is None:
+                raise RuntimeError(f"ExecutionVertex '{vertex}' has not been created yet.")
+            references.append(vertex.stream_task.ping())
+        if references:
+            klein.get(references, timeout=timeout)
+    except Exception as error:
+        raise DeploymentError("await operator readiness", error) from error
+
+
 def start_job_vertex(
     job_vertex: ExecutionJobVertex,
     timeout: float,
     paused_operation_id: str | None = None,
+    *,
+    vertices: Iterable[ExecutionVertex] | None = None,
 ) -> None:
-    """Set up one replacement operator, optionally fenced until commit."""
+    """Set up replacement tasks (or a subset), optionally fenced until commit."""
 
     try:
-        vertices = list(job_vertex.execution_vertices.values())
+        selected = _select_vertices(job_vertex, vertices)
         references = [
             (
                 vertex.stream_task.setup_and_run()
                 if paused_operation_id is None
                 else vertex.stream_task.setup_for_rescale(paused_operation_id)
             )
-            for vertex in vertices
+            for vertex in selected
         ]
         klein.get(references, timeout=timeout)
-        for vertex in vertices:
+        for vertex in selected:
             if vertex.status == ExecutionVertexStatus.DEPLOYED:
                 vertex.transition_to(ExecutionVertexStatus.RUNNING)
     except Exception as error:
@@ -221,11 +257,35 @@ def _task_class_for(vertex: ExecutionVertex) -> type[StreamTask]:
     return SourceStreamTask if vertex.operator_spec.source else StreamTask
 
 
-def _cancel_created_tasks(job_vertex: ExecutionJobVertex) -> None:
-    for vertex in job_vertex.execution_vertices.values():
+def _cancel_created_tasks(
+    job_vertex: ExecutionJobVertex,
+    vertices: Iterable[ExecutionVertex] | None = None,
+) -> None:
+    for vertex in _select_vertices(job_vertex, vertices):
         if vertex.stream_task is not None:
             klein.kill(vertex.stream_task)
             vertex.stream_task = None
+
+
+def _select_vertices(
+    job_vertex: ExecutionJobVertex,
+    vertices: Iterable[ExecutionVertex] | None,
+) -> tuple[ExecutionVertex, ...]:
+    if vertices is None:
+        # Preserve the historical whole-job-vertex path, including lightweight
+        # test doubles used by deployment/teardown callers.
+        return tuple(job_vertex.execution_vertices.values())
+    selected = tuple(vertices)
+    seen: set[int] = set()
+    for vertex in selected:
+        if not isinstance(vertex, ExecutionVertex):
+            raise TypeError("vertex subsets must contain ExecutionVertex values")
+        if job_vertex.execution_vertices.get(vertex.index) is not vertex:
+            raise ValueError(f"ExecutionVertex '{vertex}' does not belong to operator {job_vertex.name}")
+        if vertex.index in seen:
+            raise ValueError(f"duplicate ExecutionVertex index {vertex.index}")
+        seen.add(vertex.index)
+    return selected
 
 
 def deploy_workers(execution_graph: ExecutionGraph) -> None:
