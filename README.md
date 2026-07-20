@@ -141,11 +141,8 @@ For continuous execution, see the
 [Kafka walkthrough](docs/getting-started.md#submit-a-dataflow) and the complete
 [connector catalog](docs/connectors/index.md).
 
-Connect to a Ray cluster and open the build-free operations dashboard with:
-
-```bash
-ray-klein dashboard --host 127.0.0.1 --port 8266
-```
+Klein jobs appear directly in Ray Dashboard under `/#/klein`. A local Ray
+Dashboard uses `http://127.0.0.1:8265/#/klein` by default.
 
 ## Documentation
 
@@ -160,7 +157,7 @@ ray-klein dashboard --host 127.0.0.1 --port 8266
 | [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
 | [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
 | [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
-| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the web Dashboard with operator scaling. |
+| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the native Ray Dashboard integration. |
 | [Troubleshooting](docs/troubleshooting.md) | Installation, planning, connector, watermark, checkpoint, backpressure, and CLI failures. |
 
 Build the documentation locally with:

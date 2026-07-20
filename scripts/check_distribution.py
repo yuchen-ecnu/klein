@@ -12,9 +12,6 @@ WHEEL_REQUIRED_SUFFIXES = {
     "ray/klein/__init__.py",
     "ray/klein/py.typed",
     "ray/klein/_internal/logging.yaml",
-    "ray/klein/observability/dashboard/static/dashboard.css",
-    "ray/klein/observability/dashboard/static/dashboard.js",
-    "ray/klein/observability/dashboard/static/index.html",
 }
 SDIST_REQUIRED_SUFFIXES = {
     "LICENSE",
