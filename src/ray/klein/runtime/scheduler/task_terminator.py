@@ -217,8 +217,6 @@ def _stop_worker(
         if rescale_operation_id is None:
             references.append(vertex.stream_task.stop())
         else:
-            references.append(
-                vertex.stream_task.retire_rescale(rescale_operation_id, timeout)
-            )
+            references.append(vertex.stream_task.retire_rescale(rescale_operation_id, timeout))
         vertex.transition_to(ExecutionVertexStatus.CANCELLING)
     return references

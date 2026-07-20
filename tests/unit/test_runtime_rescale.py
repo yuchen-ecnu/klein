@@ -222,12 +222,8 @@ async def test_checkpoint_gate_and_transient_state_do_not_pollute_global_checkpo
     left = coordinator.operator_rescale_states("resize-1", ExecutionVertexId(2, 0))
     right = coordinator.operator_rescale_states("resize-1", ExecutionVertexId(2, 1))
     assert len(left) == len(right) == 1
-    assert pickle.loads(left[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {
-        0: b"group-0"
-    }
-    assert pickle.loads(right[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {
-        7: b"group-7"
-    }
+    assert pickle.loads(left[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {0: b"group-0"}
+    assert pickle.loads(right[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {7: b"group-7"}
     assert coordinator._latest_operator_states == {}
     assert coordinator._restored_operator_states == {}
     assert coordinator.finish_operator_rescale("resize-1") is True
@@ -250,9 +246,7 @@ def test_rescale_stabilization_sources_share_one_checkpoint_epoch() -> None:
     assert checkpoint.coordinated is True
     assert set(checkpoint.trigger_sources) == sources
     assert checkpoint.required_acknowledgements == len(graph.sink_execution_vertices)
-    assert set(checkpoint.required_committers) == {
-        vertex.id for vertex in graph.sink_execution_vertices
-    }
+    assert set(checkpoint.required_committers) == {vertex.id for vertex in graph.sink_execution_vertices}
 
 
 def test_coordinated_barrier_aligns_direct_inputs_once_with_multiplicity() -> None:
@@ -1438,10 +1432,14 @@ def test_incomplete_rescale_rollback_stays_fenced_and_forces_global_recovery() -
     master._recovery = recovery
     plan = RescalePlan.build(old_graph, 2, 3, "resize-1")
     transaction = RescaleTransaction(plan, phase=RescalePhase.COORDINATOR)
-    placement_transition = NativeStrategy().plan(old_graph).begin_rescale(
-        plan.new_graph,
-        added=plan.delta.added,
-        removed=plan.delta.removed,
+    placement_transition = (
+        NativeStrategy()
+        .plan(old_graph)
+        .begin_rescale(
+            plan.new_graph,
+            added=plan.delta.added,
+            removed=plan.delta.removed,
+        )
     )
 
     with (

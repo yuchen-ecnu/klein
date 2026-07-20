@@ -189,8 +189,7 @@ class ExecutionVertex:
 
     def __repr__(self) -> str:
         return (
-            f"{type(self).__name__}(name={self.display_name!r}, "
-            f"actor_name={self.name!r}, status={self.status.value!r})"
+            f"{type(self).__name__}(name={self.display_name!r}, actor_name={self.name!r}, status={self.status.value!r})"
         )
 
     def __str__(self) -> str:

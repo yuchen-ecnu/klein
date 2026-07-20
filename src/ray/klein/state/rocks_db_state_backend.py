@@ -307,6 +307,7 @@ class RocksDBStateBackend(ManagedStateBackend):
         if self._db is not None:
             self._db.close()
             self._db = None
+
     def _delete_state_key(self, state_key: bytes) -> None:
         self._delete_cf_key("state", state_key)
 

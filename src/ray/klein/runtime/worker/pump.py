@@ -215,10 +215,7 @@ class InboxPump:
         self._checkpoint_seen_inputs[sender] += 1
         self._block_checkpoint_input(channel)
         expected = self._checkpoint_expected_inputs or Counter({sender: 1})
-        return all(
-            self._checkpoint_seen_inputs[input_id] >= count
-            for input_id, count in expected.items()
-        )
+        return all(self._checkpoint_seen_inputs[input_id] >= count for input_id, count in expected.items())
 
     def announce_coordinated_barrier(
         self,

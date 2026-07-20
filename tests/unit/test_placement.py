@@ -116,9 +116,7 @@ def test_failed_pg_reservation_cleans_every_group_and_keeps_only_failed_ownershi
         patch("ray.klein.get", side_effect=TimeoutError("not ready")),
         pytest.raises(PlacementCleanupError) as captured,
     ):
-        PlacementGroupStrategy("PACK", ready_timeout=7).plan(
-            SimpleNamespace(execution_vertices=(first, second, third))
-        )
+        PlacementGroupStrategy("PACK", ready_timeout=7).plan(SimpleNamespace(execution_vertices=(first, second, third)))
 
     assert remove.call_args_list == [call(group) for group in groups]
     retry_plan = captured.value.plan
@@ -170,9 +168,7 @@ def test_placement_rescale_reserves_added_then_releases_only_retired_group():
         patch.object(placement_group_module, "remove_placement_group") as remove,
         patch("ray.klein.get"),
     ):
-        plan = PlacementGroupStrategy("PACK", ready_timeout=7).plan(
-            SimpleNamespace(execution_vertices=(first, second))
-        )
+        plan = PlacementGroupStrategy("PACK", ready_timeout=7).plan(SimpleNamespace(execution_vertices=(first, second)))
         transition = plan.begin_rescale(graph, added=(third,), removed=(second,))
 
         assert transition.candidate_plan.placement_group_for(third.id) is third_group

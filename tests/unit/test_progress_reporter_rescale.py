@@ -100,8 +100,7 @@ async def test_scale_in_retains_removed_cumulative_counts_but_only_lists_live_su
     )
     for field_name in cumulative_fields:
         expected = sum(getattr(handles[index].counts, field_name) for index in range(2)) + sum(
-            getattr(final_removed_counts[ExecutionVertexId(7, index)], field_name)
-            for index in (2, 3)
+            getattr(final_removed_counts[ExecutionVertexId(7, index)], field_name) for index in (2, 3)
         )
         assert getattr(after, field_name) == expected
         assert getattr(after, field_name) >= getattr(before, field_name)
