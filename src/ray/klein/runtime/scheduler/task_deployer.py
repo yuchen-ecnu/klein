@@ -22,12 +22,13 @@ from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
-from ray.klein.runtime.scheduler.errors import DeploymentError
+from ray.klein.runtime.scheduler.errors import DeploymentError, PlacementCleanupError
 from ray.klein.runtime.scheduler.placement import PlacementPlan, PlacementStrategy
 from ray.klein.runtime.scheduler.task_deployment_descriptor import (
     OutputEdgeDescriptor,
     TaskDeploymentDescriptor,
 )
+from ray.klein.runtime.scheduler.vertex_selection import select_vertices
 from ray.klein.runtime.worker.source_stream_task import SourceStreamTask
 from ray.klein.runtime.worker.stream_task import StreamTask
 
@@ -76,7 +77,15 @@ def place_workers(
     except Exception as error:
         for job_vertex in execution_graph.job_vertices.values():
             _cancel_created_tasks(job_vertex)
-        plan.rollback()
+        try:
+            plan.rollback()
+        except Exception as cleanup_error:
+            raise PlacementCleanupError(
+                strategy.name,
+                error,
+                cleanup_error,
+                plan,
+            ) from error
         raise DeploymentError("create workers", error) from error
     return plan
 
@@ -96,7 +105,7 @@ def instantiate_job_vertex(
     """
 
     job_vertex.output_queue = Queue() if job_vertex.operator_spec.collecting else None
-    for vertex in _select_vertices(job_vertex, vertices):
+    for vertex in select_vertices(job_vertex, vertices):
         vertex.reset()
         vertex.renew_task_generation()
         vertex.restore_operation_id = restore_operation_id
@@ -117,7 +126,12 @@ def instantiate_job_vertex(
         bundle_index = -1
         schedule_node_id = None
         if plan.uses_placement_group:
-            placement_group = plan.placement_group
+            placement_group = plan.placement_group_for(vertex.id)
+            if placement_group is None:
+                raise DeploymentError(
+                    "create workers",
+                    f"Placement plan has no reserved group for ExecutionVertex '{vertex}'",
+                )
             bundle_index = plan.bundle_for(vertex.id)
         elif plan.node_by_vertex:
             schedule_node_id = plan.node_for(vertex.id)
@@ -193,7 +207,7 @@ def deploy_job_vertex(
 ) -> None:
     """Move one locally-created operator's tasks (or a subset) to DEPLOYED."""
 
-    for vertex in _select_vertices(job_vertex, vertices):
+    for vertex in select_vertices(job_vertex, vertices):
         if vertex.stream_task is None:
             vertex.transition_to(ExecutionVertexStatus.FAILED)
             raise DeploymentError("deploy operator", f"ExecutionVertex '{vertex}' has not been created yet.")
@@ -213,7 +227,7 @@ def wait_job_vertex_created(
     resource-starved candidate fails while the old data path is still flowing.
     """
 
-    selected = _select_vertices(job_vertex, vertices)
+    selected = select_vertices(job_vertex, vertices)
     try:
         references = []
         for vertex in selected:
@@ -236,7 +250,7 @@ def start_job_vertex(
     """Set up replacement tasks (or a subset), optionally fenced until commit."""
 
     try:
-        selected = _select_vertices(job_vertex, vertices)
+        selected = select_vertices(job_vertex, vertices)
         references = [
             (
                 vertex.stream_task.setup_and_run()
@@ -261,31 +275,10 @@ def _cancel_created_tasks(
     job_vertex: ExecutionJobVertex,
     vertices: Iterable[ExecutionVertex] | None = None,
 ) -> None:
-    for vertex in _select_vertices(job_vertex, vertices):
+    for vertex in select_vertices(job_vertex, vertices):
         if vertex.stream_task is not None:
             klein.kill(vertex.stream_task)
             vertex.stream_task = None
-
-
-def _select_vertices(
-    job_vertex: ExecutionJobVertex,
-    vertices: Iterable[ExecutionVertex] | None,
-) -> tuple[ExecutionVertex, ...]:
-    if vertices is None:
-        # Preserve the historical whole-job-vertex path, including lightweight
-        # test doubles used by deployment/teardown callers.
-        return tuple(job_vertex.execution_vertices.values())
-    selected = tuple(vertices)
-    seen: set[int] = set()
-    for vertex in selected:
-        if not isinstance(vertex, ExecutionVertex):
-            raise TypeError("vertex subsets must contain ExecutionVertex values")
-        if job_vertex.execution_vertices.get(vertex.index) is not vertex:
-            raise ValueError(f"ExecutionVertex '{vertex}' does not belong to operator {job_vertex.name}")
-        if vertex.index in seen:
-            raise ValueError(f"duplicate ExecutionVertex index {vertex.index}")
-        seen.add(vertex.index)
-    return selected
 
 
 def deploy_workers(execution_graph: ExecutionGraph) -> None:

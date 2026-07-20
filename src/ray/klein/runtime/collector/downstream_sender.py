@@ -298,7 +298,14 @@ class DownstreamSender:
                 await asyncio.sleep(backoff)
 
     def _barrier_requests(self, barrier: Barrier) -> list:
-        return [self._target_tasks[index].emit_barrier(barrier) for index in self._control_target_indices]
+        return [
+            self._target_tasks[index].emit_barrier(
+                barrier,
+                sender_vertex_id=self._journal.sender_vertex_id,
+                delivery_channel=self._journal.delivery_channel(index),
+            )
+            for index in self._control_target_indices
+        ]
 
     def send_barrier_sync(self, barrier: Barrier) -> None:
         klein.get(self._barrier_requests(barrier))
@@ -311,6 +318,7 @@ class DownstreamSender:
             self._target_tasks[index].emit_stream_control(
                 control,
                 sender_vertex_id=self._journal.sender_vertex_id,
+                delivery_channel=self._journal.delivery_channel(index),
             )
             for index in self._control_target_indices
         ]

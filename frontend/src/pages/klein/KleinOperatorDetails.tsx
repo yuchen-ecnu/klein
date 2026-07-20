@@ -26,14 +26,19 @@ import {
   formatRate,
 } from "./KleinFormatUtils";
 import { KleinStatCard } from "./KleinStatCard";
+import { KleinOperatorRescaleControl } from "./KleinOperatorRescaleControl";
 
 export const KleinOperatorDetails = ({
   operator,
   inDrawer = false,
+  jobId,
+  onRefresh,
   rayNamespace,
 }: {
   operator?: KleinOperator;
   inDrawer?: boolean;
+  jobId?: string;
+  onRefresh: () => Promise<unknown>;
   rayNamespace?: string;
 }) => {
   if (!operator) {
@@ -77,6 +82,11 @@ export const KleinOperatorDetails = ({
         </Button>
         <StatusChip type="kleinOperator" status={operator.status} />
       </Stack>
+      <KleinOperatorRescaleControl
+        jobId={jobId}
+        onRefresh={onRefresh}
+        operator={operator}
+      />
       <Stack direction="row" flexWrap="wrap" gap={2} sx={{ marginTop: 2 }}>
         <KleinStatCard
           label="Records in / out"

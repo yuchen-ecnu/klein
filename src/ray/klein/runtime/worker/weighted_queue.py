@@ -57,14 +57,49 @@ class WeightedQueue(Generic[T]):
             self._admit(item, weight, size_bytes)
             return True
 
+    async def put_control(self, item: T) -> None:
+        """Admit one bounded protocol control without waiting for data capacity.
+
+        Coordinated checkpoint barriers must be able to overtake capacity
+        contention from ordinary data lanes; otherwise those lanes can keep a
+        full shared inbox and starve the barrier needed to release them. The
+        caller de-duplicates one barrier per physical input, so the temporary
+        over-capacity allowance is bounded by the topology's input count.
+        """
+
+        weight, size_bytes = self._measure(item)
+        async with self._condition:
+            self._admit(item, weight, size_bytes)
+
     async def get(self) -> T:
         async with self._condition:
             await self._condition.wait_for(lambda: bool(self._items))
-            item, weight, size_bytes = self._items.popleft()
-            self._weight -= weight
-            self._bytes -= size_bytes
+            return self._take(0)
+
+    async def get_matching(self, predicate: Callable[[T], bool]) -> T:
+        """Take the first eligible item while retaining blocked lanes in place.
+
+        Aligned checkpoints use this to stop consuming post-barrier records
+        from one input without allowing that lane to escape the queue's row and
+        byte capacity. Other inputs remain selectable, so their barriers can
+        still arrive and complete the alignment.
+        """
+
+        async with self._condition:
+            while True:
+                index = next(
+                    (index for index, (item, _weight, _bytes) in enumerate(self._items) if predicate(item)),
+                    None,
+                )
+                if index is not None:
+                    return self._take(index)
+                await self._condition.wait()
+
+    async def wake_waiters(self) -> None:
+        """Re-evaluate external eligibility predicates without adding an item."""
+
+        async with self._condition:
             self._condition.notify_all()
-            return item
 
     def _measure(self, item: T) -> tuple[int, int]:
         weight = self._weigh(item)
@@ -88,6 +123,14 @@ class WeightedQueue(Generic[T]):
         self._weight += weight
         self._bytes += size_bytes
         self._condition.notify_all()
+
+    def _take(self, index: int) -> T:
+        item, weight, size_bytes = self._items[index]
+        del self._items[index]
+        self._weight -= weight
+        self._bytes -= size_bytes
+        self._condition.notify_all()
+        return item
 
     def qsize(self) -> int:
         """Return queued logical weight (rows for a StreamTask inbox)."""

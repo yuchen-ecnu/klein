@@ -89,8 +89,10 @@ subtask metrics. Separate views expose checkpoint history, per-operator state
 size, barrier alignment and latency, and redacted configuration.
 
 The page also shows each operator's live parallelism and rates and exposes
-guarded local rescaling. The same operation remains available through the
-stable Python state API:
+guarded local rescaling. Select an operator, enter the target parallelism in
+its details drawer, and confirm the change. When rescaling is unavailable, the
+disabled control shows the runtime-provided reason. The same operation remains
+available through the stable Python state API:
 
 ```python
 result = ray.klein.rescale_operator(job_id, operator_id, parallelism=4)
@@ -109,12 +111,11 @@ source stop.
 If a source is itself a direct upstream of the target, that source task pauses
 cooperatively at a record boundary while the local cut is installed. Sources
 elsewhere in the graph keep running. Source operators cannot yet be the rescale
-target, and transactional or collecting sinks are also unsupported in the
-first version. Local rescaling also currently requires the job to have exactly
-one physical source task (one source operator at concurrency 1); this keeps the
-post-commit recovery checkpoint on one consistent source cut until Klein gains
-a shared checkpoint epoch across parallel sources. Unsupported API requests
-are rejected with the runtime-provided reason.
+target, and transactional or collecting sinks are also unsupported. Multiple
+source operators and parallel source subtasks are supported because the local
+cut pauses the target's direct upstream tasks rather than globally stopping
+every source. Unsupported API requests are rejected with the runtime-provided
+reason.
 
 Added actors remain fenced while the local cut is formed. At the cut, retained
 actors prepare their new runtime descriptors and managed state transactionally,
@@ -123,26 +124,46 @@ runtime remains available until topology commit, so a pre-commit failure can
 roll back without changing the retained actor identities. On a scale-in, Klein
 does not create replacements: the removed actors stay fenced and available for
 rollback until commit, and only those removed actors are stopped afterward.
-Existing job-wide PlacementGroup bundles are not resized: added actors use
-Ray's native placement, and bundles made surplus by a scale-in remain reserved
-until the job ends.
+With placement groups enabled, each physical actor owns an independently
+releasable single-bundle group. Scale-out reserves the added groups before the
+barrier, and scale-in releases the retired groups only after their actors stop.
+Retained actors and their reservations never move. This elastic layout trades
+job-wide gang scheduling and FORWARD-affinity bundle grouping for true
+incremental resource allocation and release. It accepts only `PACK` and
+`SPREAD`; `STRICT_PACK` and `STRICT_SPREAD` are rejected because separate
+actor groups cannot preserve a cross-actor strict-placement guarantee.
 
 "Retained" refers to the Ray actor identity, not to the Python operator object.
 A retained actor calls the operator's `build`/`open` lifecycle for a pending
-runtime while its old runtime is still open, then closes the old object after
-commit. Locally rescalable operators must therefore tolerate a short overlap of
-two instances in one actor process; operators that acquire process-exclusive
-ports, leases, devices, or singleton resources should not use local rescaling
-until they provide an overlap-safe lifecycle.
+runtime while its old runtime is still open, then closes the old object in a
+supervised background cleanup after commit. Plain functions and Klein's
+framework operators support this handoff. Callable or lifecycle classes are
+rejected by default because constructors or `open()` may acquire exclusive
+external resources. Such a class may set
+`supports_concurrent_rescale = True` only when two task-local instances can
+safely overlap during rollback-preserving handoff.
 
-The normal scale path does not restart the job. After commit, the checkpoint
-coordinator asks the source to emit an ordinary checkpoint at its next record
-or idle boundary; this stabilizes the new topology without stopping the source.
-The recovery fence is removed only after that checkpoint is durable. If any
-task fails after the local commit but before then, Klein deliberately falls
-back to a consistent global checkpoint recovery instead of restoring one task
-from stale state. If the coordinator is rebuilt during this window, Klein
-re-requests the stabilization checkpoint automatically.
+The normal scale path does not restart the job. Before the committed topology
+is released, the checkpoint coordinator arms every physical source in the
+target operator's physical `CheckpointDomain` set for one shared stabilization
+epoch. A checkpoint domain is a weakly connected component of physical
+execution edges, so independent FORWARD lanes and disconnected branches do not
+needlessly coordinate. Each selected source emits the same checkpoint ID at
+its next record or idle boundary. Barrier ordering forms the consistent cut,
+so sources keep producing while metadata becomes durable. Every task
+temporarily backpressures only a physical input channel whose barrier arrived
+early; other inputs keep draining until their matching barriers arrive, then
+the task snapshots and forwards the barrier once. Blocked records remain
+charged to the bounded inbox rather than moving to an unbounded side buffer;
+the finite set of in-flight control barriers has reserved admission so data
+traffic cannot starve alignment. The component's source offsets and operator
+shards are persisted atomically. Domains outside the target set do not join or
+wait for this epoch. The recovery fence is removed only after durability and
+source-state release. If any task fails after the local commit but before then,
+Klein deliberately falls back to a consistent global checkpoint recovery
+instead of restoring one task from stale state. If the coordinator is rebuilt
+during this window, Klein reclaims the old epoch and re-requests stabilization
+automatically.
 
 The standalone Dashboard has no built-in authentication. Its default listener
 is loopback-only, and a non-loopback listener requires

@@ -23,27 +23,27 @@ class PipelineOptions:
         "pipeline.placement-group.enabled",
         True,
         bool,
-        description="Use a Ray PlacementGroup as the default actor placement: the whole "
-        "job's subtasks are gang-scheduled (all-or-nothing) with FORWARD-affinity "
-        "bundle grouping, removing per-actor fragmentation deadlock. Falls back to "
-        "round-robin then native placement if the group can't be reserved in time.",
+        description="Reserve one independently releasable single-bundle Ray PlacementGroup "
+        "per streaming actor, enabling incremental scale-out reservation and scale-in "
+        "release without moving retained actors. Falls back to round-robin then native "
+        "placement if the groups can't be reserved in time.",
     )
 
     PLACEMENT_GROUP_STRATEGY = ConfigOption(
         "pipeline.placement-group.strategy",
         "PACK",
         str,
-        description="PlacementGroup strategy: PACK (default, minimize cross-node fragmentation "
-        "and keep FORWARD chains local) or SPREAD (avoid single-node hot spots).",
+        description="PlacementGroup strategy passed to each elastic actor group. Only PACK "
+        "and SPREAD are supported and are currently equivalent because each group contains "
+        "one bundle; STRICT_* cannot preserve cross-actor semantics in elastic mode.",
     )
 
     PLACEMENT_GROUP_READY_TIMEOUT = ConfigOption(
         "pipeline.placement-group.ready-timeout",
         timedelta(seconds=120),
         timedelta,
-        description="Max time to wait for the PlacementGroup to be reserved before falling "
-        "back to round-robin/native placement (a fragmented cluster may never "
-        "satisfy the all-or-nothing reservation).",
+        description="Max time to wait for all elastic actor PlacementGroups to be reserved "
+        "before falling back to round-robin/native placement.",
     )
 
     INPUT_BUFFER_PUT_TIMEOUT = ConfigOption(

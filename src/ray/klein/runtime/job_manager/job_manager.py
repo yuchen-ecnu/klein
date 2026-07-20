@@ -30,11 +30,14 @@ from ray.klein.runtime.execution_graph.execution_vertex_status import (
 )
 from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
+from ray.klein.runtime.graph.vertex_id import VertexId
+from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.job_manager.failover_supervisor import FailoverSupervisor
 from ray.klein.runtime.scheduler.job_master import JobMaster
 from ray.klein.runtime.worker.async_worker import AsyncWorker
 
 if TYPE_CHECKING:
+    from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
     from ray.klein.runtime.job_manager.progress import ProgressSnapshot
 
 logger = get_logger(__name__)
@@ -279,10 +282,6 @@ class JobManager(AsyncWorker):
             )
         try:
             resized_logical_graph = self.logical_graph.rescale_operator(vertex_id.index, parallelism)
-            resized_execution_graph = self.execution_graph.rescale_operator(
-                resized_logical_graph,
-                vertex_id.index,
-            )
         except Exception as error:
             return self._rescale_result(
                 started_at_ms,
@@ -294,7 +293,7 @@ class JobManager(AsyncWorker):
                 f"{type(error).__name__}: {error}",
             )
 
-        error = await self._run_operator_rescale(resized_execution_graph, resized_logical_graph)
+        error = await self._run_operator_rescale(vertex_id.index, parallelism, resized_logical_graph)
         return self._rescale_result(
             started_at_ms,
             vertex_id.index,
@@ -305,7 +304,11 @@ class JobManager(AsyncWorker):
             error,
         )
 
-    def _resolve_rescale_request(self, operator_id: int | str, parallelism: int) -> tuple[object, object]:
+    def _resolve_rescale_request(
+        self,
+        operator_id: int | str,
+        parallelism: int,
+    ) -> tuple[VertexId, VertexSpec]:
         if self._rescale_in_progress:
             raise RuntimeError("another operator rescale is already in progress")
         if self._job_status != JobStatus.RUNNING:
@@ -314,17 +317,42 @@ class JobManager(AsyncWorker):
             raise ValueError("parallelism must be a positive integer")
         if self.logical_graph is None or self.execution_graph is None or self.job_master is None:
             raise RuntimeError("job topology is unavailable")
-        if any(vertex.status != ExecutionVertexStatus.RUNNING for vertex in self.execution_graph.execution_vertices):
-            raise RuntimeError("operator rescale requires every task instance to be RUNNING")
         vertex_id = self.logical_graph.resolve_operator(operator_id)
+        unavailable = [
+            vertex
+            for vertex in self._rescale_domain_vertices(vertex_id.index)
+            if vertex.status != ExecutionVertexStatus.RUNNING
+        ]
+        if unavailable:
+            names = ", ".join(vertex.name for vertex in unavailable)
+            raise RuntimeError(
+                "operator rescale requires every task instance in the target checkpoint domain "
+                f"to be RUNNING; unavailable: {names}"
+            )
         logical_vertex = self.logical_graph.get(vertex_id)
         if logical_vertex.concurrency != parallelism:
             error = self._unsupported_rescale_reason(logical_vertex, parallelism)
-            if error is None:
-                error = self._rescale_source_topology_reason()
             if error is not None:
                 raise ValueError(error)
         return vertex_id, logical_vertex
+
+    def _rescale_domain_vertices(self, operator_id: int) -> tuple["ExecutionVertex", ...]:
+        """Return the physical checkpoint scope that must be live for rescale."""
+
+        if self.execution_graph is None:
+            return ()
+        vertex_ids = {
+            execution_vertex_id
+            for domain in self.execution_graph.checkpoint_domains_for_job_vertex(operator_id)
+            for execution_vertex_id in domain.vertex_ids
+        }
+        return tuple(
+            self.execution_graph.execution_vertex(execution_vertex_id)
+            for execution_vertex_id in sorted(
+                vertex_ids,
+                key=lambda item: (item.job_vertex_id, item.index),
+            )
+        )
 
     def _unsupported_rescale_reason(self, logical_vertex, parallelism: int) -> str | None:
         max_parallelism = (self._job_config or self.config).get(StateOptions.MAX_PARALLELISM)
@@ -336,47 +364,71 @@ class JobManager(AsyncWorker):
             return "transactional sink operators cannot be locally rescaled"
         if logical_vertex.operator.collecting:
             return "collecting sink operators cannot be locally rescaled"
-        return None
-
-    def _rescale_source_topology_reason(self) -> str | None:
-        if self.execution_graph is None:
-            return "operator topology is unavailable"
-        source_count = len(self.execution_graph.source_execution_vertices)
-        if source_count != 1:
+        if not logical_vertex.operator.supports_concurrent_rescale:
             return (
-                "local rescaling currently requires the job to have exactly one physical source "
-                f"task; found {source_count}"
+                "operator lifecycle does not allow an old and pending runtime to overlap; "
+                "set supports_concurrent_rescale=True only when its external resources support handoff"
             )
         return None
 
     async def _run_operator_rescale(
         self,
-        execution_graph: ExecutionGraph,
+        target_id: int,
+        parallelism: int,
         logical_graph: LogicalGraph,
     ) -> str | None:
         self._rescale_in_progress = True
         self._rescale_done.clear()
+        # Observability is best-effort and must never reject a valid topology
+        # change.  Actor RPC failures are already represented by cached/zero
+        # counts inside ProgressReporter; guard structural failures as well.
         try:
-            await self.run_exclusive(self.job_master.rescale_operator, execution_graph, uuid.uuid4().hex)
+            await self.progress_snapshot()
+        except Exception:
+            logger.debug("Unable to capture progress before operator rescale", exc_info=True)
+        try:
+            await self.run_exclusive(
+                self.job_master.rescale_operator,
+                target_id,
+                parallelism,
+                uuid.uuid4().hex,
+            )
         except Exception as error:
             # The topology commit precedes checkpoint-gate release. If that
             # post-commit RPC fails, JobMaster deliberately retains the new
             # graph and forces global recovery; keep health reporting and the
             # Dashboard on that same committed graph even though the request
             # itself reports FAILED.
-            if self.job_master.execution_graph is execution_graph:
+            committed_graph = self.job_master.execution_graph
+            if committed_graph.job_vertex(target_id).concurrency == parallelism:
                 self.logical_graph = logical_graph
-                self.execution_graph = execution_graph
-                self._progress_reporter = None
+                self.execution_graph = committed_graph
+                await self._replace_progress_execution_graph(committed_graph)
             return f"{type(error).__name__}: {error}"
         else:
+            committed_graph = self.job_master.execution_graph
             self.logical_graph = logical_graph
-            self.execution_graph = execution_graph
-            self._progress_reporter = None
+            self.execution_graph = committed_graph
+            await self._replace_progress_execution_graph(committed_graph)
             return None
         finally:
             self._rescale_in_progress = False
             self._rescale_done.set()
+
+    async def _replace_progress_execution_graph(self, execution_graph: ExecutionGraph) -> None:
+        retired_counts = self.job_master.take_retired_rescale_counts()
+        if self._progress_reporter is None:
+            return
+        try:
+            await self._progress_reporter.replace_execution_graph(
+                execution_graph,
+                retired_counts,
+            )
+        except Exception:
+            # Keep a committed data-plane transaction successful even if the
+            # best-effort view cannot migrate its cache.
+            logger.warning("Unable to retain progress counters across operator rescale", exc_info=True)
+            self._progress_reporter = None
 
     def _rescale_result(
         self,
@@ -550,18 +602,19 @@ class JobManager(AsyncWorker):
         checkpoint = await self._checkpoint_dashboard_snapshot()
         rescale_stabilizing = bool(checkpoint.get("rescale_recovery_fenced", False))
         operators = [dashboard_value(operator) for operator in progress.operators]
-        topology_rescalable = self.execution_graph is not None and all(
-            vertex.status == ExecutionVertexStatus.RUNNING for vertex in self.execution_graph.execution_vertices
-        )
         for operator in operators:
             job_vertex = (
                 None if self.execution_graph is None else self.execution_graph.find_job_vertex(operator["op_id"])
             )
+            domain_rescalable = job_vertex is not None and all(
+                vertex.status == ExecutionVertexStatus.RUNNING
+                for vertex in self._rescale_domain_vertices(operator["op_id"])
+            )
             reason = None
             if job_vertex is None:
                 reason = "Operator topology is unavailable."
-            elif not topology_rescalable:
-                reason = "Every task instance must be RUNNING before an operator can be rescaled."
+            elif not domain_rescalable:
+                reason = "Every task instance in this operator's CheckpointDomain must be RUNNING."
             elif rescale_stabilizing:
                 reason = "The previous operator rescale is waiting for its stabilization checkpoint."
             elif job_vertex.operator_spec.source:
@@ -570,8 +623,8 @@ class JobManager(AsyncWorker):
                 reason = "Transactional sink operators cannot be locally rescaled."
             elif job_vertex.operator_spec.collecting:
                 reason = "Collecting sink operators cannot be locally rescaled."
-            elif source_reason := self._rescale_source_topology_reason():
-                reason = f"{source_reason[0].upper()}{source_reason[1:]}."
+            elif not job_vertex.operator_spec.supports_concurrent_rescale:
+                reason = "The operator lifecycle has not opted into concurrent runtime handoff."
             elif self._rescale_in_progress:
                 reason = "Another operator rescale is already in progress."
             operator["can_rescale"] = reason is None and self._job_status == JobStatus.RUNNING

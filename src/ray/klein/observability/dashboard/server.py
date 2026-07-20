@@ -233,10 +233,18 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self._state_call(_rescale)
 
     def _do_klein_post(self, segments: list[str]) -> bool:
-        if len(segments) != 5 or segments[:3] != ["api", "klein", "jobs"] or segments[4] != "cancel":
-            return False
-        self._cancel_job(segments[3])
-        return True
+        if len(segments) == 5 and segments[:3] == ["api", "klein", "jobs"] and segments[4] == "cancel":
+            self._cancel_job(segments[3])
+            return True
+        if (
+            len(segments) == 7
+            and segments[:3] == ["api", "klein", "jobs"]
+            and segments[4] == "operators"
+            and segments[6] == "rescale"
+        ):
+            self._rescale_operator(segments[3], segments[5])
+            return True
+        return False
 
     def _cancel_job(self, job_id: str) -> None:
         if not self._same_origin_request():

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 import uuid
-from copy import copy
 from typing import ClassVar
 
 from ray.klein.config.configuration import Configuration
@@ -28,7 +27,12 @@ class ExecutionVertex:
         config: Configuration,
         task_metric_group: TaskMetricGroup,
     ) -> None:
-        self.name = f"{vertex_name} ({index + 1}/{concurrency})"
+        self._vertex_name = vertex_name
+        # ``name`` is the stable Ray actor/routing identity.  Total parallelism
+        # is mutable topology metadata, so including it here would leave a
+        # retained actor named ``(1/2)`` after a 2 -> 4 rescale.  Keep the
+        # topology-aware form in ``display_name`` instead.
+        self.name = f"{vertex_name} ({index + 1})"
         self.resources = vertex_resources
         self.id: ExecutionVertexId = ExecutionVertexId(vertex_id, index)
         self.index = index
@@ -137,9 +141,8 @@ class ExecutionVertex:
         The wrapper deliberately preserves the immutable actor identity (physical
         vertex id, Ray actor name and generation), actor handle, status and metric
         group.  Only graph-owned attributes that describe the resized logical
-        operator are rebound.  A shallow clone is sufficient because those shared
-        runtime objects are intentionally retained, while scalar status writes on
-        the returned wrapper no longer mutate the pre-rescale graph.
+        operator are rebound.  Runtime state is copied explicitly so a future
+        mutable field cannot accidentally become shared through a shallow clone.
         """
 
         if isinstance(concurrency, bool) or not isinstance(concurrency, int):
@@ -153,12 +156,28 @@ class ExecutionVertex:
         if not isinstance(config, Configuration):
             raise TypeError("config must be Configuration")
 
-        rebound = copy(self)
-        rebound.concurrency = concurrency
-        rebound.resources = vertex_resources
-        rebound.operator_spec = operator_spec
-        rebound.config = config
+        rebound = ExecutionVertex(
+            vertex_id=self.id.job_vertex_id,
+            vertex_name=self._vertex_name,
+            vertex_resources=vertex_resources,
+            index=self.index,
+            concurrency=concurrency,
+            operator_spec=operator_spec,
+            config=config,
+            task_metric_group=self.task_metric_group,
+        )
+        rebound.stream_task = self.stream_task
+        rebound.task_generation = self.task_generation
+        rebound.restore_operation_id = self.restore_operation_id
+        rebound._status = self._status
+        rebound._error_message = self._error_message
         return rebound
+
+    @property
+    def display_name(self) -> str:
+        """Human-readable task label for the current topology."""
+
+        return f"{self._vertex_name} ({self.index + 1}/{self.concurrency})"
 
     @property
     def status(self) -> ExecutionVertexStatus:
@@ -169,7 +188,10 @@ class ExecutionVertex:
         return self._error_message
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(name={self.name!r}, status={self.status.value!r})"
+        return (
+            f"{type(self).__name__}(name={self.display_name!r}, "
+            f"actor_name={self.name!r}, status={self.status.value!r})"
+        )
 
     def __str__(self) -> str:
-        return self.name
+        return self.display_name
