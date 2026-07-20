@@ -29,6 +29,25 @@ class PlacementError(DeploymentError):
         super().__init__("create workers", f"placement '{strategy}' infeasible: {cause}")
 
 
+class PlacementCleanupError(DeploymentError):
+    """A placement failure left a retryable reservation plan behind."""
+
+    def __init__(
+        self,
+        strategy: str,
+        cause: object,
+        cleanup_error: Exception,
+        plan: object,
+    ) -> None:
+        self.strategy = strategy
+        self.cleanup_error = cleanup_error
+        self.plan = plan
+        super().__init__(
+            "create workers",
+            f"placement '{strategy}' failed ({cause}) and reservation cleanup is incomplete: {cleanup_error}",
+        )
+
+
 class CoordinatorError(ControlPlaneError):
     """The checkpoint coordinator could not be opened, started, or recovered."""
 

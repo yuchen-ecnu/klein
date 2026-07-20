@@ -14,6 +14,7 @@ from ray.exceptions import ActorUnavailableError
 
 import ray
 import ray.klein as klein
+from ray.klein._internal.deadline import Deadline
 from ray.klein._internal.logging import get_logger, log_event
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.runtime.actor import KleinActorHandle
@@ -133,7 +134,7 @@ class RecoveryManager:
             )
             return False
 
-    def clear_stable_rescale_metadata(self) -> bool:
+    def clear_stable_rescale_metadata(self, timeout: float | None = None) -> bool:
         """Drop graph-local rescale identities after their fence is durable."""
 
         marked = tuple(
@@ -144,24 +145,33 @@ class RecoveryManager:
         coordinator = self._coordinator_provider()
         if coordinator is None:
             return False
+        deadline = Deadline(self._rpc_timeout if timeout is None else timeout)
         try:
-            if klein.get(coordinator.needs_recovery(), timeout=self._rpc_timeout):
+            if klein.get(
+                coordinator.needs_recovery(),
+                timeout=deadline.step(self._rpc_timeout),
+            ):
                 return False
-            return self._clear_stable_rescale_metadata(coordinator)
+            return self._clear_stable_rescale_metadata(coordinator, deadline)
         except Exception:
             logger.warning("Could not refresh operator-rescale recovery metadata", exc_info=True)
             return False
 
-    def _clear_stable_rescale_metadata(self, coordinator: KleinActorHandle) -> bool:
+    def _clear_stable_rescale_metadata(
+        self,
+        coordinator: KleinActorHandle,
+        deadline: Deadline | None = None,
+    ) -> bool:
         marked = tuple(
             vertex for vertex in self._execution_graph.execution_vertices if vertex.restore_operation_id is not None
         )
         if not marked:
             return True
+        deadline = Deadline(self._rpc_timeout) if deadline is None else deadline
         try:
             fenced = klein.get(
                 coordinator.operator_rescale_recovery_fenced(),
-                timeout=self._rpc_timeout,
+                timeout=deadline.step(self._rpc_timeout),
             )
         except Exception:
             logger.warning("Could not read the operator-rescale recovery fence", exc_info=True)
@@ -175,12 +185,27 @@ class RecoveryManager:
     def _request_stabilization_checkpoint_after_recovery(self) -> None:
         """Re-arm the one-shot source request lost with coordinator inflight state."""
 
-        if not any(vertex.restore_operation_id is not None for vertex in self._execution_graph.execution_vertices):
+        marked_job_vertex_ids = {
+            vertex.id.job_vertex_id
+            for vertex in self._execution_graph.execution_vertices
+            if vertex.restore_operation_id is not None
+        }
+        if not marked_job_vertex_ids:
             return
+        affected_source_ids = {
+            source_id
+            for job_vertex_id in marked_job_vertex_ids
+            for domain in self._execution_graph.checkpoint_domains_for_job_vertex(job_vertex_id)
+            for source_id in domain.source_vertex_ids
+        }
         requests = [
             vertex.stream_task.request_checkpoint()
             for vertex in self._execution_graph.source_execution_vertices
-            if vertex.stream_task is not None and vertex.status == ExecutionVertexStatus.RUNNING
+            if (
+                vertex.id in affected_source_ids
+                and vertex.stream_task is not None
+                and vertex.status == ExecutionVertexStatus.RUNNING
+            )
         ]
         if not requests:
             return

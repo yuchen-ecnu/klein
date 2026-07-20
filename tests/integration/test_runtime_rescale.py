@@ -134,7 +134,9 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         _ControlledSequenceSource,
         fn_constructor_args=[input_queue],
         bounded=False,
-        concurrency=1,
+        # Two physical source subtasks exercise the shared post-rescale
+        # checkpoint epoch and direct-input barrier alignment in real Ray.
+        concurrency=2,
         num_cpus=0.1,
         name="RescaleSource",
     ).map(

@@ -56,7 +56,7 @@ class RocksDBStateBackend(ManagedStateBackend):
         self._families: dict[str, Any] = {}
         self._handles: dict[str, Any] = {}
         if reset:
-            shutil.rmtree(self._path, ignore_errors=True)
+            _remove_tree_if_present(self._path)
         self._open_db()
 
     @property
@@ -205,7 +205,7 @@ class RocksDBStateBackend(ManagedStateBackend):
                 _extract_checkpoint_archive(archive, staged_path)
 
             self._close_db()
-            shutil.rmtree(self._path, ignore_errors=True)
+            _remove_tree_if_present(self._path)
             shutil.move(str(staged_path), self._path)
         self._open_db()
 
@@ -252,7 +252,7 @@ class RocksDBStateBackend(ManagedStateBackend):
         from rocksdict import WriteBatch
 
         self._close_db()
-        shutil.rmtree(self._path, ignore_errors=True)
+        _remove_tree_if_present(self._path)
         self._open_db()
         batch = WriteBatch(raw_mode=True)
         entries = 0
@@ -307,7 +307,6 @@ class RocksDBStateBackend(ManagedStateBackend):
         if self._db is not None:
             self._db.close()
             self._db = None
-
     def _delete_state_key(self, state_key: bytes) -> None:
         self._delete_cf_key("state", state_key)
 
@@ -329,6 +328,15 @@ class RocksDBStateBackend(ManagedStateBackend):
     def _require_current_key(self) -> None:
         if not self._key_set:
             raise RuntimeError("current key is not set")
+
+
+def _remove_tree_if_present(path: str) -> None:
+    """Remove a backend directory idempotently without hiding I/O failures."""
+
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        return
 
 
 def _extract_checkpoint_archive(

@@ -7,12 +7,14 @@ the execution graph, so it does not participate in the single-writer invariant â
 extracted from JobManager so the supervisor class stays focused on lifecycle.
 """
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Callable, Mapping
 from dataclasses import fields
 
 import ray.klein as klein
 from ray.klein._internal.logging import get_logger
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
+from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
@@ -25,6 +27,21 @@ from ray.klein.runtime.job_manager.progress import (
 )
 
 logger = get_logger(__name__)
+
+_CUMULATIVE_COUNT_FIELDS = frozenset(
+    {
+        "rows_in",
+        "rows_out",
+        "bytes_in",
+        "bytes_out",
+        "busy_ns",
+        "backpressure_ns",
+        "backpressure_events",
+        "barriers_in",
+        "barriers_out",
+    }
+)
+_PROGRESS_RPC_TIMEOUT_SECONDS = 2.0
 
 
 class ProgressReporter:
@@ -39,13 +56,25 @@ class ProgressReporter:
         self._execution_graph = execution_graph
         self._is_job_running = is_job_running
         self._restart_window = restart_window
-        # Last good per-subtask counts, keyed by object identity. A subtask whose progress
+        # Last good per-subtask counts, keyed by stable physical identity. A subtask whose progress
         # RPC fails mid-restart falls back to these so its row holds its numbers
         # instead of dropping to zero.
-        self._last_counts: dict[int, SubtaskCounts] = {}
+        self._last_counts: dict[ExecutionVertexId, SubtaskCounts] = {}
+        # Scale-in removes live subtasks, but their cumulative work remains part
+        # of the operator's lifetime totals.  Gauges (queue depth/capacity,
+        # checkpoint latency and state size) are deliberately not retained.
+        self._retired_counts: dict[int, SubtaskCounts] = {}
+        # Dashboard polling and a rescale RPC may interleave on a Ray async
+        # actor.  Topology replacement must not race an in-flight old-graph
+        # probe or it could retire a stale sample.
+        self._lock = asyncio.Lock()
 
     async def snapshot(self) -> ProgressSnapshot:
         """Per-operator progress + failover state. Best-effort and read-only."""
+        async with self._lock:
+            return await self._snapshot()
+
+    async def _snapshot(self) -> ProgressSnapshot:
         job_running = self._is_job_running()
         job_vertices = list(self._execution_graph.job_vertices.values())
         vertices_by_job_vertex = [list(job_vertex.execution_vertices.values()) for job_vertex in job_vertices]
@@ -73,17 +102,55 @@ class ProgressReporter:
             window_seconds=window_seconds,
         )
 
-    async def _probe_counts(self, vertices_by_job_vertex) -> tuple[dict, set[int]]:
+    async def replace_execution_graph(
+        self,
+        execution_graph: ExecutionGraph,
+        retired_counts: Mapping[ExecutionVertexId, SubtaskCounts] | None = None,
+    ) -> None:
+        """Adopt a resized graph and retain cumulative counts of removed tasks."""
+
+        async with self._lock:
+            final_counts = {} if retired_counts is None else retired_counts
+            old_vertex_ids = {vertex.id for vertex in self._execution_graph.execution_vertices}
+            new_vertex_ids = {vertex.id for vertex in execution_graph.execution_vertices}
+            for vertex_id in old_vertex_ids - new_vertex_ids:
+                counts = final_counts.get(vertex_id)
+                cached_counts = self._last_counts.pop(vertex_id, None)
+                if counts is None:
+                    counts = cached_counts
+                if counts is None:
+                    continue
+                retired = self._cumulative_counts(counts)
+                previous = self._retired_counts.get(vertex_id.job_vertex_id, SubtaskCounts())
+                self._retired_counts[vertex_id.job_vertex_id] = self._sum_counts([previous, retired])
+            live_job_vertex_ids = set(execution_graph.job_vertices)
+            self._retired_counts = {
+                job_vertex_id: counts
+                for job_vertex_id, counts in self._retired_counts.items()
+                if job_vertex_id in live_job_vertex_ids
+            }
+            self._execution_graph = execution_graph
+
+    async def _probe_counts(
+        self, vertices_by_job_vertex
+    ) -> tuple[dict[ExecutionVertexId, SubtaskCounts], set[ExecutionVertexId]]:
         probed_vertices = [
             vertex for vertices in vertices_by_job_vertex for vertex in vertices if vertex.stream_task is not None
         ]
         requests = [vertex.stream_task.progress_counts() for vertex in probed_vertices]
-        results = await klein.aget(requests, return_exceptions=True) if requests else []
+        results = (
+            await asyncio.gather(
+                *(klein.aget(request, timeout=_PROGRESS_RPC_TIMEOUT_SECONDS) for request in requests),
+                return_exceptions=True,
+            )
+            if requests
+            else []
+        )
 
         counts_by_vertex = {}
-        failed_vertices: set[int] = set()
+        failed_vertices: set[ExecutionVertexId] = set()
         for vertex, result in zip(probed_vertices, results, strict=True):
-            vertex_key = id(vertex)
+            vertex_key = vertex.id
             if isinstance(result, Exception):
                 failed_vertices.add(vertex_key)
                 counts_by_vertex[vertex_key] = self._last_counts.get(vertex_key, SubtaskCounts())
@@ -101,12 +168,14 @@ class ProgressReporter:
         job_running: bool,
     ) -> OperatorProgress:
         statuses = [vertex.status for vertex in vertices]
-        counts = [counts_by_vertex.get(id(vertex), SubtaskCounts()) for vertex in vertices]
-        totals = self._sum_counts(counts)
-        failed_progress_requests = sum(1 for vertex in vertices if id(vertex) in failed_vertices)
+        counts = [counts_by_vertex.get(vertex.id, SubtaskCounts()) for vertex in vertices]
+        live_totals = self._sum_counts(counts)
+        retired = self._retired_counts.get(job_vertex.id, SubtaskCounts())
+        totals = self._sum_counts([live_totals, retired])
+        failed_progress_requests = sum(1 for vertex in vertices if vertex.id in failed_vertices)
         resources = job_vertex.resources
         subtasks = tuple(
-            self._subtask_progress(vertex, count, id(vertex) in failed_vertices, job_running)
+            self._subtask_progress(vertex, count, vertex.id in failed_vertices, job_running)
             for vertex, count in zip(vertices, counts, strict=True)
         )
         return OperatorProgress(
@@ -156,6 +225,16 @@ class ProgressReporter:
             for field in fields(SubtaskCounts)
         }
         return SubtaskCounts(**totals)
+
+    @staticmethod
+    def _cumulative_counts(counts: SubtaskCounts) -> SubtaskCounts:
+        return SubtaskCounts(
+            **{
+                field.name: getattr(counts, field.name)
+                for field in fields(SubtaskCounts)
+                if field.name in _CUMULATIVE_COUNT_FIELDS
+            }
+        )
 
     @classmethod
     def _subtask_progress(
