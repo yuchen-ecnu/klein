@@ -49,6 +49,7 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
         self._state_size_metric: Gauge | None = None
         self._snapshot_duration_metric: Histogram | None = None
         self._restore_duration_metric: Histogram | None = None
+        self._deferred_restore_metrics: tuple[int, float] | None = None
 
     @property
     def state_context(self) -> KeyedStateContext:
@@ -79,7 +80,7 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
         self._backend = create_state_backend(
             runtime_context.config,
             job_id,
-            runtime_context.task_name,
+            runtime_context.state_backend_task_name,
             reset=True,
         )
         self._timer_service = TimerService(self._backend)
@@ -172,7 +173,12 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
     def restore_state(self, snapshot: bytes) -> None:
         self.restore_state_fragments((snapshot,))
 
-    def restore_state_fragments(self, snapshots: Iterable[bytes]) -> None:
+    def restore_state_fragments(
+        self,
+        snapshots: Iterable[bytes],
+        *,
+        publish_metrics: bool = True,
+    ) -> None:
         """Restore the key groups owned after a parallelism change.
 
         Every previous subtask snapshot may be supplied. Only groups in this
@@ -188,10 +194,27 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
                 return
             self._restore_key_group_payloads(payloads)
         finally:
-            if self._state_size_metric is not None:
-                self._state_size_metric.set(sum(map(len, serialized)))
-            if self._restore_duration_metric is not None:
-                self._restore_duration_metric.observe_elapsed(started_at)
+            sample = (sum(map(len, serialized)), (time.monotonic() - started_at) * 1000)
+            if publish_metrics:
+                self._publish_restore_metrics(sample)
+            else:
+                self._deferred_restore_metrics = sample
+
+    def publish_deferred_restore_metrics(self) -> None:
+        """Publish metrics captured while a pending rescale runtime was hidden."""
+
+        sample = self._deferred_restore_metrics
+        if sample is None:
+            return
+        self._publish_restore_metrics(sample)
+        self._deferred_restore_metrics = None
+
+    def _publish_restore_metrics(self, sample: tuple[int, float]) -> None:
+        state_size, duration_ms = sample
+        if self._state_size_metric is not None:
+            self._state_size_metric.set(state_size)
+        if self._restore_duration_metric is not None:
+            self._restore_duration_metric.observe(duration_ms)
 
     def _restore_key_group_payloads(self, payloads: list[dict[str, Any]]) -> None:
         selected: dict[int, bytes] = {}
@@ -234,6 +257,7 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
             self._backend = None
             self._timer_service = None
             self._state_context = None
+            self._deferred_restore_metrics = None
             super().close()
 
     def on_idle(self) -> None:

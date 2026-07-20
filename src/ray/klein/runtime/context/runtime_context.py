@@ -21,6 +21,7 @@ class _BaseRuntimeContext(RuntimeContext):
         metric_group: MetricGroup,
         runtime_info: RuntimeInfo,
         job_id: str = "default",
+        state_backend_task_name: str | None = None,
     ) -> None:
         self._task_name = task_name
         self._task_index = task_index
@@ -29,6 +30,11 @@ class _BaseRuntimeContext(RuntimeContext):
         self._metric_group = metric_group
         self._runtime_info = runtime_info
         self._job_id = job_id
+        # Public task identity stays stable while a retained actor prepares a
+        # second runtime during rescaling. Managed local state needs a distinct
+        # filesystem identity so opening the pending RocksDB backend cannot reset
+        # the still-live backend owned by the old runtime.
+        self._state_backend_task_name = state_backend_task_name or task_name
 
     @property
     def task_name(self) -> str:
@@ -58,6 +64,12 @@ class _BaseRuntimeContext(RuntimeContext):
     def job_id(self) -> str:
         return self._job_id
 
+    @property
+    def state_backend_task_name(self) -> str:
+        """Internal local-backend identity, independent of the public task name."""
+
+        return self._state_backend_task_name
+
 
 class TaskRuntimeContext(_BaseRuntimeContext, StreamRuntimeContext):
     """Streaming task context with checkpoint support."""
@@ -72,6 +84,7 @@ class TaskRuntimeContext(_BaseRuntimeContext, StreamRuntimeContext):
         checkpoint_strategy: CheckpointStrategy,
         runtime_info: RuntimeInfo,
         job_id: str = "default",
+        state_backend_task_name: str | None = None,
     ) -> None:
         super().__init__(
             task_name,
@@ -81,6 +94,7 @@ class TaskRuntimeContext(_BaseRuntimeContext, StreamRuntimeContext):
             metric_group,
             runtime_info,
             job_id,
+            state_backend_task_name,
         )
         self._checkpoint_strategy = checkpoint_strategy
 
@@ -120,4 +134,5 @@ class OperatorRuntimeContext(TaskRuntimeContext):
             task_runtime_context.checkpoint_strategy,
             task_runtime_context.runtime_info,
             task_runtime_context.job_id,
+            task_runtime_context.state_backend_task_name,
         )
