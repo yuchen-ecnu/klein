@@ -98,10 +98,12 @@ def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, forc
 def _force_kill_survivors(execution_graph: ExecutionGraph) -> None:
     """Phase 2: kill any actor still ALIVE and reconcile vertex status."""
     namespace = execution_graph.namespace
+    survivors: list[str] = []
     for vertex in execution_graph.execution_vertices:
         if klein.get_actor_status(vertex.name, namespace=namespace) != StreamTaskStatus.NOT_EXIST:
             logger.debug("Force-killing stream task %s", vertex.name)
             if not _kill_actor_with_retry(vertex.name, namespace):
+                survivors.append(vertex.name)
                 continue
         # Only cancel vertices not already globally-terminal: a FAILED (logical
         # failure) or FINISHED vertex must keep that status — forcing CANCELLED
@@ -110,6 +112,8 @@ def _force_kill_survivors(execution_graph: ExecutionGraph) -> None:
         if vertex.status != ExecutionVertexStatus.CREATED and not vertex.status.is_terminal:
             vertex.transition_to(ExecutionVertexStatus.CANCELLED)
         vertex.stream_task = None
+    if survivors:
+        raise RuntimeError(f"failed to stop job actor(s): {survivors}")
 
 
 def _kill_actor_with_retry(name: str, namespace: str) -> bool:
