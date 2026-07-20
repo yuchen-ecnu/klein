@@ -72,10 +72,7 @@ const {
 const NODE_WIDTH = 244;
 const NODE_HEIGHT = 124;
 const RANK_SEPARATION = 72;
-// Flink inherits Ant Design's light-theme text hierarchy inside JobGraph
-// nodes: strong text at 85% black and metric labels at 45% black.
-const NODE_TEXT_COLOR = "rgba(0, 0, 0, 0.85)";
-const NODE_SECONDARY_TEXT_COLOR = "rgba(0, 0, 0, 0.45)";
+const NODE_TEXT_COLOR = "#111820";
 
 const nodeTypes: XYFlow.NodeTypes = {
   kleinOperator: OperatorNode,
@@ -232,11 +229,13 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
       ? Math.min(100, (operator.queued / operator.capacity) * 100)
       : 0;
   const pressureColor =
-    backpressure >= 50 || queuePercent >= 90
-      ? "#D9363E"
-      : backpressure > 0 || queuePercent >= 60
-      ? "#D97706"
-      : "#2F80C9";
+    backpressure >= queuePercent && backpressure > 0
+      ? "#C28A21"
+      : queuePercent >= 90
+      ? "#CF5D57"
+      : queuePercent >= 60
+      ? "#D09A38"
+      : "#729BC5";
 
   return (
     <Paper
@@ -250,15 +249,21 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
       sx={{
         backgroundColor: nodeColors.background,
         border: `1px solid ${nodeColors.border}`,
-        borderRadius: 0,
-        boxShadow: "none",
+        borderRadius: 0.75,
+        boxShadow: selected
+          ? "0 8px 18px rgba(15, 23, 42, 0.16)"
+          : "0 2px 7px rgba(15, 23, 42, 0.12)",
         color: NODE_TEXT_COLOR,
         height: NODE_HEIGHT,
+        outline: selected ? "3px solid rgba(71, 85, 105, 0.2)" : "none",
+        outlineOffset: 2,
         overflow: "hidden",
         transition:
-          "background-color 160ms ease, border-color 120ms ease, transform 120ms ease",
-        transform: selected ? "scale(1.2)" : "scale(1)",
+          "background-color 160ms ease, border-color 120ms ease, box-shadow 120ms ease, outline-color 120ms ease",
         width: NODE_WIDTH,
+        "&:hover": {
+          boxShadow: "0 7px 16px rgba(15, 23, 42, 0.16)",
+        },
       }}
     >
       <FlowHandle
@@ -277,6 +282,7 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         sx={{
           alignItems: "center",
           backgroundColor: "transparent",
+          borderBottom: "1px solid rgba(17, 24, 32, 0.14)",
           display: "flex",
           height: 38,
           paddingX: 1.25,
@@ -303,9 +309,9 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         </Typography>
         <StatusChip
           style={{
-            backgroundColor: "transparent",
-            borderColor: "rgba(0, 0, 0, 0.2)",
-            color: NODE_SECONDARY_TEXT_COLOR,
+            backgroundColor: "rgba(255, 255, 255, 0.72)",
+            borderColor: "rgba(17, 24, 32, 0.42)",
+            color: NODE_TEXT_COLOR,
           }}
           type="kleinOperator"
           status={operator.status}
@@ -313,10 +319,10 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
       </Box>
       <Box sx={{ padding: 1.1, paddingBottom: 0.65 }}>
         <Stack direction="row" justifyContent="space-between">
-          <Typography color={NODE_SECONDARY_TEXT_COLOR} variant="caption">
+          <Typography variant="caption">
             {role.toUpperCase()} · P{operator.parallelism}
           </Typography>
-          <Typography color={NODE_SECONDARY_TEXT_COLOR} variant="caption">
+          <Typography variant="caption">
             ID {operator.op_id}
           </Typography>
         </Stack>
@@ -333,7 +339,6 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
           sx={{ marginTop: 0.45 }}
         >
           <Typography
-            color={NODE_SECONDARY_TEXT_COLOR}
             title="Estimated logical payload output rate"
             variant="caption"
           >
@@ -341,7 +346,6 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
           </Typography>
           <Typography
             sx={{
-              color: NODE_SECONDARY_TEXT_COLOR,
               fontWeight: queuePercent >= 90 ? 700 : 400,
             }}
             variant="caption"
@@ -432,18 +436,12 @@ const RoleIcon = ({ role }: { role: OperatorRole }) => {
 const Metric = ({ label, value }: { label: string; value: string }) => (
   <Box sx={{ minWidth: 0 }}>
     <Typography
-      color={NODE_SECONDARY_TEXT_COLOR}
       display="block"
       sx={{ fontSize: 9, letterSpacing: 0.25 }}
     >
       {label}
     </Typography>
-    <Typography
-      color={NODE_SECONDARY_TEXT_COLOR}
-      noWrap
-      sx={{ fontWeight: 600 }}
-      variant="body2"
-    >
+    <Typography noWrap sx={{ fontWeight: 600 }} variant="body2">
       {value}
     </Typography>
   </Box>

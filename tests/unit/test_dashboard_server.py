@@ -147,11 +147,9 @@ def test_dashboard_serves_the_bundled_frontend(dashboard_server) -> None:
         for token in (
             b"data-busy-percent",
             b"max_busy_percent",
-            b"#5db1ff",
-            b"#ee6464",
-            b"#888888",
-            b"rgba(0, 0, 0, 0.85)",
-            b"rgba(0, 0, 0, 0.45)",
+            b"#eaf3fc",
+            b"#fadbd8",
+            b"#fff0cc",
         )
     )
 

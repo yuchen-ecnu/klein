@@ -1,15 +1,15 @@
 import type { KleinOperator } from "../../type/klein";
 
-const FLINK_NODE_COLORS = {
+const KLEIN_NODE_COLORS = {
   background: {
-    backpressured: "#888888",
-    busy: "#ee6464",
-    idle: "#5db1ff",
+    backpressured: "#fff0cc",
+    busy: "#fadbd8",
+    idle: "#eaf3fc",
   },
   border: {
-    backpressured: "#000000",
-    busy: "#ee2222",
-    idle: "#1890ff",
+    backpressured: "#c88a16",
+    busy: "#d45d58",
+    idle: "#7ea6cf",
   },
 } as const;
 
@@ -20,8 +20,9 @@ export type OperatorNodeColors = {
   busyPercent: number;
 };
 
-// Match Flink's JobGraph: blend idle to busy first, then blend the result
-// toward the backpressure color. Both metrics use the hottest subtask.
+// Keep Flink's continuous whole-node interpolation model, but use lighter
+// surfaces and semantic borders that remain calm behind dense metric text.
+// Both metrics use the hottest subtask.
 export const getOperatorNodeColors = (
   operator: KleinOperator,
 ): OperatorNodeColors => {
@@ -43,21 +44,21 @@ export const getOperatorNodeColors = (
   return {
     background: blendHexColor(
       blendHexColor(
-        FLINK_NODE_COLORS.background.idle,
-        FLINK_NODE_COLORS.background.busy,
+        KLEIN_NODE_COLORS.background.idle,
+        KLEIN_NODE_COLORS.background.busy,
         busyRatio,
       ),
-      FLINK_NODE_COLORS.background.backpressured,
+      KLEIN_NODE_COLORS.background.backpressured,
       backpressureRatio,
     ),
     backpressurePercent,
     border: blendHexColor(
       blendHexColor(
-        FLINK_NODE_COLORS.border.idle,
-        FLINK_NODE_COLORS.border.busy,
+        KLEIN_NODE_COLORS.border.idle,
+        KLEIN_NODE_COLORS.border.busy,
         busyRatio,
       ),
-      FLINK_NODE_COLORS.border.backpressured,
+      KLEIN_NODE_COLORS.border.backpressured,
       backpressureRatio,
     ),
     busyPercent,
@@ -78,7 +79,7 @@ const getHottestPercent = (
     (candidate): candidate is number =>
       typeof candidate === "number" && Number.isFinite(candidate),
   );
-  return Math.min(100, Math.max(0, value ?? 0));
+  return Math.round(Math.min(100, Math.max(0, value ?? 0)));
 };
 
 const blendHexColor = (from: string, to: string, ratio: number) => {

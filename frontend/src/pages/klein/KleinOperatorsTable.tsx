@@ -11,9 +11,9 @@ import {
 } from "@mui/material";
 import React from "react";
 import { Link as RouterLink } from "react-router-dom";
+import { generateActorLink } from "../../common/links";
 import { StatusChip } from "../../components/StatusChip";
 import { KleinOperator } from "../../type/klein";
-import { getKleinOperatorActorsLink } from "./KleinActorLinks";
 import {
   formatByteRate,
   formatBytes,
@@ -25,12 +25,10 @@ export const KleinOperatorsTable = ({
   operators,
   selectedOperatorId,
   onSelectOperator,
-  rayNamespace,
 }: {
   operators: KleinOperator[];
   selectedOperatorId?: number;
-  onSelectOperator?: (operatorId: number) => void;
-  rayNamespace?: string;
+  onSelectOperator: (operatorId: number) => void;
 }) => (
   <TableContainer>
     <Table size="small">
@@ -75,15 +73,10 @@ export const KleinOperatorsTable = ({
                 ID {operator.op_id} · {operator.cpus} CPU · {operator.gpus} GPU
               </Typography>
               <Typography display="block" variant="caption">
-                <Link
-                  component={RouterLink}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  to={getKleinOperatorActorsLink(operator.name, rayNamespace)}
-                >
-                  View {operator.parallelism} actor
-                  {operator.parallelism === 1 ? "" : "s"}
-                </Link>
+                <OperatorActorsLink
+                  onOpenDetails={() => onSelectOperator(operator.op_id)}
+                  operator={operator}
+                />
               </Typography>
             </TableCell>
             <TableCell>
@@ -129,6 +122,51 @@ export const KleinOperatorsTable = ({
     </Table>
   </TableContainer>
 );
+
+const OperatorActorsLink = ({
+  onOpenDetails,
+  operator,
+}: {
+  onOpenDetails: () => void;
+  operator: KleinOperator;
+}) => {
+  const label = `View ${operator.parallelism} actor${
+    operator.parallelism === 1 ? "" : "s"
+  }`;
+  if (operator.parallelism !== 1) {
+    return (
+      <Link
+        component="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenDetails();
+        }}
+        onKeyDown={(event) => event.stopPropagation()}
+        sx={{ fontSize: "inherit", padding: 0, verticalAlign: "baseline" }}
+        type="button"
+      >
+        {label}
+      </Link>
+    );
+  }
+
+  const actorId = operator.subtasks?.[0]?.actor_id;
+  return actorId ? (
+    <Link
+      component={RouterLink}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      title={`Open Ray actor ${actorId}`}
+      to={generateActorLink(actorId)}
+    >
+      {label}
+    </Link>
+  ) : (
+    <Typography color="text.disabled" component="span" variant="caption">
+      Actor unavailable
+    </Typography>
+  );
+};
 
 const PercentageCell = ({
   value,
