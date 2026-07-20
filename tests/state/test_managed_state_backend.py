@@ -1,13 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 import io
+import pickle
 import tarfile
 from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
-from ray.klein.state.key_group_range import key_group_for_key
+from ray.klein.state.key_group_range import (
+    assign_key_group_range,
+    key_group_for_key,
+    key_group_owner,
+)
 from ray.klein.state.list_state_descriptor import ListStateDescriptor
+from ray.klein.state.managed_state_snapshot import repartition_managed_state_snapshots
 from ray.klein.state.memory_state_backend import MemoryStateBackend
 from ray.klein.state.rocks_db_state_backend import (
     RocksDBStateBackend,
@@ -129,6 +135,43 @@ def test_logical_key_group_snapshot_restores_only_selected_partition(backend):
     timers = state_backend.pop_due_timers(10, TimerDomain.EVENT_TIME)
     assert [(event.key, event.namespace) for event in timers] == [(first, "first-timer")]
     assert second_group in snapshots
+
+
+def test_coordinator_repartitioned_snapshot_restores_backend_owned_groups(backend):
+    state_backend, _now = backend
+    descriptor = ValueStateDescriptor("value")
+    keys = [f"key-{index}" for index in range(24)]
+    for index, key in enumerate(keys):
+        state_backend.current_key = key
+        state_backend.put(descriptor, index)
+
+    old_fragments = []
+    for old_index in range(2):
+        old_range = assign_key_group_range(16, 2, old_index)
+        old_fragments.append(
+            pickle.dumps(
+                {
+                    "format_version": 2,
+                    "max_parallelism": 16,
+                    "key_group_range": old_range,
+                    "key_groups": dict(state_backend.snapshot_key_groups(16, old_range)),
+                    "watermark": 11,
+                },
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        )
+
+    target_fragments = repartition_managed_state_snapshots(old_fragments, 3)
+
+    for target_index, target_fragment in enumerate(target_fragments):
+        payload = pickle.loads(target_fragment)
+        assert payload["key_group_range"] == assign_key_group_range(16, 3, target_index)
+        assert all(key_group_owner(group, 16, 3) == target_index for group in payload["key_groups"])
+        state_backend.restore_key_groups(payload["key_groups"])
+        for index, key in enumerate(keys):
+            state_backend.current_key = key
+            expected = index if key_group_owner(key_group_for_key(key, 16), 16, 3) == target_index else None
+            assert state_backend.get(descriptor) == expected
 
 
 @pytest.mark.parametrize(

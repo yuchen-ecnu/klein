@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import time
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
@@ -20,7 +21,7 @@ from ray.klein.runtime.coordinator.checkpoint_trigger import (
     CheckpointTrigger,
 )
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
-from ray.klein.runtime.message import Barrier, EndOfData
+from ray.klein.runtime.message import Barrier, DeliveryChannel, EndOfData
 from ray.klein.runtime.operator.operator_type import OperatorType
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
@@ -36,7 +37,13 @@ class CheckpointStrategy(ABC):
         return
 
     @abstractmethod
-    def on_barrier_received(self, barrier: Barrier, on_barrier_aligned: Callable | None = None) -> bool:
+    def on_barrier_received(
+        self,
+        barrier: Barrier,
+        on_barrier_aligned: Callable | None = None,
+        sender_vertex_id: ExecutionVertexId | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> bool:
         """Called when a barrier arrives. Return whether to emit it downstream."""
 
     @abstractmethod
@@ -100,16 +107,32 @@ class CheckpointStrategy(ABC):
     def last_alignment_duration_ms(self) -> float:
         return 0.0
 
-    def reconfigure_barrier_split(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
+    def reconfigure_barrier_split(
+        self,
+        barrier_splits: dict[ExecutionVertexId, int],
+        input_vertex_ids: tuple[ExecutionVertexId, ...] | None = None,
+    ) -> None:
         """Replace physical-input alignment counts at a quiescent rescale cut."""
 
-        del barrier_splits
+        del barrier_splits, input_vertex_ids
         raise NotImplementedError(f"{type(self).__name__} does not support runtime topology changes")
 
     def validate_barrier_reconfiguration(self) -> None:
         """Fail before a topology transaction if old barriers are still aligned."""
 
         return
+
+    def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
+        """Drop alignment bookkeeping inherited from an older coordinator epoch."""
+
+        del cutoff_barrier_id
+        return 0
+
+    def discard_checkpoint(self, barrier_id: int) -> int:
+        """Drop alignment bookkeeping for one explicitly aborted epoch."""
+
+        del barrier_id
+        return 0
 
 
 class _BarrierAligner:
@@ -126,21 +149,70 @@ class _BarrierAligner:
     when broadcast routing and the split BFS disagreed on a Union branch.
     """
 
-    def __init__(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
+    def __init__(
+        self,
+        barrier_splits: dict[ExecutionVertexId, int],
+        input_vertex_ids: tuple[ExecutionVertexId, ...] = (),
+    ) -> None:
         self._split = barrier_splits
         self._inflight: dict[int, int] = {}
+        self._input_vertex_ids = Counter(input_vertex_ids)
+        self._coordinated_inflight: dict[int, Counter[ExecutionVertexId]] = {}
+        self._coordinated_channels: dict[int, set[object]] = {}
+        self._last_coordinated_barrier_id = -1
         self._eof_from_src: dict[ExecutionVertexId, bool] = dict.fromkeys(barrier_splits, False)
 
     def _expected(self, source_id: ExecutionVertexId) -> int:
         return self._split.get(source_id, 1)
 
-    def receive(self, barrier: Barrier) -> bool:
+    def coordinated_barrier_finalized(self, barrier_id: int) -> bool:
+        return barrier_id <= self._last_coordinated_barrier_id
+
+    def receive(
+        self,
+        barrier: Barrier,
+        sender_vertex_id: ExecutionVertexId | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> bool:
         """Count one barrier; return True once its source is fully aligned."""
+        if barrier.coordinated:
+            return self._receive_coordinated(barrier, sender_vertex_id, delivery_channel)
         count = self._inflight.pop(barrier.id, 0) + 1
         if count >= self._expected(barrier.source_id):
             return True
         self._inflight[barrier.id] = count
         return False
+
+    def _receive_coordinated(
+        self,
+        barrier: Barrier,
+        sender_vertex_id: ExecutionVertexId | None,
+        delivery_channel: DeliveryChannel | None,
+    ) -> bool:
+        """Align one shared epoch once across every direct physical input."""
+
+        if barrier.id <= self._last_coordinated_barrier_id:
+            return False
+        if not self._input_vertex_ids:
+            self._last_coordinated_barrier_id = barrier.id
+            return True
+        if sender_vertex_id is None:
+            raise ValueError("a coordinated checkpoint barrier requires its direct sender identity")
+        if sender_vertex_id not in self._input_vertex_ids:
+            raise ValueError(f"unexpected coordinated checkpoint sender {sender_vertex_id}")
+        channel = delivery_channel or sender_vertex_id
+        channels = self._coordinated_channels.setdefault(barrier.id, set())
+        if channel in channels:
+            return False
+        channels.add(channel)
+        seen = self._coordinated_inflight.setdefault(barrier.id, Counter())
+        seen[sender_vertex_id] += 1
+        if any(seen[sender] < count for sender, count in self._input_vertex_ids.items()):
+            return False
+        self._coordinated_inflight.pop(barrier.id, None)
+        self._coordinated_channels.pop(barrier.id, None)
+        self._last_coordinated_barrier_id = barrier.id
+        return True
 
     def receive_eof(self, barrier: EndOfData) -> bool:
         """Mark a source's eof; return True once every source has sent eof."""
@@ -161,18 +233,38 @@ class _BarrierAligner:
         stale = [barrier_id for barrier_id in self._inflight if barrier_id <= cutoff_barrier_id]
         for barrier_id in stale:
             self._inflight.pop(barrier_id, None)
-        return len(stale)
+        coordinated = [barrier_id for barrier_id in self._coordinated_inflight if barrier_id <= cutoff_barrier_id]
+        for barrier_id in coordinated:
+            self._coordinated_inflight.pop(barrier_id, None)
+            self._coordinated_channels.pop(barrier_id, None)
+        self._last_coordinated_barrier_id = max(self._last_coordinated_barrier_id, cutoff_barrier_id)
+        return len(stale) + len(coordinated)
 
-    def reconfigure(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
+    def discard(self, barrier_id: int) -> int:
+        """Drop one failed barrier without disturbing concurrent checkpoints."""
+
+        removed = int(self._inflight.pop(barrier_id, None) is not None)
+        removed += int(self._coordinated_inflight.pop(barrier_id, None) is not None)
+        self._coordinated_channels.pop(barrier_id, None)
+        self._last_coordinated_barrier_id = max(self._last_coordinated_barrier_id, barrier_id)
+        return removed
+
+    def reconfigure(
+        self,
+        barrier_splits: dict[ExecutionVertexId, int],
+        input_vertex_ids: tuple[ExecutionVertexId, ...] | None = None,
+    ) -> None:
         """Install a new topology after every old-topology barrier completed."""
 
         self.validate_reconfiguration()
         previous_eof = self._eof_from_src
         self._split = dict(barrier_splits)
+        if input_vertex_ids is not None:
+            self._input_vertex_ids = Counter(input_vertex_ids)
         self._eof_from_src = {source_id: previous_eof.get(source_id, False) for source_id in barrier_splits}
 
     def validate_reconfiguration(self) -> None:
-        if self._inflight:
+        if self._inflight or self._coordinated_inflight:
             raise RuntimeError("cannot reconfigure barrier alignment while checkpoints are in flight")
 
 
@@ -299,11 +391,12 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
         is_committer: bool = False,
         synchronous_notify: bool = False,
         metric_group: MetricGroup | None = None,
+        input_vertex_ids: tuple[ExecutionVertexId, ...] = (),
     ) -> None:
         self._vertex_id = vertex_id
         self._operator_type = operator_type
         self._is_committer = is_committer
-        self._aligner = _BarrierAligner(barrier_splits)
+        self._aligner = _BarrierAligner(barrier_splits, input_vertex_ids)
         config = config if config is not None else Configuration()
         async_notify = config.get(CheckpointOptions.ASYNC_NOTIFY) and not synchronous_notify
         self._coordinator = _CoordinatorClient(coordinator, vertex_id, async_notify=async_notify)
@@ -316,10 +409,18 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
         )
         self._last_alignment_duration_ms = 0.0
 
-    def on_barrier_received(self, barrier: Barrier, on_barrier_aligned: Callable | None = None) -> bool:
-        alignment_key = (barrier.id, barrier.source_id)
+    def on_barrier_received(
+        self,
+        barrier: Barrier,
+        on_barrier_aligned: Callable | None = None,
+        sender_vertex_id: ExecutionVertexId | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> bool:
+        alignment_key = (barrier.id, None if barrier.coordinated else barrier.source_id)
         self._alignment_started_at.setdefault(alignment_key, time.monotonic())
-        if not self._aligner.receive(barrier):
+        if not self._aligner.receive(barrier, sender_vertex_id, delivery_channel):
+            if barrier.coordinated and self._aligner.coordinated_barrier_finalized(barrier.id):
+                self._alignment_started_at.pop(alignment_key, None)
             return False
         started_at = self._alignment_started_at.pop(alignment_key)
         self._last_alignment_duration_ms = max(0.0, (time.monotonic() - started_at) * 1_000)
@@ -342,8 +443,18 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
             self._alignment_started_at.pop(key, None)
         return removed
 
-    def reconfigure_barrier_split(self, barrier_splits: dict[ExecutionVertexId, int]) -> None:
-        self._aligner.reconfigure(barrier_splits)
+    def discard_checkpoint(self, barrier_id: int) -> int:
+        removed = self._aligner.discard(barrier_id)
+        for key in [key for key in self._alignment_started_at if key[0] == barrier_id]:
+            self._alignment_started_at.pop(key, None)
+        return removed
+
+    def reconfigure_barrier_split(
+        self,
+        barrier_splits: dict[ExecutionVertexId, int],
+        input_vertex_ids: tuple[ExecutionVertexId, ...] | None = None,
+    ) -> None:
+        self._aligner.reconfigure(barrier_splits, input_vertex_ids)
 
     def validate_barrier_reconfiguration(self) -> None:
         self._aligner.validate_reconfiguration()
@@ -395,9 +506,20 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
         if registration.barrier_id is None:
             logger.debug("Checkpoint not triggered: %s", registration.reason)
             return None
-        if is_eof:
-            return EndOfData(registration.barrier_id, source_id=self._vertex_id)
-        return Barrier(registration.barrier_id, source_id=self._vertex_id)
+        # A source can reach EOF while a post-rescale epoch is being armed.
+        # Keep that shared cut homogeneous; after it becomes durable the source
+        # emits its ordinary, independently identified EndOfData barrier.
+        if is_eof and not registration.coordinated:
+            return EndOfData(
+                registration.barrier_id,
+                source_id=self._vertex_id,
+                coordinated=registration.coordinated,
+            )
+        return Barrier(
+            registration.barrier_id,
+            source_id=self._vertex_id,
+            coordinated=registration.coordinated,
+        )
 
     @staticmethod
     def _resolve_trigger(operator_type: OperatorType, config: Configuration) -> CheckpointTrigger | None:

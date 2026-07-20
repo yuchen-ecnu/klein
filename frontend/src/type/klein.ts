@@ -74,7 +74,22 @@ export type KleinOperator = {
   checkpoint_barrier_latency_ms: number;
   checkpoint_state_size_bytes: number;
   last_checkpoint_id?: number;
+  can_rescale: boolean;
+  rescale_disabled_reason?: string | null;
   subtasks: KleinSubtask[];
+};
+
+export type KleinOperatorRescaleResult = {
+  job_id: string;
+  operator_id: number;
+  operator_name?: string | null;
+  previous_parallelism?: number | null;
+  parallelism: number;
+  target_parallelism: number;
+  status: "COMPLETED" | "NOOP" | "REJECTED" | "FAILED";
+  started_at_ms: number;
+  ended_at_ms: number;
+  error?: string | null;
 };
 
 export type KleinCheckpointSubtask = {

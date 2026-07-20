@@ -17,12 +17,14 @@ from unittest import mock
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.job_manager_options import JobManagerOptions
+from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
 from ray.klein.runtime.scheduler import job_master as js_mod
+from ray.klein.runtime.scheduler import recovery_manager as recovery_mod
 from ray.klein.runtime.scheduler.errors import DeploymentError
 from ray.klein.runtime.scheduler.job_master import JobMaster
 from ray.klein.runtime.scheduler.restart_result import RestartStatus
@@ -391,6 +393,77 @@ class RecoverCoordinatorTest(unittest.TestCase):
         self._coord.open.assert_called_once()
         self._coord.start.assert_called_once()
 
+    def test_stabilization_checkpoint_only_rearms_running_sources_in_affected_domains(self):
+        affected_source = _FakeVertex(
+            "affected-source",
+            ExecutionVertexStatus.RUNNING,
+            mock.MagicMock(),
+        )
+        affected_paused_source = _FakeVertex(
+            "affected-paused-source",
+            ExecutionVertexStatus.DEPLOYED,
+            mock.MagicMock(),
+        )
+        marked_operator = _FakeVertex("marked-operator", ExecutionVertexStatus.RUNNING)
+        disconnected_source = _FakeVertex(
+            "disconnected-source",
+            ExecutionVertexStatus.RUNNING,
+            mock.MagicMock(),
+        )
+        disconnected_operator = _FakeVertex("disconnected-operator", ExecutionVertexStatus.RUNNING)
+        affected_source.id = ExecutionVertexId(10, 0)
+        affected_paused_source.id = ExecutionVertexId(10, 1)
+        marked_operator.id = ExecutionVertexId(20, 0)
+        disconnected_source.id = ExecutionVertexId(30, 0)
+        disconnected_operator.id = ExecutionVertexId(40, 0)
+        marked_operator.restore_operation_id = "rescale-1"
+        affected_source.stream_task.request_checkpoint.return_value = "affected-request"
+
+        affected_domain = CheckpointDomain(
+            "affected-domain",
+            (affected_source.id, affected_paused_source.id, marked_operator.id),
+            (affected_source.id, affected_paused_source.id),
+            (),
+        )
+        disconnected_domain = CheckpointDomain(
+            "disconnected-domain",
+            (disconnected_source.id, disconnected_operator.id),
+            (disconnected_source.id,),
+            (),
+        )
+        graph = _build_graph(
+            [
+                affected_source,
+                affected_paused_source,
+                marked_operator,
+                disconnected_source,
+                disconnected_operator,
+            ]
+        )
+        graph.source_execution_vertices = (
+            affected_source,
+            affected_paused_source,
+            disconnected_source,
+        )
+        graph.checkpoint_domains = (affected_domain, disconnected_domain)
+        graph.checkpoint_domains_for_job_vertex.side_effect = {
+            marked_operator.id.job_vertex_id: (affected_domain,)
+        }.__getitem__
+        recovery = recovery_mod.RecoveryManager(
+            graph,
+            coordinator_provider=lambda: None,
+            rpc_timeout=30,
+            start_timeout=300,
+        )
+
+        with mock.patch.object(recovery_mod.klein, "get", return_value=[True]) as get:
+            recovery._request_stabilization_checkpoint_after_recovery()
+
+        affected_source.stream_task.request_checkpoint.assert_called_once_with()
+        affected_paused_source.stream_task.request_checkpoint.assert_not_called()
+        disconnected_source.stream_task.request_checkpoint.assert_not_called()
+        get.assert_called_once_with(["affected-request"], timeout=30)
+
     # ----- coordinator crash before first checkpoint ----------------------
 
     def test_restore_path_none_before_first_checkpoint(self):
@@ -582,13 +655,38 @@ class RestartTest(unittest.TestCase):
             result = s.restart()
         self.assertEqual(result.status, RestartStatus.FAILED)
 
-    def test_restart_stop_workers_raises_returns_failed(self):
+    def test_restart_reconciles_a_lost_worker_stop_ack(self):
         s = self._scheduler()
         with (
             mock.patch.object(
                 js_mod.task_terminator,
                 "stop_workers",
                 side_effect=TimeoutError("stop"),
+            ),
+            mock.patch.object(js_mod.task_terminator, "force_kill_survivors"),
+            mock.patch.object(s, "schedule", return_value=None),
+            mock.patch.object(js_mod.klein, "get", return_value=None),
+            mock.patch.object(
+                js_mod.klein,
+                "get_actor_status",
+                return_value=StreamTaskStatus.NOT_EXIST,
+            ),
+        ):
+            result = s.restart()
+        self.assertEqual(result.status, RestartStatus.SUCCESS)
+
+    def test_restart_fails_when_worker_stop_and_survivor_sweep_both_fail(self):
+        s = self._scheduler()
+        with (
+            mock.patch.object(
+                js_mod.task_terminator,
+                "stop_workers",
+                side_effect=TimeoutError("stop"),
+            ),
+            mock.patch.object(
+                js_mod.task_terminator,
+                "force_kill_survivors",
+                side_effect=RuntimeError("survivor"),
             ),
             mock.patch.object(js_mod.klein, "get", return_value=None),
             mock.patch.object(

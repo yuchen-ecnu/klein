@@ -24,8 +24,11 @@ cluster.
 local, barrier-aligned parallelism change when the operator supports it and
 returns a JSON-safe operation result whose status is ``COMPLETED``, ``NOOP``,
 ``REJECTED``, or ``FAILED``. The first version does not resize source operators,
-transactional sinks, or collecting sinks, and requires the job to have exactly
-one physical source task.
+transactional sinks, collecting sinks, or lifecycle classes that have not
+explicitly opted into concurrent runtime handoff. Parallel and multiple source
+operators are supported when rescaling a downstream operator; their
+post-commit recovery point uses one shared, direct-input-aligned checkpoint
+epoch.
 ``cancel_job(job_id, timeout=60)`` addresses a published job by job ID, while
 the CLI ``stop`` command addresses its Ray namespace.
 

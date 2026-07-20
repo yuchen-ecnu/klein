@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-import pickle
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping
@@ -19,6 +18,10 @@ from ray.klein.state.key_group_range import (
     key_group_for_key,
 )
 from ray.klein.state.keyed_state_context import KeyedStateContext
+from ray.klein.state.managed_state_snapshot import (
+    decode_managed_state_snapshot,
+    encode_managed_state_snapshot,
+)
 from ray.klein.state.state_backend_factory import create_state_backend
 from ray.klein.state.timer_event import TimerEvent
 from ray.klein.state.timer_service import TimerService
@@ -155,14 +158,12 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
                 self._max_parallelism,
                 self._key_group_range,
             )
-            payload = {
-                "format_version": 2,
-                "max_parallelism": self._max_parallelism,
-                "key_group_range": self._key_group_range,
-                "key_groups": dict(key_groups),
-                "watermark": self.timer_service.current_watermark,
-            }
-            snapshot = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+            snapshot = encode_managed_state_snapshot(
+                max_parallelism=self._max_parallelism,
+                key_group_range=self._key_group_range,
+                key_groups=key_groups,
+                watermark=self.timer_service.current_watermark,
+            )
             if self._state_size_metric is not None:
                 self._state_size_metric.set(len(snapshot))
             return snapshot
@@ -189,7 +190,7 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
         started_at = time.monotonic()
         serialized = tuple(snapshots)
         try:
-            payloads = [pickle.loads(snapshot) for snapshot in serialized]
+            payloads = [decode_managed_state_snapshot(snapshot) for snapshot in serialized]
             if not payloads:
                 return
             self._restore_key_group_payloads(payloads)
@@ -227,8 +228,6 @@ class ManagedStateOperator(StreamOperator, OneInputOperator):
         self.timer_service.restore_watermark(min(watermarks, default=-1))
 
     def _validate_key_group_payload(self, payload: dict[str, Any]) -> None:
-        if payload.get("format_version") != 2:
-            raise ValueError("unsupported managed operator state format")
         if payload.get("max_parallelism") != self._max_parallelism:
             raise ValueError("state.keyed.max-parallelism must match the value stored in the checkpoint")
 

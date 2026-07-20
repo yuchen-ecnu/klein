@@ -44,7 +44,12 @@ def discard_state_backend(config: Configuration, job_id: str, task_name: str) ->
 
     if config.get(StateOptions.BACKEND).strip().lower() != "rocksdb":
         return
-    shutil.rmtree(_state_backend_path(config, job_id, task_name), ignore_errors=True)
+    try:
+        shutil.rmtree(_state_backend_path(config, job_id, task_name))
+    except FileNotFoundError:
+        # Cleanup is idempotent, but permission/I/O failures must reach the
+        # supervised runtime cleanup worker instead of becoming silent leaks.
+        return
 
 
 def _state_backend_path(config: Configuration, job_id: str, task_name: str) -> Path:

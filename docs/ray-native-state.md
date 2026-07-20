@@ -217,11 +217,13 @@ owner, or cluster was lost, the task restores the latest durable snapshot.
 Checkpoint retention releases old exclusive blobs; normal Ray reference
 counting releases superseded hot snapshots.
 
-On rescale, every prior fragment for the logical operator is available through
-the coordinator. A new subtask selects only the key groups in its newly assigned
-range and merges those groups into an empty local backend. Scale-up and
-scale-down therefore preserve keyed state, TTL indexes, and timers without
-rehashing keys or depending on the previous subtask count.
+On rescale, the coordinator materializes and decodes each prior fragment once,
+then partitions its opaque key-group payloads into one snapshot per target
+subtask. Each target fetches and decodes only its assigned snapshot before
+merging those groups into an empty local backend. Scale-up and scale-down
+therefore preserve keyed state, TTL indexes, and timers without rehashing keys,
+without an old-by-new decode loop, and without depending on the previous
+subtask count.
 
 ## Configure managed state
 

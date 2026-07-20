@@ -66,6 +66,14 @@ class OperatorSpec:
         return isinstance(function, type) and issubclass(function, TwoPhaseCommitSinkFunction)
 
     @property
+    def supports_concurrent_rescale(self) -> bool:
+        """Whether every runtime recipe is safe for rollback-preserving handoff."""
+
+        if self.chained:
+            return all(child.supports_concurrent_rescale for child in self.children)
+        return self.logical_function is None or self.logical_function.supports_concurrent_rescale
+
+    @property
     def runtime_info(self) -> "RuntimeInfo":
         return RuntimeInfo() if self.logical_function is None else self.logical_function.runtime_info
 

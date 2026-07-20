@@ -236,14 +236,24 @@ def test_dashboard_lists_jobs_and_reads_url_encoded_job_id(dashboard_server) -> 
     assert json.loads(detail_payload) == state.snapshot
 
 
-def test_dashboard_forwards_operator_rescale_and_returns_operation(dashboard_server) -> None:
+@pytest.mark.parametrize(
+    "path_template",
+    (
+        "/api/jobs/{job_id}/operators/7/rescale",
+        "/api/klein/jobs/{job_id}/operators/7/rescale",
+    ),
+)
+def test_dashboard_forwards_operator_rescale_and_returns_operation(
+    dashboard_server,
+    path_template,
+) -> None:
     server, state = dashboard_server
     body = json.dumps({"parallelism": 5})
 
     status, _, payload = _request(
         server,
         "POST",
-        f"/api/jobs/{quote(state.job_id, safe='')}/operators/7/rescale",
+        path_template.format(job_id=quote(state.job_id, safe="")),
         body=body,
         headers={"Content-Type": "application/json", "Content-Length": str(len(body))},
     )

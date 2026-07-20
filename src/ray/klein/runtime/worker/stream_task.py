@@ -29,7 +29,9 @@ import asyncio
 import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass
+from enum import Enum, auto
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -85,6 +87,10 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+
+_RETIRED_RUNTIME_LIMIT = 8
+_RETIRED_RUNTIME_CLOSE_TIMEOUT_SECONDS = 30.0
+_RETIRED_RUNTIME_RETRY_DELAY_SECONDS = 0.25
 
 
 def _operator_runtime_identity(operator) -> tuple:
@@ -206,6 +212,8 @@ class _TaskRuntime:
     async_runner_closed: bool = False
     emit_closed: bool = False
     operator_closed: bool = False
+    close_task: asyncio.Task[None] | None = None
+    backend_discarded: bool = False
 
 
 @dataclass(slots=True)
@@ -213,6 +221,11 @@ class _RuntimeRescaleTransaction:
     operation_id: str
     previous: _TaskRuntime
     pending: _TaskRuntime
+
+
+class _RuntimeRescaleOutcome(Enum):
+    COMMITTED = auto()
+    ROLLED_BACK = auto()
 
 
 @dataclass(slots=True)
@@ -229,7 +242,7 @@ class _CumulativeProgress:
     barriers_in: int = 0
     barriers_out: int = 0
 
-    def add_runtime(self, runtime: _TaskRuntime) -> None:
+    def add_runtime(self, runtime: _TaskRuntime, successor: _TaskRuntime) -> None:
         operator = runtime.state.operator
         output = runtime.state.output
         self.rows_in += operator.records_in
@@ -240,8 +253,15 @@ class _CumulativeProgress:
         if output is not None:
             self.backpressure_ns += output.backpressure_duration_ns
             self.backpressure_events += output.backpressure_events
-        self.barriers_in += int(runtime.state.metrics.barriers_in.value)
-        self.barriers_out += int(runtime.state.metrics.barriers_out.value)
+        # TaskMetricGroup caches metric handles.  A retained actor can therefore
+        # expose the same readable Counter through both runtimes; blindly adding
+        # the predecessor and then reading the successor would double count it.
+        # Rebase the offset against the successor's raw value instead.  This also
+        # preserves continuity when the successor owns a fresh counter at zero.
+        barriers_in = self.barriers_in + int(runtime.state.metrics.barriers_in.value)
+        barriers_out = self.barriers_out + int(runtime.state.metrics.barriers_out.value)
+        self.barriers_in = max(0, barriers_in - int(successor.state.metrics.barriers_in.value))
+        self.barriers_out = max(0, barriers_out - int(successor.state.metrics.barriers_out.value))
 
 
 class StreamTask(AsyncWorker):
@@ -266,9 +286,14 @@ class StreamTask(AsyncWorker):
         self._active_runtime: _TaskRuntime | None = None
         self._runtime_rescale_transaction: _RuntimeRescaleTransaction | None = None
         self._runtime_rescale_preparing_operation_id: str | None = None
-        self._runtime_rescale_outcomes: dict[str, bool] = {}
+        self._runtime_rescale_outcomes: dict[str, _RuntimeRescaleOutcome] = {}
         self._runtime_rescale_lock_obj: asyncio.Lock | None = None
         self._retired_runtimes: list[_TaskRuntime] = []
+        self._retired_runtime_ids: set[int] = set()
+        self._retired_runtime_queue: asyncio.Queue[_TaskRuntime] = asyncio.Queue(maxsize=_RETIRED_RUNTIME_LIMIT)
+        self._retired_runtime_cleanup_task: asyncio.Task[None] | None = None
+        self._retired_runtime_cleanup_errors: dict[int, BaseException] = {}
+        self._retired_runtime_cleanup_attempts: dict[int, int] = {}
         self._cumulative_progress = _CumulativeProgress()
         self._last_checkpoint_id: int | None = None
         self._last_checkpoint_state_size_bytes = 0
@@ -412,6 +437,7 @@ class StreamTask(AsyncWorker):
                 watermark,
                 emit,
                 inbox_timeout=idle_check_interval.total_seconds(),
+                input_vertex_ids=descriptor.input_vertex_ids,
             )
             watermark.bind(
                 output,
@@ -498,19 +524,46 @@ class StreamTask(AsyncWorker):
         *,
         discard_backend: bool,
     ) -> None:
-        if runtime.closed:
-            return
-        errors = [
-            await self._close_runtime_async_runner(runtime, timeout),
-            await self._close_runtime_emit(runtime, timeout),
-            await self._close_runtime_operator(runtime),
-        ]
-        if discard_backend and runtime.operator_closed:
+        if not runtime.closed:
+            close_task = runtime.close_task
+            if close_task is None or close_task.done():
+                if close_task is not None:
+                    # Retrieve the previous failure before replacing the task.
+                    # A successful task would already have marked the runtime
+                    # closed, so only a failed attempt reaches this branch.
+                    with suppress(BaseException):
+                        close_task.result()
+                close_task = asyncio.create_task(
+                    self._close_runtime_components(runtime, timeout),
+                    name=f"{self._task_name}-close-{runtime.state_backend_task_name}",
+                )
+                runtime.close_task = close_task
+            done, _pending = await asyncio.wait(
+                (close_task,),
+                timeout=max(0.0, timeout),
+            )
+            if not done:
+                raise TimeoutError(f"timed out closing runtime {runtime.state_backend_task_name} after {timeout:.1f}s")
+            await close_task
+
+        if discard_backend and runtime.operator_closed and not runtime.backend_discarded:
             discard_state_backend(
                 runtime.descriptor.config,
                 runtime.descriptor.namespace,
                 runtime.state_backend_task_name,
             )
+            runtime.backend_discarded = True
+
+    async def _close_runtime_components(
+        self,
+        runtime: _TaskRuntime,
+        timeout: float,
+    ) -> None:
+        errors = [
+            await self._close_runtime_async_runner(runtime, timeout),
+            await self._close_runtime_emit(runtime, timeout),
+            await self._close_runtime_operator(runtime),
+        ]
         runtime.closed = runtime.async_runner_closed and runtime.emit_closed and runtime.operator_closed
         first_error = next((error for error in errors if error is not None), None)
         if first_error is not None:
@@ -775,6 +828,26 @@ class StreamTask(AsyncWorker):
             },
         )
 
+    def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
+        """Reclaim barrier alignment state after coordinator epoch recovery."""
+
+        if self._state is None:
+            return 0
+        removed = self._state.checkpoint_strategy.reset_inflight_before(cutoff_barrier_id)
+        if self._pump is not None:
+            removed += self._pump.reset_inflight_before(cutoff_barrier_id)
+        return removed
+
+    def discard_checkpoint(self, barrier_id: int) -> int:
+        """Reclaim one timed-out/aborted checkpoint from this task aligner."""
+
+        if self._state is None:
+            return 0
+        removed = self._state.checkpoint_strategy.discard_checkpoint(barrier_id)
+        if self._pump is not None:
+            removed += self._pump.discard_checkpoint(barrier_id)
+        return removed
+
     def prepare_sink_commit(self, barrier_id: int) -> None:
         """Pre-commit and register a transactional sink before barrier ack."""
 
@@ -817,6 +890,7 @@ class StreamTask(AsyncWorker):
             is_committer=descriptor.is_committer,
             synchronous_notify=descriptor.operator.transactional_sink,
             metric_group=descriptor.metric_group,
+            input_vertex_ids=descriptor.input_vertex_ids,
         )
         return TaskRuntimeContext(
             descriptor.task_name,
@@ -916,6 +990,9 @@ class StreamTask(AsyncWorker):
             raise RuntimeError(f"{self._task_name} became unhealthy before topology reconfiguration")
 
         state.checkpoint_strategy.validate_barrier_reconfiguration()
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            pump.validate_checkpoint_reconfiguration()
 
         if output_changed:
             if state.output is None:
@@ -953,7 +1030,13 @@ class StreamTask(AsyncWorker):
                 state.output.activate_edge_swap(operation_id)
                 self._configure_output_replay(state.output, descriptor)
                 self._attach_output_metrics(state.output, state)
-            state.checkpoint_strategy.reconfigure_barrier_split(dict(descriptor.barrier_split))
+            state.checkpoint_strategy.reconfigure_barrier_split(
+                dict(descriptor.barrier_split),
+                descriptor.input_vertex_ids,
+            )
+            pump = getattr(self, "_pump", None)
+            if pump is not None:
+                pump.reconfigure_checkpoint_inputs(descriptor.input_vertex_ids)
             if state.event_time_tracker is not None:
                 state.event_time_tracker.reconfigure_inputs(descriptor.input_vertex_ids)
             self._descriptor = descriptor
@@ -1012,10 +1095,20 @@ class StreamTask(AsyncWorker):
         failures: list[Exception] = []
         self._descriptor = previous
         try:
-            state.checkpoint_strategy.reconfigure_barrier_split(dict(previous.barrier_split))
+            state.checkpoint_strategy.reconfigure_barrier_split(
+                dict(previous.barrier_split),
+                previous.input_vertex_ids,
+            )
         except Exception as error:
             failures.append(error)
             logger.exception("Failed to restore checkpoint alignment after topology rollback")
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            try:
+                pump.reconfigure_checkpoint_inputs(previous.input_vertex_ids)
+            except Exception as error:
+                failures.append(error)
+                logger.exception("Failed to restore checkpoint input gates after topology rollback")
         if state.event_time_tracker is not None:
             try:
                 state.event_time_tracker.reconfigure_inputs(previous.input_vertex_ids)
@@ -1115,8 +1208,14 @@ class StreamTask(AsyncWorker):
             self._rescale_resume_obj = asyncio.Event()
         return self._rescale_resume_obj
 
-    def _begin_rescale(self, operation_id: str, role: str) -> None:
-        if self._rescale_operation_id not in {None, operation_id}:
+    def _begin_rescale(self, operation_id: str, role: str) -> bool:
+        if self._rescale_operation_id == operation_id:
+            if self._rescale_role != role:
+                raise RuntimeError(
+                    f"{self._task_name} already participates in rescale {operation_id} as {self._rescale_role}"
+                )
+            return False
+        if self._rescale_operation_id is not None:
             raise RuntimeError(f"{self._task_name} already participates in rescale {self._rescale_operation_id}")
         self._rescale_operation_id = operation_id
         self._rescale_role = role
@@ -1124,6 +1223,7 @@ class StreamTask(AsyncWorker):
         self._rescale_snapshot = None
         self._rescale_ready.clear()
         self._rescale_resume.clear()
+        return True
 
     async def prepare_runtime_rescale(
         self,
@@ -1146,10 +1246,9 @@ class StreamTask(AsyncWorker):
         Only ``commit_runtime_rescale`` redirects the actor's live pointers.
         """
 
-        await self._retry_retired_runtimes()
         outcome = self._runtime_rescale_outcomes.get(operation_id)
         if outcome is not None:
-            return outcome
+            return outcome is _RuntimeRescaleOutcome.COMMITTED
         transaction = self._runtime_rescale_transaction
         if transaction is not None:
             return self._validate_existing_runtime_rescale(transaction, operation_id, descriptor)
@@ -1157,6 +1256,7 @@ class StreamTask(AsyncWorker):
             raise RuntimeError(
                 f"runtime rescale {self._runtime_rescale_preparing_operation_id} is already being prepared"
             )
+        self._require_retired_runtime_capacity()
         self._runtime_rescale_preparing_operation_id = operation_id
         try:
             if self._rescale_operation_id != operation_id or self._rescale_role != "target":
@@ -1216,9 +1316,7 @@ class StreamTask(AsyncWorker):
 
         outcome = self._runtime_rescale_outcomes.get(operation_id)
         if outcome is not None:
-            if outcome:
-                await self._retry_retired_runtimes()
-            return outcome
+            return outcome is _RuntimeRescaleOutcome.COMMITTED
         transaction = self._require_runtime_rescale_transaction(operation_id)
         if self._active_runtime is not transaction.previous:
             raise RuntimeError(f"{self._task_name}'s previous runtime is no longer active")
@@ -1227,7 +1325,7 @@ class StreamTask(AsyncWorker):
         # unreachable. Starting them cannot expose the pending runtime; the five
         # pointer assignments in _install_runtime are the actor-local commit point.
         self._start_runtime_components(transaction.pending)
-        self._progress_offset().add_runtime(transaction.previous)
+        self._progress_offset().add_runtime(transaction.previous, transaction.pending)
         self._install_runtime(transaction.pending)
         self._runtime_rescale_transaction = None
         self._remember_runtime_rescale_outcome(operation_id, committed=True)
@@ -1235,14 +1333,9 @@ class StreamTask(AsyncWorker):
             self._initialize_runtime_metrics(transaction.pending)
         except Exception:
             logger.exception("Failed to publish committed runtime metrics for %s", self._task_name)
-        try:
-            await self._close_runtime(transaction.previous, discard_backend=True)
-        except Exception:
-            # The new runtime is already visible and the old one can never be
-            # rolled back after its close began. Cleanup failure is non-fatal and
-            # must not misreport the actor-local commit as reversible.
-            self._retired_runtimes.append(transaction.previous)
-            logger.exception("Failed to clean up the previous runtime of %s", self._task_name)
+        # Cleanup is deliberately outside the commit latency. Admission was
+        # checked during prepare, so this bounded enqueue cannot block here.
+        self._retire_runtime(transaction.previous)
         return True
 
     async def rollback_runtime_rescale(self, operation_id: str) -> bool:
@@ -1254,8 +1347,15 @@ class StreamTask(AsyncWorker):
 
         outcome = self._runtime_rescale_outcomes.get(operation_id)
         if outcome is not None:
-            return not outcome
-        transaction = self._require_runtime_rescale_transaction(operation_id)
+            return outcome is _RuntimeRescaleOutcome.ROLLED_BACK
+        transaction = self._runtime_rescale_transaction
+        if transaction is None:
+            # Batched coordinator preparation can fail before this actor sees
+            # the request. Being on the untouched old runtime is already the
+            # desired idempotent rollback state.
+            return True
+        if transaction.operation_id != operation_id:
+            raise RuntimeError(f"runtime rescale {transaction.operation_id} is already prepared")
         await self._close_runtime(transaction.pending, discard_backend=True)
         self._runtime_rescale_transaction = None
         self._remember_runtime_rescale_outcome(operation_id, committed=False)
@@ -1299,31 +1399,127 @@ class StreamTask(AsyncWorker):
         return transaction
 
     def _remember_runtime_rescale_outcome(self, operation_id: str, *, committed: bool) -> None:
-        self._runtime_rescale_outcomes[operation_id] = committed
+        self._runtime_rescale_outcomes[operation_id] = (
+            _RuntimeRescaleOutcome.COMMITTED if committed else _RuntimeRescaleOutcome.ROLLED_BACK
+        )
         while len(self._runtime_rescale_outcomes) > 16:
             self._runtime_rescale_outcomes.pop(next(iter(self._runtime_rescale_outcomes)))
 
-    async def _retry_retired_runtimes(self, timeout: float = 30.0) -> BaseException | None:
-        if not self._retired_runtimes:
-            return None
-        remaining: list[_TaskRuntime] = []
-        first_error: BaseException | None = None
-        for runtime in self._retired_runtimes:
-            try:
-                await self._close_runtime(runtime, timeout, discard_backend=True)
-            except BaseException as error:
-                remaining.append(runtime)
-                if first_error is None:
-                    first_error = error
-        self._retired_runtimes = remaining
-        if first_error is not None:
-            logger.warning(
-                "Failed to retry cleanup of %d retired runtime(s) for %s: %s",
-                len(remaining),
-                self._task_name,
-                first_error,
+    def _initialize_retired_runtime_cleanup(self) -> None:
+        """Lazily initialize cleanup state for lightweight unit-test actors."""
+
+        if not hasattr(self, "_retired_runtimes"):
+            self._retired_runtimes = []
+        if not hasattr(self, "_retired_runtime_ids"):
+            self._retired_runtime_ids = {id(runtime) for runtime in self._retired_runtimes}
+        if not hasattr(self, "_retired_runtime_queue"):
+            self._retired_runtime_queue = asyncio.Queue(maxsize=_RETIRED_RUNTIME_LIMIT)
+            for runtime in self._retired_runtimes:
+                self._retired_runtime_queue.put_nowait(runtime)
+        if not hasattr(self, "_retired_runtime_cleanup_task"):
+            self._retired_runtime_cleanup_task = None
+        if not hasattr(self, "_retired_runtime_cleanup_errors"):
+            self._retired_runtime_cleanup_errors = {}
+        if not hasattr(self, "_retired_runtime_cleanup_attempts"):
+            self._retired_runtime_cleanup_attempts = {}
+
+    def _require_retired_runtime_capacity(self) -> None:
+        self._initialize_retired_runtime_cleanup()
+        self._ensure_retired_runtime_cleanup()
+        if len(self._retired_runtime_ids) >= _RETIRED_RUNTIME_LIMIT:
+            raise RuntimeError(
+                f"{self._task_name} has {_RETIRED_RUNTIME_LIMIT} retired runtimes awaiting cleanup; "
+                "rejecting rescale until cleanup catches up"
             )
-        return first_error
+
+    def _retire_runtime(self, runtime: _TaskRuntime) -> None:
+        self._initialize_retired_runtime_cleanup()
+        runtime_id = id(runtime)
+        if runtime_id in self._retired_runtime_ids:
+            return
+        if len(self._retired_runtime_ids) >= _RETIRED_RUNTIME_LIMIT:
+            raise RuntimeError("retired runtime cleanup queue is full after rescale admission")
+        self._retired_runtime_ids.add(runtime_id)
+        self._retired_runtimes.append(runtime)
+        self._retired_runtime_queue.put_nowait(runtime)
+        self._ensure_retired_runtime_cleanup()
+
+    def _ensure_retired_runtime_cleanup(self) -> None:
+        cleanup_task = self._retired_runtime_cleanup_task
+        if not self._retired_runtime_ids or (cleanup_task is not None and not cleanup_task.done()):
+            return
+        cleanup_task = asyncio.create_task(
+            self._cleanup_retired_runtimes(),
+            name=f"{self._task_name}-retired-runtime-cleanup",
+        )
+        self._retired_runtime_cleanup_task = cleanup_task
+        cleanup_task.add_done_callback(self._on_retired_runtime_cleanup_done)
+
+    def _on_retired_runtime_cleanup_done(self, cleanup_task: asyncio.Task[None]) -> None:
+        if self._retired_runtime_cleanup_task is cleanup_task:
+            self._retired_runtime_cleanup_task = None
+        error = None if cleanup_task.cancelled() else cleanup_task.exception()
+        if error is not None:
+            logger.error("Retired runtime cleanup worker failed for %s: %s", self._task_name, error)
+        if self._retired_runtime_ids:
+            asyncio.get_running_loop().call_soon(self._ensure_retired_runtime_cleanup)
+
+    async def _cleanup_retired_runtimes(self) -> None:
+        while self._retired_runtime_ids:
+            runtime = await self._retired_runtime_queue.get()
+            runtime_id = id(runtime)
+            try:
+                await self._close_runtime(
+                    runtime,
+                    _RETIRED_RUNTIME_CLOSE_TIMEOUT_SECONDS,
+                    discard_backend=True,
+                )
+            except asyncio.CancelledError:
+                self._retired_runtime_queue.put_nowait(runtime)
+                raise
+            except BaseException as error:
+                self._retired_runtime_cleanup_errors[runtime_id] = error
+                attempts = self._retired_runtime_cleanup_attempts.get(runtime_id, 0) + 1
+                self._retired_runtime_cleanup_attempts[runtime_id] = attempts
+                self._retired_runtime_queue.put_nowait(runtime)
+                logger.warning(
+                    "Retired runtime cleanup attempt %d failed for %s/%s: %s",
+                    attempts,
+                    self._task_name,
+                    runtime.state_backend_task_name,
+                    error,
+                )
+                await asyncio.sleep(_RETIRED_RUNTIME_RETRY_DELAY_SECONDS)
+            else:
+                self._retired_runtime_ids.discard(runtime_id)
+                self._retired_runtimes = [item for item in self._retired_runtimes if item is not runtime]
+                self._retired_runtime_cleanup_errors.pop(runtime_id, None)
+                self._retired_runtime_cleanup_attempts.pop(runtime_id, None)
+            finally:
+                self._retired_runtime_queue.task_done()
+
+    async def _await_retired_runtime_cleanup(self, timeout: float) -> BaseException | None:
+        self._initialize_retired_runtime_cleanup()
+        deadline = asyncio.get_running_loop().time() + max(0.0, timeout)
+        while self._retired_runtime_ids:
+            self._ensure_retired_runtime_cleanup()
+            cleanup_task = self._retired_runtime_cleanup_task
+            if cleanup_task is None:
+                break
+            remaining = max(0.0, deadline - asyncio.get_running_loop().time())
+            done, _pending = await asyncio.wait((cleanup_task,), timeout=remaining)
+            if not done:
+                break
+        if not self._retired_runtime_ids:
+            return None
+        details = []
+        for runtime in self._retired_runtimes:
+            error = self._retired_runtime_cleanup_errors.get(id(runtime))
+            suffix = f": {error}" if error is not None else ""
+            details.append(f"{runtime.state_backend_task_name}{suffix}")
+        return TimeoutError(
+            f"{len(self._retired_runtime_ids)} retired runtime(s) remain after {timeout:.1f}s: " + ", ".join(details)
+        )
 
     async def prepare_rescale_upstream(
         self,
@@ -1334,29 +1530,43 @@ class StreamTask(AsyncWorker):
     ) -> bool:
         """Fence selected outputs after all earlier input and then pause."""
 
-        self._begin_rescale(operation_id, "upstream")
-        self._rescale_edge_indices = tuple(edge_indices)
-        if not self._rescale_edge_indices:
+        requested_edges = tuple(edge_indices)
+        if not requested_edges:
             raise ValueError("an upstream rescale participant needs a target output edge")
+        new_participant = self._begin_rescale(operation_id, "upstream")
+        if not new_participant:
+            if self._rescale_edge_indices != requested_edges:
+                raise ValueError(f"{self._task_name} retried rescale {operation_id} with different output edges")
+            await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
+            return True
+        self._rescale_edge_indices = requested_edges
         await self._runtime_state.inbox.put(InboxEnvelope(RescaleBarrier(operation_id, target_operator_id)))
         await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
         return True
 
     def prepare_rescale_target(self, operation_id: str) -> None:
-        self._begin_rescale(operation_id, "target")
-        self._rescale_expected_senders = set(self._descriptor.input_vertex_ids)
-        if not self._rescale_expected_senders:
+        expected_senders = set(self._descriptor.input_vertex_ids)
+        if not expected_senders:
             raise ValueError("source operators cannot be locally rescaled")
+        if not self._begin_rescale(operation_id, "target"):
+            if self._rescale_expected_senders != expected_senders:
+                raise ValueError(f"{self._task_name} retried rescale {operation_id} with different senders")
+            return
+        self._rescale_expected_senders = expected_senders
 
     def prepare_rescale_downstream(
         self,
         operation_id: str,
         expected_senders: tuple[ExecutionVertexId, ...],
     ) -> None:
-        self._begin_rescale(operation_id, "downstream")
-        self._rescale_expected_senders = set(expected_senders)
-        if not self._rescale_expected_senders:
+        requested_senders = set(expected_senders)
+        if not requested_senders:
             raise ValueError("a downstream rescale participant needs at least one target input")
+        if not self._begin_rescale(operation_id, "downstream"):
+            if self._rescale_expected_senders != requested_senders:
+                raise ValueError(f"{self._task_name} retried rescale {operation_id} with different senders")
+            return
+        self._rescale_expected_senders = requested_senders
 
     async def await_rescale_ready(
         self,
@@ -1370,6 +1580,10 @@ class StreamTask(AsyncWorker):
 
     def resume_rescale(self, operation_id: str) -> bool:
         if operation_id in self._rescale_tombstones:
+            return True
+        if self._rescale_operation_id is None:
+            # A batched participant prepare may fail before reaching every
+            # actor. An untouched actor is already resumed for this operation.
             return True
         if self._rescale_operation_id != operation_id:
             return False
@@ -1494,10 +1708,30 @@ class StreamTask(AsyncWorker):
 
     # --- inbox RPC surface ---
 
-    async def emit_barrier(self, barrier: Barrier) -> int:
+    async def emit_barrier(
+        self,
+        barrier: Barrier,
+        sender_vertex_id: ExecutionVertexId | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> int:
         if self._state is None:
             return 0
-        await self._state.inbox.put(InboxEnvelope(barrier))
+        if self._pump is not None:
+            if barrier.coordinated:
+                if not self._pump.announce_coordinated_barrier(
+                    barrier,
+                    sender_vertex_id,
+                    delivery_channel,
+                ):
+                    return self._update_buffer_size_metrics()
+            else:
+                await self._pump.wait_for_checkpoint_input(sender_vertex_id, barrier, delivery_channel)
+        envelope = InboxEnvelope(barrier, sender_vertex_id, delivery_channel=delivery_channel)
+        put_control = getattr(self._state.inbox, "put_control", None)
+        if barrier.coordinated and callable(put_control):
+            await put_control(envelope)
+        else:
+            await self._state.inbox.put(envelope)
         self._state.metrics.barriers_in.inc()
         return self._update_buffer_size_metrics()
 
@@ -1505,12 +1739,15 @@ class StreamTask(AsyncWorker):
         self,
         control: StreamControl,
         sender_vertex_id: object = None,
+        delivery_channel: DeliveryChannel | None = None,
     ) -> int:
         """Enqueue an ordered event-time control from one physical input."""
 
         if self._state is None:
             return 0
-        await self._state.inbox.put(InboxEnvelope(control, sender_vertex_id))
+        if self._pump is not None:
+            await self._pump.wait_for_checkpoint_input(sender_vertex_id, control, delivery_channel)
+        await self._state.inbox.put(InboxEnvelope(control, sender_vertex_id, delivery_channel=delivery_channel))
         return self._update_buffer_size_metrics()
 
     async def put(
@@ -1538,14 +1775,17 @@ class StreamTask(AsyncWorker):
         """
         if self._state is None:
             return PutAck(False, 0, self._forwarded_sequence_for(delivery_channel or sender_vertex_id))
+
+        async def admit() -> None:
+            if self._pump is not None:
+                await self._pump.wait_for_checkpoint_input(sender_vertex_id, record, delivery_channel)
+            await self._state.inbox.put(InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel))
+
         try:
             if timeout is None:
-                await self._state.inbox.put(InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel))
+                await admit()
             else:
-                await asyncio.wait_for(
-                    self._state.inbox.put(InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel)),
-                    timeout=timeout,
-                )
+                await asyncio.wait_for(admit(), timeout=timeout)
         except asyncio.TimeoutError:
             return PutAck(
                 False,
@@ -1573,9 +1813,11 @@ class StreamTask(AsyncWorker):
         """
         if self._state is None:
             return PutAck(False, 0, self._forwarded_sequence_for(delivery_channel or sender_vertex_id))
-        accepted = await self._state.inbox.try_put(
-            InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel)
-        )
+        accepted = False
+        if self._pump is None or not self._pump.checkpoint_input_blocked(sender_vertex_id, delivery_channel):
+            accepted = await self._state.inbox.try_put(
+                InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel)
+            )
         return PutAck(
             accepted,
             self._update_buffer_size_metrics(),
@@ -1714,48 +1956,74 @@ class StreamTask(AsyncWorker):
             await self.stop()
 
     async def stop(self, timeout: float = 30.0) -> None:
+        await self._stop_stream_task(timeout, release_rescale=True)
+
+    async def retire_rescale(self, operation_id: str, timeout: float = 30.0) -> bool:
+        """Stop a scale-in delta without reopening its fenced data path."""
+
+        if self._rescale_operation_id != operation_id or self._rescale_role != "target":
+            raise RuntimeError(
+                f"{self._task_name} is not a retired target of rescale {operation_id}"
+            )
+        await self._stop_stream_task(timeout, release_rescale=False)
+        return True
+
+    async def _stop_stream_task(self, timeout: float, *, release_rescale: bool) -> None:
         logger.debug("Stopping stream task %s", self._task_name)
-        if self._rescale_resume_obj is not None:
+        if release_rescale and self._rescale_resume_obj is not None:
             self._rescale_resume_obj.set()
+        if self._pump is not None:
+            self._pump.release_all_checkpoint_inputs()
         await super().stop(timeout)
         async with self._runtime_rescale_lock:
             await self._close_task_runtimes(timeout)
 
     async def _close_task_runtimes(self, timeout: float) -> None:
-        first_error: BaseException | None = None
+        errors: list[tuple[str, BaseException]] = []
+        deadline = asyncio.get_running_loop().time() + max(0.0, timeout)
+
+        def remaining() -> float:
+            return max(0.0, deadline - asyncio.get_running_loop().time())
+
         transaction = self._runtime_rescale_transaction
         if transaction is not None:
             try:
                 await self._close_runtime(
                     transaction.pending,
-                    timeout,
+                    remaining(),
                     discard_backend=True,
                 )
             except BaseException as error:
-                first_error = error
+                errors.append(("pending runtime", error))
             finally:
                 self._runtime_rescale_transaction = None
-        retired_error = await self._retry_retired_runtimes(timeout)
-        if first_error is None:
-            first_error = retired_error
+        retired_error = await self._await_retired_runtime_cleanup(remaining())
+        if retired_error is not None:
+            errors.append(("retired runtimes", retired_error))
         runtime = self._active_runtime
         if runtime is None:
             self._running = False
             logger.info("Stream task %s stopped without initialized runtime state", self._task_name)
-            if first_error is not None:
-                raise first_error
+            self._raise_runtime_cleanup_errors(errors)
             return
         try:
-            await self._close_runtime(runtime, timeout, discard_backend=False)
+            await self._close_runtime(runtime, remaining(), discard_backend=False)
         except BaseException as error:
-            if first_error is None:
-                first_error = error
+            errors.append(("active runtime", error))
         finally:
             self._clear_installed_runtime(runtime)
             self._running = False
             logger.info("Stream task %s stopped", self._task_name)
-        if first_error is not None:
-            raise first_error
+        self._raise_runtime_cleanup_errors(errors)
+
+    def _raise_runtime_cleanup_errors(
+        self,
+        errors: list[tuple[str, BaseException]],
+    ) -> None:
+        if not errors:
+            return
+        summary = "; ".join(f"{phase}: {error}" for phase, error in errors)
+        raise RuntimeError(f"Failed to close all runtimes for {self._task_name}: {summary}") from errors[0][1]
 
     def _get_name(self) -> str:
         return self._task_name

@@ -27,7 +27,7 @@ import { KleinStatCard } from "./KleinStatCard";
 
 export const KleinJobOverviewPage = () => {
   const { jobId } = useParams();
-  const { job, error, isLoading, cancel } = useKleinJob(jobId);
+  const { job, error, isLoading, cancel, refresh } = useKleinJob(jobId);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelError, setCancelError] = useState<unknown>();
   const [highlightedOperatorId, setHighlightedOperatorId] = useState<number>();
@@ -191,6 +191,8 @@ export const KleinJobOverviewPage = () => {
           </Stack>
           <KleinOperatorDetails
             inDrawer
+            jobId={job.job_id}
+            onRefresh={refresh}
             operator={selectedOperator}
             rayNamespace={job.namespace}
           />

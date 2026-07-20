@@ -11,6 +11,7 @@ from collections import deque
 from collections.abc import Iterable
 
 import ray.klein as klein
+from ray.klein._internal.deadline import Deadline
 from ray.klein._internal.logging import get_logger
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.runtime.actor import KleinActorHandle
@@ -20,6 +21,7 @@ from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
+from ray.klein.runtime.scheduler.vertex_selection import select_vertices
 
 _KILL_ACTOR_MAX_RETRIES = 3
 _KILL_ACTOR_RETRY_DELAY = 1.0
@@ -33,11 +35,12 @@ def stop_workers(execution_graph: ExecutionGraph, timeout: float, force: bool) -
 
     Phase 1 (``_request_graceful_stop``) asks each task to stop (or kills it when
     ``force``) and waits up to ``timeout`` for acks — best-effort, a timeout does
-    NOT skip phase 2. Phase 2 (``_force_kill_survivors``) kills any still-ALIVE
+    NOT skip phase 2. Phase 2 (``force_kill_survivors``) kills any still-ALIVE
     actor and reconciles vertex status.
     """
-    _request_graceful_stop(execution_graph, timeout, force)
-    _force_kill_survivors(execution_graph)
+    deadline = Deadline(timeout)
+    _request_graceful_stop(execution_graph, deadline.step(timeout), force)
+    force_kill_survivors(execution_graph, deadline.step(timeout))
 
 
 def stop_job_vertex(
@@ -47,27 +50,36 @@ def stop_job_vertex(
     force: bool = False,
     *,
     vertices: Iterable[ExecutionVertex] | None = None,
+    rescale_operation_id: str | None = None,
 ) -> None:
     """Stop one operator's actors, or only an explicit rescale delta."""
 
-    selected = _select_vertices(job_vertex, vertices)
-    references = _stop_worker(job_vertex, force, selected)
+    selected = select_vertices(job_vertex, vertices)
+    deadline = Deadline(timeout)
+    references = _stop_worker(
+        job_vertex,
+        force,
+        selected,
+        rescale_operation_id=rescale_operation_id,
+        timeout=deadline.remaining(),
+    )
     try:
-        klein.get(references, timeout=timeout)
+        klein.get(references, timeout=deadline.step(timeout))
     except Exception as error:
         logger.warning("Operator stop did not complete within %.1fs; force-killing survivors: %s", timeout, error)
-    survivors = []
+    survivor_names = _kill_actor_names(
+        (vertex.name for vertex in selected),
+        namespace,
+        deadline.step(timeout),
+    )
     for vertex in selected:
-        if klein.get_actor_status(
-            vertex.name, namespace=namespace
-        ) != StreamTaskStatus.NOT_EXIST and not _kill_actor_with_retry(vertex.name, namespace):
-            survivors.append(vertex.name)
+        if vertex.name in survivor_names:
             continue
         if vertex.status != ExecutionVertexStatus.CREATED and not vertex.status.is_terminal:
             vertex.transition_to(ExecutionVertexStatus.CANCELLED)
         vertex.stream_task = None
-    if survivors:
-        raise RuntimeError(f"failed to stop operator actor(s): {survivors}")
+    if survivor_names:
+        raise RuntimeError(f"failed to stop operator actor(s): {sorted(survivor_names)}")
 
 
 def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, force: bool) -> None:
@@ -95,16 +107,18 @@ def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, forc
         logger.warning("Graceful stop did not complete within %.1fs; force-killing survivors: %s", timeout, error)
 
 
-def _force_kill_survivors(execution_graph: ExecutionGraph) -> None:
+def force_kill_survivors(execution_graph: ExecutionGraph, timeout: float = 2.0) -> None:
     """Phase 2: kill any actor still ALIVE and reconcile vertex status."""
     namespace = execution_graph.namespace
-    survivors: list[str] = []
-    for vertex in execution_graph.execution_vertices:
-        if klein.get_actor_status(vertex.name, namespace=namespace) != StreamTaskStatus.NOT_EXIST:
-            logger.debug("Force-killing stream task %s", vertex.name)
-            if not _kill_actor_with_retry(vertex.name, namespace):
-                survivors.append(vertex.name)
-                continue
+    vertices = tuple(execution_graph.execution_vertices)
+    survivor_names = _kill_actor_names(
+        (vertex.name for vertex in vertices),
+        namespace,
+        timeout,
+    )
+    for vertex in vertices:
+        if vertex.name in survivor_names:
+            continue
         # Only cancel vertices not already globally-terminal: a FAILED (logical
         # failure) or FINISHED vertex must keep that status — forcing CANCELLED
         # would lose the real outcome and trip the state machine (no
@@ -112,46 +126,87 @@ def _force_kill_survivors(execution_graph: ExecutionGraph) -> None:
         if vertex.status != ExecutionVertexStatus.CREATED and not vertex.status.is_terminal:
             vertex.transition_to(ExecutionVertexStatus.CANCELLED)
         vertex.stream_task = None
-    if survivors:
-        raise RuntimeError(f"failed to stop job actor(s): {survivors}")
+    if survivor_names:
+        raise RuntimeError(f"failed to stop job actor(s): {sorted(survivor_names)}")
 
 
-def _kill_actor_with_retry(name: str, namespace: str) -> bool:
-    last_error: Exception | None = None
+def _kill_actor_names(
+    names: Iterable[str],
+    namespace: str,
+    timeout: float,
+) -> set[str]:
+    """Kill many named actors in shared retry rounds under one deadline."""
+
+    pending = _existing_actor_names(set(names), namespace)
+    if not pending:
+        return set()
+    deadline = Deadline(timeout)
     for attempt in range(_KILL_ACTOR_MAX_RETRIES):
-        try:
-            klein.kill_actor_by_name(name, namespace=namespace)
-        except Exception as error:
-            last_error = error
-        try:
-            if klein.get_actor_status(name, namespace=namespace) == StreamTaskStatus.NOT_EXIST:
-                return True
-        except Exception as error:
-            last_error = error
+        pending = _kill_actor_round(pending, namespace)
+        if not pending:
+            return set()
         if attempt < _KILL_ACTOR_MAX_RETRIES - 1:
             logger.warning(
-                "Actor %s is still alive after kill attempt %d of %d; retrying",
-                name,
+                "%d actor(s) are still alive after kill attempt %d of %d; retrying",
+                len(pending),
                 attempt + 1,
                 _KILL_ACTOR_MAX_RETRIES,
             )
-            time.sleep(_KILL_ACTOR_RETRY_DELAY)
+            remaining = deadline.remaining()
+            if remaining <= 0:
+                break
+            time.sleep(min(_KILL_ACTOR_RETRY_DELAY, remaining))
     logger.error(
-        "Failed to kill actor %s after %d attempts; actor may still be running and consuming resources.%s",
-        name,
-        _KILL_ACTOR_MAX_RETRIES,
-        "" if last_error is None else f" Last error: {last_error}",
+        "Failed to kill actor(s) %s; they may still be running and consuming resources",
+        sorted(pending),
     )
-    return False
+    return pending
+
+
+def _existing_actor_names(names: set[str], namespace: str) -> set[str]:
+    existing = set()
+    for name in names:
+        try:
+            if klein.get_actor_status(name, namespace=namespace) != StreamTaskStatus.NOT_EXIST:
+                existing.add(name)
+        except Exception:
+            existing.add(name)
+    return existing
+
+
+def _kill_actor_round(names: set[str], namespace: str) -> set[str]:
+    for name in names:
+        try:
+            logger.debug("Force-killing stream task %s", name)
+            klein.kill_actor_by_name(name, namespace=namespace)
+        except Exception:
+            logger.debug("Named actor kill failed for %s", name, exc_info=True)
+    survivors = set()
+    for name in names:
+        try:
+            if klein.get_actor_status(name, namespace=namespace) != StreamTaskStatus.NOT_EXIST:
+                survivors.add(name)
+        except Exception:
+            survivors.add(name)
+    return survivors
+
+
+def _kill_actor_with_retry(name: str, namespace: str, timeout: float = 2.0) -> bool:
+    """Compatibility wrapper for one named actor."""
+
+    return not _kill_actor_names((name,), namespace, timeout)
 
 
 def _stop_worker(
     job_vertex: ExecutionJobVertex,
     force: bool,
     vertices: Iterable[ExecutionVertex] | None = None,
+    *,
+    rescale_operation_id: str | None = None,
+    timeout: float = 30.0,
 ) -> list[KleinActorHandle]:
     references = []
-    for vertex in _select_vertices(job_vertex, vertices):
+    for vertex in select_vertices(job_vertex, vertices):
         if force:
             if vertex.stream_task is not None:
                 klein.kill(vertex.stream_task)
@@ -159,27 +214,11 @@ def _stop_worker(
         if vertex.status == ExecutionVertexStatus.CREATED or vertex.status.is_terminal:
             logger.debug("Skipping inactive execution vertex %s during task shutdown", vertex)
             continue
-        references.append(vertex.stream_task.stop())
+        if rescale_operation_id is None:
+            references.append(vertex.stream_task.stop())
+        else:
+            references.append(
+                vertex.stream_task.retire_rescale(rescale_operation_id, timeout)
+            )
         vertex.transition_to(ExecutionVertexStatus.CANCELLING)
     return references
-
-
-def _select_vertices(
-    job_vertex: ExecutionJobVertex,
-    vertices: Iterable[ExecutionVertex] | None,
-) -> tuple[ExecutionVertex, ...]:
-    if vertices is None:
-        # Preserve the historical whole-job-vertex path, including lightweight
-        # test doubles used by teardown callers.
-        return tuple(job_vertex.execution_vertices.values())
-    selected = tuple(vertices)
-    seen: set[int] = set()
-    for vertex in selected:
-        if not isinstance(vertex, ExecutionVertex):
-            raise TypeError("vertex subsets must contain ExecutionVertex values")
-        if job_vertex.execution_vertices.get(vertex.index) is not vertex:
-            raise ValueError(f"ExecutionVertex '{vertex}' does not belong to operator {job_vertex.name}")
-        if vertex.index in seen:
-            raise ValueError(f"duplicate ExecutionVertex index {vertex.index}")
-        seen.add(vertex.index)
-    return selected

@@ -22,11 +22,14 @@ thread for the sync path so the coordinator ``klein.get`` stays off the loop.
 """
 
 import asyncio
+from collections import Counter, deque
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ray.klein._internal.memory import estimate_retained_size
+from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.message import (
     Barrier,
     DeliveryChannel,
@@ -83,18 +86,36 @@ class InboxPump:
         watermark: "WatermarkController",
         emit_pipeline: "EmitPipeline",
         inbox_timeout: float = 3.0,
+        input_vertex_ids: tuple[ExecutionVertexId, ...] = (),
     ) -> None:
         self._task = task
         self._state = state
         self._watermark = watermark
         self._emit = emit_pipeline
         self._inbox_timeout = inbox_timeout
+        self._checkpoint_expected_inputs = Counter(input_vertex_ids)
+        self._checkpoint_barrier_id: int | None = None
+        self._checkpoint_seen_inputs: Counter[ExecutionVertexId] = Counter()
+        self._checkpoint_seen_channels: set[object] = set()
+        # Admission is fenced as soon as the barrier RPC reaches this actor,
+        # before the barrier itself waits for shared-inbox capacity.  Keep that
+        # separate from the processing gate below: records already in the inbox
+        # are ordered before the barrier and must remain consumable.
+        self._checkpoint_announced_channels: set[object] = set()
+        self._checkpoint_admission_resumes: dict[object, asyncio.Event] = {}
+        self._checkpoint_input_resumes: dict[object, asyncio.Event] = {}
+        self._checkpoint_held: deque[InboxEnvelope] = deque()
+        self._checkpoint_ready: deque[InboxEnvelope] = deque()
+        self._last_coordinated_barrier_id = -1
 
     async def run_once(self) -> None:
         """One pump iteration (the body of the AsyncWorker loop)."""
         loop = asyncio.get_running_loop()
         try:
-            envelope = await asyncio.wait_for(self._state.inbox.get(), timeout=self._inbox_timeout)
+            envelope = await asyncio.wait_for(
+                self._next_envelope(),
+                timeout=self._inbox_timeout,
+            )
         except asyncio.TimeoutError:
             await loop.run_in_executor(self._state.executor, self._idle_flush)
             await self._emit.drain_pending()
@@ -104,6 +125,10 @@ class InboxPump:
             return
 
         payload = envelope.payload
+        if self._hold_for_coordinated_checkpoint(envelope):
+            self._checkpoint_held.append(envelope)
+            return
+        checkpoint_aligned = self._observe_coordinated_barrier(envelope)
         if isinstance(payload, RescaleBarrier):
             await self._task.handle_rescale_barrier(payload, envelope.sender_vertex_id)
             return
@@ -124,13 +149,22 @@ class InboxPump:
             )
             if isinstance(payload, EndOfData):
                 await self._state.async_runner.barrier()
+                if checkpoint_aligned:
+                    self._finish_coordinated_checkpoint(payload.id)
                 await self._check_eof_and_stop()
+            elif checkpoint_aligned:
+                # The final barrier is an ordered runner control. Wait until its
+                # snapshot/forward action and emit drain have completed before
+                # releasing post-barrier records from earlier inputs.
+                await self._state.async_runner.barrier()
+                self._finish_coordinated_checkpoint(payload.id)
             return
         await loop.run_in_executor(
             self._state.executor,
             self._handle_sync,
             payload,
             envelope.sender_vertex_id,
+            envelope.delivery_channel,
         )
         await self._emit_drain_and_watermark(
             payload,
@@ -138,7 +172,189 @@ class InboxPump:
             envelope.sequence,
             envelope.delivery_channel,
         )
+        if checkpoint_aligned:
+            self._finish_coordinated_checkpoint(payload.id)
         await self._check_eof_and_stop()
+
+    async def _next_envelope(self) -> InboxEnvelope:
+        if self._checkpoint_ready:
+            return self._checkpoint_ready.popleft()
+        get_matching = getattr(self._state.inbox, "get_matching", None)
+        if callable(get_matching):
+            return await get_matching(lambda envelope: not self._hold_for_coordinated_checkpoint(envelope))
+        return await self._state.inbox.get()
+
+    def _hold_for_coordinated_checkpoint(self, envelope: InboxEnvelope) -> bool:
+        channel = envelope.delivery_channel or envelope.sender_vertex_id
+        if channel not in self._checkpoint_input_resumes:
+            return False
+        payload = envelope.payload
+        return not (isinstance(payload, Barrier) and payload.coordinated and payload.id == self._checkpoint_barrier_id)
+
+    def _observe_coordinated_barrier(self, envelope: InboxEnvelope) -> bool:
+        payload = envelope.payload
+        if not isinstance(payload, Barrier) or not payload.coordinated:
+            return False
+        if payload.id <= self._last_coordinated_barrier_id:
+            return False
+        sender = envelope.sender_vertex_id
+        if not isinstance(sender, ExecutionVertexId):
+            raise ValueError("a coordinated checkpoint barrier requires a physical sender")
+        if self._checkpoint_expected_inputs and sender not in self._checkpoint_expected_inputs:
+            raise ValueError(f"unexpected coordinated checkpoint sender {sender}")
+        if self._checkpoint_barrier_id is None:
+            self._checkpoint_barrier_id = payload.id
+        elif self._checkpoint_barrier_id != payload.id:
+            raise RuntimeError(
+                f"coordinated checkpoint {payload.id} arrived while {self._checkpoint_barrier_id} is aligning"
+            )
+        channel = envelope.delivery_channel or sender
+        if channel in self._checkpoint_seen_channels:
+            return False
+        self._checkpoint_seen_channels.add(channel)
+        self._checkpoint_seen_inputs[sender] += 1
+        self._block_checkpoint_input(channel)
+        expected = self._checkpoint_expected_inputs or Counter({sender: 1})
+        return all(
+            self._checkpoint_seen_inputs[input_id] >= count
+            for input_id, count in expected.items()
+        )
+
+    def announce_coordinated_barrier(
+        self,
+        barrier: Barrier,
+        sender: ExecutionVertexId | None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> bool:
+        """Fence later admissions before a coordinated barrier queues.
+
+        ``emit_barrier`` and later data RPCs from one output lane are ordered,
+        but the shared weighted inbox can already be full of pre-barrier data.
+        Recording the cut here prevents post-barrier data from racing into the
+        freed slot while still allowing those older queued records to drain.
+        The method returns ``False`` for a stale/retried channel barrier so a
+        retry cannot consume another bounded inbox slot.
+        """
+
+        if not barrier.coordinated:
+            return True
+        if barrier.id <= self._last_coordinated_barrier_id:
+            return False
+        if not isinstance(sender, ExecutionVertexId):
+            raise ValueError("a coordinated checkpoint barrier requires a physical sender")
+        if self._checkpoint_expected_inputs and sender not in self._checkpoint_expected_inputs:
+            raise ValueError(f"unexpected coordinated checkpoint sender {sender}")
+        if self._checkpoint_barrier_id is None:
+            self._checkpoint_barrier_id = barrier.id
+        elif self._checkpoint_barrier_id != barrier.id:
+            raise RuntimeError(
+                f"coordinated checkpoint {barrier.id} arrived while {self._checkpoint_barrier_id} is aligning"
+            )
+        channel = self._input_channel(sender, delivery_channel)
+        if channel in self._checkpoint_announced_channels:
+            return False
+        self._checkpoint_announced_channels.add(channel)
+        self._checkpoint_admission_resumes[channel] = asyncio.Event()
+        return True
+
+    def _block_checkpoint_input(self, channel: object) -> None:
+        if channel not in self._checkpoint_input_resumes:
+            self._checkpoint_input_resumes[channel] = self._checkpoint_admission_resumes.get(
+                channel,
+                asyncio.Event(),
+            )
+
+    @staticmethod
+    def _input_channel(sender: object, delivery_channel: DeliveryChannel | None) -> object:
+        return delivery_channel or sender
+
+    def checkpoint_input_blocked(
+        self,
+        sender: object,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> bool:
+        channel = self._input_channel(sender, delivery_channel)
+        return channel in self._checkpoint_admission_resumes or channel in self._checkpoint_input_resumes
+
+    async def wait_for_checkpoint_input(
+        self,
+        sender: object,
+        payload: object | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> None:
+        """Backpressure one post-barrier channel while its peers catch up."""
+
+        channel = self._input_channel(sender, delivery_channel)
+        resume = self._checkpoint_admission_resumes.get(channel) or self._checkpoint_input_resumes.get(channel)
+        if resume is None:
+            return
+        if isinstance(payload, Barrier) and payload.coordinated and payload.id == self._checkpoint_barrier_id:
+            return
+        await resume.wait()
+
+    def _finish_coordinated_checkpoint(self, barrier_id: int) -> None:
+        if barrier_id != self._checkpoint_barrier_id:
+            return
+        self._last_coordinated_barrier_id = max(self._last_coordinated_barrier_id, barrier_id)
+        self._release_checkpoint_inputs()
+
+    def discard_checkpoint(self, barrier_id: int) -> int:
+        self._last_coordinated_barrier_id = max(self._last_coordinated_barrier_id, barrier_id)
+        held = 0
+        if barrier_id == self._checkpoint_barrier_id:
+            held = len(self._checkpoint_held)
+            self._release_checkpoint_inputs()
+        return held
+
+    def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
+        self._last_coordinated_barrier_id = max(
+            self._last_coordinated_barrier_id,
+            cutoff_barrier_id,
+        )
+        if self._checkpoint_barrier_id is None or self._checkpoint_barrier_id > cutoff_barrier_id:
+            return 0
+        held = len(self._checkpoint_held)
+        self._release_checkpoint_inputs()
+        return held
+
+    def release_all_checkpoint_inputs(self) -> None:
+        self._release_checkpoint_inputs()
+
+    def validate_checkpoint_reconfiguration(self) -> None:
+        """Reject an input-topology swap while a shared epoch is aligning."""
+
+        if (
+            self._checkpoint_barrier_id is not None
+            or self._checkpoint_announced_channels
+            or self._checkpoint_input_resumes
+        ):
+            raise RuntimeError("cannot reconfigure checkpoint inputs with a barrier in flight")
+
+    def reconfigure_checkpoint_inputs(
+        self,
+        input_vertex_ids: tuple[ExecutionVertexId, ...],
+    ) -> None:
+        """Install the physical input multiplicity for the committed topology."""
+
+        self.validate_checkpoint_reconfiguration()
+        self._checkpoint_expected_inputs = Counter(input_vertex_ids)
+
+    def _release_checkpoint_inputs(self) -> None:
+        for resume in (*self._checkpoint_admission_resumes.values(), *self._checkpoint_input_resumes.values()):
+            resume.set()
+        self._checkpoint_announced_channels.clear()
+        self._checkpoint_admission_resumes.clear()
+        self._checkpoint_input_resumes.clear()
+        self._checkpoint_ready.extend(self._checkpoint_held)
+        self._checkpoint_held.clear()
+        self._checkpoint_seen_inputs.clear()
+        self._checkpoint_seen_channels.clear()
+        self._checkpoint_barrier_id = None
+        wake_waiters = getattr(self._state.inbox, "wake_waiters", None)
+        if callable(wake_waiters):
+            # Actor teardown can release a gate after its loop stopped.
+            with suppress(RuntimeError):
+                asyncio.get_running_loop().create_task(wake_waiters())
 
     async def _emit_drain_and_watermark(
         self,
@@ -176,15 +392,21 @@ class InboxPump:
 
     # --- operator dispatch ---
 
-    def _handle_sync(self, payload, sender_vertex_id: object | None) -> None:
+    def _handle_sync(
+        self,
+        payload,
+        sender_vertex_id: object | None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> None:
         """Runs in the executor thread — accumulator + operator + output commands."""
         for record in payload if isinstance(payload, Sequence) else (payload,):
             if isinstance(record, StreamControl):
                 self.flush_input()
                 self.handle_stream_control(record, sender_vertex_id)
                 continue
-            if not isinstance(record, Barrier | StreamControl):
+            if not isinstance(record, StreamControl):
                 record.sender = sender_vertex_id
+                record.delivery_channel = delivery_channel
             for emitted in self._state.input_batches.accept(record):
                 self.data_handler(emitted)
         if isinstance(payload, EndOfData):
@@ -223,8 +445,9 @@ class InboxPump:
                     )
                 )
                 continue
-            if not isinstance(record, Barrier | StreamControl):
+            if not isinstance(record, StreamControl):
                 record.sender = sender_vertex_id
+                record.delivery_channel = delivery_channel
             emitted = await loop.run_in_executor(
                 self._state.executor,
                 self._state.input_batches.accept,
@@ -267,6 +490,8 @@ class InboxPump:
                         self._state.executor,
                         self.handle_barrier,
                         barrier,
+                        barrier.sender,
+                        getattr(barrier, "delivery_channel", None),
                     )
                 )
             elif isinstance(record, StreamControl):
@@ -305,7 +530,11 @@ class InboxPump:
         Runs on the executor thread (sync path) or the loop (async barrier path).
         """
         if isinstance(record, Barrier):
-            self.handle_barrier(record)
+            self.handle_barrier(
+                record,
+                record.sender,
+                getattr(record, "delivery_channel", None),
+            )
         elif isinstance(record, StreamControl):
             self.handle_stream_control(record, None)
         else:
@@ -347,7 +576,12 @@ class InboxPump:
             tracker.idle_input_count,
         )
 
-    def handle_barrier(self, barrier: Barrier) -> None:
+    def handle_barrier(
+        self,
+        barrier: Barrier,
+        sender_vertex_id: ExecutionVertexId | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> None:
         def on_barrier_aligned() -> None:
             # Flush any sink so buffered records land at the barrier, not only on
             # teardown. The operator may be a SinkOperator OR a ChainedOperator
@@ -360,7 +594,12 @@ class InboxPump:
             state_size_bytes = self._task.snapshot_operator_state(barrier.id)
             self._task.register_checkpoint_metrics(barrier, state_size_bytes)
 
-        if self._state.checkpoint_strategy.on_barrier_received(barrier, on_barrier_aligned):
+        if self._state.checkpoint_strategy.on_barrier_received(
+            barrier,
+            on_barrier_aligned,
+            sender_vertex_id,
+            delivery_channel,
+        ):
             self._state.metrics.barriers_out.inc()
             self._state.operator.collect(barrier)
             if isinstance(barrier, EndOfData) and self._state.checkpoint_strategy.on_eof_received(barrier):

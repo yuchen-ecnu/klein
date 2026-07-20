@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from ray.klein.observability.metrics.metric_group import TaskMetricGroup
+from ray.klein.observability.metrics.task_metrics import TaskMetrics
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.worker import stream_task as stream_task_module
 from ray.klein.runtime.worker.stream_task import StreamTask
@@ -43,7 +45,13 @@ def _descriptor(
     )
 
 
-def _runtime(descriptor: SimpleNamespace, name: str, *, seed: int = 0):
+def _runtime(
+    descriptor: SimpleNamespace,
+    name: str,
+    *,
+    seed: int = 0,
+    metrics=None,
+):
     state = SimpleNamespace(
         name=name,
         operator=SimpleNamespace(
@@ -57,7 +65,8 @@ def _runtime(descriptor: SimpleNamespace, name: str, *, seed: int = 0):
             backpressure_duration_ns=seed + 6,
             backpressure_events=seed + 7,
         ),
-        metrics=SimpleNamespace(
+        metrics=metrics
+        or SimpleNamespace(
             barriers_in=SimpleNamespace(value=seed + 8),
             barriers_out=SimpleNamespace(value=seed + 9),
             checkpoint_barrier_latency_ms=SimpleNamespace(last=seed + 12),
@@ -76,9 +85,9 @@ def _runtime(descriptor: SimpleNamespace, name: str, *, seed: int = 0):
     )
 
 
-def _paused_target(old_descriptor: SimpleNamespace):
+def _paused_target(old_descriptor: SimpleNamespace, old_runtime=None):
     task = object.__new__(StreamTask)
-    old_runtime = _runtime(old_descriptor, "old")
+    old_runtime = old_runtime or _runtime(old_descriptor, "old")
     task._descriptor = old_descriptor
     task._task_name = old_descriptor.task_name
     task._task_generation = old_descriptor.task_generation
@@ -94,6 +103,11 @@ def _paused_target(old_descriptor: SimpleNamespace):
     task._runtime_rescale_outcomes = {}
     task._runtime_rescale_lock_obj = None
     task._retired_runtimes = []
+    task._retired_runtime_ids = set()
+    task._retired_runtime_queue = asyncio.Queue(maxsize=stream_task_module._RETIRED_RUNTIME_LIMIT)
+    task._retired_runtime_cleanup_task = None
+    task._retired_runtime_cleanup_errors = {}
+    task._retired_runtime_cleanup_attempts = {}
     task._initialize_runtime_metrics = Mock()
     task._rescale_operation_id = "resize-1"
     task._rescale_role = "target"
@@ -108,6 +122,16 @@ def _paused_target(old_descriptor: SimpleNamespace):
     task._topology_operation_id = None
     task._topology_active = False
     return task, old_runtime
+
+
+@pytest.mark.asyncio
+async def test_scale_in_retirement_does_not_release_the_fenced_target() -> None:
+    task, _runtime = _paused_target(_descriptor(_operator(stateful=False), parallelism=3))
+    task._stop_stream_task = AsyncMock()
+
+    assert await task.retire_rescale("resize-1", timeout=7) is True
+
+    task._stop_stream_task.assert_awaited_once_with(7, release_rescale=False)
 
 
 @pytest.mark.asyncio
@@ -149,7 +173,12 @@ async def test_prepare_keeps_pending_runtime_invisible_until_commit() -> None:
     assert task._pump is pending_runtime.pump
     task._start_runtime_components.assert_called_once_with(pending_runtime)
     task._initialize_runtime_metrics.assert_called_once_with(pending_runtime)
-    task._close_runtime.assert_awaited_once_with(old_runtime, discard_backend=True)
+    await task._retired_runtime_cleanup_task
+    task._close_runtime.assert_awaited_once_with(
+        old_runtime,
+        stream_task_module._RETIRED_RUNTIME_CLOSE_TIMEOUT_SECONDS,
+        discard_backend=True,
+    )
     assert await task.commit_runtime_rescale("resize-1") is True
     task._close_runtime.assert_awaited_once()
 
@@ -181,13 +210,51 @@ async def test_runtime_commit_keeps_retained_actor_progress_monotonic() -> None:
     assert after.busy_ns == before.busy_ns + pending_runtime.state.operator.processing_duration_ns
     assert after.backpressure_ns == before.backpressure_ns + pending_runtime.state.output.backpressure_duration_ns
     assert after.backpressure_events == before.backpressure_events + pending_runtime.state.output.backpressure_events
-    assert after.barriers_in == before.barriers_in + int(pending_runtime.state.metrics.barriers_in.value)
-    assert after.barriers_out == before.barriers_out + int(pending_runtime.state.metrics.barriers_out.value)
+    assert after.barriers_in == max(before.barriers_in, int(pending_runtime.state.metrics.barriers_in.value))
+    assert after.barriers_out == max(before.barriers_out, int(pending_runtime.state.metrics.barriers_out.value))
     assert after.queued == 110
     assert after.capacity == 30
 
     assert await task.commit_runtime_rescale("resize-1") is True
     assert task.progress_counts() == after
+
+
+@pytest.mark.asyncio
+async def test_runtime_commit_does_not_double_shared_task_metric_counters() -> None:
+    operator = _operator(stateful=False)
+    old_descriptor = _descriptor(operator, parallelism=2)
+    old_descriptor.input_buffer_size = 20
+    new_descriptor = _descriptor(operator, parallelism=3)
+    new_descriptor.input_buffer_size = 30
+    metric_group = TaskMetricGroup(None, "transform-0", "transform", 0)
+    old_metrics = TaskMetrics.create(metric_group, 20, 0, 1)
+    old_metrics.barriers_in.inc(3)
+    old_metrics.barriers_out.inc(2)
+    old_runtime = _runtime(old_descriptor, "old", metrics=old_metrics)
+    task, _ = _paused_target(old_descriptor, old_runtime)
+
+    pending_metrics = TaskMetrics.create(metric_group, 30, 0, 1, initialize=False)
+    assert pending_metrics.barriers_in is old_metrics.barriers_in
+    assert pending_metrics.barriers_out is old_metrics.barriers_out
+    pending_runtime = _runtime(new_descriptor, "pending", metrics=pending_metrics)
+    task._build_runtime = AsyncMock(return_value=pending_runtime)
+    task._start_runtime_components = Mock()
+    task._close_runtime = AsyncMock()
+    task._last_checkpoint_state_size_bytes = 0
+    task._last_checkpoint_id = None
+
+    before = task.progress_counts()
+    assert await task.prepare_runtime_rescale("resize-1", new_descriptor) is True
+    assert await task.commit_runtime_rescale("resize-1") is True
+    after = task.progress_counts()
+
+    assert after.barriers_in == before.barriers_in == 3
+    assert after.barriers_out == before.barriers_out == 2
+    pending_metrics.barriers_in.inc()
+    pending_metrics.barriers_out.inc()
+    current = task.progress_counts()
+    assert current.barriers_in == 4
+    assert current.barriers_out == 3
 
 
 @pytest.mark.asyncio
@@ -313,7 +380,7 @@ async def test_slow_prepare_finishes_before_concurrent_rollback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_commit_and_rollback_of_one_runtime_are_serialized() -> None:
+async def test_commit_does_not_wait_for_retired_runtime_close() -> None:
     old_descriptor = _descriptor(_operator(stateful=False), parallelism=2)
     new_descriptor = _descriptor(_operator(stateful=False), parallelism=3)
     task, old_runtime = _paused_target(old_descriptor)
@@ -331,21 +398,21 @@ async def test_commit_and_rollback_of_one_runtime_are_serialized() -> None:
 
     task._close_runtime = AsyncMock(side_effect=close_runtime)
     task._start_runtime_components = Mock()
-    commit = asyncio.create_task(task.commit_runtime_rescale("resize-1"))
+    assert await task.commit_runtime_rescale("resize-1") is True
+    assert task._active_runtime is pending_runtime
+
     await close_started.wait()
-    rollback = asyncio.create_task(task.rollback_runtime_rescale("resize-1"))
-    await asyncio.sleep(0)
-    assert not rollback.done()
+    assert task._retired_runtime_cleanup_task is not None
+    assert not task._retired_runtime_cleanup_task.done()
+    assert await task.rollback_runtime_rescale("resize-1") is False
 
     allow_close.set()
-    assert await commit is True
-    assert await rollback is False
-    assert task._active_runtime is pending_runtime
-    assert pending_runtime.closed is False
+    await task._retired_runtime_cleanup_task
+    task._close_runtime.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_repeated_commit_retries_failed_previous_runtime_cleanup() -> None:
+async def test_background_worker_retries_failed_previous_runtime_cleanup(monkeypatch) -> None:
     old_descriptor = _descriptor(_operator(stateful=False), parallelism=2)
     new_descriptor = _descriptor(_operator(stateful=False), parallelism=3)
     task, old_runtime = _paused_target(old_descriptor)
@@ -353,11 +420,82 @@ async def test_repeated_commit_retries_failed_previous_runtime_cleanup() -> None
     task._build_runtime = AsyncMock(return_value=pending_runtime)
     task._start_runtime_components = Mock()
     task._close_runtime = AsyncMock(side_effect=[RuntimeError("close failed"), None])
+    monkeypatch.setattr(stream_task_module, "_RETIRED_RUNTIME_RETRY_DELAY_SECONDS", 0.001)
 
     assert await task.prepare_runtime_rescale("resize-1", new_descriptor) is True
     assert await task.commit_runtime_rescale("resize-1") is True
-    assert task._retired_runtimes == [old_runtime]
-
-    assert await task.commit_runtime_rescale("resize-1") is True
+    await task._retired_runtime_cleanup_task
     assert task._retired_runtimes == []
     assert task._close_runtime.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_close_runtime_shares_one_inflight_close_attempt() -> None:
+    descriptor = _descriptor(_operator(stateful=False), parallelism=2)
+    task, runtime = _paused_target(descriptor)
+    close_started = asyncio.Event()
+    allow_close = asyncio.Event()
+
+    async def close_components(candidate, _timeout):
+        assert candidate is runtime
+        close_started.set()
+        await allow_close.wait()
+        candidate.closed = True
+
+    task._close_runtime_components = AsyncMock(side_effect=close_components)
+    first = asyncio.create_task(task._close_runtime(runtime, 0.01, discard_backend=False))
+    second = asyncio.create_task(task._close_runtime(runtime, 0.01, discard_backend=False))
+    await close_started.wait()
+    with pytest.raises(TimeoutError):
+        await first
+    with pytest.raises(TimeoutError):
+        await second
+    assert task._close_runtime_components.await_count == 1
+
+    allow_close.set()
+    await runtime.close_task
+    await task._close_runtime(runtime, 0.01, discard_backend=False)
+    assert task._close_runtime_components.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_retired_runtime_backlog_applies_rescale_admission_backpressure() -> None:
+    descriptor = _descriptor(_operator(stateful=False), parallelism=2)
+    task, _active_runtime = _paused_target(descriptor)
+    close_started = asyncio.Event()
+    allow_close = asyncio.Event()
+
+    async def block_close(*_args, **_kwargs):
+        close_started.set()
+        await allow_close.wait()
+
+    task._close_runtime = AsyncMock(side_effect=block_close)
+    runtimes = [_runtime(descriptor, f"old-{index}") for index in range(8)]
+    for runtime in runtimes:
+        task._retire_runtime(runtime)
+    await close_started.wait()
+
+    with pytest.raises(RuntimeError, match="rejecting rescale until cleanup catches up"):
+        task._require_retired_runtime_capacity()
+
+    allow_close.set()
+    await task._retired_runtime_cleanup_task
+
+
+@pytest.mark.asyncio
+async def test_stop_wait_for_retired_cleanup_is_bounded_and_summarized() -> None:
+    descriptor = _descriptor(_operator(stateful=False), parallelism=2)
+    task, runtime = _paused_target(descriptor)
+    allow_close = asyncio.Event()
+
+    async def block_close(*_args, **_kwargs):
+        await allow_close.wait()
+
+    task._close_runtime = AsyncMock(side_effect=block_close)
+    task._retire_runtime(runtime)
+    error = await task._await_retired_runtime_cleanup(0.01)
+    assert isinstance(error, TimeoutError)
+    assert "1 retired runtime(s) remain" in str(error)
+
+    allow_close.set()
+    await task._retired_runtime_cleanup_task

@@ -79,6 +79,20 @@ class LogicalFunction:
     def runtime_info(self) -> RuntimeInfo:
         return self._runtime_info
 
+    @property
+    def supports_concurrent_rescale(self) -> bool:
+        """Whether a pending runtime may be constructed beside the active one.
+
+        Plain functions have no open/close lifecycle and remain dormant until
+        the actor-local commit. Callable/lifecycle classes may acquire external
+        resources in construction or ``open`` and must opt in with a class
+        attribute of the same name.
+        """
+
+        if self._function_kind == FunctionKind.STATELESS:
+            return True
+        return bool(getattr(self._function, "supports_concurrent_rescale", False))
+
     def with_runtime_overrides(
         self,
         *,

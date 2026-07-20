@@ -3,6 +3,7 @@
 
 import asyncio
 import hashlib
+import pickle
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
@@ -10,8 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from ray.klein._internal.deadline import Deadline
+from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.job_status import JobStatus
 from ray.klein.api.node_type import NodeType
+from ray.klein.api.sink_function import SinkFunction
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.config.checkpoint_options import CheckpointOptions
 from ray.klein.config.configuration import Configuration
@@ -21,7 +25,10 @@ from ray.klein.runtime.collector.delivery_journal import DeliveryJournal
 from ray.klein.runtime.collector.edge_output import EdgeOutput
 from ray.klein.runtime.collector.task_output import TaskOutput
 from ray.klein.runtime.coordinator import checkpoint_coordinator as checkpoint_coordinator_module
+from ray.klein.runtime.coordinator.checkpoint import Checkpoint
 from ray.klein.runtime.coordinator.checkpoint_coordinator import CheckpointCoordinator
+from ray.klein.runtime.coordinator.checkpoint_strategy import _BarrierAligner
+from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionVertexStatus
@@ -30,7 +37,8 @@ from ray.klein.runtime.graph.logical_graph_builder import LogicalGraphBuilder
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.job_manager.job_manager import JobManager
-from ray.klein.runtime.message import Barrier, Record, RescaleBarrier
+from ray.klein.runtime.job_manager.progress import OperatorProgress, ProgressSnapshot
+from ray.klein.runtime.message import Barrier, DeliveryChannel, Record, RescaleBarrier
 from ray.klein.runtime.operator.operator import StreamOperator
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.operator.operator_type import OperatorType
@@ -40,8 +48,15 @@ from ray.klein.runtime.scheduler import job_master as job_master_module
 from ray.klein.runtime.scheduler import recovery_manager as recovery_manager_module
 from ray.klein.runtime.scheduler import task_deployer, task_terminator
 from ray.klein.runtime.scheduler.job_master import JobMaster
+from ray.klein.runtime.scheduler.placement import NativeStrategy
+from ray.klein.runtime.scheduler.rescale_plan import (
+    RescalePhase,
+    RescalePlan,
+    RescaleTransaction,
+)
 from ray.klein.runtime.worker.source_stream_task import SourceStreamTask
 from ray.klein.runtime.worker.stream_task import StreamTask
+from ray.klein.state.key_group_range import KeyGroupRange
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
 
@@ -99,6 +114,29 @@ def _bare_rescale_task(name: str = "task") -> StreamTask:
     return task
 
 
+def _managed_state_reference(
+    key_groups: dict[int, bytes] | None = None,
+    *,
+    max_parallelism: int = 8,
+    watermark: int = -1,
+) -> StateSnapshotReference:
+    payload = pickle.dumps(
+        {
+            "format_version": 2,
+            "max_parallelism": max_parallelism,
+            "key_group_range": KeyGroupRange(0, max_parallelism - 1),
+            "key_groups": key_groups or {},
+            "watermark": watermark,
+        },
+        protocol=pickle.HIGHEST_PROTOCOL,
+    )
+    return StateSnapshotReference(
+        len(payload),
+        f"sha256:{hashlib.sha256(payload).hexdigest()}",
+        inline_payload=payload,
+    )
+
+
 def test_physical_rescale_replaces_only_target_and_epochs_incident_edges() -> None:
     logical, physical = _graphs()
     source_handle = object()
@@ -120,26 +158,401 @@ def test_physical_rescale_replaces_only_target_and_epochs_incident_edges() -> No
     assert resized.topology_epoch(2, 3) == "resize-1"
 
 
+def test_lifecycle_operator_must_explicitly_opt_into_overlap_safe_rescale() -> None:
+    class ExternalSink(SinkFunction):
+        def write(self, value: dict) -> None:
+            del value
+
+    unsafe = OperatorSpec(
+        StreamOperator,
+        LogicalFunction(ExternalSink),
+        2,
+        "sink",
+        OperatorType.ONE_INPUT,
+    )
+    assert unsafe.supports_concurrent_rescale is False
+
+    class OverlapSafeSink(ExternalSink):
+        supports_concurrent_rescale = True
+
+    safe = OperatorSpec(
+        StreamOperator,
+        LogicalFunction(OverlapSafeSink),
+        2,
+        "sink",
+        OperatorType.ONE_INPUT,
+    )
+    assert safe.supports_concurrent_rescale is True
+
+
+def test_narrow_physical_resize_matches_logical_forward_edge_rewrite() -> None:
+    logical, physical = _graphs(parallelism=2, source_parallelism=2)
+
+    resized_logical = logical.rescale_operator(2, 3)
+    expected = physical.rescale_operator(resized_logical, 2)
+    resized = physical.resize_operator(2, 3)
+
+    assert tuple(str(edge.partitioner) for edge in resized.job_edges) == tuple(
+        str(edge.partitioner) for edge in expected.job_edges
+    )
+    assert all(not edge.partitioner.is_type(ForwardPartitioner) for edge in resized.job_edges)
+
+    # Once an implicit FORWARD edge became a shuffle, scaling back preserves
+    # that explicit shuffle just like LogicalGraph.rescale_operator does.
+    restored_logical = resized_logical.rescale_operator(2, 2)
+    expected_restored = resized.rescale_operator(restored_logical, 2)
+    restored = resized.resize_operator(2, 2)
+    assert tuple(str(edge.partitioner) for edge in restored.job_edges) == tuple(
+        str(edge.partitioner) for edge in expected_restored.job_edges
+    )
+    assert all(not edge.partitioner.is_type(ForwardPartitioner) for edge in restored.job_edges)
+
+
 @pytest.mark.asyncio
 async def test_checkpoint_gate_and_transient_state_do_not_pollute_global_checkpoint() -> None:
     coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
     await coordinator.begin_operator_rescale("resize-1", timeout=1)
 
     registration = coordinator.register_checkpoint(ExecutionVertexId(1, 0))
-    payload = b"managed-state"
-    reference = StateSnapshotReference(
-        len(payload),
-        f"sha256:{hashlib.sha256(payload).hexdigest()}",
-        inline_payload=payload,
-    )
-    await coordinator.stage_operator_rescale_state("resize-1", 2, (reference,))
+    reference = _managed_state_reference({0: b"group-0", 7: b"group-7"})
+    await coordinator.stage_operator_rescale_state("resize-1", 2, 2, (reference,))
 
     assert registration.barrier_id is None
     assert "paused" in registration.reason
-    assert coordinator.operator_rescale_states("resize-1", ExecutionVertexId(2, 9)) == (reference,)
+    left = coordinator.operator_rescale_states("resize-1", ExecutionVertexId(2, 0))
+    right = coordinator.operator_rescale_states("resize-1", ExecutionVertexId(2, 1))
+    assert len(left) == len(right) == 1
+    assert pickle.loads(left[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {
+        0: b"group-0"
+    }
+    assert pickle.loads(right[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {
+        7: b"group-7"
+    }
     assert coordinator._latest_operator_states == {}
     assert coordinator._restored_operator_states == {}
     assert coordinator.finish_operator_rescale("resize-1") is True
+
+
+def test_rescale_stabilization_sources_share_one_checkpoint_epoch() -> None:
+    _logical, graph = _graphs(source_parallelism=2)
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._execution_graph = graph
+    sources = {vertex.id for vertex in graph.source_execution_vertices}
+    coordinator._rescale_recovery_fence = "resize-1"
+    coordinator._rescale_recovery_pending_sources = set(sources)
+
+    registrations = [coordinator.register_checkpoint(source_id, force=True) for source_id in sources]
+
+    assert {registration.barrier_id for registration in registrations} == {registrations[0].barrier_id}
+    assert all(registration.coordinated for registration in registrations)
+    assert len(coordinator._inflight_checkpoints) == 1
+    checkpoint = next(iter(coordinator._inflight_checkpoints.values()))
+    assert checkpoint.coordinated is True
+    assert set(checkpoint.trigger_sources) == sources
+    assert checkpoint.required_acknowledgements == len(graph.sink_execution_vertices)
+    assert set(checkpoint.required_committers) == {
+        vertex.id for vertex in graph.sink_execution_vertices
+    }
+
+
+def test_coordinated_barrier_aligns_direct_inputs_once_with_multiplicity() -> None:
+    first = ExecutionVertexId(1, 0)
+    second = ExecutionVertexId(1, 1)
+    aligner = _BarrierAligner({}, (first, first, second))
+    barrier = Barrier(7, first, coordinated=True)
+    first_edge = DeliveryChannel(first, "first", 0, 0)
+    second_edge = DeliveryChannel(first, "first", 1, 0)
+    third_edge = DeliveryChannel(second, "second", 0, 0)
+
+    assert aligner.receive(barrier, first, first_edge) is False
+    assert aligner.receive(barrier, second, third_edge) is False
+    assert aligner.receive(barrier, first, second_edge) is True
+    assert aligner.receive(barrier, first, first_edge) is False
+
+
+def test_aborted_coordinated_barrier_releases_partial_alignment() -> None:
+    first = ExecutionVertexId(1, 0)
+    second = ExecutionVertexId(1, 1)
+    aligner = _BarrierAligner({}, (first, second))
+    barrier = Barrier(7, first, coordinated=True)
+
+    assert aligner.receive(barrier, first) is False
+    assert aligner.discard(7) == 1
+    aligner.validate_reconfiguration()
+    assert aligner.receive(barrier, first) is False
+    replacement = Barrier(8, first, coordinated=True)
+    assert aligner.receive(replacement, first) is False
+    assert aligner.receive(replacement, second) is True
+
+
+@pytest.mark.asyncio
+async def test_shared_checkpoint_atomically_persists_all_sources_and_target_shards(tmp_path) -> None:
+    first = ExecutionVertexId(1, 0)
+    second = ExecutionVertexId(1, 1)
+    notifications: list[tuple[ExecutionVertexId, int]] = []
+
+    class _SourceTask:
+        def __init__(self, vertex_id: ExecutionVertexId, offset: int) -> None:
+            self.vertex_id = vertex_id
+            self.offset = offset
+
+        def source_checkpoint_state(self, barrier_id: int):
+            return True, {"offset": self.offset, "barrier_id": barrier_id}
+
+        def notify_source_checkpoint_persisted(self, barrier_id: int) -> bool:
+            notifications.append((self.vertex_id, barrier_id))
+            return True
+
+        def discard_source_checkpoint(self, _barrier_id: int) -> bool:
+            return True
+
+    source_vertices = {
+        first: SimpleNamespace(id=first, stream_task=_SourceTask(first, 11)),
+        second: SimpleNamespace(id=second, stream_task=_SourceTask(second, 22)),
+    }
+
+    class _Graph:
+        source_execution_vertices = tuple(source_vertices.values())
+        sink_execution_vertices = (SimpleNamespace(),)
+
+        @staticmethod
+        def execution_vertex(vertex_id: ExecutionVertexId):
+            return source_vertices[vertex_id]
+
+    config = Configuration(include_environment=False)
+    config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
+    coordinator = CheckpointCoordinator(config, job_id="job")
+    coordinator._ensure_locks()
+    coordinator._execution_graph = _Graph()
+    coordinator._rescale_recovery_fence = "resize-1"
+    coordinator._rescale_recovery_pending_sources = {first, second}
+    coordinator._coordinated_checkpoint_barrier_id = 7
+    left = _managed_state_reference({0: b"left"})
+    right = _managed_state_reference({7: b"right"})
+    coordinator._inflight_operator_states[7] = {"2:0": left, "2:1": right}
+    coordinator._transient_rescale_states[("resize-1", 2)] = (left, right)
+    checkpoint = Checkpoint(7, 1, (first, second), coordinated=True)
+    checkpoint.mark_in_progress()
+
+    assert await coordinator._complete_aligned_checkpoint(checkpoint, 7) is True
+
+    assert checkpoint.status.name == "COMPLETED"
+    assert coordinator.operator_rescale_recovery_fenced() is False
+    assert set(coordinator._latest_operator_states) == {"2:0", "2:1"}
+    assert set(coordinator._latest_source_states) == {"1:0", "1:1"}
+    assert set(notifications) == {(first, 7), (second, 7)}
+
+
+@pytest.mark.asyncio
+async def test_durable_source_release_and_callback_retry_are_independent() -> None:
+    source_id = ExecutionVertexId(1, 0)
+
+    class _SourceTask:
+        attempts = 0
+
+        def notify_source_checkpoint_persisted(self, _barrier_id: int) -> bool:
+            self.attempts += 1
+            return self.attempts > 1
+
+    source_task = _SourceTask()
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._execution_graph = SimpleNamespace(
+        source_execution_vertices=(SimpleNamespace(id=source_id, stream_task=source_task),),
+    )
+    coordinator._durable_source_states["1:0"] = SourceCheckpointEntry("1:0", 7, {"offset": 7})
+    coordinator._rescale_recovery_fence = "resize-1"
+    coordinator._rescale_recovery_pending_sources = {source_id}
+    coordinator._rescale_recovery_required_state_revision = 1
+    coordinator._coordinated_checkpoint_barrier_id = 7
+    coordinator._persisted_state_revision = 1
+
+    await coordinator._notify_durable_source_checkpoints()
+    coordinator._clear_rescale_recovery_fence_if_durable()
+
+    assert coordinator.operator_rescale_recovery_fenced() is False
+    assert coordinator._released_source_checkpoint_ids["1:0"] == 7
+    assert "1:0" not in coordinator._notified_source_checkpoint_ids
+
+    await coordinator._notify_durable_source_checkpoints()
+    assert coordinator._notified_source_checkpoint_ids["1:0"] == 7
+    assert source_task.attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_lost_durable_source_rpc_retains_fence_until_retry() -> None:
+    source_id = ExecutionVertexId(1, 0)
+
+    class _SourceTask:
+        fail = True
+
+        def notify_source_checkpoint_persisted(self, _barrier_id: int) -> bool:
+            if self.fail:
+                raise ConnectionError("response lost")
+            return True
+
+    source_task = _SourceTask()
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._execution_graph = SimpleNamespace(
+        source_execution_vertices=(SimpleNamespace(id=source_id, stream_task=source_task),),
+    )
+    coordinator._durable_source_states["1:0"] = SourceCheckpointEntry("1:0", 7, {"offset": 7})
+    coordinator._rescale_recovery_fence = "resize-1"
+    coordinator._rescale_recovery_pending_sources = {source_id}
+    coordinator._rescale_recovery_required_state_revision = 1
+    coordinator._coordinated_checkpoint_barrier_id = 7
+    coordinator._persisted_state_revision = 1
+
+    await coordinator._notify_durable_source_checkpoints()
+    coordinator._clear_rescale_recovery_fence_if_durable()
+    assert coordinator.operator_rescale_recovery_fenced() is True
+
+    source_task.fail = False
+    await coordinator._notify_durable_source_checkpoints()
+    coordinator._clear_rescale_recovery_fence_if_durable()
+    assert coordinator.operator_rescale_recovery_fenced() is False
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_maintenance_starts_when_periodic_persistence_is_disabled() -> None:
+    config = Configuration(include_environment=False)
+    config.set(CheckpointOptions.PERSISTENCE_INTERVAL, 0)
+    coordinator = CheckpointCoordinator(config, job_id="job")
+
+    await coordinator.start()
+    try:
+        assert coordinator.healthy is True
+    finally:
+        await coordinator.stop()
+
+
+@pytest.mark.asyncio
+async def test_disabled_persistence_still_runs_checkpoint_expiry_maintenance() -> None:
+    config = Configuration(include_environment=False)
+    config.set(CheckpointOptions.PERSISTENCE_INTERVAL, 0)
+    coordinator = CheckpointCoordinator(config, job_id="job")
+    coordinator._expire_stale_checkpoints = AsyncMock()
+    coordinator._commit_durable_sink_committables = AsyncMock(return_value=True)
+    coordinator._notify_durable_source_checkpoints = AsyncMock()
+
+    with patch.object(checkpoint_coordinator_module.asyncio, "sleep", new=AsyncMock()):
+        await coordinator._run()
+
+    coordinator._expire_stale_checkpoints.assert_awaited_once_with()
+    coordinator._notify_durable_source_checkpoints.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_aligned_checkpoint_source_collection_has_a_finite_deadline() -> None:
+    source_id = ExecutionVertexId(1, 0)
+    source_task = SimpleNamespace(
+        source_checkpoint_state=Mock(return_value=object()),
+        discard_source_checkpoint=Mock(return_value=True),
+        discard_checkpoint=Mock(return_value=0),
+    )
+    source_vertex = SimpleNamespace(id=source_id, stream_task=source_task)
+    graph = SimpleNamespace(
+        execution_vertex=Mock(return_value=source_vertex),
+        execution_vertices=(source_vertex,),
+    )
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._execution_graph = graph
+    checkpoint = Checkpoint(7, 1, (source_id,), coordinated=True)
+    checkpoint.mark_in_progress()
+
+    with patch.object(
+        checkpoint_coordinator_module.klein,
+        "aget",
+        new=AsyncMock(side_effect=TimeoutError("source RPC stalled")),
+    ) as aget:
+        assert await coordinator._complete_aligned_checkpoint(checkpoint, 7) is False
+
+    assert aget.await_args_list[0].kwargs["timeout"] == coordinator._checkpoint_operation_timeout()
+    assert checkpoint.status.name == "FAILED"
+
+
+@pytest.mark.asyncio
+async def test_failed_abort_cleanup_is_retried_before_reusing_shared_epoch() -> None:
+    source_id = ExecutionVertexId(1, 0)
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._coordinated_checkpoint_barrier_id = 7
+    coordinator._coordinated_checkpoint_registered_sources = {source_id}
+    coordinator._attempt_checkpoint_release = AsyncMock(side_effect=[False, True])
+
+    await coordinator._release_checkpoint_sources(7, (source_id,))
+    assert coordinator._coordinated_checkpoint_barrier_id == 7
+    assert 7 in coordinator._pending_checkpoint_releases
+
+    await coordinator._retry_pending_checkpoint_releases()
+    assert coordinator._coordinated_checkpoint_barrier_id is None
+    assert coordinator._coordinated_checkpoint_registered_sources == set()
+    assert coordinator._pending_checkpoint_releases == {}
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_release_accepts_an_idempotent_source_noop() -> None:
+    source_id = ExecutionVertexId(1, 0)
+    source_task = SimpleNamespace(discard_source_checkpoint=Mock(return_value=object()))
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._execution_graph = SimpleNamespace(
+        execution_vertex=Mock(return_value=SimpleNamespace(stream_task=source_task)),
+    )
+    coordinator._discard_checkpoint_alignment = AsyncMock(return_value=True)
+
+    with patch.object(
+        checkpoint_coordinator_module.klein,
+        "aget",
+        new=AsyncMock(return_value=False),
+    ):
+        assert await coordinator._attempt_checkpoint_release(7, (source_id,)) is True
+
+
+def test_coordinated_source_keeps_running_after_ordered_emit() -> None:
+    task = object.__new__(SourceStreamTask)
+    task._coordinated_checkpoint_barrier_id = None
+    emitted = threading.Event()
+    output = Mock()
+    output.collect.side_effect = lambda _barrier: emitted.set()
+    task._state = SimpleNamespace(output=output)
+    barrier = Barrier(7, ExecutionVertexId(1, 0), coordinated=True)
+
+    worker = threading.Thread(target=task._emit_checkpoint_barrier, args=(barrier,))
+    worker.start()
+    assert emitted.wait(timeout=1)
+    worker.join(timeout=1)
+    assert worker.is_alive() is False
+    assert task._coordinated_checkpoint_barrier_id == 7
+
+
+@pytest.mark.asyncio
+async def test_rescale_state_is_materialized_once_and_served_as_one_target_partition() -> None:
+    config = Configuration(include_environment=False)
+    config.set(StateOptions.OBJECT_STORE_CACHE_ENABLED, False)
+    coordinator = CheckpointCoordinator(config, job_id="job")
+    await coordinator.begin_operator_rescale("resize-1", timeout=1)
+    payloads = {
+        "old-0": _managed_state_reference({0: b"zero", 1: b"one"}).inline_payload,
+        "old-1": _managed_state_reference({4: b"four", 7: b"seven"}).inline_payload,
+    }
+    references = tuple(
+        StateSnapshotReference(
+            len(payload),
+            f"sha256:{hashlib.sha256(payload).hexdigest()}",
+            object_ref=name,
+        )
+        for name, payload in payloads.items()
+    )
+
+    with patch.object(checkpoint_coordinator_module.klein, "get", side_effect=payloads.__getitem__) as get:
+        await coordinator.stage_operator_rescale_state("resize-1", 2, 3, references)
+
+    assert [call.args[0] for call in get.call_args_list] == ["old-0", "old-1"]
+    restored = {}
+    for index in range(3):
+        target_references = coordinator.operator_rescale_states("resize-1", ExecutionVertexId(2, index))
+        assert len(target_references) == 1
+        target_payload = pickle.loads(target_references[0].inline_payload)
+        restored.update(target_payload["key_groups"])
+    assert restored == {0: b"zero", 1: b"one", 4: b"four", 7: b"seven"}
 
 
 @pytest.mark.asyncio
@@ -179,21 +592,25 @@ async def test_next_rescale_waits_for_the_stabilization_checkpoint() -> None:
     coordinator.finish_operator_rescale("resize-2")
 
 
-def test_recovery_fence_requires_durable_state_from_every_source() -> None:
+def test_recovery_fence_requires_one_shared_durable_source_cut() -> None:
     coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
     first = ExecutionVertexId(1, 0)
     second = ExecutionVertexId(1, 1)
     coordinator._rescale_recovery_fence = "resize-1"
     coordinator._rescale_recovery_pending_sources = {first, second}
+    coordinator._coordinated_checkpoint_barrier_id = 7
 
     coordinator._state_revision = 7
-    assert coordinator._record_rescale_stabilization_progress(first) is False
+    partial = Checkpoint(6, 1, (first,), coordinated=True)
+    assert coordinator._record_rescale_stabilization_progress(partial) is False
     assert coordinator.operator_rescale_recovery_fenced() is True
-    assert coordinator._record_rescale_stabilization_progress(second) is True
+    shared = Checkpoint(7, 1, (first, second), coordinated=True)
+    assert coordinator._record_rescale_stabilization_progress(shared) is True
     coordinator._clear_rescale_recovery_fence_if_durable()
     assert coordinator.operator_rescale_recovery_fenced() is True
 
     coordinator._persisted_state_revision = 7
+    coordinator._released_source_checkpoint_ids = {"1:0": 7, "1:1": 7}
     coordinator._clear_rescale_recovery_fence_if_durable()
     assert coordinator.operator_rescale_recovery_fenced() is False
 
@@ -203,19 +620,18 @@ async def test_rescale_restore_falls_back_after_transient_state_is_superseded() 
     coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
     coordinator._ensure_locks()
     vertex_id = ExecutionVertexId(2, 0)
-    payload = b"managed-state"
-    reference = StateSnapshotReference(
-        len(payload),
-        f"sha256:{hashlib.sha256(payload).hexdigest()}",
-        inline_payload=payload,
-    )
+    reference = _managed_state_reference({0: b"group-0"})
     await coordinator.begin_operator_rescale("resize-1", timeout=1)
 
     with pytest.raises(RuntimeError, match=r"active operator rescale.*unavailable"):
         await coordinator.restore_operator_rescale_states("resize-1", vertex_id)
 
-    await coordinator.stage_operator_rescale_state("resize-1", 2, (reference,))
-    assert await coordinator.restore_operator_rescale_states("resize-1", vertex_id) == (reference,)
+    await coordinator.stage_operator_rescale_state("resize-1", 2, 1, (reference,))
+    transient = await coordinator.restore_operator_rescale_states("resize-1", vertex_id)
+    assert len(transient) == 1
+    assert pickle.loads(transient[0].materialize(checkpoint_coordinator_module.klein.get))["key_groups"] == {
+        0: b"group-0"
+    }
     coordinator.finish_operator_rescale("resize-1")
     coordinator._replace_logical_operator_states({"2:0": reference})
 
@@ -235,23 +651,21 @@ async def test_committed_rescale_recovery_fence_clears_after_state_is_superseded
     coordinator._execution_graph = SimpleNamespace(
         source_execution_vertices=[SimpleNamespace(id=source_id)],
     )
-    payload = b"managed-state"
-    reference = StateSnapshotReference(
-        len(payload),
-        f"sha256:{hashlib.sha256(payload).hexdigest()}",
-        inline_payload=payload,
-    )
+    reference = _managed_state_reference({0: b"group-0"})
     await coordinator.begin_operator_rescale("resize-1", timeout=1)
-    await coordinator.stage_operator_rescale_state("resize-1", 2, (reference,))
+    await coordinator.stage_operator_rescale_state("resize-1", 2, 1, (reference,))
 
     assert coordinator.finish_operator_rescale("resize-1", committed=True) is True
     assert coordinator.operator_rescale_recovery_fenced() is True
     coordinator._replace_logical_operator_states({"2:0": reference})
-    assert coordinator._record_rescale_stabilization_progress(source_id) is True
+    coordinator._coordinated_checkpoint_barrier_id = 7
+    checkpoint = Checkpoint(7, 1, (source_id,), coordinated=True)
+    assert coordinator._record_rescale_stabilization_progress(checkpoint) is True
     coordinator._clear_rescale_recovery_fence_if_durable()
 
     assert coordinator.operator_rescale_recovery_fenced() is True
     coordinator._persisted_state_revision = coordinator._state_revision
+    coordinator._released_source_checkpoint_ids["1:0"] = 7
     coordinator._clear_rescale_recovery_fence_if_durable()
 
     assert coordinator.operator_rescale_recovery_fenced() is False
@@ -267,13 +681,15 @@ async def test_stabilization_fence_survives_persistence_failure(tmp_path) -> Non
     coordinator._execution_graph = SimpleNamespace(source_execution_vertices=[])
     coordinator._rescale_recovery_fence = "resize-1"
     coordinator._rescale_recovery_pending_sources = {source_id}
+    coordinator._coordinated_checkpoint_barrier_id = 7
     coordinator._latest_source_states["1:0"] = SourceCheckpointEntry(
         task_key="1:0",
         checkpoint_id=7,
         state={"offset": 7},
     )
     coordinator._state_revision = 1
-    assert coordinator._record_rescale_stabilization_progress(source_id) is True
+    checkpoint = Checkpoint(7, 1, (source_id,), coordinated=True)
+    assert coordinator._record_rescale_stabilization_progress(checkpoint) is True
 
     with (
         patch.object(
@@ -287,6 +703,9 @@ async def test_stabilization_fence_survives_persistence_failure(tmp_path) -> Non
 
     assert coordinator.operator_rescale_recovery_fenced() is True
     assert await coordinator._persist_checkpoint_metadata(notify_sources=False, strict=True) is True
+    assert coordinator.operator_rescale_recovery_fenced() is True
+    coordinator._released_source_checkpoint_ids["1:0"] = 7
+    coordinator._clear_rescale_recovery_fence_if_durable()
     assert coordinator.operator_rescale_recovery_fenced() is False
 
 
@@ -297,7 +716,8 @@ async def test_job_manager_noop_rejection_success_and_failed_swap_preserve_commi
     manager = JobManager(Configuration(include_environment=False), namespace="job")
     manager.logical_graph = logical
     manager.execution_graph = physical
-    manager.job_master = Mock()
+    manager.job_master = Mock(execution_graph=physical)
+    manager.job_master.take_retired_rescale_counts.return_value = {}
     manager._job_config = Configuration(include_environment=False)
     manager._job_config.set(StateOptions.MAX_PARALLELISM, 2)
     manager._job_status = JobStatus.RUNNING
@@ -317,7 +737,13 @@ async def test_job_manager_noop_rejection_success_and_failed_swap_preserve_commi
     assert (await manager.rescale_operator(2, 3))["status"] == "REJECTED"
     manager._rescale_in_progress = False
 
-    manager.run_exclusive = AsyncMock(return_value=None)
+    async def commit_resize(_callable, target_id, parallelism, _operation_id):
+        manager.job_master.execution_graph = manager.job_master.execution_graph.resize_operator(
+            target_id,
+            parallelism,
+        )
+
+    manager.run_exclusive = AsyncMock(side_effect=commit_resize)
     completed = await manager.rescale_operator("2", 3)
     assert completed["status"] == "COMPLETED"
     assert manager.execution_graph.job_vertex(1) is physical.job_vertex(1)
@@ -344,13 +770,14 @@ async def test_job_manager_adopts_a_topology_that_failed_after_commit() -> None:
     manager.logical_graph = logical
     manager.execution_graph = physical
     manager.job_master = Mock(execution_graph=physical)
+    manager.job_master.take_retired_rescale_counts.return_value = {}
 
     def fail_after_commit(*_args):
         manager.job_master.execution_graph = resized_graph
         raise RuntimeError("checkpoint gate response was lost")
 
     manager.run_exclusive = AsyncMock(side_effect=fail_after_commit)
-    error = await manager._run_operator_rescale(resized_graph, resized_logical)
+    error = await manager._run_operator_rescale(2, 3, resized_logical)
 
     assert "checkpoint gate response was lost" in error
     assert manager.logical_graph is resized_logical
@@ -359,25 +786,123 @@ async def test_job_manager_adopts_a_topology_that_failed_after_commit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_local_rescale_rejects_jobs_with_multiple_physical_sources() -> None:
+async def test_local_rescale_accepts_multiple_physical_sources() -> None:
     logical, physical = _graphs(source_parallelism=2)
     _mark_running(physical)
+    for source in physical.source_execution_vertices:
+        source.stream_task = MagicMock()
     manager = JobManager(Configuration(include_environment=False), namespace="job")
     manager.logical_graph = logical
     manager.execution_graph = physical
-    manager.job_master = Mock()
+    resized_graph = physical.resize_operator(2, 3)
+    manager.job_master = Mock(execution_graph=resized_graph)
+    manager.job_master.take_retired_rescale_counts.return_value = {}
     manager._job_config = Configuration(include_environment=False)
     manager._job_status = JobStatus.RUNNING
 
     result = await manager.rescale_operator(2, 3)
 
-    assert result["status"] == "REJECTED"
-    assert "exactly one physical source task" in result["error"]
-    resized_logical = logical.rescale_operator(2, 3)
-    resized_graph = physical.rescale_operator(resized_logical, 2)
+    assert result["status"] == "COMPLETED"
+    assert result["error"] is None
     master = JobMaster(physical, Configuration(include_environment=False))
-    with pytest.raises(ValueError, match="exactly one physical source task"):
-        master._validate_local_rescale(resized_graph)
+    master.coordinator = MagicMock()
+    with patch.object(master, "_coordinator_alive", return_value=True):
+        master._validate_local_rescale(RescalePlan.build(physical, 2, 3, "resize-1"))
+    manager._writer.shutdown(wait=False)
+
+
+def test_stabilization_excludes_disconnected_dataflow_components() -> None:
+    selected_source = SimpleNamespace(id=ExecutionVertexId(1, 0))
+    unrelated_source = SimpleNamespace(id=ExecutionVertexId(4, 0))
+    selected_sink = SimpleNamespace(id=ExecutionVertexId(3, 0))
+    unrelated_sink = SimpleNamespace(id=ExecutionVertexId(6, 0))
+    selected_domain = CheckpointDomain(
+        "selected",
+        (selected_source.id, ExecutionVertexId(2, 0), selected_sink.id),
+        (selected_source.id,),
+        (selected_sink.id,),
+    )
+    unrelated_domain = CheckpointDomain(
+        "unrelated",
+        (unrelated_source.id, ExecutionVertexId(5, 0), unrelated_sink.id),
+        (unrelated_source.id,),
+        (unrelated_sink.id,),
+    )
+    graph = SimpleNamespace(
+        source_execution_vertices=(selected_source, unrelated_source),
+        sink_execution_vertices=(selected_sink, unrelated_sink),
+        checkpoint_domains_for_job_vertex=Mock(
+            side_effect=lambda target: (selected_domain,) if target == 2 else (unrelated_domain,)
+        ),
+    )
+
+    assert JobMaster._rescale_stabilization_sources(graph, 2) == (selected_source,)
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    coordinator._execution_graph = graph
+    coordinator._rescale_operation_id = "resize-1"
+    assert coordinator.finish_operator_rescale("resize-1", committed=True, target_job_vertex_id=2) is True
+    assert coordinator._rescale_recovery_pending_sources == {selected_source.id}
+    assert coordinator._rescale_recovery_pending_sinks == {selected_sink.id}
+
+
+@pytest.mark.asyncio
+async def test_rescale_readiness_excludes_disconnected_checkpoint_domains() -> None:
+    config = Configuration(include_environment=False)
+    builder = LogicalGraphBuilder("job", config)
+    vertices = [
+        _vertex("job", index, node_type, 1)
+        for index, node_type in (
+            (1, NodeType.SOURCE),
+            (2, NodeType.TRANSFORM),
+            (3, NodeType.SINK),
+            (4, NodeType.SOURCE),
+            (5, NodeType.TRANSFORM),
+            (6, NodeType.SINK),
+        )
+    ]
+    for vertex in vertices:
+        builder.add_vertex(vertex)
+    forward = ForwardPartitioner().to_spec()
+    for source, target in ((1, 2), (2, 3), (4, 5), (5, 6)):
+        builder.add_edge(EdgeSpec(vertices[source - 1].id, vertices[target - 1].id, forward))
+    logical = builder.build()
+    physical = ExecutionGraph.expand(logical, config, JobMetricGroup("job"), "job")
+    selected_domain = physical.checkpoint_domains_for_job_vertex(2)[0]
+    for execution_vertex_id in selected_domain.vertex_ids:
+        vertex = physical.execution_vertex(execution_vertex_id)
+        vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+        vertex.transition_to(ExecutionVertexStatus.RUNNING)
+
+    manager = JobManager(config, namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock()
+    manager._job_config = config
+    manager._job_status = JobStatus.RUNNING
+
+    vertex_id, _logical_vertex = manager._resolve_rescale_request(2, 2)
+
+    assert vertex_id.index == 2
+    assert all(
+        physical.execution_vertex(execution_vertex_id).status == ExecutionVertexStatus.CREATED
+        for execution_vertex_id in physical.checkpoint_domains_for_job_vertex(5)[0].vertex_ids
+    )
+    manager.progress_snapshot = AsyncMock(
+        return_value=ProgressSnapshot(
+            operators=(
+                OperatorProgress("op2", 2, 1, "RUNNING", 0),
+                OperatorProgress("op5", 5, 1, "CREATED", 0),
+            )
+        )
+    )
+    manager._checkpoint_dashboard_snapshot = AsyncMock(return_value={})
+
+    snapshot = await manager.dashboard_snapshot()
+    operators = {operator["op_id"]: operator for operator in snapshot["operators"]}
+
+    assert operators[2]["can_rescale"] is True
+    assert operators[5]["can_rescale"] is False
+    assert "CheckpointDomain" in operators[5]["rescale_disabled_reason"]
     manager._writer.shutdown(wait=False)
 
 
@@ -542,7 +1067,10 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
     assert task._descriptor is pending
     output.prepare_edge_swap.assert_called_once_with("resize-1", ["replacement"])
     output.activate_edge_swap.assert_called_once_with("resize-1")
-    checkpoint.reconfigure_barrier_split.assert_called_once_with(dict(pending.barrier_split))
+    checkpoint.reconfigure_barrier_split.assert_called_once_with(
+        dict(pending.barrier_split),
+        pending.input_vertex_ids,
+    )
     tracker.reconfigure_inputs.assert_called_once_with(pending.input_vertex_ids)
 
     assert task.commit_topology_reconfiguration("resize-1") is True
@@ -838,8 +1366,8 @@ def test_actor_topology_activation_failure_restores_every_local_component() -> N
     output.activate_edge_swap.assert_called_once_with("resize-1")
     output.rollback_edge_swap.assert_called_once_with("resize-1")
     assert checkpoint.reconfigure_barrier_split.call_args_list == [
-        ((dict(pending.barrier_split),),),
-        ((dict(previous.barrier_split),),),
+        ((dict(pending.barrier_split), pending.input_vertex_ids),),
+        ((dict(previous.barrier_split), previous.input_vertex_ids),),
     ]
     assert tracker.reconfigure_inputs.call_args_list == [
         ((pending.input_vertex_ids,),),
@@ -898,29 +1426,27 @@ def test_checkpoint_gate_release_rejects_a_false_coordinator_response() -> None:
         patch.object(job_master_module.klein, "get", return_value=False) as get,
         pytest.raises(RuntimeError, match="failed to release checkpoint gate"),
     ):
-        master._finish_local_rescale_gate("resize-1", committed=True)
+        master._finish_local_rescale_gate("resize-1", committed=True, timeout=1)
 
     assert get.call_count == 3
 
 
 def test_incomplete_rescale_rollback_stays_fenced_and_forces_global_recovery() -> None:
-    logical, old_graph = _graphs()
-    resized_logical = logical.rescale_operator(2, 3)
-    new_graph = old_graph.rescale_operator(resized_logical, 2)
+    _logical, old_graph = _graphs()
     master = JobMaster(old_graph, Configuration(include_environment=False))
     recovery = MagicMock()
     master._recovery = recovery
-    attempt = SimpleNamespace(
-        coordinator_reconfiguration_attempted=True,
-        routes_prepared=True,
-        candidate_created=False,
-        runtime_prepare_attempted=False,
-        checkpoint_gate_attempted=True,
-        participants_prepare_attempted=True,
+    plan = RescalePlan.build(old_graph, 2, 3, "resize-1")
+    transaction = RescaleTransaction(plan, phase=RescalePhase.COORDINATOR)
+    placement_transition = NativeStrategy().plan(old_graph).begin_rescale(
+        plan.new_graph,
+        added=plan.delta.added,
+        removed=plan.delta.removed,
     )
 
     with (
         patch.object(master, "_restore_precommit_topologies", return_value=False),
+        patch.object(master, "_restore_precommit_runtime", return_value=True),
         patch.object(master, "_replace_recovery_graph"),
         patch.object(master, "_discard_local_rescale_state"),
         patch.object(master, "_finish_local_rescale_gate") as finish_gate,
@@ -928,17 +1454,16 @@ def test_incomplete_rescale_rollback_stays_fenced_and_forces_global_recovery() -
         pytest.raises(RuntimeError, match="global recovery is required"),
     ):
         master._rollback_local_rescale(
-            new_graph,
-            "resize-1",
-            2,
-            old_graph,
-            new_graph.job_vertex(2),
-            1,
-            attempt,
+            plan,
+            Deadline(1),
+            transaction,
+            placement_transition,
         )
 
     recovery.require_global_recovery.assert_called_once()
-    finish_gate.assert_called_once_with("resize-1", committed=True)
+    finish_gate.assert_called_once()
+    assert finish_gate.call_args.args == ("resize-1",)
+    assert finish_gate.call_args.kwargs["committed"] is True
     release.assert_not_called()
 
 
@@ -1107,6 +1632,18 @@ def test_source_forced_checkpoint_is_emitted_at_the_next_idle_boundary() -> None
 
     task._generate_barrier.assert_called_once_with(force=True)
     task._state.metrics.barriers_out.inc.assert_called_once_with()
+    assert task._forced_checkpoint_requested.is_set() is False
+
+
+def test_exhausted_source_rejects_checkpoint_before_finished_status_is_visible() -> None:
+    task = object.__new__(SourceStreamTask)
+    task._running = True
+    task._eof_reached = False
+    task._source_exhausted = threading.Event()
+    task._source_exhausted.set()
+    task._forced_checkpoint_requested = threading.Event()
+
+    assert task.request_checkpoint() is False
     assert task._forced_checkpoint_requested.is_set() is False
 
 

@@ -11,11 +11,12 @@ class CheckpointRegistration(NamedTuple):
 
     barrier_id: int | None
     reason: str
+    coordinated: bool
 
     @classmethod
-    def success(cls, barrier_id: int) -> "CheckpointRegistration":
-        return cls(barrier_id, "")
+    def success(cls, barrier_id: int, *, coordinated: bool = False) -> "CheckpointRegistration":
+        return cls(barrier_id, "", coordinated)
 
     @classmethod
     def skip(cls, reason: str) -> "CheckpointRegistration":
-        return cls(None, reason)
+        return cls(None, reason, False)

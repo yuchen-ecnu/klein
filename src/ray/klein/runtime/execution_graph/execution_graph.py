@@ -1,16 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
+import hashlib
 from collections import deque
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+from ray.klein._internal.partitioning import default_partitioner
+from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_job_edge import ExecutionJobEdge
 from ray.klein.runtime.execution_graph.execution_job_vertex import ExecutionJobVertex
 from ray.klein.runtime.execution_graph.execution_vertex import (
     ExecutionVertex,
     ExecutionVertexId,
 )
+from ray.klein.runtime.graph.vertex_spec import VertexSpec
+from ray.klein.runtime.partitioning.forward_partitioner import ForwardPartitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 
 if TYPE_CHECKING:
     from ray.klein.config.configuration import Configuration
@@ -109,6 +116,69 @@ class ExecutionGraph:
         for source_job_vertex_id in self.source_job_vertices:
             self._accumulate_barrier_splits(source_job_vertex_id, alignments)
         return alignments
+
+    @cached_property
+    def checkpoint_domains(self) -> tuple[CheckpointDomain, ...]:
+        """Physical weak components used as independent checkpoint scopes."""
+
+        adjacency: dict[ExecutionVertexId, list[ExecutionVertexId]] = {
+            vertex.id: [] for vertex in self.execution_vertices
+        }
+        for job_edge in self.job_edges:
+            for edge in job_edge.execution_edges:
+                source_id = edge.source.id
+                target_id = edge.target.id
+                adjacency[source_id].append(target_id)
+                adjacency[target_id].append(source_id)
+        components = [
+            tuple(sorted(component, key=self._execution_vertex_id_key))
+            for component in self._connected_components(adjacency)
+        ]
+        components.sort(key=lambda component: tuple(map(self._execution_vertex_id_key, component)))
+        source_ids = {vertex.id for vertex in self.source_execution_vertices}
+        sink_ids = {vertex.id for vertex in self.sink_execution_vertices}
+        return tuple(
+            CheckpointDomain(
+                id=self._checkpoint_domain_id(component),
+                vertex_ids=component,
+                source_vertex_ids=tuple(vertex_id for vertex_id in component if vertex_id in source_ids),
+                sink_vertex_ids=tuple(vertex_id for vertex_id in component if vertex_id in sink_ids),
+            )
+            for component in components
+        )
+
+    @cached_property
+    def _checkpoint_domain_by_vertex(self) -> dict[ExecutionVertexId, CheckpointDomain]:
+        return {vertex_id: domain for domain in self.checkpoint_domains for vertex_id in domain.vertex_ids}
+
+    def checkpoint_domain(self, vertex_id: ExecutionVertexId) -> CheckpointDomain:
+        return self._checkpoint_domain_by_vertex[vertex_id]
+
+    def find_checkpoint_domain(self, vertex_id: ExecutionVertexId) -> CheckpointDomain | None:
+        return self._checkpoint_domain_by_vertex.get(vertex_id)
+
+    def checkpoint_domains_for_job_vertex(self, job_vertex_id: int) -> tuple[CheckpointDomain, ...]:
+        """Domains intersecting one logical operator's physical subtasks."""
+
+        job_vertex = self.job_vertex(job_vertex_id)
+        domains: dict[str, CheckpointDomain] = {}
+        for vertex in job_vertex.execution_vertices.values():
+            domain = self.checkpoint_domain(vertex.id)
+            domains[domain.id] = domain
+        return tuple(domains.values())
+
+    @staticmethod
+    def _execution_vertex_id_key(vertex_id: ExecutionVertexId) -> tuple[int, int]:
+        return vertex_id.job_vertex_id, vertex_id.index
+
+    @classmethod
+    def _checkpoint_domain_id(cls, vertex_ids: tuple[ExecutionVertexId, ...]) -> str:
+        encoded_members = ",".join(
+            f"{vertex_id.job_vertex_id}:{vertex_id.index}"
+            for vertex_id in sorted(vertex_ids, key=cls._execution_vertex_id_key)
+        )
+        digest = hashlib.sha256(encoded_members.encode("ascii")).hexdigest()
+        return f"checkpoint-domain-{digest}"
 
     def _accumulate_barrier_splits(
         self,
@@ -250,17 +320,57 @@ class ExecutionGraph:
         target_id = logical_graph.resolve_operator(operator_id).index
         if {vertex_id.index for vertex_id in logical_graph.vertices} != set(self._job_vertices):
             raise ValueError("rescale requires the logical and execution graphs to contain the same operators")
-        old_target = self.job_vertex(target_id)
         new_spec = next(spec for vertex_id, spec in logical_graph.vertices.items() if vertex_id.index == target_id)
+        edges = [(edge.source.index, edge.target.index, edge.partitioner) for edge in logical_graph.edges]
+        return self._rescale_operator_spec(target_id, new_spec, edges)
+
+    def resize_operator(self, operator_id: int, parallelism: int) -> "ExecutionGraph":
+        """Build a physical rescale candidate from the writer-owned graph.
+
+        Unlike :meth:`rescale_operator`, this narrow control-plane entry point
+        accepts no caller-provided topology.  Only the selected operator's
+        scalar concurrency can change; operators, resources and logical edges
+        are copied from the current graph.
+        """
+
+        if isinstance(operator_id, bool) or not isinstance(operator_id, int):
+            raise TypeError("operator_id must be an integer")
+        if isinstance(parallelism, bool) or not isinstance(parallelism, int):
+            raise TypeError("parallelism must be an integer")
+        if parallelism <= 0:
+            raise ValueError("parallelism must be positive")
+        old_target = self.job_vertex(operator_id)
+        new_spec = replace(
+            old_target.spec,
+            resources=replace(old_target.resources, concurrency=parallelism),
+        )
+        edges = []
+        for edge in self.job_edges:
+            partitioner = edge.partitioner
+            if operator_id in {edge.source, edge.target} and partitioner.is_type(ForwardPartitioner):
+                source_parallelism = (
+                    parallelism if edge.source == operator_id else self.job_vertex(edge.source).concurrency
+                )
+                target_parallelism = (
+                    parallelism if edge.target == operator_id else self.job_vertex(edge.target).concurrency
+                )
+                if source_parallelism != target_parallelism:
+                    partitioner = default_partitioner(source_parallelism, target_parallelism).to_spec()
+            edges.append((edge.source, edge.target, partitioner))
+        return self._rescale_operator_spec(operator_id, new_spec, edges)
+
+    def _rescale_operator_spec(
+        self,
+        target_id: int,
+        new_spec: VertexSpec,
+        edges: Sequence[tuple[int, int, PartitionerSpec]],
+    ) -> "ExecutionGraph":
+        old_target = self.job_vertex(target_id)
         if old_target.concurrency == new_spec.concurrency:
             return self
 
         job_vertices = dict(self._job_vertices)
-        new_target = ExecutionJobVertex(
-            new_spec,
-            old_target.config,
-            old_target.job_metric_group,
-        )
+        new_target = ExecutionJobVertex(new_spec, old_target.config, old_target.job_metric_group)
         retained_count = min(old_target.concurrency, new_target.concurrency)
         for index in range(retained_count):
             new_target.execution_vertices[index] = old_target.execution_vertex(index).rebind(
@@ -273,11 +383,11 @@ class ExecutionGraph:
         job_vertices[target_id] = new_target
         job_edges = [
             ExecutionJobEdge(
-                job_vertices[edge.source.index],
-                job_vertices[edge.target.index],
-                edge.partitioner,
+                job_vertices[source],
+                job_vertices[target],
+                partitioner,
             )
-            for edge in logical_graph.edges
+            for source, target, partitioner in edges
         ]
         return ExecutionGraph(
             self.namespace,
@@ -383,6 +493,8 @@ class ExecutionGraph:
             "_job_vertex_degrees",
             "_topological_job_vertices",
             "barrier_splits",
+            "checkpoint_domains",
+            "_checkpoint_domain_by_vertex",
             "affinity_groups",
         ):
             state.pop(key, None)

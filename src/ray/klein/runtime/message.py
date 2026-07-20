@@ -167,14 +167,20 @@ class Barrier(Record):
         self,
         _id: int,
         source_id: ExecutionVertexId | None = None,
+        *,
+        coordinated: bool = False,
     ) -> None:
         super().__init__(None)
         self.id = _id
         self.source_id = source_id
+        self.coordinated = coordinated
         self.timestamp = int(time.time() * 1000)
 
     def __repr__(self) -> str:
-        return f"Barrier(id:{self.id}, source:{self.source_id}, timestamp:{self.timestamp})"
+        return (
+            f"Barrier(id:{self.id}, source:{self.source_id}, coordinated:{self.coordinated}, "
+            f"timestamp:{self.timestamp})"
+        )
 
     def __eq__(self, other: object) -> bool:
         if type(self) is type(other):

@@ -23,6 +23,9 @@ class Checkpoint:
     barrier_id: int
     required_acknowledgements: int
     trigger_sources: tuple[ExecutionVertexId, ...]
+    coordinated: bool = False
+    domain_id: str | None = None
+    required_committers: tuple[ExecutionVertexId, ...] = ()
     acknowledgements: int = 0
     reason: str = ""
     triggered_at_ms: int | None = None
@@ -34,6 +37,7 @@ class Checkpoint:
 
     def __post_init__(self) -> None:
         self.trigger_sources = tuple(self.trigger_sources)
+        self.required_committers = tuple(self.required_committers)
 
     def mark_complete(self) -> None:
         now_ms = int(time.time() * 1000)
@@ -57,6 +61,8 @@ class Checkpoint:
 
     def acknowledge(self, committer: ExecutionVertexId) -> bool:
         """Record one idempotent acknowledgement and report finalization readiness."""
+        if self.required_committers and committer not in self.required_committers:
+            return False
         # Idempotent per committer: a committer that acks twice (e.g. a batched
         # notify retried after a transient failure) is counted once.
         if committer in self._acknowledged_by:
