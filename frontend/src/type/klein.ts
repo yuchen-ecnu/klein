@@ -63,6 +63,8 @@ export type KleinOperator = {
   backpressure_ns: number;
   busy_percent: number;
   backpressure_percent: number;
+  max_busy_percent?: number;
+  max_backpressure_percent?: number;
   instances: KleinInstanceCounts;
   cpus: number;
   gpus: number;

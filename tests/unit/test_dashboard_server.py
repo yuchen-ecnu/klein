@@ -128,20 +128,32 @@ def test_dashboard_serves_the_bundled_frontend(dashboard_server) -> None:
     server, _ = dashboard_server
 
     status, headers, page = _request(server, "GET", "/")
-    asset_path = re.search(rb'src="(/assets/[^"]+\.js)"', page)
+    asset_path = re.search(rb'src="\./(assets/[^"]+\.js)"', page)
 
     assert status == 200
     assert headers["Content-Type"] == "text/html; charset=utf-8"
     assert b'<div id="root"></div>' in page
-    assert b"/__klein/navigation.js" in page
+    assert b'src="__klein/navigation.js"' in page
     assert asset_path is not None
-    asset_status, asset_headers, asset = _request(server, "GET", asset_path.group(1).decode())
+    asset_status, asset_headers, asset = _request(server, "GET", f"/{asset_path.group(1).decode()}")
     assert asset_status == 200
     assert asset_headers["Content-Type"] in {
         "application/javascript; charset=utf-8",
         "text/javascript; charset=utf-8",
     }
     assert len(asset) > 1_000
+    assert all(
+        token in asset
+        for token in (
+            b"data-busy-percent",
+            b"max_busy_percent",
+            b"#5db1ff",
+            b"#ee6464",
+            b"#888888",
+            b"rgba(0, 0, 0, 0.85)",
+            b"rgba(0, 0, 0, 0.45)",
+        )
+    )
 
 
 def test_dashboard_exposes_ray_navigation_configuration() -> None:
@@ -183,7 +195,7 @@ def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_
 
         assert status == script_status == bridge_status == jobs_status == job_status == 200
         assert b"Ray Dashboard" in page
-        assert b"/__klein/navigation.js" in page
+        assert b'src="__klein/navigation.js"' in page
         assert script == b"window.__RAY_DASHBOARD__ = true;"
         assert b"https://ray.example.com/base" in bridge
         assert b'"jobs"' in jobs

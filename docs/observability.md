@@ -83,10 +83,13 @@ Frontend contributors can run the source in `frontend/` and temporarily point
 8266 at it with `--frontend-url`; production installations use the packaged UI.
 
 The page polls published job snapshots and renders the operator DAG. Like
-Flink's JobGraph, node color mixes idle (blue), busy (red), and backpressured
-(black) time. Selecting a node or operator row opens a right-side drawer with
-subtask metrics. Separate views expose checkpoint history, per-operator state
-size, barrier alignment and latency, and redacted configuration.
+Flink's JobGraph, the whole node and its border continuously blend from idle
+blue to busy red using the hottest subtask, then toward gray with a black border
+for backpressure. Node titles and values use Flink's primary text opacity while
+metric labels use its quieter secondary opacity. Selecting a node or operator
+row opens a right-side drawer with subtask metrics. Separate views expose
+checkpoint history, per-operator state size, barrier alignment and latency, and
+redacted configuration.
 
 The page also shows each operator's live parallelism and rates and exposes
 guarded local rescaling. Select an operator, enter the target parallelism in

@@ -12,6 +12,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 - The embedded Ray Serve proxy client now uses HTTPX instead of aiohttp while
   preserving total request timeouts and per-host connection limits.
+- Dashboard JobGraph nodes now use Flink-style whole-node coloring, blending
+  continuously from idle blue to busy red and toward gray for backpressure
+  based on the hottest subtask, with Flink's primary/secondary text hierarchy.
 
 ## [0.1.0a1] - 2026-07-20
 
