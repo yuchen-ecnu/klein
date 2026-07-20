@@ -13,7 +13,7 @@ import sys
 import ray
 ray.__path__.insert(0, {str(source_ray)!r})
 import ray.klein
-for name in ('aiohttp', 'confluent_kafka', 'orjson', 'redis', 'rocksdict', 'rocketmq'):
+for name in ('confluent_kafka', 'httpx', 'orjson', 'redis', 'rocksdict', 'rocketmq'):
     assert name not in sys.modules, name
 assert callable(ray.klein.from_items)
 assert callable(ray.klein.read_canal)

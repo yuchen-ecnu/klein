@@ -8,9 +8,9 @@ import random
 import time
 import uuid
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
-import aiohttp
+import httpx
 import numpy as np
 import orjson
 
@@ -49,8 +49,13 @@ class EmbeddedProxyClient:
         ]
         if not self.endpoints:
             raise RuntimeError(f"At least one proxy endpoint is required; set {ServeOptions.PROXY_ENDPOINTS.key}")
-        self._session: aiohttp.ClientSession | None = None
+        self._http_timeout = self.config.get(ServeOptions.HTTP_TIMEOUT)
+        self._http_connect_timeout = self.config.get(ServeOptions.HTTP_CONNECT_TIMEOUT)
+        self._http_limit_per_host = self.config.get(ServeOptions.HTTP_LIMIT_PER_HOST)
+        self._http_connection_limit = self.config.get(ServeOptions.HTTP_CONNECTION_LIMIT)
+        self._session: httpx.AsyncClient | None = None
         self._session_loop: asyncio.AbstractEventLoop | None = None
+        self._host_semaphores: dict[tuple[str, str, int | None], asyncio.Semaphore] = {}
         self.request_duration: Histogram = runtime_context.metric_group.builtin_histogram(
             KleinMetrics.SERVE_REQUEST_DURATION_MS
         )
@@ -59,20 +64,69 @@ class EmbeddedProxyClient:
         )
 
     @property
-    def session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
+    def session(self) -> httpx.AsyncClient:
+        if self._session is None or self._session.is_closed:
             self._session_loop = asyncio.get_running_loop()
-            self._session = aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(
-                    limit_per_host=self.config.get(ServeOptions.HTTP_LIMIT_PER_HOST),
-                    limit=self.config.get(ServeOptions.HTTP_CONNECTION_LIMIT),
+            self._host_semaphores.clear()
+            connection_limit = self._http_connection_limit or None
+            connect_timeout = self._http_connect_timeout or None
+            self._session = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_connections=connection_limit,
+                    max_keepalive_connections=connection_limit,
+                    keepalive_expiry=15.0,
                 ),
-                timeout=aiohttp.ClientTimeout(
-                    total=self.config.get(ServeOptions.HTTP_TIMEOUT),
-                    connect=self.config.get(ServeOptions.HTTP_CONNECT_TIMEOUT),
+                timeout=httpx.Timeout(
+                    None,
+                    connect=connect_timeout,
+                    pool=connect_timeout,
                 ),
+                follow_redirects=True,
+                max_redirects=10,
+                trust_env=False,
             )
         return self._session
+
+    def _host_semaphore(self, url: str) -> asyncio.Semaphore | None:
+        if self._http_limit_per_host == 0:
+            return None
+        parsed = urlsplit(url)
+        key = (parsed.scheme, parsed.hostname or "", parsed.port)
+        semaphore = self._host_semaphores.get(key)
+        if semaphore is None:
+            semaphore = asyncio.Semaphore(self._http_limit_per_host)
+            self._host_semaphores[key] = semaphore
+        return semaphore
+
+    async def _post(self, url: str, body: bytes, request_id: str) -> httpx.Response:
+        session = self.session
+
+        async def send() -> httpx.Response:
+            async with session.stream(
+                "POST",
+                url,
+                content=body,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "X-Request-ID": request_id,
+                },
+            ) as response:
+                if response.status_code >= 400:
+                    response.raise_for_status()
+                await response.aread()
+                return response
+
+        semaphore = self._host_semaphore(url)
+        if semaphore is None:
+            return await send()
+        await asyncio.wait_for(
+            semaphore.acquire(),
+            timeout=self._http_connect_timeout or None,
+        )
+        try:
+            return await send()
+        finally:
+            semaphore.release()
 
     async def _backoff(self, attempt: int) -> None:
         delay = min(1.5 ** min(attempt, 64), self.retry_backoff_max)
@@ -98,18 +152,17 @@ class EmbeddedProxyClient:
         for attempt in range(self.max_attempts):
             selected_url = self._request_url()
             try:
-                async with self.session.post(
-                    selected_url,
-                    data=body,
-                    headers={"X-Request-ID": request_id},
-                ) as response:
-                    response.raise_for_status()
-                    return await response.json()
-            except aiohttp.ClientResponseError as error:
+                response = await asyncio.wait_for(
+                    self._post(selected_url, body, request_id),
+                    timeout=self._http_timeout or None,
+                )
+                return response.json()
+            except httpx.HTTPStatusError as error:
                 last_error = error
-                if 400 <= error.status < 500 and error.status not in {429, 499}:
+                status = error.response.status_code
+                if 400 <= status < 500 and status not in {429, 499}:
                     break
-            except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as error:
+            except (httpx.TooManyRedirects, httpx.TransportError, asyncio.TimeoutError) as error:
                 last_error = error
 
             slow_warning_emitted = self._warn_if_slow(
@@ -161,17 +214,17 @@ class EmbeddedProxyClient:
 
     def close(self) -> None:
         session, self._session = self._session, None
-        if session is None or session.closed:
+        loop, self._session_loop = self._session_loop, None
+        self._host_semaphores.clear()
+        if session is None or session.is_closed:
             return
-        loop = self._session_loop
-        self._session_loop = None
         if loop is not None and loop.is_running():
             if loop is self._running_loop():
-                loop.create_task(session.close())
+                loop.create_task(session.aclose())
             else:
-                asyncio.run_coroutine_threadsafe(session.close(), loop).result(timeout=5)
+                asyncio.run_coroutine_threadsafe(session.aclose(), loop).result(timeout=5)
             return
-        asyncio.run(session.close())
+        asyncio.run(session.aclose())
 
     @staticmethod
     def _running_loop() -> asyncio.AbstractEventLoop | None:
