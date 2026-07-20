@@ -1,0 +1,202 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Assign event timestamps and coordinate Klein for Ray watermarks across "
+"active and idle streaming inputs."
+msgstr "分配事件时间戳，并在活动和空闲的流输入之间协调 Klein for Ray 水位线。"
+
+msgid "Event time and idle inputs"
+msgstr "事件时间与空闲输入"
+
+msgid ""
+"Klein carries event-time progress as ordered data-plane control messages. A "
+"`Watermark(t)` means that one physical input does not expect another event "
+"at or before `t`. `InputIdle` temporarily removes an input from minimum-"
+"watermark calculation, and `InputActive` adds it back before resumed data is "
+"processed. These messages flush preceding micro-batches and use the same "
+"physical edge targets as checkpoint barriers, so they cannot overtake "
+"records."
+msgstr "Klein 将事件时间进度作为有序的数据平面控制消息传递。`Watermark(t)` 表示一个物理输入不再预期出现时间小于或等于 `t` 的事件。`InputIdle` 会暂时从最小水位线计算中移除某个输入，`InputActive` 则在恢复的数据被处理前将其重新加入。这些消息会刷新前面的微批，并使用与检查点屏障相同的物理边目标，因此不会越过记录。"
+
+msgid "For a task with multiple physical inputs:"
+msgstr "对于具有多个物理输入的任务："
+
+msgid "the output watermark is the minimum watermark across active inputs;"
+msgstr "输出水位线是所有活动输入水位线的最小值；"
+
+msgid "an active input without its first watermark blocks progress;"
+msgstr "尚未产生首个水位线的活动输入会阻塞进度；"
+
+msgid "an idle input does not block progress;"
+msgstr "空闲输入不会阻塞进度；"
+
+msgid "the task emits `InputIdle` only when every input is idle;"
+msgstr "仅当所有输入都空闲时，任务才会发出 `InputIdle`；"
+
+msgid ""
+"the first resumed input emits `InputActive`, optionally with its last known "
+"watermark, before further progress;"
+msgstr "首个恢复的输入会先发出 `InputActive`（可携带其最后已知水位线），然后再继续推进；"
+
+msgid "per-input and output watermarks are monotonic."
+msgstr "每个输入的水位线和输出水位线都单调递增。"
+
+msgid ""
+"This is independent of Klein's replay-buffer acknowledgement watermark, "
+"which tracks delivered batches rather than event time."
+msgstr "这与 Klein 的重放缓冲区确认水位线无关；后者跟踪的是已交付批次，而不是事件时间。"
+
+msgid "Assign timestamps and watermarks"
+msgstr "分配时间戳和水位线"
+
+msgid ""
+"The strategy attaches the assigned timestamp to the record, emits "
+"monotonically increasing watermarks from the largest observed timestamp "
+"minus the configured out-of-orderness bound, marks the operator idle after "
+"the configured timeout, and emits active before the next record. Idle "
+"strategies are checked according to `event-time.idle-input.check-interval` "
+"(one second by default)."
+msgstr "该策略把分配的时间戳附加到记录上，根据已观测最大时间戳减去配置的乱序界限生成单调递增的水位线，在达到配置的超时后将算子标记为空闲，并在下一条记录前发出活动消息。空闲策略按照 `event-time.idle-input.check-interval` 检查（默认为一秒）。"
+
+msgid ""
+"The timestamp assigner must return a non-negative integer in milliseconds. "
+"Boolean, floating-point, negative, and second-based values are rejected or "
+"produce the wrong window scale. With bounded out-of-orderness `d`, the "
+"candidate watermark is `max_timestamp_seen - d`; Klein emits it only when it "
+"is non-negative and greater than the previous watermark."
+msgstr "时间戳分配器必须返回以毫秒为单位的非负整数。布尔值、浮点数、负值和以秒为单位的值会被拒绝，或导致窗口尺度错误。对于乱序界限 `d`，候选水位线为 `max_timestamp_seen - d`；只有当它非负且大于上一条水位线时，Klein 才会发出。"
+
+msgid "Strategy"
+msgstr "策略"
+
+msgid "Use when"
+msgstr "适用场景"
+
+msgid "Watermark behavior"
+msgstr "水位线行为"
+
+msgid "`for_monotonous_timestamps(assigner)`"
+msgstr "`for_monotonous_timestamps(assigner)`"
+
+msgid "Each physical input's timestamps never decrease."
+msgstr "每个物理输入的时间戳都不会减小。"
+
+msgid "Tracks the maximum observed timestamp directly."
+msgstr "直接跟踪已观测到的最大时间戳。"
+
+msgid "`for_bounded_out_of_orderness(delay, assigner)`"
+msgstr "`for_bounded_out_of_orderness(delay, assigner)`"
+
+msgid "Records may arrive late within a known bound."
+msgstr "记录可能在已知界限内延迟到达。"
+
+msgid "Subtracts the bound from the maximum observed timestamp."
+msgstr "从已观测最大时间戳中减去该界限。"
+
+msgid "`.with_idleness(timeout)`"
+msgstr "`.with_idleness(timeout)`"
+
+msgid "A physical input can stay empty while others continue."
+msgstr "某个物理输入可能保持无数据，而其他输入继续运行。"
+
+msgid ""
+"Marks that input idle after the timeout and active before its next record."
+msgstr "超时后将该输入标记为空闲，并在其下一条记录之前标记为活动。"
+
+msgid ""
+"Apply one strategy after decoding the field that owns event time and before "
+"a stateful window or join. A later transform preserves the attached record "
+"timestamp, but an explicit timestamp selector on the stateful operator "
+"remains the authoritative timestamp for that operator."
+msgstr "请在解码拥有事件时间的字段后、在有状态窗口或 join 前应用一次策略。后续转换会保留记录上附加的时间戳，但有状态算子上显式指定的时间戳选择器仍是该算子的权威时间戳来源。"
+
+msgid ""
+"Stateful window and join timestamp selectors remain supported and can use "
+"the same timestamp field. Their event-time timers fire only when the "
+"aggregate watermark advances. A bounded source emits the maximum watermark "
+"before `EndOfData`, closing all event-time windows in normal control-message "
+"order."
+msgstr "有状态窗口和 join 的时间戳选择器仍受支持，并可使用同一个时间戳字段。只有聚合水位线推进时，其事件时间定时器才会触发。有限数据源会在 `EndOfData` 前发出最大水位线，按正常控制消息顺序关闭所有事件时间窗口。"
+
+msgid "Windows, allowed lateness, and late records"
+msgstr "窗口、允许迟到时间与迟到记录"
+
+msgid "Klein windows use half-open intervals `[start, end)`:"
+msgstr "Klein 窗口使用左闭右开区间 `[start, end)`："
+
+msgid ""
+"a tumbling window assigns each record to exactly one fixed-size interval;"
+msgstr "滚动窗口把每条记录恰好分配到一个固定大小的区间；"
+
+msgid ""
+"a sliding window assigns it to every overlapping `size` interval starting at "
+"the configured `slide` cadence;"
+msgstr "滑动窗口按照配置的 `slide` 步长，将记录分配到每个重叠的 `size` 区间；"
+
+msgid ""
+"a session window creates `[timestamp, timestamp + gap)` and merges "
+"overlapping windows for the same key."
+msgstr "会话窗口创建 `[timestamp, timestamp + gap)`，并合并同一个键的重叠窗口。"
+
+msgid ""
+"`allowed_lateness` delays cleanup and final emission beyond the window end. "
+"A record is dropped when its window cleanup timestamp is already at or "
+"behind the current watermark. Increasing allowed lateness retains state "
+"longer; it does not rewind a watermark."
+msgstr "`allowed_lateness` 会将清理和最终发射推迟到窗口结束之后。当窗口清理时间戳已经小于或等于当前水位线时，记录会被丢弃。增加允许迟到时间会延长状态保留，但不会回退水位线。"
+
+msgid ""
+"The window `state_ttl` is a processing-time safety bound. Set it longer than "
+"the maximum expected window lifetime plus lateness; premature TTL expiry can "
+"make an emitted result incomplete."
+msgstr "窗口的 `state_ttl` 是处理时间维度的安全上限。请将其设置得长于预期最大窗口生命周期与迟到时间之和；TTL 过早到期可能导致发出的结果不完整。"
+
+msgid ""
+"Interval joins apply the same lateness principle independently to their left "
+"and right buffered records. A left record at time `t` can match right "
+"records whose timestamp difference falls between `lower_bound` and "
+"`upper_bound`. Watermarks remove records once no future on-time match is "
+"possible."
+msgstr "区间 join 会对左右两侧缓冲记录分别应用相同的迟到原则。时间为 `t` 的左侧记录可以匹配时间戳差位于 `lower_bound` 和 `upper_bound` 之间的右侧记录。当未来不可能再出现准时匹配时，水位线会移除记录。"
+
+msgid "Control event time from a source"
+msgstr "从数据源控制事件时间"
+
+msgid ""
+"Streaming sources emit records and event-time control through "
+"`SourceContext`:"
+msgstr "流处理 Source 通过 `SourceContext` 发出记录和事件时间控制消息："
+
+msgid ""
+"Checkpoint state is source-owned and separate from records. A custom "
+"`SourceFunction` implements `snapshot_state(checkpoint_id)`, "
+"`restore_state(state)`, `cancel()`, and optionally "
+"`notify_checkpoint_complete(checkpoint_id)`. `cancel()` only asks the source "
+"loop to return; release connections and other resources in `close()`. Klein "
+"calls `close()` once after the loop has stopped. It stores the opaque state "
+"per physical source subtask and never compares integration offsets."
+msgstr "检查点状态归数据源所有，与记录分离。自定义 `SourceFunction` 实现 `snapshot_state(checkpoint_id)`、`restore_state(state)`、`cancel()`，并可选择实现 `notify_checkpoint_complete(checkpoint_id)`。`cancel()` 只请求数据源循环返回；连接及其他资源应在 `close()` 中释放。循环停止后，Klein 会调用一次 `close()`。Klein 按物理数据源子任务保存不透明状态，从不比较集成层偏移量。"
+
+msgid ""
+"`RAY_KLEIN_EVENT_TIME_IDLE_INPUT_CHECK_INTERVAL=500ms` configures the "
+"periodic idleness check through the standard environment-variable "
+"configuration path."
+msgstr "`RAY_KLEIN_EVENT_TIME_IDLE_INPUT_CHECK_INTERVAL=500ms` 通过标准环境变量配置路径设置定期空闲检查。"

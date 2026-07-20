@@ -33,6 +33,7 @@ tracks delivered batches rather than event time.
 from datetime import timedelta
 
 import ray
+import ray.klein
 
 strategy = (
     ray.klein.WatermarkStrategy.for_bounded_out_of_orderness(

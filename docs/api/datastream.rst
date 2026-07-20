@@ -39,6 +39,7 @@ DataStream API
    DataStream.write_json
    DataStream.write_csv
    DataStream.write_parquet
+   DataStream.write_iceberg
    DataStream.write_text
    DataStream.write_sql
    DataStream.write_kafka

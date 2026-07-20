@@ -480,6 +480,18 @@ def _project_select(
     return dataset.map(_FinalizeProjection(fields), num_cpus=num_cpus)
 
 
+def _parse_limit_literal(expression: exp.Expression) -> int:
+    if not isinstance(expression, exp.Literal) or expression.is_string:
+        raise SQLQueryError("LIMIT must be a non-negative integer literal")
+    try:
+        value = int(expression.this)
+    except (TypeError, ValueError) as error:
+        raise SQLQueryError("LIMIT must be a non-negative integer literal") from error
+    if value < 0:
+        raise SQLQueryError("LIMIT must be a non-negative integer literal")
+    return value
+
+
 def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
     from sqlglot import exp
 
@@ -499,13 +511,7 @@ def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
 
     limit = select.args.get("limit")
     if limit is not None:
-        expression = limit.expression
-        if not isinstance(expression, exp.Literal) or expression.is_string:
-            raise SQLQueryError("LIMIT must be a non-negative integer literal")
-        value = int(expression.this)
-        if value < 0:
-            raise SQLQueryError("LIMIT must be a non-negative integer literal")
-        dataset = dataset.limit(value)
+        dataset = dataset.limit(_parse_limit_literal(limit.expression))
     return dataset
 
 

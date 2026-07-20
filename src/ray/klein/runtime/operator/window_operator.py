@@ -35,9 +35,9 @@ class WindowOperator(ManagedStateOperator):
         )
         self._assigner = assigner
         self._reduce_function = reduce_function
-        self._allowed_lateness_ms = int(allowed_lateness.total_seconds() * 1000)
-        if self._allowed_lateness_ms < 0:
+        if allowed_lateness < timedelta(0):
             raise ValueError("allowed_lateness must not be negative")
+        self._allowed_lateness_ms = int(allowed_lateness.total_seconds() * 1000)
         ttl_config = StateTTLConfig(state_ttl) if state_ttl is not None else None
         self._window_state = ValueStateDescriptor(
             "window-aggregate",
@@ -52,12 +52,14 @@ class WindowOperator(ManagedStateOperator):
         timestamp = context.timestamp
         if timestamp is None or timestamp < 0:
             raise ValueError("window timestamp_selector must return a non-negative integer")
+        dropped_from_window = False
         for window in self._assigner.assign_windows(timestamp):
-            cleanup_timestamp = window.end - 1 + self._allowed_lateness_ms
+            target, overlapping = self._session_merge_plan(window)
+            cleanup_timestamp = target.end - 1 + self._allowed_lateness_ms
             if cleanup_timestamp <= self.timer_service.current_watermark:
-                self._record_late_drop()
+                dropped_from_window = True
                 continue
-            target = self._merge_session_windows(window, context)
+            self._merge_session_windows(target, overlapping, context)
             state = context.state(self._window_state, target)
             current = state.value
             state.value = dict(record.block) if current is None else self._reduce_function(current, record.block)
@@ -65,6 +67,8 @@ class WindowOperator(ManagedStateOperator):
                 target.end - 1 + self._allowed_lateness_ms,
                 target,
             )
+        if dropped_from_window:
+            self._record_late_drop()
 
     def on_timer(self, event: TimerEvent, context: KeyedStateContext) -> None:
         if event.domain != TimerDomain.EVENT_TIME:
@@ -83,20 +87,30 @@ class WindowOperator(ManagedStateOperator):
         ):
             self._fire_timer(event)
 
-    def _merge_session_windows(
+    def _session_merge_plan(
         self,
         candidate: TimeWindow,
-        context: KeyedStateContext,
-    ) -> TimeWindow:
+    ) -> tuple[TimeWindow, tuple[TimeWindow, ...]]:
         if not self._assigner.is_merging:
-            return candidate
-        overlapping = [window for window in self._backend.namespaces(self._window_state) if window.overlaps(candidate)]
+            return candidate, ()
+        overlapping = tuple(
+            window for window in self._backend.namespaces(self._window_state) if window.overlaps(candidate)
+        )
         if not overlapping:
-            return candidate
+            return candidate, ()
         merged = candidate
-        accumulated = None
         for window in overlapping:
             merged = merged.merge(window)
+        return merged, overlapping
+
+    def _merge_session_windows(
+        self,
+        target: TimeWindow,
+        overlapping: tuple[TimeWindow, ...],
+        context: KeyedStateContext,
+    ) -> None:
+        accumulated = None
+        for window in overlapping:
             state = context.state(self._window_state, window)
             value = state.value
             if value is not None:
@@ -107,8 +121,7 @@ class WindowOperator(ManagedStateOperator):
                 window,
             )
         if accumulated is not None:
-            context.state(self._window_state, merged).value = accumulated
-        return merged
+            context.state(self._window_state, target).value = accumulated
 
     def _spec_parameters(self) -> dict[str, Any]:
         ttl = self._window_state.ttl_config

@@ -1,48 +1,28 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray user guides for pipelines, state, event time, SQL, configuration, checkpointing, and operations."
+    description: "Klein for Ray user guides for pipelines, state, event time, SQL, autoscaling, checkpointing, and operations."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-user-guides)=
 # User guides
 
-If you're new to Klein, complete [Getting started](getting-started.md) and read [Key concepts](key-concepts.md) first. These guides cover pipeline development and production behavior.
-
-```{toctree}
-:hidden:
-:maxdepth: 2
-
-development
-production-streaming
-operator-compatibility
-ray-data-interop
-sql
-connectors/index
-delivery-semantics
-ray-native-state
-event-time
-checkpoint-storage
-checkpoint-recovery
-driver-fault-tolerance
-deployment
-observability
-performance-tuning
-troubleshooting
-configuration
-configuration-reference
-local_debug
-compatibility
-package-structure
-testing
-private-api-inventory
-releasing
-```
+If you're new to Klein, complete [Getting started](getting-started.md) and read
+[Key concepts](key-concepts.md) first. Use [Feature highlights](features.md) for
+a separate product-oriented map of hybrid execution, state, event time, SQL,
+recovery, live rescaling, detached jobs, and Ray Serve. The guides below cover
+pipeline development and production behavior.
 
 ## Build dataflows
 
-- {doc}`Develop a pipeline <development>` describes transformations, resources, partitioning, and integrations.
+- [Program with DataStream and UDFs](datastream-programming-guide.md) is the
+  complete guide to records, batches, callable lifecycles, asynchronous work,
+  ordering, errors, resources, and partitioning.
+- {doc}`Develop a pipeline <development>` provides a compact first reference
+  for transformations, resources, partitioning, and integrations.
+- [Manage the job lifecycle](job-lifecycle.md) covers contexts, sinks,
+  compilation, submission, handles, namespaces, cancellation, and cleanup.
 - [Build a production streaming pipeline](production-streaming.md) follows a
   Kafka job from event-time assignment through checkpointed file output,
   operations, and restore.
@@ -72,6 +52,9 @@ releasing
   resources, credentials, operations, and upgrades.
 - [Observe Klein jobs](observability.md) covers structured logs, metrics,
   checkpoints, CLI attach, and the cluster state API.
+- [Autoscaling and live operator rescaling](operator-rescaling.md) separates bounded
+  Ray Data worker autoscaling, live streaming rescaling, and Ray cluster
+  autoscaling, then covers the runtime safety protocol.
 - [Tune performance](performance-tuning.md) maps symptoms and metrics to
   concurrency, batching, state, checkpoint, placement, and replay controls.
 - [Troubleshoot jobs](troubleshooting.md) provides failure-oriented checks for
@@ -80,10 +63,12 @@ releasing
 - [Configuration reference](configuration-reference.md) lists every supported key, type, default, constraint, and environment variable.
 - {doc}`Debug a local pipeline <local_debug>` describes embedded Ray, in-process debug mode, and logging.
 - [Check compatibility](compatibility.md) defines supported Python and Ray versions.
+- [Check production readiness](production-readiness.md) provides an executable
+  launch checklist; [Security](security.md), [Known limitations](limitations.md),
+  and [Upgrading](upgrading.md) make the operational boundaries explicit.
+- [Use the CLI](cli-reference.md) lists every command, option, exit behavior,
+  JSON contract, and automation rule.
 
-## Contribute to Klein
-
-- [Understand the package structure](package-structure.md) before moving or adding modules.
-- [Write and run tests](testing.md) explains the test tiers and fixture rules.
-- [Review the Ray private-API inventory](private-api-inventory.md) before adding a Ray dependency.
-- [Release Klein](releasing.md) describes package verification and publication.
+Contributor and internal-development documentation has its own top-level
+navigation section so application users do not need to filter it out of the
+runtime guides.

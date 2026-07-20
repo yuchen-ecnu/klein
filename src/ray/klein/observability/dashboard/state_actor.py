@@ -108,8 +108,35 @@ class _KleinStateActor:
             entry["manager"].rescale_operator.remote(operator_id, parallelism),
             timeout=timeout,
         )
+        return self._normalize_rescale_result(raw_result, job_id, operator_id, parallelism)
+
+    async def submit_operator_rescale(
+        self,
+        job_id: str,
+        operator_id: int,
+        parallelism: int,
+        timeout: float = 10,
+    ) -> dict[str, Any] | None:
+        """Submit one rescale without waiting for its topology transaction."""
+
+        entry = self._entries.get(job_id)
+        if entry is None:
+            return None
+        raw_result = await asyncio.wait_for(
+            entry["manager"].submit_operator_rescale.remote(operator_id, parallelism),
+            timeout=timeout,
+        )
+        return self._normalize_rescale_result(raw_result, job_id, operator_id, parallelism)
+
+    @staticmethod
+    def _normalize_rescale_result(
+        raw_result: Any,
+        job_id: str,
+        operator_id: int,
+        parallelism: int,
+    ) -> dict[str, Any]:
         if not isinstance(raw_result, dict):
-            raise TypeError("JobManager.rescale_operator must return a dict")
+            raise TypeError("JobManager operator rescale RPC must return a dict")
         result = dashboard_value(raw_result)
         # Keep request identity stable at the public boundary and expose the
         # concise ``parallelism`` spelling expected by dashboard clients while

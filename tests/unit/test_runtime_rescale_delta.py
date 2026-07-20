@@ -22,6 +22,7 @@ from ray.klein.runtime.partitioning import RoundRobinPartitioner
 from ray.klein.runtime.resources import Resources
 from ray.klein.runtime.scheduler import job_master as job_master_module
 from ray.klein.runtime.scheduler import task_deployer, task_terminator
+from ray.klein.runtime.scheduler.errors import DeploymentError
 from ray.klein.runtime.scheduler.job_master import JobMaster
 from ray.klein.runtime.scheduler.placement import NativeStrategy
 from ray.klein.runtime.scheduler.rescale_plan import (
@@ -489,6 +490,72 @@ def test_job_master_prewarms_only_added_actors_before_the_rescale_barrier() -> N
     assert wait_created.call_args.kwargs["vertices"] == added
     assert start.call_args.kwargs["vertices"] == added
     assert transaction.committed is True
+
+
+def test_candidate_readiness_timeout_rolls_back_before_checkpoint_gate() -> None:
+    logical, old_graph = _graphs(2)
+    retained_handles = _mark_target_running(old_graph)
+    new_graph = old_graph.rescale_operator(logical.rescale_operator(2, 3), 2)
+    new_target = new_graph.job_vertex(2)
+    added = (new_target.execution_vertex(2),)
+    candidate_handle = MagicMock(name="resource-starved-candidate")
+    resource_timeout = TimeoutError("candidate actor was not scheduled: insufficient resources")
+    readiness_error = DeploymentError("await operator readiness", resource_timeout)
+    master = JobMaster(old_graph, Configuration(include_environment=False))
+    master.coordinator = MagicMock()
+    master._recovery = MagicMock()
+    timeout = master._schedule_start_timeout
+
+    with (
+        patch.object(master, "_coordinator_alive", return_value=True),
+        patch.object(task_deployer, "create_remote_actor", return_value=candidate_handle) as create,
+        patch.object(
+            task_deployer,
+            "wait_job_vertex_created",
+            side_effect=readiness_error,
+        ) as wait_created,
+        patch.object(task_deployer, "start_job_vertex") as start,
+        patch.object(master, "_prepare_local_rescale") as prepare_barrier,
+        patch.object(master, "_replace_recovery_graph") as replace_recovery_graph,
+        patch.object(master, "_discard_local_rescale_state") as discard_local_state,
+        patch.object(master, "_finish_local_rescale_gate") as finish_gate,
+        patch.object(task_terminator.klein, "get", side_effect=lambda value, **_kwargs: value),
+        patch.object(
+            task_terminator.klein,
+            "get_actor_status",
+            return_value=task_terminator.StreamTaskStatus.NOT_EXIST,
+        ),
+        patch.object(task_terminator.klein, "kill") as kill,
+        patch.object(task_terminator, "stop_job_vertex", wraps=task_terminator.stop_job_vertex) as stop,
+        pytest.raises(DeploymentError) as raised,
+    ):
+        master.rescale_operator(new_graph, "resize-1")
+
+    assert raised.value is readiness_error
+    create.assert_called_once()
+    wait_created.assert_called_once_with(new_target, timeout, vertices=added)
+    start.assert_not_called()
+    stop.assert_called_once_with(
+        new_target,
+        new_graph.namespace,
+        timeout,
+        force=True,
+        vertices=added,
+    )
+    kill.assert_called_once_with(candidate_handle)
+    assert added[0].stream_task is None
+    assert added[0].status == ExecutionVertexStatus.CANCELLED
+    assert master._pending_rescale_actor_cleanup == {}
+
+    assert master.execution_graph is old_graph
+    assert tuple(old_graph.job_vertex(2).execution_vertex(index).stream_task for index in range(2)) == retained_handles
+    replace_recovery_graph.assert_called_once_with(old_graph)
+    discard_local_state.assert_called_once_with("resize-1", 2)
+
+    master.coordinator.begin_operator_rescale.assert_not_called()
+    master.coordinator.reconfigure_execution_graph.assert_not_called()
+    prepare_barrier.assert_not_called()
+    finish_gate.assert_not_called()
 
 
 def test_job_master_scale_in_creates_nothing_and_stops_only_removed_actors() -> None:

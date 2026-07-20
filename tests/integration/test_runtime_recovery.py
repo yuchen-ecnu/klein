@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from queue import Empty
 
+from ray.util.queue import Queue
 from ray.util.state import list_actors
 
 import ray
@@ -15,18 +17,22 @@ from ray.klein.config.checkpoint_options import CheckpointOptions
 from ray.klein.config.checkpoint_trigger_options import CheckpointTriggerOptions
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.job_manager_options import JobManagerOptions
+from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.config.restart_strategy_options import RestartStrategyOptions
 from ray.klein.runtime.coordinator import checkpoint_io
 from tests.support.streaming import LoopSourceFunction
 from tests.support.waiting import wait_until
 
 
-class _DiscardSink(SinkFunction):
+class _QueueSink(SinkFunction):
+    def __init__(self, output_queue: Queue) -> None:
+        self._output_queue = output_queue
+
     def open(self, runtime_context: RuntimeContext) -> None:
         self.task_index = runtime_context.task_index
 
     def write(self, value) -> None:
-        return None
+        self._output_queue.put(value)
 
     def flush(self) -> None:
         return None
@@ -40,6 +46,17 @@ def _task_actors(address: str, namespace: str):
     ]
 
 
+def _drain_max_index(output_queue: Queue) -> int:
+    maximum = 0
+    for _ in range(output_queue.qsize()):
+        try:
+            row = output_queue.get(block=False)
+        except Empty:
+            break
+        maximum = max(maximum, row["idx"])
+    return maximum
+
+
 def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path, ray_cluster) -> None:
     config = Configuration()
     config.set(CheckpointOptions.DIRECTORY, (tmp_path / "checkpoints").as_uri())
@@ -47,9 +64,11 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
     config.set(CheckpointTriggerOptions.INTERVAL_RECORDS, 50)
     config.set(CheckpointTriggerOptions.INTERVAL_DURATION, timedelta(seconds=1))
     config.set(JobManagerOptions.HEALTH_CHECK_INTERVAL, 1)
+    config.set(PipelineOptions.OPERATOR_CHAINING, False)
     config.set(RestartStrategyOptions.DELAY, timedelta(0))
 
     context = KleinContext(config)
+    output_queue = Queue()
     stream = context.source(
         LoopSourceFunction,
         fn_constructor_kwargs={"sleep_interval": 0.01},
@@ -57,7 +76,12 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
         num_cpus=0.1,
         name="RecoverySource",
     ).map(lambda row: row, num_cpus=0.1, name="RecoveryMap")
-    stream.write(_DiscardSink, num_cpus=0.1, name="RecoverySink")
+    stream.write(
+        _QueueSink,
+        fn_constructor_args=[output_queue],
+        num_cpus=0.1,
+        name="RecoverySink",
+    )
     handle = context.execute("runtime-task-recovery")
 
     try:
@@ -77,7 +101,7 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
                 (
                     actor
                     for actor in _task_actors(ray_cluster.address_info["address"], handle.namespace)
-                    if actor.state == "ALIVE"
+                    if actor.state == "ALIVE" and actor.name.startswith("RecoveryMap")
                 ),
                 None,
             ),
@@ -102,9 +126,26 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
             description=f"replacement actor for {original.name}",
         )
         assert replacement.actor_id != original.actor_id
+        index_after_replacement = _drain_max_index(output_queue)
+
+        def next_new_row():
+            try:
+                row = output_queue.get(timeout=0.2)
+            except Empty:
+                return None
+            return row if row["idx"] > index_after_replacement else None
+
+        progressed = wait_until(
+            next_new_row,
+            timeout=30,
+            interval=0,
+            description="data to continue after task recovery",
+        )
+        assert progressed["idx"] > index_after_replacement
         assert handle.status == JobStatus.RUNNING
     finally:
         if not handle.status.is_terminal:
             assert handle.cancel(timeout=30)
+        output_queue.shutdown()
 
     assert handle.status == JobStatus.CANCELLED

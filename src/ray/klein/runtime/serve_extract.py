@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 # Thread-local so a deployment replica that extracts on one thread never affects
 # a genuine job submission happening on another.
 _state = threading.local()
+_extraction_lock = threading.RLock()
 
 
 class _ServeExtractDone(BaseException):
@@ -64,7 +65,11 @@ def capture_from_sinks(sinks: Sequence[StreamSink], config: Configuration) -> No
             "Workflow has no ray_serve_enabled region to extract. Mark the serve "
             "operators with `ray_serve_enabled=True`."
         )
-    raise _ServeExtractDone(instantiate_logical_functions(serve_fns))
+    operators = instantiate_logical_functions(serve_fns)
+    captured_chains = getattr(_state, "captured_chains", None)
+    if captured_chains is not None:
+        captured_chains.append(operators)
+    raise _ServeExtractDone(operators)
 
 
 def run_extraction(entrypoint: str) -> list:
@@ -75,13 +80,35 @@ def run_extraction(entrypoint: str) -> list:
     """
     import runpy
 
-    _state.active = True
-    try:
-        runpy.run_path(entrypoint, run_name="__main__")
-    except _ServeExtractDone as done:
-        return done.operators
-    finally:
-        _state.active = False
+    from ray.klein.api.klein_context import KleinContext
+    from ray.klein.runtime.serve_functions import close_operators
+
+    previous_active = extracting()
+    previous_captured_chains = getattr(_state, "captured_chains", None)
+    captured_chains: list[list] = []
+    handed_off: list = []
+    # runpy temporarily mutates interpreter-global __main__/argv state, so the
+    # ContextVar isolates Klein's builder while this lock serializes runpy itself.
+    with _extraction_lock, KleinContext._isolated():
+        _state.active = True
+        _state.captured_chains = captured_chains
+        try:
+            runpy.run_path(entrypoint, run_name="__main__")
+        except _ServeExtractDone as done:
+            handed_off = done.operators
+            return done.operators
+        finally:
+            _state.active = previous_active
+            if previous_captured_chains is None:
+                del _state.captured_chains
+            else:
+                _state.captured_chains = previous_captured_chains
+                if handed_off:
+                    previous_captured_chains.append(handed_off)
+            close_operators(
+                [operator for chain in captured_chains for operator in chain],
+                excluding=handed_off,
+            )
 
     raise RuntimeError(
         f"Workflow {entrypoint} finished without calling execute(); no serve operators could be extracted."

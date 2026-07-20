@@ -1,0 +1,415 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: 2026-07-21 01:20+0800\n"
+"Last-Translator: Klein for Ray Authors\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Explore Klein for Ray feature guides for hybrid execution, state, event "
+"time, SQL, recovery, live rescaling, detached jobs, and Ray Serve."
+msgstr "浏览 Klein for Ray 的特色功能指南，了解混合执行、状态、事件时间、SQL、恢复、在线扩缩容、分离式作业和 Ray Serve。"
+
+msgid "Feature highlights"
+msgstr "特色功能"
+
+msgid ""
+"This page is the product-oriented map of Klein's distinctive "
+"capabilities. Each feature links to its programming guide, operational "
+"contract, and known boundary. Read [Key concepts](key-concepts.md) first "
+"for the common execution model, or choose a feature directly below."
+msgstr ""
+"本页从产品视角展示 Klein 的差异化能力。每项功能均链接到其编程指南、运维契约和已知边界。可以先阅读[核心概念](key-"
+"concepts.md)了解通用执行模型，也可以直接从下方选择一项功能。"
+
+msgid "Feature guide map"
+msgstr "特色功能指南一览"
+
+msgid "Feature"
+msgstr "功能"
+
+msgid "What it adds to a Ray application"
+msgstr "为 Ray 应用增添的能力"
+
+msgid "Start here"
+msgstr "从这里开始"
+
+msgid "Check before production"
+msgstr "生产前检查"
+
+msgid "One graph for bounded and continuous data"
+msgstr "一张图处理有界与持续数据"
+
+msgid ""
+"A lazy `DataStream` graph that lowers to Ray Data for compatible bounded "
+"work or runs as long-lived Ray actors for streaming work."
+msgstr "一张惰性 `DataStream` 图：兼容的有界工作负载会降低为 Ray Data，流式工作负载则通过长生命周期的 Ray actor 运行。"
+
+msgid "[Ray Data interoperation](ray-data-interop.md)"
+msgstr "[Ray Data 互操作](ray-data-interop.md)"
+
+msgid "[Operator compatibility](operator-compatibility.md)"
+msgstr "[算子兼容性](operator-compatibility.md)"
+
+msgid "Dynamic Ray Data access"
+msgstr "动态访问 Ray Data"
+
+msgid ""
+"Module-level `read_*` factories and `stream.data` adapters derived from "
+"the installed compatible Ray version instead of a duplicated wrapper API."
+msgstr "模块级 `read_*` 工厂和 `stream.data` 适配器直接取自已安装的兼容 Ray 版本，无需重复实现一套包装 API。"
+
+msgid "[Compatibility](compatibility.md)"
+msgstr "[兼容性](compatibility.md)"
+
+msgid "Ray-native managed state"
+msgstr "Ray 原生托管状态"
+
+msgid ""
+"Keyed value, list, and map state; TTL; timers; key groups; RocksDB; "
+"checkpoint restore; and rescaling."
+msgstr "键控值、列表和映射状态；TTL；定时器；键组；RocksDB；检查点恢复；以及扩缩容。"
+
+msgid "[Managed state](ray-native-state.md)"
+msgstr "[托管状态](ray-native-state.md)"
+
+msgid "[Checkpoint recovery](checkpoint-recovery.md)"
+msgstr "[检查点恢复](checkpoint-recovery.md)"
+
+msgid "Event time and idle inputs"
+msgstr "事件时间与空闲输入"
+
+msgid ""
+"Watermarks, idleness, event-time timers, windows, interval joins, and "
+"late-record handling."
+msgstr "水位线、空闲检测、事件时间定时器、窗口、区间联接以及迟到记录处理。"
+
+msgid "[Event time](event-time.md)"
+msgstr "[事件时间](event-time.md)"
+
+msgid "[Delivery semantics](delivery-semantics.md)"
+msgstr "[交付语义](delivery-semantics.md)"
+
+msgid "Bounded and continuous SQL"
+msgstr "有界与持续 SQL"
+
+msgid ""
+"SQL and Table APIs backed by SQLGlot planning, with explicit changelog "
+"rows for dynamic tables."
+msgstr "由 SQLGlot 规划提供支持的 SQL 和 Table API，并使用显式变更日志行表示动态表。"
+
+msgid "[SQL and Table APIs](sql.md)"
+msgstr "[SQL 和 Table API](sql.md)"
+
+msgid "[SQL execution modes](sql.md#how-does-sql-execute)"
+msgstr "[SQL 执行模式](sql.md#how-does-sql-execute)"
+
+msgid "Checkpoint-aware recovery and output"
+msgstr "检查点感知的恢复与输出"
+
+msgid ""
+"Coordinated source progress, managed state, replay, durable checkpoint "
+"storage, and transactional publication where a sink supports it."
+msgstr "协调数据源进度、托管状态、重放和持久检查点存储；当 Sink 支持时，还可进行事务性发布。"
+
+msgid "[Production readiness](production-readiness.md)"
+msgstr "[生产就绪](production-readiness.md)"
+
+msgid "Live operator rescaling"
+msgstr "在线算子扩缩容"
+
+msgid ""
+"A checkpoint-coordinated topology change through the Dashboard or Python "
+"state API without restarting the whole job."
+msgstr "通过 Dashboard 或 Python 状态 API 执行由检查点协调的拓扑变更，无需重启整个作业。"
+
+msgid "[Live operator rescaling](operator-rescaling.md)"
+msgstr "[在线算子扩缩容](operator-rescaling.md)"
+
+msgid ""
+"[Rescaling safety conditions](operator-rescaling.md#prepare-a-streaming-"
+"job-for-live-rescaling)"
+msgstr ""
+"[扩缩容安全条件](operator-rescaling.md#prepare-a-streaming-job-for-live-"
+"rescaling)"
+
+msgid "Driver-independent streaming jobs"
+msgstr "不依赖驱动程序的流式作业"
+
+msgid ""
+"Detached control actors, CLI reattachment, snapshots, cancellation, and "
+"explicit recovery after larger failures."
+msgstr "分离式控制 actor、CLI 重新挂接、快照、取消，以及发生较大范围故障后的显式恢复。"
+
+msgid "[Driver fault tolerance](driver-fault-tolerance.md)"
+msgstr "[驱动程序容错](driver-fault-tolerance.md)"
+
+msgid "[Failure boundaries](driver-fault-tolerance.md#failure-boundaries)"
+msgstr "[故障边界](driver-fault-tolerance.md#failure-boundaries)"
+
+msgid "Ray Serve execution regions"
+msgstr "Ray Serve 执行区域"
+
+msgid ""
+"An eligible `map_batches` chain can run behind an independently deployed "
+"Ray Serve endpoint."
+msgstr "符合条件的 `map_batches` 链可以在独立部署的 Ray Serve 端点后运行。"
+
+msgid "[Ray Serve integration](connectors/ray-serve.md)"
+msgstr "[Ray Serve 集成](connectors/ray-serve.md)"
+
+msgid ""
+"[Requests, retries, and operations](connectors/ray-serve.md#requests-"
+"retries-and-operations)"
+msgstr "[请求、重试与运维](connectors/ray-serve.md#requests-retries-and-operations)"
+
+msgid "One lazy graph, two Ray-native runtimes"
+msgstr "一张惰性图，两种 Ray 原生运行时"
+
+msgid ""
+"Klein keeps graph construction independent from execution. In `auto` "
+"mode, an unbounded source, any graph vertex without a batch lowering, or "
+"`udf.ignore-exception=true` selects the native streaming runtime for the "
+"whole job. Otherwise a fully batch-lowerable bounded graph becomes lazy "
+"Ray Data operations."
+msgstr ""
+"Klein 将图构建与执行分离。在 `auto` 模式下，无界数据源、任何不具备批处理降低实现"
+"的图顶点或 `udf.ignore-exception=true`，都会让整个作业选择原生流式运行时。否则，"
+"可完全降低为批处理的有界图会变成惰性 Ray Data 操作。"
+
+msgid ""
+"This gives applications one `DataStream` shape without hiding the runtime"
+" boundary. Batch and streaming regions are not mixed within one submitted"
+" job, and forcing a mode cannot add a missing implementation. Use the "
+"[compatibility matrix](operator-compatibility.md) when combining "
+"execution families."
+msgstr ""
+"这让应用能够统一使用一种 `DataStream` "
+"形态，同时不掩盖运行时边界。一个已提交作业内不会混合批处理区域和流式区域，强制指定模式也无法补上缺失的实现。组合不同执行类别时，请查阅[兼容性矩阵"
+"](operator-compatibility.md)。"
+
+msgid ""
+"The dynamic adapter exposes public readers and Dataset methods from the "
+"installed supported Ray release through `ray.klein.read_*`, `ctx.data`, "
+"and `stream.data`. Ray Data expressions used by `with_column` and "
+"`filter` also have documented streaming forms; most other arbitrary "
+"Dataset operations remain batch-only."
+msgstr ""
+"动态适配器通过 `ray.klein.read_*`、`ctx.data` 和 `stream.data`，公开已安装且受支持的 Ray "
+"版本中的公共读取器和 Dataset 方法。`with_column` 和 `filter` 所使用的 Ray Data "
+"表达式也有文档说明的流式形式；其他大多数任意 Dataset 操作仍仅支持批处理。"
+
+msgid "Stateful, event-time, and relational streaming"
+msgstr "有状态、事件时间与关系型流处理"
+
+msgid "The native streaming runtime combines three related programming models:"
+msgstr "原生流式运行时结合了三种相互关联的编程模型："
+
+msgid ""
+"Managed keyed state provides value, list, and map state, TTL cleanup, "
+"processing-time and event-time timers, key groups, and restore across a "
+"supported parallelism change."
+msgstr "托管键控状态提供值、列表和映射状态、TTL 清理、处理时间和事件时间定时器、键组，并支持在兼容的并行度变更后恢复。"
+
+msgid ""
+"Event-time processing carries ordered watermarks over the same channels "
+"as data and checkpoint barriers. Idle-input detection prevents a quiet "
+"physical input from holding back the whole graph indefinitely."
+msgstr "事件时间处理通过与数据和检查点屏障相同的通道传输有序水位线。空闲输入检测可以防止静默的物理输入无限期阻碍整张图推进。"
+
+msgid ""
+"Continuous SQL represents changing results as insert, update-before, "
+"update-after, and delete rows. The Table API and connector DDL make those"
+" changelog contracts explicit instead of treating an unbounded query as a"
+" bounded table."
+msgstr ""
+"持续 SQL 将不断变化的结果表示为插入、更新前、更新后和删除行。Table API 与连接器 DDL "
+"会显式表达这些变更日志契约，而不是把无界查询当作有界表。"
+
+msgid ""
+"Start with [Managed state](ray-native-state.md), [Event time](event-"
+"time.md), and [SQL and Table APIs](sql.md). Their supported combinations "
+"are summarized in [Operator compatibility](operator-compatibility.md)."
+msgstr ""
+"请从[托管状态](ray-native-state.md)、[事件时间](event-time.md)以及 [SQL 和 Table "
+"API](sql.md)开始阅读。[算子兼容性](operator-compatibility.md)汇总了它们支持的组合。"
+
+msgid "Recovery and checkpoint-aware outputs"
+msgstr "恢复与检查点感知输出"
+
+msgid ""
+"A streaming checkpoint coordinates source positions, managed state, "
+"timers, and sink preparation. Durable storage is the cluster-loss "
+"boundary; Ray's Object Store is only an optional recovery cache. The "
+"filesystem and Iceberg integrations publish checkpoint-aware output. "
+"Other sources and sinks, including Kafka, Redis, the RocketMQ source, "
+"console, SQL, and custom integrations, retain their documented system-"
+"specific guarantees."
+msgstr ""
+"流式检查点协调数据源位置、托管状态、定时器和 Sink 准备。持久存储是集群丢失时的"
+"恢复边界；Ray Object Store 仅作为可选的恢复缓存。文件系统和 Iceberg 集成会发布"
+"检查点感知输出。其他数据源和 Sink，包括 Kafka、Redis、仅提供 Source 的 RocketMQ、"
+"控制台、SQL 和自定义集成，仍遵循各自文档所述的系统特定保证。"
+
+msgid "Read these contracts together:"
+msgstr "请结合阅读以下契约："
+
+msgid ""
+"[Delivery semantics](delivery-semantics.md) explains how source replay, "
+"state, checkpoints, and external effects compose."
+msgstr "[交付语义](delivery-semantics.md)说明数据源重放、状态、检查点和外部效果如何组合。"
+
+msgid ""
+"[Checkpoint storage](checkpoint-storage.md) covers durable locations and "
+"object integrity."
+msgstr "[检查点存储](checkpoint-storage.md)介绍持久存储位置和对象完整性。"
+
+msgid ""
+"[Restore and rescale](checkpoint-recovery.md) covers compatible "
+"resubmission from a completed checkpoint."
+msgstr "[恢复与调整并行度](checkpoint-recovery.md)介绍如何从已完成检查点进行兼容的重新提交。"
+
+msgid ""
+"[Filesystem output](connectors/filesystem.md) and [Iceberg "
+"output](connectors/iceberg.md) document their publication boundaries."
+msgstr ""
+"[文件系统输出](connectors/filesystem.md)和 [Iceberg "
+"输出](connectors/iceberg.md)说明各自的发布边界。"
+
+msgid ""
+"Klein does not label an entire job exactly-once merely because its "
+"internal state is consistent. End-to-end behavior still depends on every "
+"source and destination in the graph."
+msgstr "Klein 不会仅因为内部状态一致，就把整个作业标记为精确一次。端到端行为仍取决于图中的每个数据源和目标端。"
+
+msgid "Live control without driver ownership"
+msgstr "无需驱动程序持有的在线控制"
+
+msgid ""
+"Submitted streaming jobs use detached control actors, so the original "
+"Python driver can exit while the job continues. Another process can "
+"inspect or stop the job with the CLI or public state API. The Dashboard "
+"provides the same snapshot model and can request a supported operator "
+"rescale."
+msgstr ""
+"已提交的流式作业使用分离式控制 actor，因此原始 Python 驱动程序退出后，作业仍可继续运行。其他进程可以通过 CLI 或公共状态 API"
+" 检查或停止作业。Dashboard 提供相同的快照模型，并可请求受支持的算子扩缩容。"
+
+msgid ""
+"Live rescaling changes one physical operator at an ordered, checkpointed "
+"cut. It is an explicit operation rather than a built-in metric-driven "
+"streaming autoscaler. Operator type, job health, key-group capacity, "
+"available Ray resources, and checkpoint stabilization all constrain the "
+"request."
+msgstr ""
+"在线扩缩容会在有序且已创建检查点的切分点变更一个物理算子。它是显式操作，而不是内置的指标驱动型流式自动扩缩器。算子类型、作业健康状况、键组容量、可用"
+" Ray 资源以及检查点稳定过程都会约束该请求。"
+
+msgid ""
+"Use [Driver fault tolerance](driver-fault-tolerance.md), "
+"[Observability](observability.md), [CLI reference](cli-reference.md), and"
+" [Live operator rescaling](operator-rescaling.md) as one operational set."
+" Detached actors survive a driver exit, but they do not replace durable "
+"recovery after Ray head, JobManager-process, or whole-cluster loss."
+msgstr ""
+"请将[驱动程序容错](driver-fault-tolerance.md)、[可观测性](observability.md)、[CLI 参考"
+"](cli-reference.md)和[在线算子扩缩容](operator-rescaling.md)作为一组运维文档阅读。分离式 actor "
+"可在驱动程序退出后继续运行，但无法替代 Ray head、JobManager 进程或整个集群丢失后的持久恢复。"
+
+msgid "Optional Ray Serve execution regions"
+msgstr "可选的 Ray Serve 执行区域"
+
+msgid ""
+"Klein can replace one connected linear region of synchronous "
+"NumPy/default `map_batches` transforms with an asynchronous client to a "
+"separately deployed Ray Serve application. This is useful when model-"
+"serving lifecycle and scaling must remain independent from the "
+"surrounding batch or streaming job."
+msgstr ""
+"Klein 可以把由同步 NumPy/默认格式 `map_batches` Transform 组成的一个相连线性区域，替换为连接独立部署 Ray"
+" Serve 应用的异步客户端。当模型服务的生命周期和扩缩容必须独立于周围的批处理或流式作业时，这项能力很有用。"
+
+msgid ""
+"The remote service is outside Klein's checkpoint transaction. Requests "
+"can be retried after ambiguous network failures, so served functions "
+"should be deterministic and free of non-idempotent external side effects."
+" See the [Ray Serve integration guide](connectors/ray-serve.md) for "
+"topology, serialization, timeout, retry, and security constraints."
+msgstr ""
+"远程服务不在 Klein "
+"的检查点事务范围内。发生结果不明确的网络故障后，请求可能会被重试，因此服务函数应具有确定性，并且不得产生非幂等的外部副作用。有关拓扑、序列化、超时、重试和安全约束，请参阅"
+" [Ray Serve 集成指南](connectors/ray-serve.md)。"
+
+msgid "Choose the next guide"
+msgstr "选择下一篇指南"
+
+msgid "If you want to..."
+msgstr "如果你想……"
+
+msgid "Continue with..."
+msgstr "接下来阅读……"
+
+msgid "Build a first end-to-end stream"
+msgstr "构建第一条端到端数据流"
+
+msgid "[Production streaming walkthrough](production-streaming.md)"
+msgstr "[生产流处理实战](production-streaming.md)"
+
+msgid "Implement UDFs and control ordering or resources"
+msgstr "实现 UDF，并控制顺序或资源"
+
+msgid "[DataStream programming](datastream-programming-guide.md)"
+msgstr "[DataStream 编程](datastream-programming-guide.md)"
+
+msgid "Select an input, output, lookup, or execution integration"
+msgstr "选择输入、输出、查询或执行集成"
+
+msgid "[Connector catalog](connectors/index.md)"
+msgstr "[连接器目录](connectors/index.md)"
+
+msgid "Understand unsupported combinations before designing a job"
+msgstr "在设计作业前了解不受支持的组合"
+
+msgid ""
+"[Operator compatibility](operator-compatibility.md) and [Known "
+"limitations](limitations.md)"
+msgstr "[算子兼容性](operator-compatibility.md)与[已知限制](limitations.md)"
+
+msgid "Approve a deployment"
+msgstr "批准部署上线"
+
+msgid "[Production readiness checklist](production-readiness.md)"
+msgstr "[生产就绪检查清单](production-readiness.md)"
+
+msgid ""
+"Klein is alpha software. Treat the feature guides as behavioral contracts"
+" for the documented compatible release, then validate the exact topology "
+"and connectors in a representative environment."
+msgstr "Klein 仍是 alpha 软件。请将特色功能指南视为所述兼容版本的行为契约，并在具有代表性的环境中验证实际使用的拓扑和连接器。"
+
+#~ msgid ""
+#~ "Klein keeps graph construction independent "
+#~ "from execution. In `auto` mode, a "
+#~ "fully batch-lowerable bounded graph "
+#~ "becomes lazy Ray Data operations. An "
+#~ "unbounded source or any graph vertex "
+#~ "without a batch lowering selects the "
+#~ "native streaming runtime for the whole"
+#~ " job."
+#~ msgstr ""
+#~ "Klein 将图构建与执行分离。在 `auto` 模式下，可完全降低为批处理的有界图会变成惰性 "
+#~ "Ray Data 操作。无界数据源或任何不具备批处理降低能力的图顶点，都会让整个作业选择原生流式运行时。"

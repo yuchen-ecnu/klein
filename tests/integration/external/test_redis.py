@@ -75,7 +75,7 @@ def test_write_redis_round_trip(clean_redis, data_type, rows, expected) -> None:
         key_prefix=prefix,
     )
 
-    context.from_values(*rows).write_redis(
+    sink = context.from_values(*rows).write_redis(
         connection,
         key=lambda row: row["name"],
         value=lambda row: row["value"],
@@ -84,7 +84,7 @@ def test_write_redis_round_trip(clean_redis, data_type, rows, expected) -> None:
         concurrency=2,
     )
 
-    context.execute(f"write-{data_type.value}").wait()
+    context.execute(f"write-{data_type.value}", sinks=(sink,)).wait()
 
     actual = {name: _read_value(clean_redis.client, data_type, f"{prefix}:{name}") for name in expected}
     assert actual == expected

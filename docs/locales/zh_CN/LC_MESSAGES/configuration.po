@@ -1,0 +1,320 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Configure Klein for Ray with typed options, mappings, strings, global "
+"context settings, and environment variables."
+msgstr "通过类型化选项、映射、字符串、全局上下文设置和环境变量配置 Klein for Ray。"
+
+msgid "Configure Klein"
+msgstr "配置 Klein"
+
+msgid ""
+"Klein uses lower-case dotted keys with kebab-case compound names. For "
+"example, `execution.runtime.mode` and `pipeline.operator-"
+"chaining.enabled`. Underscores in input keys are normalized to hyphens."
+msgstr ""
+"Klein 使用小写点分键，复合名称采用短横线命名。例如 `execution.runtime.mode` 和 `pipeline"
+".operator-chaining.enabled`。输入键中的下划线会规范化为短横线。"
+
+msgid "Klein resolves each option from three sources:"
+msgstr "Klein 从三个来源解析每个选项："
+
+msgid "Priority"
+msgstr "优先级"
+
+msgid "Source"
+msgstr "来源"
+
+msgid "Example"
+msgstr "示例"
+
+msgid "1 (highest)"
+msgstr "1（最高）"
+
+msgid "Explicit pipeline or `Configuration` value"
+msgstr "显式管道值或 `Configuration` 值"
+
+#, python-brace-format
+msgid "`{\"execution.runtime.mode\": \"streaming\"}`"
+msgstr "`{\"execution.runtime.mode\": \"streaming\"}`"
+
+msgid "2"
+msgstr "2"
+
+msgid "Captured `RAY_KLEIN_*` environment value"
+msgstr "捕获的 `RAY_KLEIN_*` 环境变量值"
+
+msgid "`RAY_KLEIN_EXECUTION_RUNTIME_MODE=streaming`"
+msgstr "`RAY_KLEIN_EXECUTION_RUNTIME_MODE=streaming`"
+
+msgid "3"
+msgstr "3"
+
+msgid "Typed option default"
+msgstr "类型化选项默认值"
+
+msgid "`execution.runtime.mode=auto`"
+msgstr "`execution.runtime.mode=auto`"
+
+msgid ""
+"Klein captures matching environment values when it creates a "
+"`Configuration`, so later environment changes don't alter that "
+"configuration. Call `ray.klein.configure()` before building the graph; "
+"submission gives the running job its configuration snapshot."
+msgstr ""
+"Klein 在创建 `Configuration` 时捕获匹配的环境变量值，因此之后的环境变化不会改变该配置。请先调用 "
+"`ray.klein.configure()` 再构建图；提交时会把配置快照交给正在运行的作业。"
+
+msgid ""
+"For every supported key, type, default, constraint, and direct runtime "
+"environment variable, see the [complete configuration reference"
+"](configuration-reference.md)."
+msgstr "每个受支持键的类型、默认值、约束和直接运行时环境变量，请参阅[完整配置参考](configuration-reference.md)。"
+
+msgid "Set options in Python"
+msgstr "在 Python 中设置选项"
+
+msgid ""
+"Choose the input form that matches how your application receives "
+"configuration:"
+msgstr "请选择与应用接收配置方式相匹配的输入形式："
+
+msgid "Use a JSON object string when values contain dictionaries or lists:"
+msgstr "当值包含字典或列表时，请使用 JSON 对象字符串："
+
+msgid ""
+"When you call `Configuration.set()` with a `ConfigOption`, pass the final"
+" typed Python value. Strings from mappings, `key=value` input, and "
+"environment variables are converted when the runtime reads a typed "
+"option:"
+msgstr ""
+"使用 `ConfigOption` 调用 `Configuration.set()` 时，请传入最终的类型化 Python "
+"值。来自映射、`key=value` 输入和环境变量的字符串，会在运行时读取类型化选项时转换："
+
+msgid "Set options with environment variables"
+msgstr "使用环境变量设置选项"
+
+msgid ""
+"Every typed option maps dots and hyphens to underscores and adds the "
+"`RAY_KLEIN_` prefix:"
+msgstr "每个类型化选项都会把点和短横线映射为下划线，并添加 `RAY_KLEIN_` 前缀："
+
+msgid ""
+"Klein converts Boolean values, durations, numbers, mappings, and "
+"enumerations with the same converter used by code configuration. Invalid "
+"values fail when Klein reads the option instead of silently falling back "
+"to a default."
+msgstr "Klein 使用与代码配置相同的转换器来转换布尔值、时长、数字、映射和枚举。无效值会在 Klein 读取选项时失败，而不是静默回退到默认值。"
+
+msgid ""
+"Accepted Boolean strings are `true`, `false`, `1`, `0`, `yes`, `no`, "
+"`on`, and `off`, without case sensitivity. Duration strings combine a "
+"number with `ms`, `s`, `min`, `h`, `d`, or `w`; examples include `250ms`,"
+" `30s`, and `1.5h`. Unquoted numeric values in mappings or `key=value` "
+"input are seconds; environment-variable durations are strings and "
+"therefore need a unit. Enum names and values are case-insensitive."
+msgstr ""
+"可接受的布尔字符串包括 `true`、`false`、`1`、`0`、`yes`、`no`、`on` 和 "
+"`off`，不区分大小写。时长字符串由数字和 `ms`、`s`、`min`、`h`、`d` 或 `w` 组成，例如 `250ms`、`30s` 和"
+" `1.5h`。映射或 `key=value` "
+"输入中未加引号的数值以秒为单位；环境变量中的时长是字符串，因此必须带单位。枚举名称和值均不区分大小写。"
+
+msgid "Advanced: isolate a context"
+msgstr "高级用法：隔离上下文"
+
+msgid ""
+"Most application code should use the module-level API shown above. For "
+"the advanced case where one process must build mutually isolated "
+"pipelines, construct `KleinContext(configuration)` directly and use its "
+"graph-building methods."
+msgstr ""
+"大多数应用代码都应使用上面展示的模块级 API。对于必须在同一进程中构建彼此隔离管道的高级场景，请直接构造 "
+"`KleinContext(configuration)`，并使用它的图构建方法。"
+
+msgid "Don't combine streams from different contexts in one graph."
+msgstr "不要在同一张图中组合来自不同上下文的 stream。"
+
+msgid "Use canonical keys"
+msgstr "使用规范键"
+
+msgid ""
+"Configuration keys use a lower-case dotted hierarchy and kebab-case "
+"compound names. Use these top-level namespaces:"
+msgstr "配置键使用小写点分层级，复合名称采用短横线命名。请使用以下顶层命名空间："
+
+msgid "Namespace"
+msgstr "命名空间"
+
+msgid "Purpose"
+msgstr "用途"
+
+msgid "`execution.*`"
+msgstr "`execution.*`"
+
+msgid ""
+"Runtime mode, task deployment, restart strategy, and checkpoint "
+"coordination."
+msgstr "运行时模式、任务部署、重启策略和检查点协调。"
+
+msgid "`pipeline.*`"
+msgstr "`pipeline.*`"
+
+msgid "Graph compilation, operator chaining, and batching."
+msgstr "图编译、算子链和批处理。"
+
+msgid "`state.*`"
+msgstr "`state.*`"
+
+msgid "State backend, TTL cleanup, key groups, and snapshot caching."
+msgstr "状态后端、TTL 清理、键组和快照缓存。"
+
+msgid "`table.*`"
+msgstr "`table.*`"
+
+msgid "Flink-compatible streaming SQL state and planner options."
+msgstr "兼容 Flink 的流处理 SQL 状态和规划器选项。"
+
+msgid "`event-time.*`"
+msgstr "`event-time.*`"
+
+msgid "Event-time and idle-input coordination."
+msgstr "事件时间和空闲输入协调。"
+
+msgid "`job.*`"
+msgstr "`job.*`"
+
+msgid ""
+"Streaming job deployment, shutdown, health checks, and Ray namespace "
+"isolation."
+msgstr "流处理作业部署、关闭、健康检查和 Ray 命名空间隔离。"
+
+msgid "`partitioner.*`"
+msgstr "`partitioner.*`"
+
+msgid "Compatibility settings retained for earlier adaptive partitioners."
+msgstr "为早期自适应分区器保留的兼容设置。"
+
+msgid "`observability.*`"
+msgstr "`observability.*`"
+
+msgid "Dashboard publication, retained job history, and related telemetry."
+msgstr "仪表板发布、保留的作业历史和相关遥测。"
+
+msgid "`serve.*`"
+msgstr "`serve.*`"
+
+msgid "Ray Serve deployment and embedded HTTP proxy-client settings."
+msgstr "Ray Serve 部署和嵌入式 HTTP 代理客户端设置。"
+
+msgid "`udf.*`"
+msgstr "`udf.*`"
+
+msgid "User-function error handling."
+msgstr "用户函数错误处理。"
+
+msgid ""
+"Unknown canonical keys are accepted and retained, which lets applications"
+" keep their own metadata beside Klein settings. Klein doesn't validate or"
+" act on unknown keys. Use the [configuration reference](configuration-"
+"reference.md) to distinguish active Klein options from application-"
+"defined values."
+msgstr ""
+"未知的规范键会被接受并保留，因此应用可以把自有元数据与 Klein 设置放在一起。Klein 不会验证未知键，也不会据此采取动作。请使用[配置参考"
+"](configuration-reference.md)区分有效的 Klein 选项与应用定义的值。"
+
+msgid "Inspect configuration before submission"
+msgstr "提交前检查配置"
+
+msgid ""
+"Build a `Configuration`, inspect or update it with typed options, and "
+"then install its values before constructing the graph:"
+msgstr "构建 `Configuration`，使用类型化选项检查或更新它，然后在构建图之前安装其中的值："
+
+msgid ""
+"`to_dict()` returns only explicit values. It deliberately doesn't expand "
+"captured environment values or typed defaults:"
+msgstr "`to_dict()` 只返回显式值，并且有意不展开捕获的环境变量值或类型化默认值："
+
+msgid ""
+"`unset(key)` removes the explicit value. The next typed `get()` then "
+"reveals a captured environment value, if one exists, or the option "
+"default."
+msgstr "`unset(key)` 会移除显式值。下次类型化 `get()` 将显示捕获的环境变量值（如果存在），否则显示选项默认值。"
+
+msgid ""
+"Pass a `ConfigOption` to `get()` whenever you want conversion and a typed"
+" default. Passing a plain key string returns only the raw explicit or "
+"captured environment value, or `None` when neither exists."
+msgstr ""
+"需要转换和类型化默认值时，请始终向 `get()` 传入 "
+"`ConfigOption`。传入普通键字符串只会返回原始的显式值或捕获的环境变量值；两者都不存在时返回 `None`。"
+
+msgid ""
+"For deterministic tests or tools, disable process-environment capture or "
+"provide an explicit environment mapping:"
+msgstr "为了让测试或工具具备确定性，请禁用进程环境捕获，或提供显式环境映射："
+
+msgid ""
+"Constructing a `Configuration` from another one copies its captured "
+"environment and explicit values, so later mutation of either instance is "
+"isolated."
+msgstr "从另一个 `Configuration` 构造配置时，会复制其捕获的环境和显式值，因此之后修改任一实例都互不影响。"
+
+msgid "Configure dashboard publication"
+msgstr "配置仪表板发布"
+
+msgid ""
+"Streaming jobs publish read-only snapshots to the Klein state actor by "
+"default. Disable this for a job, or bound the in-memory terminal-job "
+"history, with:"
+msgstr "默认情况下，流处理作业会向 Klein 状态 actor 发布只读快照。可使用以下配置为某个作业禁用此行为，或限制内存中终止作业的历史数量："
+
+msgid ""
+"Logging level and format are process-level logging settings rather than "
+"job configuration options. See [Observe Klein jobs](observability.md) for"
+" `RAY_KLEIN_LOG_LEVEL`, `RAY_KLEIN_LOG_FORMAT`, and custom logging YAML."
+msgstr ""
+"日志级别和格式属于进程级日志设置，而不是作业配置选项。有关 "
+"`RAY_KLEIN_LOG_LEVEL`、`RAY_KLEIN_LOG_FORMAT` 和自定义日志 YAML，请参阅[观测 Klein "
+"作业](observability.md)。"
+
+msgid ""
+"Input underscores normalize to hyphens, but `to_dict()` and environment-"
+"variable mapping always use the canonical key."
+msgstr "输入中的下划线会规范化为短横线，但 `to_dict()` 和环境变量映射始终使用规范键。"
+
+#~ msgid ""
+#~ "For isolated pipelines, construct "
+#~ "`KleinContext(configuration)` directly and use "
+#~ "its graph-building methods. Application "
+#~ "code normally uses the process-global"
+#~ " module API so source construction "
+#~ "matches `ray.data`."
+#~ msgstr ""
+#~ "对于需要隔离的流水线，请直接构造 `KleinContext(configuration)` "
+#~ "并使用其图构建方法。应用代码通常使用进程全局的模块 API，使数据源构建方式与 `ray.data` "
+#~ "一致。"
+
+#~ msgid "Read a typed effective value with its `ConfigOption`:"
+#~ msgstr "通过对应的 `ConfigOption` 读取类型化有效值："

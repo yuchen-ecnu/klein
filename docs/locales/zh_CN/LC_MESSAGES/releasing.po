@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid "Build, verify, sign, and publish a Klein for Ray release."
+msgstr "构建、验证、签名并发布 Klein for Ray 版本。"
+
+msgid "Release process"
+msgstr "发布流程"
+
+msgid ""
+"Confirm CI, dependency review, CodeQL, package checks, and the full "
+"integration suite are green on the release commit."
+msgstr "确认发布提交上的 CI、依赖审查、CodeQL、包检查和完整集成测试套件均已通过。"
+
+msgid "Update `CHANGELOG.md`, package version, and `CITATION.cff`."
+msgstr "更新 `CHANGELOG.md`、包版本和 `CITATION.cff`。"
+
+msgid ""
+"Build with `python -m build` and inspect both archives for `LICENSE`, "
+"`NOTICE`, expected package data, and absence of credentials or private "
+"endpoints."
+msgstr "使用 `python -m build` 构建，并检查两个归档是否包含 `LICENSE`、`NOTICE` 和预期的包数据，且不含凭据或私有端点。"
+
+msgid ""
+"Run `python -m twine check dist/*` and install the wheel in a clean "
+"environment."
+msgstr "运行 `python -m twine check dist/*`，并在干净环境中安装 wheel。"
+
+msgid ""
+"Create a signed `vX.Y.Z` tag. The release workflow publishes through PyPI "
+"Trusted Publishing; long-lived PyPI tokens are not used."
+msgstr "创建已签名的 `vX.Y.Z` 标签。发布工作流通过 PyPI Trusted Publishing 发布，不使用长期有效的 PyPI 令牌。"
+
+msgid ""
+"Publish GitHub release notes and verify the PyPI provenance attestation."
+msgstr "发布 GitHub 发行说明，并验证 PyPI 来源证明。"
+
+msgid ""
+"Do not publish from an unclean worktree or reuse a version already uploaded "
+"to PyPI. Test releases should use a PEP 440 pre-release version."
+msgstr "不要从不干净的工作树发布，也不要复用已上传至 PyPI 的版本。测试版本应使用符合 PEP 440 的预发布版本号。"

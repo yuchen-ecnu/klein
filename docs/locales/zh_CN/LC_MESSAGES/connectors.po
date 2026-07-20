@@ -1,0 +1,2742 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Decode Canal MySQL binlog FlatMessage JSON carried by Kafka into "
+"checkpointed Klein changelog rows."
+msgstr "将 Kafka 承载的 Canal MySQL binlog FlatMessage JSON 解码为受检查点保护的 Klein 变更日志行。"
+
+msgid "Canal JSON format"
+msgstr "Canal JSON 格式"
+
+msgid ""
+"Klein consumes MySQL binlog changes that Canal Server publishes to Kafka "
+"in FlatMessage JSON format. Canal JSON is a Kafka value format rather "
+"than a physical connector. Install the Kafka dependency with:"
+msgstr ""
+"Klein 使用 Canal Server 以 FlatMessage JSON 格式发布到 Kafka 的 MySQL binlog "
+"变更。Canal JSON 是一种 Kafka 值格式，而不是物理 Connector。请安装 Kafka 依赖："
+
+msgid "Configure Canal with Kafka MQ mode and JSON messages:"
+msgstr "将 Canal 配置为 Kafka MQ 模式并使用 JSON 消息："
+
+msgid ""
+"Canal's protobuf MQ payload (`canal.mq.flatMessage=false`) and the Canal "
+"TCP client protocol are not supported by this format."
+msgstr ""
+"此格式不支持 Canal 的 protobuf MQ 载荷（`canal.mq.flatMessage=false`）和 Canal TCP "
+"客户端协议。"
+
+msgid "Read binlog changes"
+msgstr "读取 binlog 变更"
+
+msgid ""
+"For convenience, `ray.klein.read_canal(...)` is a thin typed wrapper "
+"around this call. It selects continuous Kafka and supplies `value_format`"
+" and `format_options`; it does not introduce a Canal connector or a "
+"second source implementation."
+msgstr ""
+"为便于使用，`ray.klein.read_canal(...)` 是此调用的轻量类型化封装。它会选择连续 Kafka，并提供 "
+"`value_format` 和 `format_options`；它不会引入 Canal Connector 或第二套 Source 实现。"
+
+msgid ""
+"The format is continuous-only and uses the Kafka connector's "
+"deterministic partition assignment, checkpointed offsets, partition "
+"discovery, and durable checkpoint commit behavior."
+msgstr "此格式仅支持连续模式，并使用 Kafka Connector 的确定性分区分配、检查点化 offset、分区发现和持久检查点提交行为。"
+
+msgid "Change mapping"
+msgstr "变更映射"
+
+msgid "Canal type"
+msgstr "Canal 类型"
+
+msgid "Klein rows"
+msgstr "Klein 行"
+
+msgid "`INSERT`"
+msgstr "`INSERT`"
+
+msgid "One `RowKind.INSERT` for every `data` row."
+msgstr "每个 `data` 行对应一个 `RowKind.INSERT`。"
+
+msgid "`DELETE`"
+msgstr "`DELETE`"
+
+msgid "One `RowKind.DELETE` for every `data` row."
+msgstr "每个 `data` 行对应一个 `RowKind.DELETE`。"
+
+msgid "`UPDATE`"
+msgstr "`UPDATE`"
+
+msgid "An `UPDATE_BEFORE` and `UPDATE_AFTER` pair for every row."
+msgstr "每个行对应一组 `UPDATE_BEFORE` 和 `UPDATE_AFTER`。"
+
+msgid "DDL"
+msgstr "DDL"
+
+msgid ""
+"Ignored, emitted as an INSERT metadata row, or rejected according to "
+"`ddl_handling`."
+msgstr "根据 `ddl_handling` 忽略、作为 INSERT 元数据行发出，或拒绝。"
+
+msgid "Transaction/control event"
+msgstr "事务/控制事件"
+
+msgid "Ignored when it has no row data."
+msgstr "没有行数据时忽略。"
+
+msgid ""
+"For UPDATE, Canal's `data` entry is the after image while its aligned "
+"`old` entry contains the old values of changed columns. Klein overlays "
+"`old` on `data` to reconstruct the complete before image. Missing or "
+"misaligned `old` images fail fast because silently emitting an incorrect "
+"retraction would corrupt downstream state."
+msgstr ""
+"对于 UPDATE，Canal 的 `data` 条目是后镜像，与其对齐的 `old` 条目包含已变更列的旧值。Klein 将 `old` 覆盖到"
+" `data` 上，以重建完整的前镜像。缺失或未对齐的 `old` 镜像会快速失败，因为静默发出错误的撤回记录会破坏下游状态。"
+
+msgid ""
+"Canal FlatMessage values remain strings or `None`; Klein does not infer "
+"Python values from `sqlType` or `mysqlType`. Cast fields explicitly in "
+"application or SQL logic when numeric, temporal, or binary types are "
+"required."
+msgstr ""
+"Canal FlatMessage 的值会保持为字符串或 `None`；Klein 不会根据 `sqlType` 或 `mysqlType` 推断"
+" Python 值。需要数值、时间或二进制类型时，请在应用或 SQL 逻辑中显式转换字段。"
+
+msgid "Metadata columns"
+msgstr "元数据列"
+
+msgid ""
+"`format_options[\"include_metadata\"]=True` adds reserved columns without"
+" replacing the row payload:"
+msgstr "`format_options[\"include_metadata\"]=True` 会添加保留列，而不替换行载荷："
+
+msgid ""
+"`__canal_id`, `__canal_database`, `__canal_table`, and "
+"`__canal_event_type`;"
+msgstr "`__canal_id`、`__canal_database`、`__canal_table` 和 `__canal_event_type`；"
+
+msgid ""
+"`__canal_execute_time`, `__canal_build_time`, `__canal_gtid`, and "
+"`__canal_pk_names` when present;"
+msgstr ""
+"存在时包括 `__canal_execute_time`、`__canal_build_time`、`__canal_gtid` 和 "
+"`__canal_pk_names`；"
+
+msgid ""
+"`__canal_kafka_topic`, `__canal_kafka_partition`, and "
+"`__canal_kafka_offset`."
+msgstr "`__canal_kafka_topic`、`__canal_kafka_partition` 和 `__canal_kafka_offset`。"
+
+msgid ""
+"Set the option to `False` to emit only source-table columns. Reserved "
+"metadata wins if a source table itself uses one of these names."
+msgstr "将此选项设为 `False` 可仅发出源表列。如果源表本身使用了这些名称之一，保留元数据优先。"
+
+msgid "DDL handling"
+msgstr "DDL 处理"
+
+msgid "`format_options[\"ddl_handling\"]` accepts:"
+msgstr "`format_options[\"ddl_handling\"]` 接受："
+
+msgid "`ignore` (default): advance the Kafka offset without emitting a row;"
+msgstr "`ignore`（默认）：推进 Kafka offset，但不发出行；"
+
+msgid ""
+"`emit`: emit an INSERT metadata row containing `__canal_is_ddl=True` and "
+"`__canal_sql`;"
+msgstr "`emit`：发出一个包含 `__canal_is_ddl=True` 和 `__canal_sql` 的 INSERT 元数据行；"
+
+msgid "`fail`: stop on a DDL event."
+msgstr "`fail`：遇到 DDL 事件时停止。"
+
+msgid "Recovery semantics"
+msgstr "恢复语义"
+
+msgid ""
+"A single Canal Kafka record can contain several database rows, and every "
+"UPDATE expands to two changelog rows. Klein checkpoints both the Kafka "
+"offset and the next changelog-row index inside the current Kafka record. "
+"A recovery therefore resumes at the exact before/after boundary instead "
+"of dropping or replaying half of an UPDATE. Kafka group offsets are still"
+" committed only after the corresponding Klein checkpoint is durable."
+msgstr ""
+"一条 Canal Kafka 记录可以包含多个数据库行，每个 UPDATE 会展开为两个变更日志行。Klein 会同时对 Kafka offset"
+" 和当前 Kafka 记录内的下一个变更日志行索引创建检查点。因此，恢复会从准确的前/后镜像边界继续，而不会丢弃或重放 UPDATE "
+"的一半。Kafka 消费组 offset 仍只会在对应的 Klein 检查点持久化后提交。"
+
+msgid "Use Table DDL"
+msgstr "使用 Table DDL"
+
+msgid ""
+"Use the Kafka connector with the `canal-json` format. Canal-specific SQL "
+"options use the `canal-json.` namespace:"
+msgstr ""
+"请将 Kafka Connector 与 `canal-json` 格式配合使用。Canal 专用 SQL 选项使用 `canal-json.` "
+"命名空间："
+
+msgid ""
+"`format='canal-json'` defaults the table source to continuous mode. Set "
+"`trigger='continuous'` explicitly when a self-documenting DDL is "
+"preferred. The format is source-only; Kafka sinks continue to use "
+"`value_serializer`."
+msgstr ""
+"`format='canal-json'` 默认将表 Source 设为连续模式。如果希望 DDL 本身清楚表达意图，请显式设置 "
+"`trigger='continuous'`。此格式仅用于 Source；Kafka Sink 继续使用 `value_serializer`。"
+
+msgid "Ordering note"
+msgstr "顺序说明"
+
+msgid ""
+"Klein preserves the order delivered by each Kafka partition. End-to-end "
+"binlog ordering still depends on Canal's topic and partition routing. "
+"Hashing by a primary key preserves order for that key but a primary-key "
+"change can route the before and after operations differently; choose "
+"Canal's routing configuration according to the downstream ordering "
+"requirement."
+msgstr ""
+"Klein 会保留每个 Kafka 分区交付的顺序。端到端 binlog 顺序仍取决于 Canal 的 topic "
+"和分区路由。按主键哈希可保留该键的顺序，但主键变更可能使前后操作被路由到不同位置；请根据下游顺序要求选择 Canal 的路由配置。"
+
+msgid ""
+"Create Klein for Ray inputs from Python collections, values, and existing"
+" Ray Datasets."
+msgstr "从 Python 集合、值和现有 Ray Dataset 创建 Klein for Ray 输入。"
+
+msgid "Collections and existing Datasets"
+msgstr "集合与现有 Dataset"
+
+msgid ""
+"Collection sources are useful for examples, tests, small control inputs, "
+"and adapting an existing Ray Dataset. They are finite; they are not a "
+"distributed queue or a replacement for a production data connector."
+msgstr ""
+"集合 Source 适用于示例、测试、小型控制输入以及适配现有 Ray Dataset。它们是有限的；既不是分布式队列，也不能替代生产数据 "
+"Connector。"
+
+msgid "Choose an API"
+msgstr "选择 API"
+
+msgid "API"
+msgstr "API"
+
+msgid "Input"
+msgstr "输入"
+
+msgid "Automatic mode"
+msgstr "自动模式"
+
+msgid "Record requirement"
+msgstr "记录要求"
+
+msgid "Recovery"
+msgstr "恢复"
+
+msgid "`ray.klein.from_items(items)`"
+msgstr "`ray.klein.from_items(items)`"
+
+msgid "Iterable accepted by Ray Data"
+msgstr "Ray Data 接受的可迭代对象"
+
+msgid "Batch"
+msgstr "批处理"
+
+msgid "Ray Data-compatible items"
+msgstr "与 Ray Data 兼容的元素"
+
+msgid "Ray Data retry semantics"
+msgstr "Ray Data 重试语义"
+
+msgid "`ray.klein.from_values(*values)`"
+msgstr "`ray.klein.from_values(*values)`"
+
+msgid "Positional values"
+msgstr "位置参数值"
+
+msgid "Streaming"
+msgstr "流处理"
+
+msgid "Every value must be a mapping"
+msgstr "每个值都必须是映射"
+
+msgid "Restores the next unread index"
+msgstr "恢复下一个未读取的索引"
+
+msgid "`ray.klein.from_ray_dataset(dataset)`"
+msgstr "`ray.klein.from_ray_dataset(dataset)`"
+
+msgid "Existing Ray `Dataset`"
+msgstr "现有 Ray `Dataset`"
+
+msgid "Dataset schema"
+msgstr "Dataset schema"
+
+msgid ""
+"`from_items` has both a native collection source and a Ray Data lowering,"
+" so automatic mode selects batch under the default UDF exception policy. "
+"Setting `udf.ignore-exception=true` or explicitly forcing streaming "
+"selects the native runtime, where values must be mappings because the "
+"native `SourceContext.collect()` contract accepts mapping records."
+msgstr ""
+"`from_items` 同时提供原生集合数据源和 Ray Data 下沉实现，因此在默认 UDF "
+"异常策略下，自动模式会选择批处理。设置 `udf.ignore-exception=true` "
+"或显式强制使用流处理会选择原生运行时；此时值必须是映射，因为原生 "
+"`SourceContext.collect()` 契约只接受映射记录。"
+
+msgid "Create a bounded collection"
+msgstr "创建有界集合"
+
+msgid "Use an existing Dataset without materializing it on the driver:"
+msgstr "使用现有 Dataset，而不在 Driver 上将其物化："
+
+msgid ""
+"Both forms are batch-only in normal use and can be followed by [Ray Data "
+"operations](ray-data.md)."
+msgstr "正常使用时，这两种形式都仅支持批处理，后续可以接续 [Ray Data 操作](ray-data.md)。"
+
+msgid "Create a finite streaming source"
+msgstr "创建有限流 Source"
+
+msgid ""
+"`from_values` intentionally has no Ray Data lowering, so it selects "
+"native streaming execution. Its checkpoint state stores the next value "
+"index. After recovery, values before that index are not emitted again by "
+"the source, though downstream external sinks can still have their own "
+"replay semantics."
+msgstr ""
+"`from_values` 有意不提供 Ray Data "
+"lowering，因此会选择原生流处理执行。其检查点状态存储下一个值的索引。恢复后，Source 不会再次发出该索引之前的值，但下游外部 Sink"
+" 仍可能具有自己的重放语义。"
+
+msgid "Configuration and limits"
+msgstr "配置与限制"
+
+msgid ""
+"These APIs have no connector-specific configuration. `from_values` "
+"accepts only an optional operator `name`; `from_items` and "
+"`from_ray_dataset` follow their public API signatures. Job-wide runtime "
+"and checkpoint settings are in the [configuration reference"
+"](../configuration-reference.md)."
+msgstr ""
+"这些 API 没有 Connector 专用配置。`from_values` 仅接受可选的 Operator "
+"`name`；`from_items` 和 `from_ray_dataset` 遵循各自的公开 API "
+"签名。作业级运行时和检查点设置请参阅[配置参考](../configuration-reference.md)。"
+
+msgid ""
+"The collection is serialized with the submitted job, so large local "
+"datasets increase driver memory and submission cost. Store production-"
+"scale data in a distributed system and use a dedicated connector."
+msgstr ""
+"集合会随提交的作业一起序列化，因此大型本地数据集会增加 Driver 内存占用和提交开销。请将生产规模的数据存储在分布式系统中，并使用专用 "
+"Connector。"
+
+msgid ""
+"Inspect Klein for Ray batch and streaming records with the console and "
+"print connector."
+msgstr "使用 console 和 print Connector 查看 Klein for Ray 的批处理与流处理记录。"
+
+msgid "Console and print"
+msgstr "Console 与 print"
+
+msgid ""
+"The console sink is a diagnostic connector for examples and local "
+"debugging. It prints records to standard output and provides no external "
+"durability or deduplication."
+msgstr "Console Sink 是用于示例和本地调试的诊断 Connector。它将记录打印到标准输出，不提供外部持久性或去重。"
+
+msgid "Use the DataStream API"
+msgstr "使用 DataStream API"
+
+msgid "Argument"
+msgstr "参数"
+
+msgid "Default"
+msgstr "默认值"
+
+msgid "Meaning"
+msgstr "含义"
+
+msgid "`limit`"
+msgstr "`limit`"
+
+msgid "`20`"
+msgstr "`20`"
+
+msgid ""
+"Maximum rows shown by Ray Data in batch; maximum per sink subtask in "
+"streaming. Use `-1` for no streaming limit."
+msgstr "批处理模式下 Ray Data 显示的最大行数；流处理模式下每个 Sink Subtask 的最大行数。使用 `-1` 表示流处理不设限制。"
+
+msgid "`num_cpus`"
+msgstr "`num_cpus`"
+
+msgid "`None`"
+msgstr "`None`"
+
+msgid "Sink task CPU requirement."
+msgstr "Sink Task 的 CPU 要求。"
+
+msgid "`concurrency`"
+msgstr "`concurrency`"
+
+msgid ""
+"Number of streaming sink subtasks or Ray Data operation concurrency where"
+" supported."
+msgstr "流处理 Sink Subtask 的数量；在支持时也表示 Ray Data 操作并发度。"
+
+msgid "`batch_size`"
+msgstr "`batch_size`"
+
+msgid "Maximum records delivered in one native operator batch."
+msgstr "单个原生 Operator 批次交付的最大记录数。"
+
+msgid "`batch_timeout`"
+msgstr "`batch_timeout`"
+
+msgid "3 seconds"
+msgstr "3 秒"
+
+msgid "Maximum wait for a native operator batch."
+msgstr "等待原生 Operator 批次的最长时间。"
+
+msgid "`name`"
+msgstr "`name`"
+
+msgid "`\"Show\"`"
+msgstr "`\"Show\"`"
+
+msgid "Operator name."
+msgstr "Operator 名称。"
+
+msgid ""
+"In batch, `show` delegates to `Dataset.show`. In streaming, each output "
+"line is compact JSON Lines and has this shape:"
+msgstr "在批处理模式下，`show` 委托给 `Dataset.show`。在流处理模式下，每个输出行都是紧凑的 JSON Lines，格式如下："
+
+msgid ""
+"For a `ChangelogRow`, the line also includes `row_kind`. Operational logs"
+" use standard error so tools can safely parse or pipe standard output. "
+"Sequence and limit counters are local to each streaming subtask."
+msgstr ""
+"对于 `ChangelogRow`，行中还会包含 "
+"`row_kind`。运维日志使用标准错误，因此工具可以安全地解析标准输出或将其接入管道。序列计数器和限制计数器均为各流处理 Subtask "
+"所独有。"
+
+msgid ""
+"Checkpoint recovery can print a record again. Do not treat console output"
+" as an exactly-once audit log, and avoid it for high-volume production "
+"data."
+msgstr "检查点恢复可能再次打印记录。不要将 console 输出视为 exactly-once 审计日志，也不要将其用于高吞吐生产数据。"
+
+msgid "The sink-only Table connector identifier is `print`:"
+msgstr "仅支持 Sink 的 Table Connector 标识符为 `print`："
+
+msgid ""
+"`limit` defaults to `20` and is the only connector option. The print sink"
+" accepts all Klein row kinds and includes `row_kind` in native streaming "
+"output. See [SQL and Table DDL](../sql.md) for inserting a query into the"
+" table."
+msgstr ""
+"`limit` 默认为 `20`，也是唯一的 Connector 选项。print Sink 接受所有 Klein "
+"行类型，并在原生流处理输出中包含 `row_kind`。有关将查询插入表中的方法，请参阅 [SQL 与 Table "
+"DDL](../sql.md)。"
+
+msgid ""
+"Implement custom Klein for Ray SourceFunction, SinkFunction, two-phase-"
+"commit sink, and TableFactory connectors."
+msgstr ""
+"实现自定义 Klein for Ray SourceFunction、SinkFunction、两阶段提交 Sink 和 TableFactory"
+" Connector。"
+
+msgid "Custom connectors"
+msgstr "自定义 Connector"
+
+msgid ""
+"Use a custom connector when an external system has no public Ray Data "
+"adapter and no built-in Klein integration. Native `SourceFunction` and "
+"`SinkFunction` connectors execute only on Klein's streaming runtime "
+"unless you also provide an internal Ray Data lowering."
+msgstr ""
+"当外部系统没有公开的 Ray Data 适配器，也没有内置 Klein 集成时，请使用自定义 Connector。除非还提供内部 Ray Data"
+" lowering，否则原生 `SourceFunction` 和 `SinkFunction` Connector 只能在 Klein "
+"流处理运行时中执行。"
+
+msgid "Implement a source"
+msgstr "实现 Source"
+
+msgid ""
+"A source class implements `run`, `cancel`, `snapshot_state`, and "
+"`restore_state`. It may implement `open`, `close`, and "
+"`notify_checkpoint_complete` for lifecycle and external offset commits."
+msgstr ""
+"Source 类需实现 `run`、`cancel`、`snapshot_state` 和 `restore_state`。它还可以实现 "
+"`open`、`close` 和 `notify_checkpoint_complete`，以处理生命周期和外部 offset 提交。"
+
+msgid ""
+"Pass the class, not a preconstructed instance, so every Ray task owns its"
+" resources. `fn_constructor_args` and `fn_constructor_kwargs` are "
+"serialized as top-level actor-construction arguments. `num_cpus`, "
+"`num_gpus`, and `concurrency` control source resources; `bounded` records"
+" finiteness but does not make a native source batch-lowerable. A bounded "
+"native source without a lowering must force streaming as shown above. "
+"Declare `changelog_mode` when the source can emit non-insert `RowKind` "
+"values."
+msgstr ""
+"请传入类而不是预先构造的实例，使每个 Ray Task 都拥有自己的资源。`fn_constructor_args` 和 "
+"`fn_constructor_kwargs` 会作为顶层 Actor 构造参数序列化。`num_cpus`、`num_gpus` 和 "
+"`concurrency` 控制 Source 资源；`bounded` 记录其是否有限，但不会使原生 Source 可 lowering "
+"为批处理。没有 lowering 的有界原生 Source 必须像上例一样强制使用流处理。当 Source 可以发出非 insert "
+"`RowKind` 值时，请声明 `changelog_mode`。"
+
+msgid ""
+"`SourceContext.collect()` accepts mapping records and preserves source "
+"order. Advance the externally meaningful position before calling "
+"`collect`, as in the example, so a barrier caused by that call snapshots "
+"the matching next position. The other context methods are:"
+msgstr ""
+"`SourceContext.collect()` 接受映射记录并保留 Source 顺序。请像示例中那样，在调用 `collect` "
+"前推进对外有意义的位置，使该调用触发的 Barrier 对匹配的下一个位置创建快照。其他 Context 方法如下："
+
+msgid "Method"
+msgstr "方法"
+
+msgid "When to use it"
+msgstr "使用时机"
+
+msgid "`on_idle()`"
+msgstr "`on_idle()`"
+
+msgid ""
+"A blocking poll returned no data; lets time checkpoints and watermark "
+"idleness advance."
+msgstr "阻塞轮询未返回数据时调用；使定时检查点和 Watermark 空闲状态可以推进。"
+
+msgid "`emit_watermark(timestamp)`"
+msgstr "`emit_watermark(timestamp)`"
+
+msgid "All preceding records are at or before explicit event-time progress."
+msgstr "之前的所有记录均不晚于显式事件时间进度。"
+
+msgid "`mark_idle()`"
+msgstr "`mark_idle()`"
+
+msgid "Exclude this input from downstream minimum-watermark calculation."
+msgstr "从下游最小 Watermark 计算中排除此输入。"
+
+msgid "`mark_active(resume_watermark=None)`"
+msgstr "`mark_active(resume_watermark=None)`"
+
+msgid "Reactivate before emitting after an idle period."
+msgstr "空闲一段时间后，在发出数据前重新激活。"
+
+msgid "`ray.klein.source` registration options are:"
+msgstr "`ray.klein.source` 注册选项如下："
+
+msgid "`fn`"
+msgstr "`fn`"
+
+msgid "Required"
+msgstr "必填"
+
+msgid "`SourceFunction` class; instances are rejected."
+msgstr "`SourceFunction` 类；不接受实例。"
+
+msgid "`fn_constructor_args`, `fn_constructor_kwargs`"
+msgstr "`fn_constructor_args`、`fn_constructor_kwargs`"
+
+msgid "Arguments used to construct one source per subtask."
+msgstr "用于为每个 Subtask 构造一个 Source 的参数。"
+
+msgid "`lowering`"
+msgstr "`lowering`"
+
+msgid "Advanced declarative Ray Data source lowering for batch support."
+msgstr "用于支持批处理的高级声明式 Ray Data Source lowering。"
+
+msgid "`num_cpus`, `num_gpus`"
+msgstr "`num_cpus`、`num_gpus`"
+
+msgid "Effective defaults are 1 CPU and 0 GPUs."
+msgstr "实际默认值为 1 个 CPU 和 0 个 GPU。"
+
+msgid "Effective parallelism 1; an integer or `(min, max)` range is accepted."
+msgstr "实际并行度默认为 1；接受整数或 `(min, max)` 范围。"
+
+msgid "Logical operator name."
+msgstr "逻辑 Operator 名称。"
+
+msgid "`bounded`"
+msgstr "`bounded`"
+
+msgid "`False`"
+msgstr "`False`"
+
+msgid "Whether the source is finite; independent of batch support."
+msgstr "Source 是否有限；与批处理支持无关。"
+
+msgid "`changelog_mode`"
+msgstr "`changelog_mode`"
+
+msgid "Optional non-empty set of emitted `RowKind` values."
+msgstr "可选的非空已发出 `RowKind` 值集合。"
+
+msgid ""
+"Source snapshot state must be pickleable. `notify_checkpoint_complete` is"
+" at-least-once across coordinator recovery, so use the checkpoint ID as "
+"an idempotency key when committing offsets externally. `cancel` should "
+"only signal the run loop; release clients, files, and threads in `close`."
+msgstr ""
+"Source 快照状态必须可被 pickle。Coordinator 恢复时，`notify_checkpoint_complete` 具有 "
+"at-least-once 语义，因此在外部提交 offset 时，请使用检查点 ID 作为幂等键。`cancel` 应仅向运行循环发出信号；请在"
+" `close` 中释放客户端、文件和线程。"
+
+msgid "Implement a sink"
+msgstr "实现 Sink"
+
+msgid "Subclass `SinkFunction` for an ordinary streaming sink:"
+msgstr "为普通流处理 Sink 创建 `SinkFunction` 子类："
+
+msgid ""
+"`DataStream.write` accepts the same constructor, resource, concurrency, "
+"and name options. It additionally accepts operator `batch_size` (default "
+"`None`) and `batch_timeout` (default 3 seconds), plus an advanced "
+"`lowering` for Ray Data batch support. Leave the internal `node_type` "
+"override unset in connector code."
+msgstr ""
+"`DataStream.write` 接受相同的构造、资源、并发度和名称选项。它还接受 Operator `batch_size`（默认 "
+"`None`）和 `batch_timeout`（默认 3 秒），以及用于支持 Ray Data 批处理的高级 `lowering`。在 "
+"Connector 代码中，请勿设置内部 `node_type` 覆盖项。"
+
+msgid ""
+"`write(value)` receives one mapping. `flush()` is called where buffered "
+"output must be drained, including checkpoint alignment. Connector clients"
+" should be constructed in `open`, not serialized from the driver. A "
+"normal `SinkFunction` does not gain exactly-once semantics merely by "
+"flushing at a barrier; document the external system's replay and "
+"idempotency behavior."
+msgstr ""
+"`write(value)` 接收一个映射。在必须排空缓冲输出时（包括检查点对齐）会调用 `flush()`。Connector 客户端应在 "
+"`open` 中构造，而不是从 Driver 序列化。普通 `SinkFunction` 不会仅因在 Barrier 处刷新就获得 "
+"exactly-once 语义；请说明外部系统的重放和幂等行为。"
+
+msgid "Implement a two-phase-commit sink"
+msgstr "实现两阶段提交 Sink"
+
+msgid ""
+"Use `TwoPhaseCommitSinkFunction` only when prepared output can remain "
+"private until a global checkpoint is durable. In addition to `write`, "
+"implement:"
+msgstr ""
+"仅当已准备的输出能够在全局检查点持久化前保持私有时，才使用 `TwoPhaseCommitSinkFunction`。除 `write` "
+"外，还需实现："
+
+msgid ""
+"`prepare_commit(checkpoint_id)`, which closes the current transaction, "
+"starts a fresh one, and returns a pickleable `SinkCommittable` or `None` "
+"for no data;"
+msgstr ""
+"`prepare_commit(checkpoint_id)`：关闭当前事务、启动新事务，并返回可被 pickle 的 "
+"`SinkCommittable`；没有数据时返回 `None`；"
+
+msgid ""
+"`abort_current_transaction()`, which discards writer-local unprepared "
+"data."
+msgstr "`abort_current_transaction()`：丢弃 Writer 本地尚未准备的数据。"
+
+msgid ""
+"A `SinkCommittable` supplies a stable string `transaction_id` and "
+"idempotent `commit()` and `abort()` methods. It must store only enough "
+"serializable information to reconnect and publish or discard the prepared"
+" transaction; do not capture clients, locks, threads, or open handles. "
+"The coordinator persists the committable before calling `commit` and may "
+"retry either terminal method after recovery. The [filesystem "
+"connector](filesystem.md) is the reference implementation."
+msgstr ""
+"`SinkCommittable` 提供稳定的字符串 `transaction_id`，以及幂等的 `commit()` 和 `abort()` "
+"方法。它只应存储足够的可序列化信息，用于重新连接并发布或丢弃已准备事务；不要捕获客户端、锁、线程或打开的句柄。Coordinator 会在调用 "
+"`commit` 前持久化 Committable，并可能在恢复后重试任一终止方法。[Filesystem "
+"Connector](filesystem.md) 是参考实现。"
+
+msgid "Add a Table DDL connector"
+msgstr "添加 Table DDL Connector"
+
+msgid ""
+"Subclass `TableFactory`, set a non-empty `identifier`, and implement only"
+" the directions the connector supports:"
+msgstr "创建 `TableFactory` 子类，设置非空 `identifier`，并仅实现 Connector 支持的方向："
+
+msgid "Responsibility"
+msgstr "职责"
+
+msgid "`validate(table)`"
+msgstr "`validate(table)`"
+
+msgid "Reject missing, malformed, or unknown connector options eagerly."
+msgstr "尽早拒绝缺失、格式错误或未知的 Connector 选项。"
+
+msgid "`create_source(context, table)`"
+msgstr "`create_source(context, table)`"
+
+msgid "Convert catalog metadata to a `DataStream`."
+msgstr "将 Catalog 元数据转换为 `DataStream`。"
+
+msgid "`create_sink(stream, table)`"
+msgstr "`create_sink(stream, table)`"
+
+msgid "Bind a stream to connector output."
+msgstr "将 Stream 绑定到 Connector 输出。"
+
+msgid "`supported_sink_row_kinds(table)`"
+msgstr "`supported_sink_row_kinds(table)`"
+
+msgid "Declare accepted changelog kinds; default is insert-only."
+msgstr "声明接受的变更日志类型；默认仅接受 insert。"
+
+msgid "Register an instance in one SQL session:"
+msgstr "在一个 SQL Session 中注册实例："
+
+msgid ""
+"For an installable connector package, publish a Python entry point in the"
+" `ray.klein.table_factories` group. The entry point may resolve to a "
+"factory instance or class. Klein discovers these alongside the built-in "
+"`filesystem`, `kafka`, and `print` factories. Duplicate identifiers fail "
+"unless a session-local registration explicitly uses `replace=True`."
+msgstr ""
+"对于可安装的 Connector 包，请在 `ray.klein.table_factories` 组中发布 Python Entry "
+"Point。该 Entry Point 可以解析为 Factory 实例或类。Klein 会将它们与内置 `filesystem`、`kafka`"
+" 和 `print` Factory 一起发现。重复标识符会导致失败，除非 Session 本地注册显式使用 `replace=True`。"
+
+msgid ""
+"See [SQL and Table DDL](../sql.md) for catalog behavior and "
+"[Testing](../testing.md) for connector test expectations."
+msgstr ""
+"有关 Catalog 行为，请参阅 [SQL 与 Table DDL](../sql.md)；有关 Connector "
+"测试要求，请参阅[测试](../testing.md)。"
+
+msgid ""
+"Read files with Ray Data and write checkpoint-transactional JSON, CSV, "
+"Parquet, and text files with Klein for Ray."
+msgstr "使用 Ray Data 读取文件，并通过 Klein for Ray 写入具备检查点事务语义的 JSON、CSV、Parquet 和文本文件。"
+
+msgid "Filesystem"
+msgstr "Filesystem"
+
+msgid ""
+"Filesystem input uses public Ray Data readers and is bounded. Klein's "
+"stable output API writes JSON, CSV, and Parquet in either execution mode "
+"and text in streaming mode. Native streaming output participates in Klein"
+" checkpoints so uncommitted part files are not exposed as completed "
+"output."
+msgstr ""
+"Filesystem 输入使用公开的 Ray Data Reader，并且是有界的。Klein 的稳定输出 API 可在两种执行模式下写入 "
+"JSON、CSV 和 Parquet，并可在流处理模式下写入文本。原生流处理输出参与 Klein 检查点，因此未提交的 part "
+"文件不会作为已完成输出暴露。"
+
+msgid "Read files"
+msgstr "读取文件"
+
+msgid ""
+"Use any public Ray Data file reader exposed by the installed compatible "
+"Ray version:"
+msgstr "可使用已安装兼容 Ray 版本公开的任意 Ray Data 文件 Reader："
+
+msgid ""
+"Common readers include `read_csv`, `read_json`, `read_parquet`, and "
+"`read_text`. Their options, schemas, file discovery, and retry semantics "
+"are owned by Ray Data; see [Ray Data](ray-data.md). Filesystem input has "
+"no native continuous directory watcher."
+msgstr ""
+"常用 Reader 包括 `read_csv`、`read_json`、`read_parquet` 和 "
+"`read_text`。它们的选项、schema、文件发现和重试语义由 Ray Data 管理；请参阅 [Ray Data](ray-"
+"data.md)。Filesystem 输入没有原生连续目录监视器。"
+
+msgid "Write files"
+msgstr "写入文件"
+
+msgid ""
+"Call `write_json`, `write_csv`, `write_parquet`, `write_text`, or the "
+"common `write_files(path, data_format, ...)` method."
+msgstr ""
+"调用 `write_json`、`write_csv`、`write_parquet`、`write_text`，或通用的 "
+"`write_files(path, data_format, ...)` 方法。"
+
+msgid "`path`"
+msgstr "`path`"
+
+msgid "Output directory on a local, shared, or object filesystem."
+msgstr "本地、共享或对象文件系统上的输出目录。"
+
+msgid "`data_format`"
+msgstr "`data_format`"
+
+msgid "Required to `write_files`"
+msgstr "`write_files` 必填"
+
+msgid "`json`, `csv`, `parquet`, or `text`."
+msgstr "`json`、`csv`、`parquet` 或 `text`。"
+
+msgid "`columns`"
+msgstr "`columns`"
+
+msgid "Explicit column order; text requires exactly one column."
+msgstr "显式列顺序；文本格式要求恰好一列。"
+
+msgid "`storage_options`"
+msgstr "`storage_options`"
+
+msgid "PyArrow filesystem construction options for native streaming."
+msgstr "用于原生流处理的 PyArrow 文件系统构造选项。"
+
+msgid "`filename_prefix`"
+msgstr "`filename_prefix`"
+
+msgid "`\"part\"`"
+msgstr "`\"part\"`"
+
+msgid "Prefix for final part filenames."
+msgstr "最终 part 文件名的前缀。"
+
+msgid "`max_rows_per_file`"
+msgstr "`max_rows_per_file`"
+
+msgid "Positive row-count rolling threshold."
+msgstr "正数行数滚动阈值。"
+
+msgid "`max_bytes_per_file`"
+msgstr "`max_bytes_per_file`"
+
+msgid "Positive encoded-byte rolling threshold."
+msgstr "正数编码字节数滚动阈值。"
+
+msgid "`rollover_interval`"
+msgstr "`rollover_interval`"
+
+msgid "Maximum duration a part remains open."
+msgstr "part 保持打开的最长时间。"
+
+msgid "`inactivity_interval`"
+msgstr "`inactivity_interval`"
+
+msgid "Close an inactive part at the next write or checkpoint."
+msgstr "在下次写入或检查点时关闭不活跃的 part。"
+
+msgid "`ray_remote_args`"
+msgstr "`ray_remote_args`"
+
+msgid ""
+"Ray Data batch options; `num_cpus` and `num_gpus` also size native sink "
+"tasks."
+msgstr "Ray Data 批处理选项；`num_cpus` 和 `num_gpus` 也用于确定原生 Sink Task 的资源大小。"
+
+msgid "Batch writer concurrency or native sink parallelism."
+msgstr "批处理 Writer 并发度或原生 Sink 并行度。"
+
+msgid "`ray_data_options`"
+msgstr "`ray_data_options`"
+
+msgid "Extra options forwarded only to the bounded Ray Data writer."
+msgstr "仅转发给有界 Ray Data Writer 的额外选项。"
+
+msgid ""
+"Streaming records must be mappings. JSON is newline-delimited; every CSV "
+"part contains its own header. Text output encodes the single selected "
+"column as UTF-8. JSON, CSV, and Parquet lower to their Ray Data writers "
+"in batch; text does not have a Klein batch lowering and therefore "
+"requires streaming mode. In batch, only `path`, `data_format`, "
+"`ray_data_options`, `ray_remote_args`, and `concurrency` affect the Ray "
+"Data write. Column order, storage options, filename prefix, and rolling "
+"policies are native-streaming settings and are not forwarded to Ray Data."
+msgstr ""
+"流处理记录必须是映射。JSON 使用换行分隔；每个 CSV part 都包含自己的表头。文本输出将选中的唯一列编码为 UTF-8。JSON、CSV"
+" 和 Parquet 在批处理模式下会 lowering 到对应的 Ray Data Writer；文本没有 Klein 批处理 "
+"lowering，因此需要流处理模式。在批处理模式下，只有 "
+"`path`、`data_format`、`ray_data_options`、`ray_remote_args` 和 `concurrency`"
+" 会影响 Ray Data 写入。列顺序、存储选项、文件名前缀和滚动策略是原生流处理设置，不会转发给 Ray Data。"
+
+msgid "Understand the streaming commit lifecycle"
+msgstr "理解流处理提交生命周期"
+
+msgid "Each streaming sink subtask owns a unique attempt directory:"
+msgstr "每个流处理 Sink Subtask 都拥有唯一的 attempt 目录："
+
+msgid ""
+"At an aligned checkpoint barrier, the writer closes its in-progress part "
+"and returns a serializable committable. The coordinator then:"
+msgstr ""
+"在对齐的检查点 Barrier 处，Writer 会关闭正在写入的 part，并返回可序列化的 Committable。随后 "
+"Coordinator 会："
+
+msgid ""
+"persists source state, operator state, and sink committables in "
+"checkpoint metadata;"
+msgstr "在检查点元数据中持久化 Source 状态、Operator 状态和 Sink Committable；"
+
+msgid "publishes pending parts to final paths with idempotent commits;"
+msgstr "通过幂等提交将待处理 part 发布到最终路径；"
+
+msgid "notifies checkpoint-aware sources that the checkpoint is durable."
+msgstr "通知感知检查点的 Source 该检查点已持久化。"
+
+msgid ""
+"Recovery reloads persisted committables and retries publication. An "
+"already published target completes successfully instead of producing "
+"another part. Klein aborts prepared files from an abandoned checkpoint "
+"when possible."
+msgstr ""
+"恢复会重新加载已持久化的 Committable 并重试发布。已发布的目标会成功完成，而不会生成另一个 part。Klein "
+"会尽可能中止已放弃检查点中的已准备文件。"
+
+msgid ""
+"This provides **exactly-once file visibility relative to Klein "
+"checkpoints**. Use durable shared storage for both "
+"`execution.checkpointing.dir` and output. Force termination or an "
+"unreachable object store can leave hidden staging objects, but readers "
+"that ignore `.klein-staging` do not treat them as output."
+msgstr ""
+"这提供了**相对于 Klein 检查点的 exactly-once 文件可见性**。`execution.checkpointing.dir` "
+"和输出都应使用持久共享存储。强制终止或对象存储不可达可能留下隐藏的暂存对象，但忽略 `.klein-staging` 的 Reader "
+"不会将其视为输出。"
+
+msgid "Configure rolling"
+msgstr "配置滚动策略"
+
+msgid ""
+"Every checkpoint rolls the active part. You may roll earlier by row "
+"count, encoded bytes, elapsed time, or inactivity:"
+msgstr "每个检查点都会滚动当前活跃的 part。也可以根据行数、编码字节数、已用时间或不活跃状态提前滚动："
+
+msgid ""
+"Rolling prepares a private file; publication still waits for a successful"
+" checkpoint. Time policies are evaluated on writes and at the next "
+"checkpoint, not by a separate per-part timer."
+msgstr "滚动会准备一个私有文件；发布仍需等待检查点成功。时间策略在写入时和下一个检查点处评估，而不是由每个 part 的独立计时器评估。"
+
+msgid "The connector identifier is `filesystem`:"
+msgstr "Connector 标识符为 `filesystem`："
+
+msgid ""
+"`path` and `format` are required. Source options use a `source.` prefix "
+"and are forwarded to the matching Ray Data reader, for example "
+"`source.override_num_blocks`. Sink options are:"
+msgstr ""
+"`path` 和 `format` 为必填项。Source 选项使用 `source.` 前缀，并转发给匹配的 Ray Data "
+"Reader，例如 `source.override_num_blocks`。Sink 选项如下："
+
+msgid "Table option"
+msgstr "Table 选项"
+
+msgid "`sink.filename-prefix`"
+msgstr "`sink.filename-prefix`"
+
+msgid "`part`"
+msgstr "`part`"
+
+msgid "Final filename prefix."
+msgstr "最终文件名前缀。"
+
+msgid "`sink.max-rows-per-file`"
+msgstr "`sink.max-rows-per-file`"
+
+msgid "None"
+msgstr "None"
+
+msgid "Positive row-count threshold."
+msgstr "正数行数阈值。"
+
+msgid "`sink.parallelism`"
+msgstr "`sink.parallelism`"
+
+msgid "Positive native sink parallelism."
+msgstr "正数原生 Sink 并行度。"
+
+msgid "`sink.rolling-policy.file-size`"
+msgstr "`sink.rolling-policy.file-size`"
+
+msgid "Bytes or a size such as `128 MB` or `128 MiB`."
+msgstr "字节数，或 `128 MB`、`128 MiB` 之类的大小。"
+
+msgid "`sink.rolling-policy.rollover-interval`"
+msgstr "`sink.rolling-policy.rollover-interval`"
+
+msgid "Positive duration such as `15 min`."
+msgstr "正数时长，例如 `15 min`。"
+
+msgid "`sink.rolling-policy.inactivity-interval`"
+msgstr "`sink.rolling-policy.inactivity-interval`"
+
+msgid "Positive inactivity duration."
+msgstr "正数不活跃时长。"
+
+msgid "`sink.storage-options`"
+msgstr "`sink.storage-options`"
+
+msgid "JSON object for the native PyArrow filesystem."
+msgstr "用于原生 PyArrow 文件系统的 JSON 对象。"
+
+msgid "`sink.ray-data-options`"
+msgstr "`sink.ray-data-options`"
+
+msgid "JSON object forwarded only to bounded output."
+msgstr "仅转发给有界输出的 JSON 对象。"
+
+msgid ""
+"Supported DDL formats are `csv`, `json`, `parquet`, and `text`. A text "
+"sink table must have exactly one column. See [SQL and Table "
+"DDL](../sql.md) for full statement behavior."
+msgstr ""
+"支持的 DDL 格式为 `csv`、`json`、`parquet` 和 `text`。文本 Sink "
+"表必须恰好包含一列。有关完整语句行为，请参阅 [SQL 与 Table DDL](../sql.md)。"
+
+msgid "Credentials and operations"
+msgstr "凭据与运维"
+
+msgid ""
+"Prefer workload identity, instance roles, or the filesystem client's "
+"standard credential chain over secrets in `storage_options`. Checkpoint "
+"metadata stores serialized transactions, so do not put non-serializable "
+"filesystem clients in connector options. Monitor checkpoint duration and "
+"failures as described in [Observability](../observability.md)."
+msgstr ""
+"应优先使用工作负载身份、实例角色或文件系统客户端的标准凭据链，而不是在 `storage_options` "
+"中放置密钥。检查点元数据会存储序列化事务，因此不要在 Connector "
+"选项中放置不可序列化的文件系统客户端。请按照[可观测性](../observability.md)中的说明监控检查点耗时和失败。"
+
+msgid ""
+"Write Ray Data batches or checkpoint-transactional streaming appends to "
+"Apache Iceberg with Klein for Ray."
+msgstr "使用 Klein for Ray 向 Apache Iceberg 写入 Ray Data 批次或具备检查点事务语义的流式追加。"
+
+msgid "Apache Iceberg"
+msgstr "Apache Iceberg"
+
+msgid "Install the Iceberg extra on the driver and every streaming worker:"
+msgstr "在 Driver 和每个流处理 Worker 上安装 Iceberg extra："
+
+msgid ""
+"`DataStream.write_iceberg()` has the same arguments as the compatible Ray"
+" Data `Dataset.write_iceberg()` API. The table and namespace must already"
+" exist. Catalog configuration follows PyIceberg:"
+msgstr ""
+"`DataStream.write_iceberg()` 的参数与兼容 Ray Data `Dataset.write_iceberg()` "
+"API 相同。表和命名空间必须已存在。Catalog 配置遵循 PyIceberg："
+
+msgid "Execution modes"
+msgstr "执行模式"
+
+msgid "Mode"
+msgstr "模式"
+
+msgid "Behavior"
+msgstr "行为"
+
+msgid ""
+"Delegates to Ray Data and supports its append, overwrite, upsert, schema "
+"evolution, and concurrency behavior."
+msgstr "委托给 Ray Data，并支持其 append、overwrite、upsert、schema 演进和并发行为。"
+
+msgid ""
+"Supports `SaveMode.APPEND`; non-empty sink subtasks prepare Arrow "
+"batches, which the coordinator combines per logical sink and domain epoch"
+" before publishing one durable Iceberg snapshot."
+msgstr ""
+"支持 `SaveMode.APPEND`；非空 sink 子任务会准备 Arrow 批次，协调器按逻辑 sink 和检查点域 epoch "
+"合并这些批次，然后发布一个持久的 Iceberg snapshot。"
+
+msgid ""
+"Streaming overwrite and upsert are rejected. An overwrite committed by "
+"one parallel sink subtask would erase output from other subtasks, while a"
+" correct streaming upsert needs a global key/materialization contract. "
+"Use a bounded Ray Data job for those modes."
+msgstr ""
+"流处理 overwrite 和 upsert 会被拒绝。一个并行 Sink Subtask 提交的 overwrite 会擦除其他 Subtask"
+" 的输出，而正确的流处理 upsert 需要全局键/物化契约。请为这些模式使用有界 Ray Data 作业。"
+
+msgid "Checkpoint and schema behavior"
+msgstr "检查点与 schema 行为"
+
+msgid ""
+"Prepared Arrow batches are compressed into Klein checkpoint metadata. "
+"Keep the checkpoint interval and source rate sized so one interval fits "
+"comfortably in checkpoint storage and coordinator memory. Increasing sink"
+" concurrency reduces the batch held by each subtask; writers "
+"participating in the same checkpoint domain epoch are committed in one "
+"Iceberg append. Physically disconnected domains still checkpoint and "
+"commit independently."
+msgstr ""
+"已准备的 Arrow 批次会压缩到 Klein "
+"检查点元数据中。请合理设置检查点间隔和源速率，使一个间隔内的数据能轻松容纳在检查点存储和协调器内存中。提高 sink "
+"并发度会减少每个子任务持有的批次大小；参与同一检查点域 epoch 的 writer 会在一次 Iceberg append "
+"中提交。物理上断开的域仍会独立执行检查点和提交。"
+
+msgid ""
+"The commit adds a reserved `ray-klein.transaction-id` snapshot property. "
+"On a coordinator retry, Klein reloads the table and treats a snapshot "
+"with the same transaction ID as already committed. Do not set that "
+"property yourself, and do not expire a just-committed snapshot while its "
+"Klein checkpoint is still being finalized."
+msgstr ""
+"提交会添加保留的 `ray-klein.transaction-id` snapshot 属性。Coordinator 重试时，Klein "
+"会重新加载表，并将具有相同事务 ID 的 snapshot 视为已提交。请勿自行设置该属性，也不要在对应 Klein "
+"检查点仍处于最终确认阶段时过期刚提交的 snapshot。"
+
+msgid ""
+"New top-level columns are added before the data snapshot while existing "
+"Iceberg field IDs and required identifier columns are preserved. Rows "
+"handled by one live sink task must keep the same set of columns. Nested "
+"schema changes and incompatible type changes should be applied to the "
+"table separately before the stream emits the new shape."
+msgstr ""
+"新的顶层列会在数据 snapshot 前添加，同时保留现有 Iceberg 字段 ID 和必需的标识列。一个运行中 Sink Task "
+"处理的行必须保持相同的列集合。嵌套 schema 变更和不兼容的类型变更应先单独应用到表，再让 Stream 发出新结构。"
+
+msgid ""
+"Catalog credentials are serialized as part of the job and prepared "
+"checkpoint transaction. Prefer workload identity or the catalog/FileIO "
+"credential chain over embedding long-lived secrets in `catalog_kwargs`."
+msgstr ""
+"Catalog 凭据会作为作业和已准备检查点事务的一部分序列化。应优先使用工作负载身份或 Catalog/FileIO 凭据链，而不是在 "
+"`catalog_kwargs` 中嵌入长期密钥。"
+
+msgid ""
+"Klein for Ray connector catalog for Ray Data, collections, Kafka, "
+"RocketMQ, filesystems, Redis, console, custom connectors, and Ray Serve."
+msgstr ""
+"Klein for Ray Connector 目录，涵盖 Ray "
+"Data、集合、Kafka、RocketMQ、Filesystem、Redis、Console、自定义 Connector 和 Ray "
+"Serve。"
+
+msgid "Connectors"
+msgstr "Connector"
+
+msgid ""
+"This section is the complete catalog of inputs, outputs, lookup "
+"integrations, and execution integrations shipped with Klein. Start here "
+"when choosing how a dataflow enters or leaves Klein; each child page "
+"documents installation, supported execution modes, configuration, data "
+"shape, delivery guarantees, and operational constraints."
+msgstr ""
+"本节是 Klein 随附的输入、输出、Lookup 集成和执行集成的完整目录。选择数据流如何进入或离开 Klein "
+"时，请从这里开始；每个子页面都会说明安装方式、支持的执行模式、配置、数据结构、交付保证和运维限制。"
+
+msgid "Capability matrix"
+msgstr "能力矩阵"
+
+msgid "Connector"
+msgstr "Connector"
+
+msgid "Output"
+msgstr "输出"
+
+msgid "Table DDL"
+msgstr "Table DDL"
+
+msgid "Extra"
+msgstr "Extra 依赖"
+
+msgid "[Ray Data](ray-data.md)"
+msgstr "[Ray Data](ray-data.md)"
+
+msgid "Yes"
+msgstr "是"
+
+msgid "Expressions only"
+msgstr "仅表达式"
+
+msgid "No"
+msgstr "否"
+
+msgid "None beyond the selected Ray Data connector"
+msgstr "除所选 Ray Data Connector 外无其他依赖"
+
+msgid "[Collections](collections.md)"
+msgstr "[集合](collections.md)"
+
+msgid "[Kafka](kafka.md)"
+msgstr "[Kafka](kafka.md)"
+
+msgid "`kafka`"
+msgstr "`kafka`"
+
+msgid "[RocketMQ](rocketmq.md)"
+msgstr "[RocketMQ](rocketmq.md)"
+
+msgid "`rocketmq` plus native `librocketmq`"
+msgstr "`rocketmq` 加原生 `librocketmq`"
+
+msgid "[Filesystem](filesystem.md)"
+msgstr "[Filesystem](filesystem.md)"
+
+msgid "Output only"
+msgstr "仅输出"
+
+msgid "Filesystem-specific dependencies"
+msgstr "文件系统专用依赖"
+
+msgid "[Iceberg](iceberg.md)"
+msgstr "[Iceberg](iceberg.md)"
+
+msgid "Via Ray Data"
+msgstr "通过 Ray Data"
+
+msgid "Append output"
+msgstr "追加输出"
+
+msgid "`iceberg` plus catalog-specific dependencies"
+msgstr "`iceberg` 加 Catalog 专用依赖"
+
+msgid "[Redis](redis.md)"
+msgstr "[Redis](redis.md)"
+
+msgid "Lookup/filter"
+msgstr "Lookup/过滤"
+
+msgid "`redis`"
+msgstr "`redis`"
+
+msgid "[Console](console.md)"
+msgstr "[Console](console.md)"
+
+msgid "Sink only"
+msgstr "仅 Sink"
+
+msgid "[Custom](custom.md)"
+msgstr "[自定义](custom.md)"
+
+msgid "Depends on implementation"
+msgstr "取决于实现"
+
+msgid "Optional"
+msgstr "可选"
+
+msgid "Connector-defined"
+msgstr "由 Connector 定义"
+
+msgid "[Ray Serve](ray-serve.md)"
+msgstr "[Ray Serve](ray-serve.md)"
+
+msgid "Execution region"
+msgstr "执行区域"
+
+msgid "`serve`"
+msgstr "`serve`"
+
+msgid "Matrix notes"
+msgstr "矩阵说明"
+
+msgid "**Ray Data streaming**"
+msgstr "**Ray Data 流处理**"
+
+msgid ""
+"`stream.data.with_column(name, expr)` and `stream.data.filter(expr=expr)`"
+" support streaming. Other Ray Data operations are batch-only; Klein's "
+"native filesystem writers and `stream.write_sql` support streaming "
+"separately."
+msgstr ""
+"`stream.data.with_column(name, expr)` 和 `stream.data.filter(expr=expr)` "
+"支持流处理。其他 Ray Data 操作仅支持批处理；Klein 的原生 Filesystem Writer 和 "
+"`stream.write_sql` 分别支持流处理。"
+
+msgid "**Redis transformations**"
+msgstr "**Redis 转换**"
+
+msgid ""
+"Redis lookup and missing-key transforms work in both modes; Redis output "
+"is a native streaming sink."
+msgstr "Redis Lookup 和缺失键 Transform 可在两种模式下工作；Redis 输出是原生流处理 Sink。"
+
+msgid "Choose a connector"
+msgstr "选择 Connector"
+
+msgid ""
+"For bounded data already supported by Ray Data, use the dynamic [Ray Data"
+" adapter](ray-data.md). Klein preserves Ray Data's public arguments "
+"instead of duplicating them."
+msgstr ""
+"对于 Ray Data 已支持的有界数据，请使用动态 [Ray Data 适配器](ray-data.md)。Klein 会保留 Ray Data"
+" 的公开参数，而不会重复定义。"
+
+msgid ""
+"For a long-running event log, use [Kafka](kafka.md). Continuous input is "
+"checkpoint-aware; output is at-least-once."
+msgstr "对于长期运行的事件日志，请使用 [Kafka](kafka.md)。连续输入感知检查点；输出具有 at-least-once 语义。"
+
+msgid ""
+"For an existing remoting-protocol Apache RocketMQ deployment, use "
+"[RocketMQ](rocketmq.md) and review its broker-managed recovery boundary."
+msgstr ""
+"对于现有的 remoting-protocol Apache RocketMQ 部署，请使用 "
+"[RocketMQ](rocketmq.md)，并查看其由 Broker 管理的恢复边界。"
+
+msgid ""
+"For MySQL CDC already published by Canal, use Kafka with the [Canal JSON "
+"format](canal.md). FlatMessage JSON is decoded into native Klein "
+"changelog rows without introducing another connector."
+msgstr ""
+"对于已由 Canal 发布的 MySQL CDC，请将 Kafka 与 [Canal JSON "
+"格式](canal.md)配合使用。FlatMessage JSON 会解码为原生 Klein 变更日志行，而无需引入其他 Connector。"
+
+msgid ""
+"For checkpoint-transactional output, use [filesystem](filesystem.md). "
+"Final part files become visible only after their Klein checkpoint is "
+"durable."
+msgstr ""
+"对于具备检查点事务语义的输出，请使用 [Filesystem](filesystem.md)。最终 part 文件只会在对应 Klein "
+"检查点持久化后可见。"
+
+msgid ""
+"For an existing lakehouse table, use [Iceberg](iceberg.md). Batch mode "
+"keeps Ray Data's append/overwrite/upsert behavior; streaming mode appends"
+" snapshots only after a Klein checkpoint becomes durable."
+msgstr ""
+"对于现有 Lakehouse 表，请使用 [Iceberg](iceberg.md)。批处理模式保留 Ray Data 的 "
+"append/overwrite/upsert 行为；流处理模式只会在 Klein 检查点持久化后追加 snapshot。"
+
+msgid ""
+"For enrichment or a materialized key/value output, use [Redis](redis.md),"
+" and account for its external at-least-once semantics."
+msgstr "对于数据扩充或物化键值输出，请使用 [Redis](redis.md)，并考虑其外部 at-least-once 语义。"
+
+msgid "For development-only inspection, use [console](console.md)."
+msgstr "若仅在开发时查看数据，请使用 [Console](console.md)。"
+
+msgid "To integrate another system, implement a [custom connector](custom.md)."
+msgstr "如需集成其他系统，请实现[自定义 Connector](custom.md)。"
+
+msgid "Execution-mode rule"
+msgstr "执行模式规则"
+
+msgid ""
+"In `auto` mode, an unbounded source, any graph vertex without a batch "
+"lowering, or `udf.ignore-exception=true` selects streaming; only a fully "
+"batch-lowerable, bounded graph with that policy disabled selects batch. A"
+" native `SourceFunction` or `SinkFunction` without a lowering therefore "
+"selects streaming automatically, even when the source is bounded. See "
+"[Configuration](../configuration.md) for explicit mode selection and [Ray"
+" Data interoperation](../ray-data-interop.md) for the lowering model."
+msgstr ""
+"在 `auto` 模式下，无界数据源、任何缺少批处理下沉实现的计算图顶点，或 "
+"`udf.ignore-exception=true` 都会使运行时选择流处理；只有关闭该策略且整个"
+"有界图均可下沉为批处理时，才选择批处理。因此，未提供下沉实现的原生 "
+"`SourceFunction` 或 `SinkFunction` 会自动选择流处理，即使数据源有界也是"
+"如此。有关显式选择模式的方法，请参阅[配置](../configuration.md)；有关下沉"
+"模型，请参阅 [Ray Data 互操作](../ray-data-interop.md)。"
+
+msgid ""
+"Configure Klein for Ray Kafka bounded and continuous input, output, "
+"checkpoint offsets, and Table DDL."
+msgstr "配置 Klein for Ray Kafka 的有界与连续输入、输出、检查点 offset 和 Table DDL。"
+
+msgid "Kafka"
+msgstr "Kafka"
+
+msgid ""
+"Klein reads Kafka either as a bounded Ray Data input or as a native "
+"continuous source. Kafka output lowers to Ray Data in batch and uses a "
+"native producer in streaming. Install the connector dependency with:"
+msgstr ""
+"Klein 将 Kafka 读取为有界 Ray Data 输入或原生连续 Source。Kafka 输出在批处理模式下 lowering 到 "
+"Ray Data，在流处理模式下使用原生 Producer。请安装 Connector 依赖："
+
+msgid "Read Kafka"
+msgstr "读取 Kafka"
+
+msgid ""
+"Set `trigger=\"once\"` for bounded Ray Data input or `\"continuous\"` for"
+" a long-running checkpoint-aware source."
+msgstr ""
+"对于有界 Ray Data 输入，请设置 `trigger=\"once\"`；对于长期运行且感知检查点的 Source，请设置 "
+"`\"continuous\"`。"
+
+msgid "Input options"
+msgstr "输入选项"
+
+msgid "`topics`"
+msgstr "`topics`"
+
+msgid "One topic or a sequence of topics."
+msgstr "一个 topic 或 topic 序列。"
+
+msgid "`bootstrap_servers`"
+msgstr "`bootstrap_servers`"
+
+msgid ""
+"Broker address string or sequence. A value in `consumer_config` is "
+"ignored."
+msgstr "Broker 地址字符串或序列。`consumer_config` 中的值会被忽略。"
+
+msgid "`trigger`"
+msgstr "`trigger`"
+
+msgid "`\"once\"`"
+msgstr "`\"once\"`"
+
+msgid "`once` for bounded input; `continuous` for native streaming."
+msgstr "有界输入使用 `once`；原生流处理使用 `continuous`。"
+
+msgid "`start_offset`"
+msgstr "`start_offset`"
+
+msgid "`\"earliest\"`"
+msgstr "`\"earliest\"`"
+
+msgid ""
+"Integer, datetime, `earliest`, `latest`, or per-topic/per-partition "
+"mapping."
+msgstr "整数、datetime、`earliest`、`latest`，或按 topic/分区指定的映射。"
+
+msgid "`end_offset`"
+msgstr "`end_offset`"
+
+msgid "`\"latest\"`"
+msgstr "`\"latest\"`"
+
+msgid ""
+"Bounded end offset; a non-default value is unsupported for continuous "
+"input."
+msgstr "有界结束 offset；连续输入不支持非默认值。"
+
+msgid "`consumer_config`"
+msgstr "`consumer_config`"
+
+msgid "Additional Confluent consumer properties. JSON object in Table DDL."
+msgstr "额外的 Confluent Consumer 属性。在 Table DDL 中为 JSON 对象。"
+
+msgid "`override_num_blocks`"
+msgstr "`override_num_blocks`"
+
+msgid ""
+"Ray Data output blocks; for continuous input it must equal `concurrency` "
+"if both are set."
+msgstr "Ray Data 输出 Block 数；对于连续输入，如果同时设置，则必须等于 `concurrency`。"
+
+msgid "Continuous source subtasks. Not accepted by `trigger=\"once\"`."
+msgstr "连续 Source Subtask 数量。`trigger=\"once\"` 不接受此选项。"
+
+msgid "`partition_discovery_interval_ms`"
+msgstr "`partition_discovery_interval_ms`"
+
+msgid "`30000`"
+msgstr "`30000`"
+
+msgid "Continuous partition refresh interval."
+msgstr "连续分区刷新间隔。"
+
+msgid "`max_batch_size`"
+msgstr "`max_batch_size`"
+
+msgid "`1000`"
+msgstr "`1000`"
+
+msgid "Maximum records emitted by a continuous poll batch."
+msgstr "连续轮询批次发出的最大记录数。"
+
+msgid "`value_format`"
+msgstr "`value_format`"
+
+msgid "`\"raw\"`"
+msgstr "`\"raw\"`"
+
+msgid "`raw` or the continuous-only `canal-json` value format."
+msgstr "`raw`，或仅支持连续模式的 `canal-json` 值格式。"
+
+msgid "`format_options`"
+msgstr "`format_options`"
+
+msgid ""
+"Format-specific options; for `canal-json`, `include_metadata` and "
+"`ddl_handling`."
+msgstr "格式专用选项；对于 `canal-json`，包括 `include_metadata` 和 `ddl_handling`。"
+
+msgid "`timeout_ms`"
+msgstr "`timeout_ms`"
+
+msgid "Poll/read timeout; continuous input uses 1000 ms when unset."
+msgstr "轮询/读取超时；未设置时，连续输入使用 1000 ms。"
+
+msgid "Source task resources."
+msgstr "Source Task 资源。"
+
+msgid "`memory`, `ray_remote_args`"
+msgstr "`memory`、`ray_remote_args`"
+
+msgid "Bounded Ray Data resource options; unsupported for continuous input."
+msgstr "有界 Ray Data 资源选项；连续输入不支持。"
+
+msgid ""
+"An integer start offset must be non-negative. A naive `datetime` is "
+"interpreted as UTC. A partition-specific mapping has this shape:"
+msgstr "整数起始 offset 必须为非负数。无时区的 `datetime` 会解释为 UTC。分区专用映射的格式如下："
+
+msgid ""
+"Continuous `timeout_ms`, `partition_discovery_interval_ms`, and "
+"`max_batch_size` must be positive integers when set. Topic names, broker "
+"addresses, and configured partition IDs are validated before polling."
+msgstr ""
+"连续模式下，`timeout_ms`、`partition_discovery_interval_ms` 和 `max_batch_size` "
+"在设置时必须为正整数。轮询前会验证 topic 名称、Broker 地址和已配置的分区 ID。"
+
+msgid "Input record schema"
+msgstr "输入记录 schema"
+
+msgid ""
+"With `value_format=\"raw\"`, continuous input emits one mapping per Kafka"
+" record:"
+msgstr "使用 `value_format=\"raw\"` 时，连续输入会为每条 Kafka 记录发出一个映射："
+
+msgid "Field"
+msgstr "字段"
+
+msgid "Type"
+msgstr "类型"
+
+msgid "`topic`"
+msgstr "`topic`"
+
+msgid "`str`"
+msgstr "`str`"
+
+msgid "Topic name."
+msgstr "topic 名称。"
+
+msgid "`partition`"
+msgstr "`partition`"
+
+msgid "`int`"
+msgstr "`int`"
+
+msgid "Partition number."
+msgstr "分区编号。"
+
+msgid "`offset`"
+msgstr "`offset`"
+
+msgid "Kafka record offset."
+msgstr "Kafka 记录 offset。"
+
+msgid "`key`"
+msgstr "`key`"
+
+msgid "`bytes | None`"
+msgstr "`bytes | None`"
+
+msgid "Unmodified key bytes."
+msgstr "未经修改的 key 字节。"
+
+msgid "`value`"
+msgstr "`value`"
+
+msgid "Unmodified value bytes."
+msgstr "未经修改的 value 字节。"
+
+msgid "`timestamp`"
+msgstr "`timestamp`"
+
+msgid "`int | None`"
+msgstr "`int | None`"
+
+msgid "Kafka timestamp in milliseconds."
+msgstr "以毫秒为单位的 Kafka 时间戳。"
+
+msgid "`timestamp_type`"
+msgstr "`timestamp_type`"
+
+msgid "implementation value"
+msgstr "实现定义的值"
+
+msgid "Kafka timestamp type."
+msgstr "Kafka 时间戳类型。"
+
+msgid "`headers`"
+msgstr "`headers`"
+
+msgid "`dict`"
+msgstr "`dict`"
+
+msgid "Header names and values."
+msgstr "Header 名称和值。"
+
+msgid ""
+"Deserialize `key` and `value` explicitly in the next transform so schema "
+"and error handling remain application-owned."
+msgstr "请在下一个 Transform 中显式反序列化 `key` 和 `value`，使 schema 和错误处理仍由应用控制。"
+
+msgid ""
+"For an unchained source boundary, all valid raw records returned by one "
+"Kafka poll are emitted as one columnar transport block. A chained row "
+"operator still receives ordinary rows, because chaining already removes "
+"the actor RPC. Poll offsets are advanced before the block and any "
+"checkpoint barrier is ordered after it."
+msgstr ""
+"对于未 Chaining 的 Source 边界，一次 Kafka 轮询返回的所有有效原始记录会作为一个列式传输 Block "
+"发出。Chaining 的行 Operator 仍会接收普通行，因为 Chaining 已经消除了 Actor RPC。轮询 offset 会在该"
+" Block 前推进，所有检查点 Barrier 都排在其后。"
+
+msgid ""
+"For Canal Server FlatMessage JSON, select the [Canal JSON value "
+"format](canal.md) to obtain INSERT/UPDATE/DELETE changelog rows with "
+"checkpoint-safe recovery inside multi-row Kafka messages."
+msgstr ""
+"对于 Canal Server FlatMessage JSON，请选择 [Canal JSON 值格式](canal.md)，以获取 "
+"INSERT/UPDATE/DELETE 变更日志行，并在包含多行的 Kafka 消息内部实现检查点安全恢复。"
+
+msgid "Partition assignment and recovery"
+msgstr "分区分配与恢复"
+
+msgid ""
+"The continuous source sorts discovered topic partitions and assigns them "
+"by partition index modulo source parallelism. It periodically discovers "
+"new partitions without restarting the job. Empty polls still report "
+"source idleness so time-based checkpoints and watermarks can progress."
+msgstr ""
+"连续 Source 会对发现的 topic 分区排序，并按分区索引对 Source "
+"并行度取模来分配分区。它会定期发现新分区，无需重启作业。空轮询仍会报告 Source 空闲，使基于时间的检查点和 Watermark 能够推进。"
+
+msgid "Resume position is chosen in this order:"
+msgstr "恢复位置按以下顺序选择："
+
+msgid "offsets restored from a durable Klein checkpoint;"
+msgstr "从持久 Klein 检查点恢复的 offset；"
+
+msgid "positions already held by the running source;"
+msgstr "运行中 Source 已持有的位置；"
+
+msgid "committed offsets for the configured Kafka consumer group;"
+msgstr "已配置 Kafka 消费组的已提交 offset；"
+
+msgid "`start_offset`."
+msgstr "`start_offset`。"
+
+#, python-brace-format
+msgid ""
+"Klein forces `enable.auto.offset.store=false` and disables automatic "
+"commits; `enable.auto.commit=true` is rejected. If `group.id` is absent, "
+"Klein uses `ray-klein-{job_id}`. It commits Kafka group offsets only "
+"after the corresponding Klein checkpoint is durable and retries a failed "
+"commit. This prevents the consumer group from moving ahead of recoverable"
+" Klein state."
+msgstr ""
+"Klein 会强制设置 `enable.auto.offset.store=false` "
+"并禁用自动提交；`enable.auto.commit=true` 会被拒绝。如果没有 `group.id`，Klein 使用 `ray-"
+"klein-{job_id}`。它只会在对应 Klein 检查点持久化后提交 Kafka 消费组 "
+"offset，并会重试失败的提交。这可防止消费组位置超前于可恢复的 Klein 状态。"
+
+msgid "Write Kafka"
+msgstr "写入 Kafka"
+
+msgid "Output options"
+msgstr "输出选项"
+
+msgid "Exactly one output topic."
+msgstr "恰好一个输出 topic。"
+
+msgid "Broker addresses; overrides any same property in `producer_config`."
+msgstr "Broker 地址；会覆盖 `producer_config` 中的同名属性。"
+
+msgid "`key_field`"
+msgstr "`key_field`"
+
+msgid "Optional mapping field used as the Kafka key."
+msgstr "用作 Kafka key 的可选映射字段。"
+
+msgid "`key_serializer`"
+msgstr "`key_serializer`"
+
+msgid "`\"string\"`"
+msgstr "`\"string\"`"
+
+msgid "`string`, `json`, or `bytes`."
+msgstr "`string`、`json` 或 `bytes`。"
+
+msgid "`value_serializer`"
+msgstr "`value_serializer`"
+
+msgid "`\"json\"`"
+msgstr "`\"json\"`"
+
+msgid "`json`, `string`, or `bytes`."
+msgstr "`json`、`string` 或 `bytes`。"
+
+msgid "`producer_config`"
+msgstr "`producer_config`"
+
+msgid "Additional Confluent producer properties."
+msgstr "额外的 Confluent Producer 属性。"
+
+msgid ""
+"Ray Data batch task arguments; `num_cpus` and `num_gpus` also size native"
+" sink tasks."
+msgstr "Ray Data 批处理 Task 参数；`num_cpus` 和 `num_gpus` 也用于确定原生 Sink Task 的资源大小。"
+
+msgid "Sink parallelism."
+msgstr "Sink 并行度。"
+
+msgid ""
+"`json` uses JSON encoding, `string` uses `str(value).encode(\"utf-8\")`, "
+"and `bytes` preserves an existing `bytes` value but UTF-8 encodes "
+"`str(value)` for other types. If `key_field` is absent or its value is "
+"`None`, the producer sends no Kafka key. The value serializer receives "
+"the whole record mapping."
+msgstr ""
+"`json` 使用 JSON 编码，`string` 使用 `str(value).encode(\"utf-8\")`，`bytes` "
+"会保留现有 `bytes` 值，但对其他类型的 `str(value)` 使用 UTF-8 编码。如果没有 `key_field` 或其值为 "
+"`None`，Producer 不会发送 Kafka key。Value Serializer 接收完整的记录映射。"
+
+msgid ""
+"The streaming producer flushes outstanding deliveries at checkpoint "
+"barriers and waits for acknowledgements, but it does not use Kafka "
+"transactions. Output is therefore **at-least-once**: recovery can replay "
+"records that Kafka already accepted before the failed checkpoint became "
+"durable. Use an idempotent downstream key/version design when duplicates "
+"matter."
+msgstr ""
+"流处理 Producer 会在检查点 Barrier 处刷新未完成的交付并等待确认，但不会使用 Kafka 事务。因此，输出具有 **at-"
+"least-once** 语义：恢复可能重放 Kafka "
+"已接受、但失败检查点持久化之前的记录。如果重复记录会造成影响，请在下游采用幂等的键/版本设计。"
+
+msgid ""
+"The connector identifier is `kafka`. `consumer_config`, "
+"`producer_config`, and `ray_remote_args` are JSON strings in SQL:"
+msgstr ""
+"Connector 标识符为 `kafka`。在 SQL 中，`consumer_config`、`producer_config` 和 "
+"`ray_remote_args` 是 JSON 字符串："
+
+msgid ""
+"Source tables require `topic` or `topics` plus `bootstrap_servers`. Sink "
+"tables require exactly one topic. Supported keys are the snake-case API "
+"names shown in the option tables: `trigger`, offsets, consumer/producer "
+"config, resources, block/concurrency settings, discovery and batch size, "
+"`format`, and serializers. Format-specific source options use a prefix "
+"such as `canal-json.include-metadata`. See [SQL and Table DDL](../sql.md)"
+" for statement syntax and row-kind validation."
+msgstr ""
+"Source 表需要 `topic` 或 `topics`，以及 `bootstrap_servers`。Sink 表要求恰好一个 "
+"topic。支持的键是选项表中所示的 snake-case API 名称：`trigger`、offset、Consumer/Producer "
+"配置、资源、Block/并发度设置、发现与批次大小、`format` 和 Serializer。格式专用 Source 选项使用 `canal-"
+"json.include-metadata` 之类的前缀。有关语句语法和行类型验证，请参阅 [SQL 与 Table "
+"DDL](../sql.md)。"
+
+msgid "Operational notes"
+msgstr "运维说明"
+
+msgid ""
+"Keep Klein checkpoint storage durable; Kafka offset commits alone cannot "
+"restore operator state."
+msgstr "请确保 Klein 检查点存储持久可靠；仅提交 Kafka offset 无法恢复 Operator 状态。"
+
+msgid ""
+"Use a stable `group.id` when recovery must survive a new Klein job "
+"identity."
+msgstr "如果恢复需要跨越新的 Klein 作业标识，请使用稳定的 `group.id`。"
+
+msgid ""
+"Scale continuous source concurrency no higher than useful topic-partition"
+" parallelism. Idle subtasks do not increase Kafka throughput."
+msgstr "连续 Source 并发度不应超过有效的 topic 分区并行度。空闲 Subtask 不会提高 Kafka 吞吐量。"
+
+msgid ""
+"Monitor checkpoint duration, consumer lag, records consumed/produced, and"
+" producer error metrics described in "
+"[Observability](../observability.md)."
+msgstr ""
+"请监控[可观测性](../observability.md)中说明的检查点耗时、Consumer Lag、消费/生产记录数和 Producer "
+"错误指标。"
+
+msgid ""
+"Use public Ray Data readers, transforms, consumers, and writers through "
+"Klein for Ray."
+msgstr "通过 Klein for Ray 使用公开的 Ray Data Reader、Transform、Consumer 和 Writer。"
+
+msgid "Ray Data"
+msgstr "Ray Data"
+
+msgid ""
+"The Ray Data adapter exposes public Ray Data `Dataset` factories and "
+"methods as bounded Klein sources and operations. It is the broadest batch"
+" connector: when Ray Data adds a public reader or writer, a compatible "
+"Klein installation can expose it without a Klein wrapper release."
+msgstr ""
+"Ray Data 适配器将公开的 Ray Data `Dataset` Factory 和方法公开为有界 Klein Source "
+"和操作。它是覆盖面最广的批处理 Connector：当 Ray Data 添加公开 Reader 或 Writer 时，兼容的 Klein "
+"安装无需发布 Klein 封装版本即可公开它。"
+
+msgid "Availability and execution mode"
+msgstr "可用性与执行模式"
+
+msgid ""
+"Ray Data sources, general `stream.data` transforms, and `stream.data` "
+"consumers are batch-only. The expression forms "
+"`stream.data.with_column(name, expr)` and `stream.data.filter(expr=expr)`"
+" are dual-mode: batch execution delegates to Ray Data unchanged, while "
+"streaming execution uses Klein's native expression operator. `download()`"
+" runs with bounded ordered concurrency and backpressure."
+msgstr ""
+"Ray Data Source、通用 `stream.data` Transform 和 `stream.data` Consumer "
+"仅支持批处理。表达式形式 `stream.data.with_column(name, expr)` 和 "
+"`stream.data.filter(expr=expr)` 支持双模式：批处理执行会原样委托给 Ray Data，流处理执行则使用 Klein"
+" 的原生表达式 Operator。`download()` 以有界有序并发和背压运行。"
+
+msgid ""
+"Check availability before relying on an API that differs across Ray "
+"versions:"
+msgstr "在依赖不同 Ray 版本间存在差异的 API 前，请先检查可用性："
+
+msgid ""
+"Klein supports the Ray version range stated in "
+"[Compatibility](../compatibility.md). Public Ray Data APIs outside that "
+"range are not compatibility guarantees."
+msgstr ""
+"Klein 支持[兼容性](../compatibility.md)中声明的 Ray 版本范围。该范围之外的公开 Ray Data API "
+"不属于兼容性保证。"
+
+msgid "Read data"
+msgstr "读取数据"
+
+msgid ""
+"Call a public Ray Data factory directly from `ray.klein` or through "
+"`source`:"
+msgstr "可直接从 `ray.klein` 或通过 `source` 调用公开的 Ray Data factory："
+
+msgid ""
+"You can also pass a public Ray Data factory callable instead of its name."
+" Klein preserves the installed function's signature and documentation, "
+"and forwards all arguments to Ray Data. Consult the matching [Ray Data "
+"input API](https://docs.ray.io/en/latest/data/api/input_output.html) for "
+"connector-specific options, credentials, schemas, and return values."
+msgstr ""
+"也可以传入公开的 Ray Data Factory Callable，而不是其名称。Klein 会保留已安装函数的签名和文档，并将所有参数转发给 "
+"Ray Data。有关 Connector 专用选项、凭据、schema 和返回值，请查阅对应的 [Ray Data 输入 "
+"API](https://docs.ray.io/en/latest/data/api/input_output.html)。"
+
+msgid "Transform data"
+msgstr "转换数据"
+
+msgid "`stream.data` dynamically exposes public `Dataset` methods:"
+msgstr "`stream.data` 动态公开 `Dataset` 的公开方法："
+
+msgid ""
+"Use `transform` when an operation needs more than one stream or is easier"
+" to express as a Dataset-to-Dataset function:"
+msgstr "当操作需要多个 Stream，或更适合表达为 Dataset 到 Dataset 的函数时，请使用 `transform`："
+
+msgid ""
+"The callable passed to `transform` must return exactly one Ray `Dataset`."
+" Additional `DataStream` arguments become graph dependencies and are "
+"replaced with their lowered Datasets at execution time."
+msgstr ""
+"传给 `transform` 的 Callable 必须恰好返回一个 Ray `Dataset`。额外的 `DataStream` "
+"参数会成为图依赖，并在执行时替换为 lowering 后的 Dataset。"
+
+msgid "Consume or write data"
+msgstr "消费或写入数据"
+
+msgid ""
+"Public terminal Dataset methods are available through `stream.data`, "
+"including writers supported by the installed Ray version:"
+msgstr "可通过 `stream.data` 使用公开的终结 Dataset 方法，包括已安装 Ray 版本支持的 Writer："
+
+msgid ""
+"Unlike `transform`, `consume` may return any value accepted by the "
+"underlying terminal operation. The result is represented as a Klein sink "
+"and becomes part of the submitted job."
+msgstr ""
+"与 `transform` 不同，`consume` 可以返回底层终结操作接受的任意值。结果会表示为 Klein "
+"Sink，并成为已提交作业的一部分。"
+
+msgid ""
+"For JSON, CSV, and Parquet, `stream.write_json`, `write_csv`, and "
+"`write_parquet` provide a stable Klein entry point that lowers to Ray "
+"Data in batch and uses checkpoint-transactional native output in "
+"streaming. See [Filesystem](filesystem.md) before choosing between the "
+"APIs."
+msgstr ""
+"对于 JSON、CSV 和 Parquet，`stream.write_json`、`write_csv` 和 `write_parquet` "
+"提供稳定的 Klein 入口：在批处理模式下降低为 Ray Data，在流处理模式下使用具备检查点事务语义的原生输出。在这些 API "
+"之间进行选择前，请参阅 [Filesystem](filesystem.md)。"
+
+msgid ""
+"`stream.write_sql(sql, connection_factory, ray_remote_args=None, "
+"concurrency=None)` is also available with the same arguments as "
+"`ray.data.Dataset.write_sql`. Batch execution uses Ray Data's writer. "
+"Streaming execution owns one DB-API 2.0 connection per sink subtask, "
+"preserves the first record's column order, and commits `executemany` "
+"batches of up to 128 rows at full batches and checkpoint flushes."
+msgstr ""
+"还可使用 `stream.write_sql(sql, connection_factory, ray_remote_args=None, "
+"concurrency=None)`，其参数与 `ray.data.Dataset.write_sql` 相同。批处理执行使用 Ray Data "
+"Writer。流处理执行为每个 Sink Subtask 持有一个 DB-API 2.0 "
+"连接，保留第一条记录的列顺序，并在批次填满和检查点刷新时提交最多 128 行的 `executemany` 批次。"
+
+msgid ""
+"Streaming SQL output is at-least-once: a database commit can succeed "
+"before the matching Klein checkpoint becomes durable. Use an idempotent "
+"statement or database-native upsert when replayed rows must not create "
+"duplicates."
+msgstr ""
+"流处理 SQL 输出具有 at-least-once 语义：数据库提交可能在匹配的 Klein "
+"检查点持久化前成功。如果重放行不能产生重复数据，请使用幂等语句或数据库原生 upsert。"
+
+msgid "Adapt an existing Dataset"
+msgstr "适配现有 Dataset"
+
+msgid ""
+"Use `from_ray_dataset` when another library has already constructed a "
+"Dataset:"
+msgstr "当其他库已经构造了 Dataset 时，请使用 `from_ray_dataset`："
+
+msgid ""
+"The Dataset remains bounded and batch-only. Klein does not collect it "
+"into the driver or convert it to a native streaming source."
+msgstr "该 Dataset 保持有界且仅支持批处理。Klein 不会将其收集到 Driver，也不会将其转换为原生流处理 Source。"
+
+msgid "Configuration and guarantees"
+msgstr "配置与保证"
+
+msgid ""
+"There are no Ray Data connector-wide Klein options. Pass connector and "
+"resource arguments to the selected Ray Data method. Klein's job-wide "
+"`execution.runtime.mode`, retry, and Ray initialization options still "
+"apply; see the [configuration reference](../configuration-reference.md)."
+msgstr ""
+"没有适用于整个 Ray Data Connector 的 Klein 选项。请将 Connector 和资源参数传给所选 Ray Data "
+"方法。Klein 作业级 `execution.runtime.mode`、重试和 Ray 初始化选项仍然适用；请参阅[配置参考"
+"](../configuration-reference.md)。"
+
+msgid ""
+"Except for the native `stream.write_sql` path described above, data "
+"partitioning, retries, commit behavior, and filesystem semantics are "
+"those of the invoked public Ray Data operation. They are not Klein "
+"streaming checkpoints. Use a transactional native connector when the "
+"external system must commit only after a Klein checkpoint becomes "
+"durable."
+msgstr ""
+"除上述原生 `stream.write_sql` 路径外，数据分区、重试、提交行为和文件系统语义均由所调用的公开 Ray Data "
+"操作决定；它们不是 Klein 流处理检查点。如果外部系统必须在 Klein 检查点持久化后才提交，请使用事务型原生 Connector。"
+
+msgid ""
+"Run a connected Klein for Ray transformation region behind Ray Serve "
+"through an embedded proxy client."
+msgstr "通过嵌入式 Proxy Client，在 Ray Serve 后运行相连的 Klein for Ray Transform 区域。"
+
+msgid "Ray Serve execution integration"
+msgstr "Ray Serve 执行集成"
+
+msgid ""
+"Ray Serve is an optional execution integration, not a data source or "
+"sink. It moves one connected transform region behind a Serve deployment "
+"and replaces that region in the Klein graph with an asynchronous HTTP "
+"proxy client. Use it for independently deployed model or inference "
+"transforms in batch or streaming graphs."
+msgstr ""
+"Ray Serve 是可选的执行集成，而不是数据 Source 或 Sink。它会将一个相连的 Transform 区域移到 Serve "
+"Deployment 后，并在 Klein 图中用异步 HTTP Proxy Client "
+"替换该区域。可将其用于批处理或流处理图中独立部署的模型或推理 Transform。"
+
+msgid "Install the optional dependencies:"
+msgstr "安装可选依赖："
+
+msgid "Mark a Serve region"
+msgstr "标记 Serve 区域"
+
+msgid ""
+"Mark synchronous `map_batches` transforms in the original workflow. The "
+"current Serve runtime accepts only NumPy/default batch format; other "
+"transform kinds, async or generator callables, and pandas/Arrow batches "
+"are rejected while the logical graph is built:"
+msgstr ""
+"在原始工作流中标记同步 `map_batches` 转换。当前 Serve 运行时仅接受 "
+"NumPy/默认批次格式；构建逻辑图时会拒绝其他转换类型、异步或生成器可调用对象，以及 pandas/Arrow 批次："
+
+msgid ""
+"All marked nodes in a job must form exactly one connected linear chain. A"
+" branch or merge inside the marked region, or two disconnected marked "
+"regions, is rejected during graph construction. External inputs may only "
+"enter the chain's head, and external outputs may only leave its tail; "
+"tail fan-out is supported. Functions, constructor arguments, and returned"
+" values must remain serializable and compatible with the selected "
+"operator's batch contract."
+msgstr "作业中所有已标记节点必须恰好形成一条相连的线性链。在已标记区域内部出现分支或合并，或存在两个互不相连的已标记区域，都会在构图时被拒绝。外部输入只能进入链首，外部输出只能从链尾离开；支持链尾扇出。函数、构造参数和返回值必须保持可序列化，并与所选算子的批次约定兼容。"
+
+msgid ""
+"In a streaming graph the proxy is an ordinary transform operator, but the"
+" remote HTTP service does not participate in Klein's checkpoint protocol."
+msgstr "在流处理图中，Proxy 是普通 Transform Operator，但远程 HTTP 服务不参与 Klein 的检查点协议。"
+
+msgid "Deploy the operator chain"
+msgstr "部署 Operator Chain"
+
+msgid ""
+"The Serve deployment imports Klein's bound application and receives the "
+"same workflow path as user configuration:"
+msgstr "Serve Deployment 会导入 Klein 的绑定应用，并接收与用户配置相同的工作流路径："
+
+msgid ""
+"The deployment runs that workflow as `__main__` and intercepts its call "
+"to `execute()`. It extracts the marked functions without submitting the "
+"workflow's ordinary Klein job, then executes the extracted chain for "
+"incoming batches. The workflow file must therefore build the graph and "
+"call `execute`; keep graph construction deterministic and avoid unrelated"
+" process-wide side effects."
+msgstr ""
+"Deployment 将该工作流作为 `__main__` 运行，并拦截它对 `execute()` "
+"的调用。它会提取已标记函数，而不提交工作流中的普通 Klein 作业，然后对传入批次执行提取出的 Chain。因此，工作流文件必须构建图并调用 "
+"`execute`；请确保构图具有确定性，并避免无关的进程级副作用。"
+
+msgid ""
+"The job-side client must point at an already reachable proxy and "
+"deployment:"
+msgstr "作业端 Client 必须指向已经可达的 Proxy 和 Deployment："
+
+msgid "Configuration reference"
+msgstr "配置参考"
+
+msgid "Key"
+msgstr "键"
+
+msgid "`serve.proxy-endpoints`"
+msgstr "`serve.proxy-endpoints`"
+
+msgid "Required comma-separated HTTP proxy base URLs."
+msgstr "必填，以逗号分隔的 HTTP Proxy Base URL。"
+
+msgid "`serve.deployment-name`"
+msgstr "`serve.deployment-name`"
+
+msgid "Required Serve deployment name."
+msgstr "必填的 Serve Deployment 名称。"
+
+msgid "`serve.route-prefix`"
+msgstr "`serve.route-prefix`"
+
+msgid "`/`"
+msgstr "`/`"
+
+msgid "Route prefix sent through the proxy API."
+msgstr "通过 Proxy API 发送的路由前缀。"
+
+msgid "`serve.client.num-cpus`"
+msgstr "`serve.client.num-cpus`"
+
+msgid "`1.0`"
+msgstr "`1.0`"
+
+msgid "CPU allocation for a multi-node region's embedded client."
+msgstr "多节点区域嵌入式 Client 的 CPU 分配。"
+
+msgid "`serve.client.concurrency`"
+msgstr "`serve.client.concurrency`"
+
+msgid "`1`"
+msgstr "`1`"
+
+msgid "Embedded client parallelism."
+msgstr "嵌入式 Client 并行度。"
+
+msgid "`serve.client.async-buffer-size`"
+msgstr "`serve.client.async-buffer-size`"
+
+msgid "`100`"
+msgstr "`100`"
+
+msgid "Maximum asynchronous buffered work."
+msgstr "异步缓冲工作的最大数量。"
+
+msgid "`serve.client.batch-timeout`"
+msgstr "`serve.client.batch-timeout`"
+
+msgid "`5`"
+msgstr "`5`"
+
+msgid "Proxy batch timeout in seconds."
+msgstr "以秒为单位的 Proxy 批次超时。"
+
+msgid "`serve.client.batch-size`"
+msgstr "`serve.client.batch-size`"
+
+msgid "`2`"
+msgstr "`2`"
+
+msgid "Proxy request batch size."
+msgstr "Proxy 请求批次大小。"
+
+msgid "`serve.client.max-attempts`"
+msgstr "`serve.client.max-attempts`"
+
+msgid "`30`"
+msgstr "`30`"
+
+msgid "Maximum HTTP request attempts."
+msgstr "HTTP 请求最大尝试次数。"
+
+msgid "`serve.client.slow-request-warning`"
+msgstr "`serve.client.slow-request-warning`"
+
+msgid "`60`"
+msgstr "`60`"
+
+msgid "Seconds before one slow-request warning."
+msgstr "发出一次慢请求警告前等待的秒数。"
+
+msgid "`serve.client.http-timeout`"
+msgstr "`serve.client.http-timeout`"
+
+msgid "`300`"
+msgstr "`300`"
+
+msgid "Total logical request timeout across retries and backoff, in seconds."
+msgstr "包括重试和退避在内的逻辑请求总超时时间，单位为秒。"
+
+msgid "`serve.client.http-connect-timeout`"
+msgstr "`serve.client.http-connect-timeout`"
+
+msgid "HTTP connect timeout in seconds."
+msgstr "以秒为单位的 HTTP 连接超时。"
+
+msgid "`serve.client.http-limit-per-host`"
+msgstr "`serve.client.http-limit-per-host`"
+
+msgid "Per-host connection limit."
+msgstr "每个 Host 的连接数限制。"
+
+msgid "`serve.client.http-connection-limit`"
+msgstr "`serve.client.http-connection-limit`"
+
+msgid "Total connection limit."
+msgstr "总连接数限制。"
+
+msgid "`serve.client.retry-backoff-max`"
+msgstr "`serve.client.retry-backoff-max`"
+
+msgid "`3.0`"
+msgstr "`3.0`"
+
+msgid "Maximum randomized exponential backoff; runtime-capped at 10 seconds."
+msgstr "随机指数退避上限；运行时最高限制为 10 秒。"
+
+msgid ""
+"For a single marked operator, the proxy inherits that operator's CPU, "
+"concurrency, batch size, and timeout. A multi-operator region uses the "
+"`serve.client.*` resource and batching values. All keys also appear in "
+"the [complete configuration reference](../configuration-reference.md), "
+"including accepted configuration sources and precedence."
+msgstr ""
+"对于单个已标记 Operator，Proxy 会继承该 Operator 的 CPU、并发度、批次大小和超时。多 Operator 区域使用 "
+"`serve.client.*` 资源和批处理值。所有键也会出现在[完整配置参考](../configuration-"
+"reference.md)中，其中包括接受的配置来源和优先级。"
+
+msgid "Requests, retries, and operations"
+msgstr "请求、重试与运维"
+
+msgid ""
+"The proxy JSON-encodes NumPy batches, chooses among configured endpoints,"
+" and reuses one request ID across retries. Connection errors, timeouts, "
+"HTTP 408, 429, 502, 503, and 504 are retryable; other HTTP failures stop "
+"retrying. The configured HTTP timeout is one total budget for the logical"
+" call, including all attempts and backoff. Because a remote deployment "
+"can finish a request before the client observes a failure, functions "
+"should be deterministic and free of non-idempotent side effects."
+msgstr ""
+"Proxy 会对 NumPy 批次进行 JSON 编码，从已配置端点中选择一个，并在多次重试中复用同一请求 ID。连接错误、超时以及 HTTP "
+"408、429、502、503 和 504 可以重试；其他 HTTP 失败会停止重试。配置的 HTTP "
+"超时是一次逻辑调用的总预算，包含所有尝试和退避。由于远程部署可能在客户端观察到失败前已经完成请求，函数应具有确定性，且不包含非幂等副作用。"
+
+msgid ""
+"The deployment can optionally validate the `rayservice` request header "
+"when the `RAY_SERVICE_NAME` environment variable is set. Monitor Serve "
+"request duration and failure metrics through "
+"[Observability](../observability.md), and protect the proxy endpoint with"
+" the authentication and network policy expected by your environment."
+msgstr ""
+"设置 `RAY_SERVICE_NAME` 环境变量后，Deployment 可以选择验证 `rayservice` 请求 "
+"Header。请通过[可观测性](../observability.md)监控 Serve "
+"请求耗时和失败指标，并使用环境所要求的身份验证和网络策略保护 Proxy Endpoint。"
+
+msgid ""
+"Use Klein for Ray Redis value lookups, missing-key filters, and buffered "
+"output."
+msgstr "使用 Klein for Ray Redis 值 Lookup、缺失键过滤和缓冲输出。"
+
+msgid "Redis"
+msgstr "Redis"
+
+msgid ""
+"The Redis integration enriches or filters records in batch and streaming "
+"pipelines and writes keyed values through a native streaming sink. "
+"Install it with `python -m pip install \"ray-klein[redis]\"`."
+msgstr ""
+"Redis 集成可在批处理和流处理 Pipeline 中扩充或过滤记录，并通过原生流处理 Sink 写入键值。使用 `python -m pip "
+"install \"ray-klein[redis]\"` 安装。"
+
+msgid "Configure connections"
+msgstr "配置连接"
+
+msgid "`RedisConnectionConfig` is immutable and shared by lookups and output:"
+msgstr "`RedisConnectionConfig` 不可变，并由 Lookup 和输出共享："
+
+msgid "Meaning and constraint"
+msgstr "含义与约束"
+
+msgid "`host`"
+msgstr "`host`"
+
+msgid "Non-empty hostname or address."
+msgstr "非空 Hostname 或地址。"
+
+msgid "`port`"
+msgstr "`port`"
+
+msgid "`6379`"
+msgstr "`6379`"
+
+msgid "Integer from 1 through 65535."
+msgstr "1 至 65535 之间的整数。"
+
+msgid "`database`"
+msgstr "`database`"
+
+msgid "`0`"
+msgstr "`0`"
+
+msgid "Non-negative database number."
+msgstr "非负数据库编号。"
+
+msgid "`username`"
+msgstr "`username`"
+
+msgid "Optional ACL username."
+msgstr "可选 ACL 用户名。"
+
+msgid "`password`"
+msgstr "`password`"
+
+msgid "Optional password; omitted from object representation."
+msgstr "可选密码；对象表示中会省略。"
+
+msgid "`max_connections`"
+msgstr "`max_connections`"
+
+msgid "`10`"
+msgstr "`10`"
+
+msgid "Positive per-operator connection-pool capacity."
+msgstr "每个 Operator 的正数连接池容量。"
+
+msgid "`timeout`"
+msgstr "`timeout`"
+
+msgid "5 seconds"
+msgstr "5 秒"
+
+msgid "Positive connect and socket timeout."
+msgstr "正数连接和 Socket 超时。"
+
+msgid "`max_retries`"
+msgstr "`max_retries`"
+
+msgid "Non-negative Redis client retry count."
+msgstr "非负 Redis Client 重试次数。"
+
+msgid "`max_retry_delay`"
+msgstr "`max_retry_delay`"
+
+msgid "10 seconds"
+msgstr "10 秒"
+
+msgid "Positive exponential-backoff cap."
+msgstr "正数指数退避上限。"
+
+msgid "`connection_options`"
+msgstr "`connection_options`"
+
+#, python-brace-format
+msgid "`{}`"
+msgstr "`{}`"
+
+msgid "Additional `BlockingConnectionPool` arguments."
+msgstr "额外的 `BlockingConnectionPool` 参数。"
+
+msgid ""
+"Each operator instance creates and owns its connection pool. Use a secret"
+" manager or runtime environment for credentials rather than committing a "
+"password in pipeline source."
+msgstr ""
+"每个 Operator 实例都会创建并拥有自己的连接池。请使用 Secret Manager 或运行时环境提供凭据，而不要在 Pipeline "
+"源码中提交密码。"
+
+msgid "Enrich records"
+msgstr "扩充记录"
+
+msgid ""
+"Pass the callable class and its constructor arguments to `map` so each "
+"worker owns its Redis client:"
+msgstr "将 Callable 类及其构造参数传给 `map`，使每个 Worker 都拥有自己的 Redis Client："
+
+msgid ""
+"`RedisValueLookup` supports `STRING`, `HASH`, `LIST`, and `SET`. Its "
+"options are `key_prefix`, key `delimiter` (default `:`), optional hash "
+"fields, and `result_field` (default `redis_value`). Redis byte responses "
+"are decoded as UTF-8. A missing string returns `None`; selected missing "
+"hash fields also become `None`."
+msgstr ""
+"`RedisValueLookup` 支持 `STRING`、`HASH`、`LIST` 和 `SET`。其选项包括 `key_prefix`、键"
+" `delimiter`（默认 `:`）、可选 Hash 字段和 `result_field`（默认 `redis_value`）。Redis "
+"字节响应会按 UTF-8 解码。缺失的 String 返回 `None`；选中的缺失 Hash 字段也会变为 `None`。"
+
+msgid ""
+"Batch-enabled transforms pipeline multiple non-transactional reads. "
+"Streaming transforms issue one logical lookup per record. A Redis error "
+"is recorded and raised so the normal task retry policy can apply."
+msgstr ""
+"支持批处理的 Transform 会通过 Pipeline 执行多次非事务读取。流处理 Transform 对每条记录发起一次逻辑 "
+"Lookup。Redis 错误会被记录并抛出，以便应用常规 Task 重试策略。"
+
+msgid "Keep only missing keys"
+msgstr "仅保留缺失键"
+
+msgid ""
+"`RedisMissingKeyFilter` retains a record only when its extracted, "
+"optionally prefixed key does not exist:"
+msgstr "仅当提取出的键（可带前缀）不存在时，`RedisMissingKeyFilter` 才会保留记录："
+
+msgid ""
+"The filter supports both execution modes and pipelines `EXISTS` calls in "
+"a batch-enabled operator. A lookup followed by another client write is "
+"not an atomic check-and-set; concurrent producers can race."
+msgstr ""
+"该 Filter 支持两种执行模式，并在支持批处理的 Operator 中通过 Pipeline 执行 `EXISTS` 调用。Lookup "
+"后由另一个 Client 写入并不是原子 check-and-set；并发 Producer 可能发生竞争。"
+
+msgid "Write keyed values"
+msgstr "写入键值"
+
+msgid "Sink configuration"
+msgstr "Sink 配置"
+
+msgid "`RedisSinkConfig` field"
+msgstr "`RedisSinkConfig` 字段"
+
+msgid "`data_type`"
+msgstr "`data_type`"
+
+msgid "`STRING`"
+msgstr "`STRING`"
+
+msgid "`STRING`, `HASH`, `SET`, or `LIST`."
+msgstr "`STRING`、`HASH`、`SET` 或 `LIST`。"
+
+msgid "`key_prefix`"
+msgstr "`key_prefix`"
+
+msgid "Optional non-empty namespace prefix."
+msgstr "可选的非空命名空间前缀。"
+
+msgid "`delimiter`"
+msgstr "`delimiter`"
+
+msgid "`:`"
+msgstr "`:`"
+
+msgid "Non-empty prefix/key separator."
+msgstr "非空的前缀/键分隔符。"
+
+msgid "`ttl`"
+msgstr "`ttl`"
+
+msgid "Positive expiration duration applied after replacement."
+msgstr "替换后应用的正数过期时长。"
+
+msgid "Positive Redis pipeline batch size."
+msgstr "正数 Redis Pipeline 批次大小。"
+
+msgid "`flush_interval`"
+msgstr "`flush_interval`"
+
+msgid "1 second"
+msgstr "1 秒"
+
+msgid "Positive maximum buffering interval."
+msgstr "正数最大缓冲间隔。"
+
+msgid "`buffer_capacity`"
+msgstr "`buffer_capacity`"
+
+msgid "`5000`"
+msgstr "`5000`"
+
+msgid "Bounded buffer capacity; at least `batch_size`."
+msgstr "有界缓冲区容量；至少为 `batch_size`。"
+
+msgid ""
+"`write_redis` also accepts `num_cpus`, `num_gpus`, `concurrency`, "
+"operator `batch_size`, `batch_timeout` (default 3 seconds), and `name`. "
+"The operator batch size controls how Klein delivers records to the sink; "
+"the identically named `RedisSinkConfig.batch_size` controls the sink's "
+"internal Redis pipeline."
+msgstr ""
+"`write_redis` 还接受 `num_cpus`、`num_gpus`、`concurrency`、Operator "
+"`batch_size`、`batch_timeout`（默认 3 秒）和 `name`。Operator 批次大小控制 Klein 向 Sink"
+" 交付记录的方式；同名的 `RedisSinkConfig.batch_size` 控制 Sink 内部 Redis Pipeline。"
+
+msgid ""
+"The sink uses `SET` for strings. It transactionally replaces hashes, "
+"lists, and sets using `DEL` followed by `HSET`, `RPUSH`, or `SADD`; an "
+"empty collection leaves the key deleted. Repeating the same replacement "
+"is idempotent and list order is preserved."
+msgstr ""
+"Sink 对字符串使用 `SET`。它通过先执行 `DEL`，再执行 `HSET`、`RPUSH` 或 `SADD`，以事务方式替换 "
+"Hash、List 和 Set；空集合会使键保持已删除状态。重复执行相同替换是幂等的，并会保留 List 顺序。"
+
+msgid "Delivery guarantees and limits"
+msgstr "交付保证与限制"
+
+msgid ""
+"Redis output is native streaming-only and automatically makes the overall"
+" job streaming. The sink flushes at a checkpoint barrier, but Redis "
+"mutations happen before checkpoint durability and are not a Klein two-"
+"phase commit. Delivery is therefore **at-least-once**. Deterministic "
+"replacement makes an identical replay idempotent per key, but concurrent "
+"writers, non-deterministic values, and cross-key ordering can still "
+"change the result."
+msgstr ""
+"Redis 输出仅支持原生流处理，并会自动使整个作业采用流处理。Sink 会在检查点 Barrier 处刷新，但 Redis "
+"变更发生在检查点持久化之前，并不属于 Klein 两阶段提交。因此，交付具有 **at-least-once** "
+"语义。确定性替换使相同重放对每个键幂等，但并发 Writer、非确定性值和跨键顺序仍可能改变结果。"
+
+#, python-brace-format
+msgid ""
+"Redis has no built-in Table DDL factory. Use the DataStream API or "
+"implement a [custom TableFactory](custom.md). Connector metrics and retry"
+" logs are described in [Observability](../observability.md); API types "
+"are listed in the {doc}`Redis API reference <../api/redis>`."
+msgstr ""
+"Redis 没有内置 Table DDL Factory。请使用 DataStream API，或实现[自定义 "
+"TableFactory](custom.md)。Connector "
+"指标和重试日志请参阅[可观测性](../observability.md)；API 类型请参阅 {doc}`Redis API reference"
+" <../api/redis>`。"
+
+msgid "Read continuous Apache RocketMQ topics with Klein for Ray."
+msgstr "使用 Klein for Ray 读取连续 Apache RocketMQ topic。"
+
+msgid "RocketMQ"
+msgstr "RocketMQ"
+
+msgid ""
+"Klein reads Apache RocketMQ topics as unbounded `DataStream` inputs "
+"through the official remoting-protocol Python client. The connector "
+"supports clustering and broadcasting consumers, Tag expressions, orderly "
+"callbacks, ACL credentials, SSL, client consume threads, and Ray source "
+"parallelism."
+msgstr ""
+"Klein 通过官方 remoting-protocol Python Client，将 Apache RocketMQ topic 读取为无界 "
+"`DataStream` 输入。该 Connector 支持 clustering 和 broadcasting Consumer、Tag "
+"表达式、顺序回调、ACL 凭据、SSL、Client 消费线程和 Ray Source 并行度。"
+
+msgid "Install"
+msgstr "安装"
+
+msgid ""
+"`rocketmq-client-python` wraps the native `librocketmq` library. Install "
+"a compatible `librocketmq` on every Ray worker, or use a client wheel "
+"that bundles it. This connector targets remoting-protocol RocketMQ "
+"deployments; it is not a RocketMQ 5 gRPC SimpleConsumer implementation."
+msgstr ""
+"`rocketmq-client-python` 封装原生 `librocketmq` 库。请在每个 Ray Worker 上安装兼容的 "
+"`librocketmq`，或使用已捆绑该库的 Client Wheel。此 Connector 面向 remoting-protocol "
+"RocketMQ 部署；它不是 RocketMQ 5 gRPC SimpleConsumer 实现。"
+
+msgid "Read a topic"
+msgstr "读取 topic"
+
+msgid ""
+"In clustering mode, all source subtasks join the same consumer group and "
+"RocketMQ distributes messages among them. Set `concurrency` to the "
+"desired number of Ray source subtasks. Broadcasting mode requires "
+"`concurrency=1`; otherwise every source subtask would emit its own copy."
+msgstr ""
+"在 clustering 模式下，所有 Source Subtask 都会加入同一个消费组，RocketMQ 在它们之间分发消息。请将 "
+"`concurrency` 设置为所需的 Ray Source Subtask 数量。broadcasting 模式要求 "
+"`concurrency=1`；否则每个 Source Subtask 都会发出自己的副本。"
+
+msgid "Options"
+msgstr "选项"
+
+msgid "Option"
+msgstr "选项"
+
+msgid "Topic to subscribe to."
+msgstr "要订阅的 topic。"
+
+msgid "`name_server_address`"
+msgstr "`name_server_address`"
+
+msgid ""
+"RocketMQ NameServer address, such as `host:9876`; separate multiple "
+"addresses with `;`."
+msgstr "RocketMQ NameServer 地址，例如 `host:9876`；多个地址使用 `;` 分隔。"
+
+msgid "`consumer_group`"
+msgstr "`consumer_group`"
+
+msgid "Existing or permitted RocketMQ consumer group."
+msgstr "现有或获准使用的 RocketMQ 消费组。"
+
+msgid "`tag_expression`"
+msgstr "`tag_expression`"
+
+msgid "`\"*\"`"
+msgstr "`\"*\"`"
+
+msgid "RocketMQ Tag subscription expression."
+msgstr "RocketMQ Tag 订阅表达式。"
+
+msgid "`message_model`"
+msgstr "`message_model`"
+
+msgid "`\"clustering\"`"
+msgstr "`\"clustering\"`"
+
+msgid "`\"clustering\"` or `\"broadcasting\"`."
+msgstr "`\"clustering\"` 或 `\"broadcasting\"`。"
+
+msgid "`orderly`"
+msgstr "`orderly`"
+
+msgid "Register the orderly client callback."
+msgstr "注册顺序 Client 回调。"
+
+msgid "`access_key`, `access_secret`"
+msgstr "`access_key`、`access_secret`"
+
+msgid "ACL credentials; both must be provided together."
+msgstr "ACL 凭据；两者必须同时提供。"
+
+msgid "`channel`"
+msgstr "`channel`"
+
+msgid "`\"KLEIN\"`"
+msgstr "`\"KLEIN\"`"
+
+msgid "Credential channel passed to the native client."
+msgstr "传给原生 Client 的凭据 channel。"
+
+msgid "`ssl_enabled`"
+msgstr "`ssl_enabled`"
+
+msgid "Enable native-client SSL."
+msgstr "启用原生 Client SSL。"
+
+msgid "`ssl_property_file`"
+msgstr "`ssl_property_file`"
+
+msgid "Native-client SSL properties file."
+msgstr "原生 Client SSL 属性文件。"
+
+msgid "`consumer_threads`"
+msgstr "`consumer_threads`"
+
+msgid "Callback threads inside each RocketMQ client."
+msgstr "每个 RocketMQ Client 内部的回调线程数。"
+
+msgid "`max_pending_messages`"
+msgstr "`max_pending_messages`"
+
+msgid "Per-subtask bounded handoff queue."
+msgstr "每个 Subtask 的有界交接队列。"
+
+msgid "`poll_timeout_ms`"
+msgstr "`poll_timeout_ms`"
+
+msgid "Source queue wait used for idle detection and cancellation."
+msgstr "用于空闲检测和取消的 Source 队列等待时间。"
+
+msgid "`message_trace_enabled`"
+msgstr "`message_trace_enabled`"
+
+msgid "Enable RocketMQ client message tracing."
+msgstr "启用 RocketMQ Client 消息追踪。"
+
+msgid "Number of Ray source subtasks."
+msgstr "Ray Source Subtask 数量。"
+
+msgid ""
+"The stable 2.0.0 client supports the core consumer, filtering, orderly "
+"mode, message models, and ACL settings. SSL and message tracing require a"
+" client build that exposes the corresponding native setters; Klein raises"
+" a targeted startup error if either option is enabled against an older "
+"build."
+msgstr ""
+"稳定版 2.0.0 Client 支持核心 Consumer、过滤、顺序模式、消息模型和 ACL 设置。SSL 和消息追踪要求 Client "
+"构建公开对应的原生 Setter；如果在旧版构建上启用任一选项，Klein 会抛出有针对性的启动错误。"
+
+msgid "Record shape"
+msgstr "记录结构"
+
+msgid "Each message becomes a mapping with these fields:"
+msgstr "每条消息都会成为包含以下字段的映射："
+
+msgid "Description"
+msgstr "说明"
+
+msgid "Message topic."
+msgstr "消息 topic。"
+
+msgid "`message_id`"
+msgstr "`message_id`"
+
+msgid "RocketMQ message ID."
+msgstr "RocketMQ 消息 ID。"
+
+msgid "Message keys as raw bytes."
+msgstr "以原始字节表示的消息 key。"
+
+msgid "Message body as raw bytes."
+msgstr "以原始字节表示的消息正文。"
+
+msgid "`tags`"
+msgstr "`tags`"
+
+msgid "Message tags as raw bytes."
+msgstr "以原始字节表示的消息 Tag。"
+
+msgid "`queue_id`, `queue_offset`"
+msgstr "`queue_id`、`queue_offset`"
+
+msgid "Logical queue and queue offset."
+msgstr "逻辑队列和队列 offset。"
+
+msgid "`commit_log_offset`"
+msgstr "`commit_log_offset`"
+
+msgid "Broker commit-log offset."
+msgstr "Broker commit-log offset。"
+
+msgid "`born_timestamp`, `store_timestamp`"
+msgstr "`born_timestamp`、`store_timestamp`"
+
+msgid "Millisecond timestamps from RocketMQ."
+msgstr "来自 RocketMQ 的毫秒时间戳。"
+
+msgid "`reconsume_times`"
+msgstr "`reconsume_times`"
+
+msgid "Retry count observed by the client."
+msgstr "Client 观察到的重试次数。"
+
+msgid "`delay_time_level`"
+msgstr "`delay_time_level`"
+
+msgid "Delay level."
+msgstr "延迟级别。"
+
+msgid "`store_size`"
+msgstr "`store_size`"
+
+msgid "Stored message size."
+msgstr "已存储消息大小。"
+
+msgid "`prepared_transaction_offset`"
+msgstr "`prepared_transaction_offset`"
+
+msgid "Transaction preparation offset."
+msgstr "事务准备 offset。"
+
+msgid "Delivery and recovery"
+msgstr "交付与恢复"
+
+msgid ""
+"The Python SDK exposes a PushConsumer callback and does not expose "
+"partition assignment, seek, or checkpoint-controlled offset commits. "
+"Klein copies each native message into a bounded queue and returns "
+"`CONSUME_SUCCESS` only after the source thread has emitted the record and"
+" force-flushed its local transport batch into the next task. If emission "
+"fails or the source is cancelled first, it returns `RECONSUME_LATER`."
+msgstr ""
+"Python SDK 公开 PushConsumer 回调，但不公开分区分配、seek 或由检查点控制的 offset 提交。Klein "
+"会将每条原生消息复制到有界队列中，并且只在 Source 线程发出记录、且将本地传输批次强制刷新到下一个 Task 后返回 "
+"`CONSUME_SUCCESS`。如果发出失败或 Source 先被取消，则返回 `RECONSUME_LATER`。"
+
+msgid ""
+"RocketMQ consumer-group progress is therefore the source recovery "
+"boundary, not Klein's checkpoint metadata. A full job rollback can lose "
+"records that the broker acknowledged after the last durable Klein "
+"checkpoint. Use an idempotent downstream sink and retain message IDs when"
+" deduplication matters. Workloads that require checkpoint-coordinated "
+"source offsets should use the Kafka connector or a custom pull-based "
+"`SourceFunction`."
+msgstr ""
+"因此，RocketMQ 消费组进度是 Source 恢复边界，而不是 Klein 检查点元数据。完整作业回滚可能丢失 Broker 在最近一次持久"
+" Klein 检查点之后已确认的记录。如果去重很重要，请使用幂等的下游 Sink 并保留消息 ID。需要由检查点协调 Source offset "
+"的工作负载应使用 Kafka Connector，或自定义基于 Pull 的 `SourceFunction`。"
+
+#~ msgid "Expressions only[^native-sinks]"
+#~ msgstr "仅表达式 (Expressions only)[^native-sinks]"
+
+#~ msgid "Yes[^redis-transform]"
+#~ msgstr "是 (Yes)[^redis-transform]"
+
+#~ msgid ""
+#~ "Transform methods that accept "
+#~ "`ray_serve_enabled` can be marked in the"
+#~ " original workflow:"
+#~ msgstr "可在原始工作流中标记接受 `ray_serve_enabled` 的 Transform 方法："
+
+#~ msgid ""
+#~ "All marked nodes in a job must "
+#~ "form exactly one connected linear chain."
+#~ " A branch or merge inside the "
+#~ "marked region, or two disconnected "
+#~ "marked regions, is rejected during graph"
+#~ " construction. External fan-in or "
+#~ "fan-out is rewired to the single "
+#~ "proxy boundary. Functions, constructor "
+#~ "arguments, and returned values must "
+#~ "remain serializable and compatible with "
+#~ "the selected operator's batch contract."
+#~ msgstr ""
+#~ "作业中所有已标记节点必须恰好形成一条相连的线性 "
+#~ "Chain。在已标记区域内部出现分支或合并，或存在两个互不相连的已标记区域，都会在构图时被拒绝。外部 Fan-in"
+#~ " 或 Fan-out 会重新连接到单一 Proxy "
+#~ "边界。函数、构造参数和返回值必须保持可序列化，并与所选 Operator 的批次契约兼容。"
+
+#~ msgid "Total HTTP timeout in seconds."
+#~ msgstr "以秒为单位的 HTTP 总超时。"
+
+#~ msgid ""
+#~ "The proxy JSON-encodes NumPy batches,"
+#~ " chooses among configured endpoints, and"
+#~ " reuses one request ID across "
+#~ "retries. Connection errors, timeouts, HTTP "
+#~ "429, and HTTP 499 are retryable; "
+#~ "most other 4xx responses stop retrying."
+#~ " Because a remote deployment can "
+#~ "finish a request before the client "
+#~ "observes a failure, functions should be"
+#~ " deterministic and free of non-"
+#~ "idempotent side effects."
+#~ msgstr ""
+#~ "Proxy 会对 NumPy 批次进行 JSON 编码，从已配置 "
+#~ "Endpoint 中选择一个，并在多次重试中复用同一请求 ID。连接错误、超时、HTTP 429 "
+#~ "和 HTTP 499 可以重试；大多数其他 4xx 响应会停止重试。由于远程"
+#~ " Deployment 可能在 Client "
+#~ "观察到失败前已完成请求，函数应具有确定性，且不包含非幂等副作用。"

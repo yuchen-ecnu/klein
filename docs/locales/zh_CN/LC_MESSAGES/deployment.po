@@ -1,0 +1,208 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Deploy Klein for Ray applications to an existing Ray cluster, Ray Jobs, "
+"containers, and KubeRay."
+msgstr "将 Klein for Ray 应用部署到现有 Ray 集群、Ray Jobs、容器和 KubeRay。"
+
+msgid "Deploy Klein jobs"
+msgstr "部署 Klein 作业"
+
+msgid "A production deployment has three independent pieces:"
+msgstr "生产部署包含三个独立部分："
+
+msgid "a Ray cluster with enough worker resources and observability enabled;"
+msgstr "具备足够 worker 资源且已启用可观测性的 Ray 集群；"
+
+msgid ""
+"an identical Python environment on every node that may run a Klein task;"
+msgstr "每个可能运行 Klein 任务的节点上都有相同的 Python 环境；"
+
+msgid ""
+"a submission process that builds the graph, records the job namespace, and "
+"exits or attaches without owning the job's lifetime."
+msgstr "一个负责构建图、记录作业命名空间，然后退出或连接但不拥有作业生命周期的提交流程。"
+
+msgid ""
+"Klein's streaming JobManager is a named detached actor. Losing the "
+"submitting process does not stop the job, but losing the whole Ray cluster "
+"requires a new submission from durable checkpoint storage."
+msgstr "Klein 的流处理 JobManager 是具名的分离 actor。提交进程丢失不会停止作业，但整个 Ray 集群丢失后必须基于持久检查点存储重新提交。"
+
+msgid "Package the application"
+msgstr "打包应用"
+
+msgid ""
+"Pin Klein and the tested Ray minor together. Install only the extras "
+"required by the graph, on the driver and every eligible worker:"
+msgstr "同时固定 Klein 和已经测试的 Ray 次版本。仅在 driver 和每个符合条件的 worker 上安装图所需的额外依赖："
+
+msgid ""
+"Connector-specific native dependencies also belong in the worker image. For "
+"example, RocketMQ requires a compatible `librocketmq`; RocksDB uses "
+"`rocksdict`; Serve needs `ray[serve]`, `aiohttp`, and `orjson`."
+msgstr "连接器专用的原生依赖也必须包含在 worker 镜像中。例如，RocketMQ 需要兼容的 `librocketmq`；RocksDB 使用 `rocksdict`；Serve 需要 `ray[serve]`、`aiohttp` 和 `orjson`。"
+
+msgid ""
+"Build the image or runtime environment before submission. Do not install "
+"dependencies dynamically inside a UDF: that makes worker startup "
+"nondeterministic and can exceed deployment timeouts."
+msgstr "提交前构建好镜像或运行时环境。不要在 UDF 内动态安装依赖，否则 worker 启动将不可预测，并可能超过部署超时时间。"
+
+msgid "Connect to a cluster"
+msgstr "连接集群"
+
+msgid ""
+"Initialize Ray explicitly when the application needs a remote address, "
+"dashboard, metrics exporter, runtime environment, or custom resources:"
+msgstr "当应用需要远程地址、仪表板、指标导出器、运行时环境或自定义资源时，请显式初始化 Ray："
+
+msgid ""
+"If Ray is not initialized, native streaming execution starts an embedded "
+"local cluster. That is convenient for development but is not a production "
+"deployment strategy."
+msgstr "如果 Ray 尚未初始化，原生流处理执行会启动一个嵌入式本地集群。这便于开发，但不是生产部署策略。"
+
+msgid "Submit with Ray Jobs"
+msgstr "使用 Ray Jobs 提交"
+
+msgid ""
+"Keep graph construction in a normal Python entry point, for example "
+"`pipeline.py`, and submit it with the Ray Jobs mechanism used by the cluster:"
+msgstr "将图构建放在普通 Python 入口点（例如 `pipeline.py`）中，并使用集群采用的 Ray Jobs 机制提交："
+
+msgid ""
+"The submission process may remain attached, or it may exit after printing "
+"the Klein namespace. The detached streaming actors continue running. Capture "
+"the Ray Jobs submission ID, Klein namespace, source consumer identity, code "
+"version, and checkpoint root in deployment metadata."
+msgstr "提交流程可以保持连接，也可以在输出 Klein 命名空间后退出。分离的流处理 actor 会继续运行。请在部署元数据中记录 Ray Jobs 提交 ID、Klein 命名空间、数据源消费者身份、代码版本和检查点根目录。"
+
+msgid ""
+"For container or KubeRay deployments, put the same wheel/application "
+"artifact in the head and worker images or provide an immutable Ray runtime "
+"environment. Mount node-local SSD for RocksDB working state when used, and "
+"provide object storage credentials through workload identity or the "
+"platform's secret mechanism rather than source code."
+msgstr "对于容器或 KubeRay 部署，请在 head 和 worker 镜像中放入相同的 wheel/应用制品，或提供不可变的 Ray 运行时环境。使用 RocksDB 工作状态时，请挂载节点本地 SSD；对象存储凭据应通过工作负载身份或平台的密钥机制提供，不要写入源码。"
+
+msgid "Size resources"
+msgstr "规划资源容量"
+
+msgid ""
+"Each source, transform, and sink declares `num_cpus`, `num_gpus`, and "
+"`concurrency`. The streaming scheduler needs resources for all live "
+"subtasks, the JobManager, checkpoint coordinator, and optional Serve client "
+"actors."
+msgstr "每个 Source、转换和 Sink 都会声明 `num_cpus`、`num_gpus` 和 `concurrency`。流处理调度器需要为所有活动子任务、JobManager、检查点协调器和可选的 Serve 客户端 actor 准备资源。"
+
+msgid "Before submitting:"
+msgstr "提交前："
+
+msgid ""
+"Review the plan for unexpected shuffles, fan-out, concurrency, and resource "
+"requests. Placement groups are attempted by default; if the reservation "
+"cannot be satisfied before its timeout, Klein falls back according to the "
+"configured deployment mode. A fallback can start the job but change locality "
+"and performance, so alert on deployment warnings."
+msgstr "检查计划中是否存在意外的 shuffle、扇出、并发度和资源请求。默认会尝试使用 placement group；如果在超时前无法满足预留请求，Klein 会按配置的部署模式回退。回退可以启动作业，但可能改变数据局部性和性能，因此应针对部署警告设置告警。"
+
+msgid ""
+"The Ray Object Store must hold in-flight data and any hot checkpoint "
+"snapshots. It is not durable storage. Size it together with `pipeline.input-"
+"buffer.size`, output batching, replay-buffer limits, and the largest "
+"expected state snapshot."
+msgstr "Ray Object Store 必须容纳传输中的数据和所有热检查点快照。它不是持久存储。规划容量时应综合考虑 `pipeline.input-buffer.size`、输出批处理、重放缓冲区限制和预期最大的状态快照。"
+
+msgid "Configure durable services"
+msgstr "配置持久服务"
+
+msgid "Production streaming jobs should set:"
+msgstr "生产流处理作业应设置："
+
+msgid "a shared `execution.checkpointing.dir` reachable by every worker;"
+msgstr "每个 worker 都能访问的共享 `execution.checkpointing.dir`；"
+
+msgid ""
+"enough retained checkpoints to survive one corrupt or operationally bad "
+"revision;"
+msgstr "保留足够多的检查点，以应对一个损坏或运行效果不佳的修订版；"
+
+msgid ""
+"stable external source identities where resubmission must recover progress;"
+msgstr "需要在重新提交后恢复进度时，使用稳定的外部数据源身份；"
+
+msgid "explicit output idempotency or transactional behavior;"
+msgstr "明确的输出幂等性或事务行为；"
+
+msgid "Ray metrics export and log retention independent of worker lifetime."
+msgstr "不依赖 worker 生命周期的 Ray 指标导出和日志保留。"
+
+msgid ""
+"For S3-compatible storage, pass filesystem construction settings through "
+"`execution.checkpointing.storage-options`. Prefer identity-based "
+"credentials. Snapshot publication redacts credential-like configuration "
+"fields, but checkpoint metadata and application logs should never receive "
+"raw secrets."
+msgstr "对于兼容 S3 的存储，通过 `execution.checkpointing.storage-options` 传递文件系统构造设置。优先使用基于身份的凭据。快照发布会遮蔽类似凭据的配置字段，但检查点元数据和应用日志绝不能接收原始密钥。"
+
+msgid "Operate the deployed job"
+msgstr "运维已部署的作业"
+
+msgid ""
+"`attach` requires a TTY and detaches on Ctrl+C without stopping the job. "
+"`stop` is cancellation, not savepoint creation. Confirm that an acceptable "
+"completed checkpoint exists before an upgrade or cluster shutdown when the "
+"job must be restored later."
+msgstr "`attach` 需要 TTY；按 Ctrl+C 只会断开连接，不会停止作业。`stop` 表示取消，而不是创建 savepoint。如果稍后需要恢复作业，请在升级或关闭集群前确认存在可接受的已完成检查点。"
+
+msgid "Upgrade procedure"
+msgstr "升级流程"
+
+msgid ""
+"Verify the target Klein/Ray versions against [Compatibility](compatibility."
+"md)."
+msgstr "根据[兼容性](compatibility.md)验证目标 Klein/Ray 版本。"
+
+msgid ""
+"Wait for a completed durable checkpoint and record its exact `chk-N` URI."
+msgstr "等待持久检查点完成，并记录其确切的 `chk-N` URI。"
+
+msgid "Stop the old job and confirm its detached actors are gone."
+msgstr "停止旧作业，并确认其分离 actor 已全部退出。"
+
+msgid "Deploy the new immutable application artifact."
+msgstr "部署新的不可变应用制品。"
+
+msgid ""
+"Resubmit with `execution.savepoint.path` and the original max parallelism."
+msgstr "使用 `execution.savepoint.path` 和原来的最大并行度重新提交。"
+
+msgid ""
+"Validate source position, state restore, sink behavior, and a new completed "
+"checkpoint before declaring success."
+msgstr "验证数据源位置、状态恢复、Sink 行为以及一个新的已完成检查点，再宣布升级成功。"
+
+msgid ""
+"Alpha releases do not promise automatic checkpoint-schema migration. Test an "
+"upgrade against a copy of production-shaped state before using it as the "
+"only recovery path."
+msgstr "Alpha 版本不承诺自动迁移检查点模式。在将升级作为唯一恢复路径前，请使用符合生产规模特征的状态副本进行测试。"

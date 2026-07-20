@@ -42,6 +42,11 @@ different plan or concurrency topology is a different baseline.
 | Placement startup times out | Cluster free resources and placement-group bundle | Reduce requests, add nodes, change placement strategy, or select balanced deployment. |
 | Too many tiny output files | Checkpoint cadence and rolling thresholds | Increase checkpoint interval/records or file rolling limits while preserving recovery objectives. |
 
+Checkpoint cadence is applied per weakly connected physical execution-graph
+domain, not once per source subtask. All sources in one domain share an epoch;
+physically disconnected lanes remain independent and can still produce one set
+of files per lane and interval.
+
 ## Set operator concurrency
 
 `concurrency` creates physical subtasks for native streaming operators and maps
@@ -56,7 +61,9 @@ scarcer of input parallelism, external-service capacity, and cluster resources.
   change the max-parallelism compatibility value.
 
 Keep explicit operator names when comparing plans and metrics across tuning
-runs.
+runs. [Autoscaling and live operator rescaling](operator-rescaling.md)
+explains when a batch concurrency range is dynamic, how to resize a running
+streaming operator, and why `DataStream.rescale()` does not change parallelism.
 
 ## Choose row or batch processing
 

@@ -2,6 +2,8 @@
 import asyncio
 import threading
 import time
+from collections import deque
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 import ray.cloudpickle as cloudpickle
@@ -58,6 +60,10 @@ class SourceStreamTask(StreamTask):
         # operator.run() returns so a concurrent rescale cannot arm a source
         # whose producer loop has already exited but is still reporting status.
         self._source_exhausted = threading.Event()
+        self._requested_checkpoint_ids: deque[int] = deque()
+        self._checkpoint_request_lock = threading.Lock()
+        self._resolved_checkpoint_floor = 0
+        self._checkpoint_wait_stop = threading.Event()
 
     @property
     def _source_operator(self) -> SourceOperator:
@@ -68,6 +74,11 @@ class SourceStreamTask(StreamTask):
 
     async def _on_setup_done(self, runtime_context: RuntimeContext) -> None:
         # Source delivery mode is fixed to INLINE when TaskOutput is built.
+        source_shutdown = getattr(self, "_source_shutdown_requested", None)
+        if source_shutdown is None:
+            source_shutdown = self._source_shutdown_requested = threading.Event()
+        source_shutdown.clear()
+        self._checkpoint_wait_stop.clear()
         source_operator = self._source_operator
         source_operator.bind_record_emitter(self._on_records_emitted)
         self._source_rescale_loop = asyncio.get_running_loop()
@@ -96,8 +107,15 @@ class SourceStreamTask(StreamTask):
         """
         if self._state is not None and self._state.operator is not None:
             self._source_operator.interrupt()
-        self._source_shutdown_requested.set()
-        self._source_exhausted.set()
+        source_shutdown = getattr(self, "_source_shutdown_requested", None)
+        if source_shutdown is None:
+            source_shutdown = self._source_shutdown_requested = threading.Event()
+        source_shutdown.set()
+        source_exhausted = getattr(self, "_source_exhausted", None)
+        if source_exhausted is None:
+            source_exhausted = self._source_exhausted = threading.Event()
+        source_exhausted.set()
+        self._checkpoint_wait_stop.set()
         self._source_rescale_resume.set()
         await super().stop(timeout)
 
@@ -111,6 +129,7 @@ class SourceStreamTask(StreamTask):
         requested_edges = tuple(edge_indices)
         if not requested_edges:
             raise ValueError("an upstream rescale participant needs a target output edge")
+        barrier = RescaleBarrier(operation_id, target_operator_id)
         new_participant = self._begin_rescale(operation_id, "upstream")
         if not new_participant:
             if self._rescale_edge_indices != requested_edges:
@@ -118,7 +137,7 @@ class SourceStreamTask(StreamTask):
             await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
             return True
         self._rescale_edge_indices = requested_edges
-        self._source_rescale_barrier = RescaleBarrier(operation_id, target_operator_id)
+        self._source_rescale_barrier = barrier
         self._source_rescale_resume.clear()
         self._source_rescale_requested.set()
         await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
@@ -148,17 +167,27 @@ class SourceStreamTask(StreamTask):
         commit a final checkpoint and reach FINISHED.
         """
         self._source_operator.run()
-        self._source_exhausted.set()
+        source_exhausted = getattr(self, "_source_exhausted", None)
+        if source_exhausted is None:
+            source_exhausted = self._source_exhausted = threading.Event()
+        source_exhausted.set()
+        if self._checkpoint_wait_stop.is_set():
+            return
         if self._state.output is not None:
             self._state.output.collect(Watermark(MAX_WATERMARK))
-            barrier = self._await_end_of_data_barrier()
+            checkpoint_id = self._pop_requested_checkpoint()
+            if checkpoint_id is None:
+                while self._inflight_source_states and not self._checkpoint_wait_stop.is_set():
+                    self._emit_pending_rescale_barrier()
+                    time.sleep(0.01)
+                if self._checkpoint_wait_stop.is_set():
+                    return
+            barrier = self._await_terminal_barrier(checkpoint_id)
             while barrier is not None and barrier.coordinated:
                 self._emit_checkpoint_barrier(barrier)
-                barrier = self._await_end_of_data_barrier()
+                barrier = self._await_terminal_barrier(self._pop_requested_checkpoint())
             if barrier is None:
                 return
-            if not isinstance(barrier, EndOfData):
-                raise RuntimeError("checkpoint coordinator returned a non-terminal EOF barrier")
             self._emit_checkpoint_barrier(barrier)
         # Close the arm-vs-FINISHED race before the scheduler status RPC.
         self._eof_reached = True
@@ -190,14 +219,59 @@ class SourceStreamTask(StreamTask):
         """
         self._source_operator.interrupt()
 
-    def request_checkpoint(self) -> bool:
-        """Request a checkpoint at the next cooperative source boundary."""
+    def request_checkpoint(self, checkpoint_id: int | None = None) -> bool:
+        """Request a local or coordinator-assigned checkpoint at the next boundary."""
 
         source_exhausted = getattr(self, "_source_exhausted", None)
         if not self._running or self._eof_reached or (source_exhausted is not None and source_exhausted.is_set()):
             return False
+        if checkpoint_id is not None:
+            if isinstance(checkpoint_id, bool) or not isinstance(checkpoint_id, int):
+                raise TypeError("checkpoint_id must be an integer or None")
+            if checkpoint_id <= 0:
+                raise ValueError("checkpoint_id must be greater than zero")
+            with self._checkpoint_request_lock:
+                if checkpoint_id <= self._resolved_checkpoint_floor:
+                    return False
+                if checkpoint_id in self._inflight_source_states or checkpoint_id in self._requested_checkpoint_ids:
+                    return False
+                self._requested_checkpoint_ids.append(checkpoint_id)
+            return True
         self._forced_checkpoint_requested.set()
         return True
+
+    def _pop_requested_checkpoint(self) -> int | None:
+        queue = getattr(self, "_requested_checkpoint_ids", None)
+        lock = getattr(self, "_checkpoint_request_lock", None)
+        if queue is None or lock is None:
+            return None
+        with lock:
+            while queue:
+                barrier_id = queue.popleft()
+                if barrier_id <= getattr(self, "_resolved_checkpoint_floor", 0):
+                    continue
+                if barrier_id in self._inflight_source_states:
+                    continue
+                return barrier_id
+            return None
+
+    def _discard_requested_checkpoint(self, barrier_id: int) -> None:
+        queue = getattr(self, "_requested_checkpoint_ids", None)
+        lock = getattr(self, "_checkpoint_request_lock", None)
+        if queue is None or lock is None:
+            return
+        with lock, suppress(ValueError):
+            queue.remove(barrier_id)
+
+    def _remember_resolved_checkpoint(self, barrier_id: int) -> None:
+        lock = getattr(self, "_checkpoint_request_lock", None)
+        if lock is None:
+            return
+        with lock:
+            self._resolved_checkpoint_floor = max(
+                getattr(self, "_resolved_checkpoint_floor", 0),
+                barrier_id,
+            )
 
     def notify_source_checkpoint_complete(self, barrier_id: int) -> tuple[bool, Any]:
         return self._notify_source_checkpoint_complete(barrier_id)
@@ -221,12 +295,22 @@ class SourceStreamTask(StreamTask):
         existed = barrier_id in self._inflight_source_states
         self._inflight_source_states.pop(barrier_id, None)
         self.discard_checkpoint(barrier_id)
-        if self._coordinated_checkpoint_barrier_id == barrier_id and self._running and not self._eof_reached:
+        self._discard_requested_checkpoint(barrier_id)
+        self._remember_resolved_checkpoint(barrier_id)
+        coordinated_barrier_id = getattr(self, "_coordinated_checkpoint_barrier_id", None)
+        if coordinated_barrier_id == barrier_id and self._running and not self._eof_reached:
             self._forced_checkpoint_requested.set()
         self._resume_coordinated_checkpoint(barrier_id)
         if existed:
             logger.debug("Discarded source state for checkpoint barrier %s", barrier_id)
         return existed
+
+    async def abort_checkpoint(self, barrier_id: int) -> bool:
+        # The source's sole executor thread runs the connector loop, so the
+        # base implementation must not submit aligner work to that executor.
+        # Sources have no inbox admission gates; releasing state/request state
+        # is sufficient and stays responsive on the actor loop.
+        return self.discard_source_checkpoint(barrier_id)
 
     def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
         """Drop in-flight barriers from a previous coordinator epoch (<= cutoff).
@@ -242,10 +326,22 @@ class SourceStreamTask(StreamTask):
         stale = [barrier_id for barrier_id in self._inflight_source_states if barrier_id <= cutoff_barrier_id]
         for barrier_id in stale:
             self._inflight_source_states.pop(barrier_id, None)
-        coordinated_barrier_id = self._coordinated_checkpoint_barrier_id
+            self._discard_requested_checkpoint(barrier_id)
+        queue = getattr(self, "_requested_checkpoint_ids", None)
+        lock = getattr(self, "_checkpoint_request_lock", None)
+        if queue is not None and lock is not None:
+            with lock:
+                retained = (barrier_id for barrier_id in queue if barrier_id > cutoff_barrier_id)
+                self._requested_checkpoint_ids = deque(retained)
+        self._remember_resolved_checkpoint(cutoff_barrier_id)
+        coordinated_barrier_id = getattr(self, "_coordinated_checkpoint_barrier_id", None)
         if coordinated_barrier_id is not None and coordinated_barrier_id <= cutoff_barrier_id:
             self._resume_coordinated_checkpoint(coordinated_barrier_id)
-        aligned = super().reset_inflight_before(cutoff_barrier_id)
+        reset_result = self._state.checkpoint_strategy.reset_inflight_before(cutoff_barrier_id)
+        aligned = reset_result if isinstance(reset_result, int) else 0
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            aligned += pump.reset_inflight_before(cutoff_barrier_id)
         if stale or aligned:
             logger.info(
                 "Reclaimed %d orphan in-flight barriers through checkpoint %d after coordinator recovery",
@@ -260,6 +356,7 @@ class SourceStreamTask(StreamTask):
                 logger.warning("Ignoring unknown checkpoint barrier %s", barrier_id)
                 return False, None
             state = self._inflight_source_states.pop(barrier_id)
+            self._remember_resolved_checkpoint(barrier_id)
             return True, state
         except Exception:
             logger.exception("Checkpoint completion notification failed for barrier %s", barrier_id)
@@ -268,6 +365,37 @@ class SourceStreamTask(StreamTask):
     def _on_records_emitted(self, record_emitted: bool, record_count: int = 1) -> Barrier | None:
         if super()._check_end_of_stream():
             return None
+        self._emit_pending_rescale_barrier()
+        requested_checkpoint_id = self._pop_requested_checkpoint()
+        if requested_checkpoint_id is not None:
+            barrier = self._generate_barrier(checkpoint_id=requested_checkpoint_id)
+            if barrier:
+                self._forced_checkpoint_requested.clear()
+                reset_trigger = getattr(self._state.checkpoint_strategy, "reset_trigger", None)
+                if callable(reset_trigger):
+                    reset_trigger()
+                self._state.metrics.barriers_out.inc()
+                if barrier.coordinated:
+                    self._emit_checkpoint_barrier(barrier)
+                    return None
+            return barrier
+
+        force_checkpoint = self._forced_checkpoint_requested.is_set()
+        if force_checkpoint or self._state.checkpoint_strategy.should_trigger(record_emitted, record_count):
+            barrier = self._generate_barrier(force=force_checkpoint)
+            if barrier:
+                if force_checkpoint:
+                    self._forced_checkpoint_requested.clear()
+                self._state.metrics.barriers_out.inc()
+                if barrier.coordinated:
+                    self._emit_checkpoint_barrier(barrier)
+                    return None
+            return barrier
+        return None
+
+    def _emit_pending_rescale_barrier(self) -> bool:
+        """Emit and park at a requested rescale cut from the source thread."""
+
         if self._source_rescale_requested.is_set():
             barrier = self._source_rescale_barrier
             output = self._state.output
@@ -282,18 +410,8 @@ class SourceStreamTask(StreamTask):
                 raise RuntimeError("source rescale event loop is unavailable")
             loop.call_soon_threadsafe(self._rescale_ready.set)
             self._source_rescale_resume.wait()
-        force_checkpoint = self._forced_checkpoint_requested.is_set()
-        if force_checkpoint or self._state.checkpoint_strategy.should_trigger(record_emitted, record_count):
-            barrier = self._generate_barrier(force=force_checkpoint)
-            if barrier:
-                if force_checkpoint:
-                    self._forced_checkpoint_requested.clear()
-                self._state.metrics.barriers_out.inc()
-                if barrier.coordinated:
-                    self._emit_checkpoint_barrier(barrier)
-                    return None
-            return barrier
-        return None
+            return True
+        return False
 
     def _emit_checkpoint_barrier(self, barrier: Barrier) -> None:
         output = self._state.output
@@ -304,12 +422,45 @@ class SourceStreamTask(StreamTask):
         output.collect(barrier)
 
     def _resume_coordinated_checkpoint(self, barrier_id: int) -> None:
-        if self._coordinated_checkpoint_barrier_id != barrier_id:
+        if getattr(self, "_coordinated_checkpoint_barrier_id", None) != barrier_id:
             return
         self._coordinated_checkpoint_barrier_id = None
 
-    def _generate_barrier(self, is_eof: bool = False, *, force: bool = False) -> Barrier | None:
-        barrier = self._state.checkpoint_strategy.generate_next_barrier(is_eof, force=force)
+    def _await_terminal_barrier(self, checkpoint_id: int | None) -> Barrier | None:
+        """Retry a canceled EOF epoch without starving an active rescale."""
+
+        while not self._checkpoint_wait_stop.is_set():
+            self._emit_pending_rescale_barrier()
+            barrier = self._generate_barrier(
+                is_eof=True,
+                force=True,
+                checkpoint_id=checkpoint_id,
+            )
+            if barrier is not None:
+                return barrier
+            # The assigned epoch may have been canceled by the rescale gate.
+            # Retry queued coordinator work first, then allocate a new terminal
+            # epoch once admission reopens.
+            checkpoint_id = self._pop_requested_checkpoint()
+            time.sleep(0.01)
+        return None
+
+    def _generate_barrier(
+        self,
+        is_eof: bool = False,
+        *,
+        force: bool = False,
+        checkpoint_id: int | None = None,
+    ) -> Barrier | None:
+        if checkpoint_id is None:
+            barrier = self._state.checkpoint_strategy.generate_next_barrier(is_eof, force=force)
+        else:
+            barrier = self._state.checkpoint_strategy.generate_next_barrier(
+                is_eof,
+                force=force,
+                checkpoint_id=checkpoint_id,
+            )
+            self._discard_requested_checkpoint(checkpoint_id)
         if barrier is not None:
             # A source can be operator-chained directly with a sink. In that
             # layout the barrier never enters InboxPump, so the source task must
@@ -317,7 +468,7 @@ class SourceStreamTask(StreamTask):
             # for ordinary downstream tasks.
             self._state.operator.flush()
             self.prepare_sink_commit(barrier.id)
-            if isinstance(barrier, EndOfData):
+            if is_eof or isinstance(barrier, EndOfData):
                 self._state.operator.finish()
             state = self._source_operator.snapshot_state(barrier.id)
             self._inflight_source_states[barrier.id] = state
@@ -345,5 +496,6 @@ class SourceStreamTask(StreamTask):
             callback_succeeded = False
             logger.exception("Source checkpoint callback failed for durable checkpoint %s", checkpoint_id)
         finally:
+            self._remember_resolved_checkpoint(checkpoint_id)
             self._resume_coordinated_checkpoint(checkpoint_id)
         return callback_succeeded

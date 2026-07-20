@@ -22,22 +22,26 @@ control-plane, data-plane, and recovery components.
 
 A `DataStream` is a logical collection of records and the operations needed to produce them. Methods such as `map()`, `filter()`, `key_by()`, and `join()` add operators to the graph. They don't run work when you call them.
 
-A stream belongs to one `KleinContext`. The module-level `ray.klein` functions use a process-global context so source creation matches `ray.data`. Construct `KleinContext` directly only when one process needs isolated graph builders.
+A stream belongs to one internal pipeline owner. Module-level `ray.klein`
+functions hide that bookkeeping, matching Ray Data's source-construction
+style. Direct `KleinContext` construction is an advanced escape hatch for a
+process that must build isolated pipelines.
 
 ## How does Klein choose an execution mode?
 
-In `auto` mode, Klein selects an execution mode from source boundedness and
-sink capability:
+In `auto` mode, Klein selects one execution mode for the whole graph:
 
-- An unbounded source or a sink without a Ray Data lowering selects streaming
-  execution. Klein deploys long-lived source, transform, and sink tasks on Ray.
-- Otherwise Klein selects batch and lowers the graph to lazy Ray Data
-  `Dataset` operations.
+- An unbounded source, any graph vertex without a batch lowering, or
+  `udf.ignore-exception=true` selects streaming execution. Klein deploys
+  long-lived source, transform, and sink tasks on Ray. The exception policy
+  needs Klein's record-level error handling and metric semantics.
+- Only a fully batch-lowerable, bounded graph selects batch and becomes lazy
+  Ray Data `Dataset` operations.
 
 You can override detection through `execution.runtime.mode`. A graph must use
-operations supported by its selected mode. In particular, a bounded custom
-`SourceFunction` without a Ray Data lowering must explicitly select streaming;
-automatic selection does not inspect bounded source lowerings.
+operations supported by its selected mode. A bounded custom `SourceFunction`
+without a batch lowering, or a graph with a streaming-only intermediate
+operator, therefore selects streaming automatically; forcing batch fails.
 
 ## How does data move through a streaming graph?
 

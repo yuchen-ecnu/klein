@@ -5,11 +5,13 @@ import asyncio
 import hashlib
 import pickle
 import threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from ray.exceptions import RayTaskError
 
 from ray.klein._internal.deadline import Deadline
 from ray.klein.api.functions.logical_function import LogicalFunction
@@ -20,6 +22,7 @@ from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.config.checkpoint_options import CheckpointOptions
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.state_options import StateOptions
+from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 from ray.klein.observability.metrics.metric_group import JobMetricGroup
 from ray.klein.runtime.collector.delivery_journal import DeliveryJournal
 from ray.klein.runtime.collector.edge_output import EdgeOutput
@@ -27,7 +30,7 @@ from ray.klein.runtime.collector.task_output import TaskOutput
 from ray.klein.runtime.coordinator import checkpoint_coordinator as checkpoint_coordinator_module
 from ray.klein.runtime.coordinator.checkpoint import Checkpoint
 from ray.klein.runtime.coordinator.checkpoint_coordinator import CheckpointCoordinator
-from ray.klein.runtime.coordinator.checkpoint_strategy import _BarrierAligner
+from ray.klein.runtime.coordinator.checkpoint_strategy import AlignedCheckpointStrategy, _BarrierAligner
 from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
@@ -36,12 +39,13 @@ from ray.klein.runtime.graph.edge_spec import EdgeSpec
 from ray.klein.runtime.graph.logical_graph_builder import LogicalGraphBuilder
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
-from ray.klein.runtime.job_manager.job_manager import JobManager
+from ray.klein.runtime.job_manager.job_manager import JobManager, _format_rescale_error
 from ray.klein.runtime.job_manager.progress import OperatorProgress, ProgressSnapshot
 from ray.klein.runtime.message import Barrier, DeliveryChannel, Record, RescaleBarrier
 from ray.klein.runtime.operator.operator import StreamOperator
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.operator.operator_type import OperatorType
+from ray.klein.runtime.operator.sink import SinkOperator
 from ray.klein.runtime.partitioning import ForwardPartitioner, RoundRobinPartitioner
 from ray.klein.runtime.resources import Resources
 from ray.klein.runtime.scheduler import job_master as job_master_module
@@ -72,12 +76,33 @@ def _vertex(job: str, index: int, node_type: NodeType, parallelism: int) -> Vert
     )
 
 
-def _graphs(parallelism: int = 2, source_parallelism: int = 1):
+def _graphs(
+    parallelism: int = 2,
+    source_parallelism: int = 1,
+    *,
+    console_sink: bool = False,
+):
     config = Configuration(include_environment=False)
     builder = LogicalGraphBuilder("job", config)
     source = _vertex("job", 1, NodeType.SOURCE, source_parallelism)
     target = _vertex("job", 2, NodeType.TRANSFORM, parallelism)
-    sink = _vertex("job", 3, NodeType.SINK, 2)
+    sink = (
+        VertexSpec(
+            VertexId("job", 3),
+            "ConsoleSinkAll[3]",
+            OperatorSpec(
+                SinkOperator,
+                LogicalFunction(ConsoleSinkFunction),
+                3,
+                "ConsoleSinkAll",
+                OperatorType.SINK,
+            ),
+            NodeType.SINK,
+            Resources(num_cpus=0, concurrency=2),
+        )
+        if console_sink
+        else _vertex("job", 3, NodeType.SINK, 2)
+    )
     for vertex in (source, target, sink):
         builder.add_vertex(vertex)
     source_partitioner = ForwardPartitioner() if source_parallelism == parallelism else RoundRobinPartitioner()
@@ -134,6 +159,22 @@ def _managed_state_reference(
         len(payload),
         f"sha256:{hashlib.sha256(payload).hexdigest()}",
         inline_payload=payload,
+    )
+
+
+async def _wait_for_rescale_status(
+    manager: JobManager,
+    operation_id: str,
+    expected_status: str,
+) -> dict:
+    for _ in range(200):
+        operation = manager._rescale_operations[operation_id]
+        if operation["status"] == expected_status:
+            return operation
+        await asyncio.sleep(0.01)
+    pytest.fail(
+        f"rescale {operation_id} did not reach {expected_status}; "
+        f"last status was {manager._rescale_operations[operation_id]['status']}"
     )
 
 
@@ -550,14 +591,84 @@ async def test_rescale_state_is_materialized_once_and_served_as_one_target_parti
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_gate_waits_for_old_topology_inflight() -> None:
+async def test_checkpoint_gate_aborts_old_topology_inflight() -> None:
     coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
-    coordinator._inflight_checkpoints[1] = Mock()
-    waiting = asyncio.create_task(coordinator.begin_operator_rescale("resize-1", timeout=1))
-    await asyncio.sleep(0)
-    assert not waiting.done()
-    coordinator._inflight_checkpoints.clear()
-    assert await waiting is True
+    source_id = ExecutionVertexId(1, 0)
+    sink_id = ExecutionVertexId(3, 0)
+    source_task = Mock()
+    sink_task = Mock()
+    vertices = {
+        source_id: SimpleNamespace(id=source_id, stream_task=source_task),
+        sink_id: SimpleNamespace(id=sink_id, stream_task=sink_task),
+    }
+    coordinator._execution_graph = SimpleNamespace(
+        checkpoint_domains=(),
+        find_execution_vertex=vertices.get,
+        execution_vertex=vertices.__getitem__,
+    )
+    checkpoint = Checkpoint(
+        1,
+        1,
+        (source_id,),
+        domain_id="old-domain",
+        required_committers=(sink_id,),
+    )
+    checkpoint.mark_in_progress()
+    coordinator._checkpoint_history.append(checkpoint)
+    coordinator._inflight_checkpoints[1] = checkpoint
+    coordinator._active_checkpoint_by_domain["old-domain"] = 1
+    coordinator._inflight_operator_states[1] = {"2:0": Mock()}
+    coordinator._inflight_sink_committables[1] = {}
+
+    assert await coordinator.begin_operator_rescale("resize-1", timeout=1) is True
+    # Retrying the same operation is idempotent and must not repeat cleanup.
+    assert await coordinator.begin_operator_rescale("resize-1", timeout=1) is True
+
+    assert coordinator._inflight_checkpoints == {}
+    assert coordinator._active_checkpoint_by_domain == {}
+    assert coordinator._inflight_operator_states == {}
+    assert coordinator._inflight_sink_committables == {}
+    assert checkpoint.status.name == "FAILED"
+    assert checkpoint.reason == "Checkpoint aborted for operator rescale resize-1."
+    assert coordinator._checkpoints_failed.value == 1
+    assert coordinator._checkpoints_in_progress.value == 0
+    source_task.discard_source_checkpoint.assert_called_once_with(1)
+    source_task.abort_checkpoint.assert_called_once_with(1)
+    sink_task.abort_checkpoint.assert_called_once_with(1)
+    coordinator.finish_operator_rescale("resize-1")
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_gate_retry_waits_for_inflight_cleanup() -> None:
+    coordinator = CheckpointCoordinator(Configuration(include_environment=False), job_id="job")
+    source_id = ExecutionVertexId(1, 0)
+    checkpoint = Checkpoint(1, 1, (source_id,))
+    checkpoint.mark_in_progress()
+    coordinator._inflight_checkpoints[1] = checkpoint
+    cleanup_started = asyncio.Event()
+    release_cleanup = asyncio.Event()
+
+    async def delayed_cleanup(*_args, **_kwargs) -> None:
+        cleanup_started.set()
+        await release_cleanup.wait()
+
+    with patch.object(coordinator, "_fail_checkpoint", side_effect=delayed_cleanup) as cleanup:
+        first = asyncio.create_task(coordinator.begin_operator_rescale("resize-1", timeout=1))
+        await cleanup_started.wait()
+        retry = asyncio.create_task(coordinator.begin_operator_rescale("resize-1", timeout=1))
+        await asyncio.sleep(0)
+        assert not retry.done()
+
+        release_cleanup.set()
+        assert await first is True
+        assert await retry is True
+
+    cleanup.assert_awaited_once_with(
+        checkpoint,
+        1,
+        "Checkpoint aborted for operator rescale resize-1.",
+        wait_for_task_abort=True,
+    )
     coordinator.finish_operator_rescale("resize-1")
 
 
@@ -741,6 +852,8 @@ async def test_job_manager_noop_rejection_success_and_failed_swap_preserve_commi
     completed = await manager.rescale_operator("2", 3)
     assert completed["status"] == "COMPLETED"
     assert manager.execution_graph.job_vertex(1) is physical.job_vertex(1)
+    while manager._active_rescale_operation_id is not None:
+        await asyncio.sleep(0)
     committed = manager.execution_graph
     for vertex in committed.execution_vertices:
         if vertex.status == ExecutionVertexStatus.CREATED:
@@ -750,8 +863,278 @@ async def test_job_manager_noop_rejection_success_and_failed_swap_preserve_commi
     manager.run_exclusive = AsyncMock(side_effect=RuntimeError("swap failed"))
     failed = await manager.rescale_operator(2, 4)
     assert failed["status"] == "FAILED"
+    assert failed["error"] == "RuntimeError: swap failed"
     assert manager.execution_graph is committed
     manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_job_manager_async_rescale_admission_is_observable_and_rejects_a_second_request() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=None)
+    manager.job_master.restart_window.return_value = (0, 0, 0)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_rescale(*_args):
+        entered.set()
+        await release.wait()
+
+    manager.run_exclusive = AsyncMock(side_effect=blocked_rescale)
+
+    accepted = await manager.submit_operator_rescale(2, 3)
+
+    assert accepted["status"] == "ACCEPTED"
+    assert accepted["phase"] == "QUEUED"
+    assert accepted["operation_id"]
+    await entered.wait()
+
+    snapshot = await manager.dashboard_snapshot()
+    operation = snapshot["rescale_operations"][0]
+    target = next(operator for operator in snapshot["operators"] if operator["op_id"] == 2)
+    assert operation["operation_id"] == accepted["operation_id"]
+    assert operation["status"] == "RUNNING"
+    assert operation["phase"] == "COORDINATING"
+    assert target["rescale_operation"]["operation_id"] == accepted["operation_id"]
+
+    rejected = await manager.submit_operator_rescale(2, 4)
+    assert rejected["status"] == "REJECTED"
+    assert rejected["active_operation_id"] == accepted["operation_id"]
+
+    release.set()
+    completed = await manager._wait_for_rescale_operation(accepted["operation_id"])
+    assert completed["status"] == "COMPLETED"
+    assert manager._active_rescale_operation_id is None
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_job_manager_tracks_stabilization_without_holding_lifecycle_lock() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    fence = {"active": True}
+    coordinator = SimpleNamespace(operator_rescale_recovery_fenced=lambda: fence["active"])
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=coordinator)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    manager.run_exclusive = AsyncMock(return_value=None)
+
+    synchronous = asyncio.create_task(manager.rescale_operator(2, 3))
+    for _ in range(100):
+        if manager._rescale_operations and next(iter(manager._rescale_operations.values()))["status"] == "STABILIZING":
+            break
+        await asyncio.sleep(0)
+    operation = next(iter(manager._rescale_operations.values()))
+
+    assert operation["status"] == "STABILIZING"
+    assert manager._lifecycle_lock.locked() is False
+    # The compatibility API returns at topology commit while the authoritative
+    # operation continues through its stabilization checkpoint.
+    assert (await asyncio.wait_for(synchronous, timeout=1))["status"] == "COMPLETED"
+    assert operation["status"] == "STABILIZING"
+
+    fence["active"] = False
+    for _ in range(100):
+        if operation["status"] == "COMPLETED":
+            break
+        await asyncio.sleep(0.01)
+    assert operation["status"] == "COMPLETED"
+    assert operation["ended_at_ms"] is not None
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_cancelling_rescale_caller_does_not_cancel_admitted_background_operation() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=None)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_rescale(*_args):
+        entered.set()
+        await release.wait()
+
+    manager.run_exclusive = AsyncMock(side_effect=blocked_rescale)
+    caller = asyncio.create_task(manager.rescale_operator(2, 3))
+    await entered.wait()
+    operation_id = manager._active_rescale_operation_id
+    background = manager._rescale_task_obj
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert operation_id is not None
+    assert background is not None
+    assert background.done() is False
+    assert manager._rescale_operations[operation_id]["status"] == "RUNNING"
+
+    release.set()
+    operation = await _wait_for_rescale_status(manager, operation_id, "COMPLETED")
+    await asyncio.sleep(0)
+    assert operation["target_parallelism"] == 3
+    assert manager.execution_graph.job_vertex(2).concurrency == 3
+    assert manager._active_rescale_operation_id is None
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_rescale_stabilization_failure_is_retained_after_topology_commit() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    coordinator = SimpleNamespace(operator_rescale_recovery_fenced=lambda: True)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=coordinator)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    manager.run_exclusive = AsyncMock(return_value=None)
+
+    accepted = await manager.submit_operator_rescale(2, 3)
+    operation = await _wait_for_rescale_status(manager, accepted["operation_id"], "STABILIZING")
+    assert operation["ended_at_ms"] is None
+
+    manager._job_status = JobStatus.CANCELLED
+    operation = await _wait_for_rescale_status(manager, accepted["operation_id"], "FAILED")
+    await asyncio.sleep(0)
+
+    assert operation["phase"] == "COMPLETED"
+    assert "CANCELLED" in operation["error"]
+    assert operation["ended_at_ms"] is not None
+    assert manager._active_rescale_operation_id is None
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_async_scale_out_and_in_are_retained_in_snapshot_history() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=None)
+    manager.job_master.restart_window.return_value = (0, 0, 0)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    manager.run_exclusive = AsyncMock(return_value=None)
+
+    scale_out = await manager.submit_operator_rescale(2, 4)
+    assert scale_out["status"] == "ACCEPTED"
+    assert scale_out["previous_parallelism"] == 2
+    await _wait_for_rescale_status(manager, scale_out["operation_id"], "COMPLETED")
+    await asyncio.sleep(0)
+    assert manager.execution_graph.job_vertex(2).concurrency == 4
+
+    for vertex in manager.execution_graph.execution_vertices:
+        if vertex.status == ExecutionVertexStatus.CREATED:
+            vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+            vertex.transition_to(ExecutionVertexStatus.RUNNING)
+    scale_in = await manager.submit_operator_rescale(2, 2)
+    assert scale_in["status"] == "ACCEPTED"
+    assert scale_in["previous_parallelism"] == 4
+    await _wait_for_rescale_status(manager, scale_in["operation_id"], "COMPLETED")
+    await asyncio.sleep(0)
+    assert manager.execution_graph.job_vertex(2).concurrency == 2
+
+    for vertex in manager.execution_graph.execution_vertices:
+        if vertex.status == ExecutionVertexStatus.CREATED:
+            vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+            vertex.transition_to(ExecutionVertexStatus.RUNNING)
+    snapshot = await manager.dashboard_snapshot()
+    operations = snapshot["rescale_operations"]
+    target = next(operator for operator in snapshot["operators"] if operator["op_id"] == 2)
+
+    assert [operation["operation_id"] for operation in operations[:2]] == [
+        scale_in["operation_id"],
+        scale_out["operation_id"],
+    ]
+    assert [operation["target_parallelism"] for operation in operations[:2]] == [2, 4]
+    assert all(operation["status"] == "COMPLETED" for operation in operations[:2])
+    assert target["rescale_operation"]["operation_id"] == scale_in["operation_id"]
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_job_manager_rejects_unknown_operator_before_async_admission() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=None)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+
+    rejected = await manager.submit_operator_rescale(999, 3)
+
+    assert rejected["status"] == "REJECTED"
+    assert rejected["ended_at_ms"] is not None
+    assert manager._active_rescale_operation_id is None
+    assert manager._rescale_task_obj is None
+    assert next(iter(manager._rescale_operations.values()))["operation_id"] == rejected["operation_id"]
+    for operator_id in range(1_000, 1_025):
+        assert (await manager.submit_operator_rescale(operator_id, 3))["status"] == "REJECTED"
+    assert len(manager._rescale_operations) == 20
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_job_manager_rescale_failure_reports_nested_ray_cause_without_traceback() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(execution_graph=physical)
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    timeout = TimeoutError("\x1b[31mtimed out waiting for in-flight checkpoints before rescale\x1b[0m")
+    remote_timeout = RayTaskError(
+        "begin_operator_rescale",
+        "\x1b[36mray::CheckpointCoordinator.begin_operator_rescale()\x1b[39m\nremote traceback",
+        timeout,
+    ).as_instanceof_cause()
+    manager.run_exclusive = AsyncMock(
+        side_effect=RayTaskError(
+            "rescale_operator",
+            "\x1b[36mray::JobMaster.rescale_operator()\x1b[39m\nouter remote traceback",
+            remote_timeout,
+        )
+    )
+
+    failed = await manager.rescale_operator(2, 3)
+
+    assert failed["status"] == "FAILED"
+    assert failed["error"] == "TimeoutError: timed out waiting for in-flight checkpoints before rescale"
+    assert "traceback" not in failed["error"]
+    assert "\x1b" not in failed["error"]
+    manager._writer.shutdown(wait=False)
+
+
+def test_job_manager_rescale_error_without_a_ray_cause_does_not_expose_traceback() -> None:
+    error = RayTaskError(
+        "rescale_operator",
+        "\x1b[36mray::JobMaster.rescale_operator()\x1b[39m\nsecret remote traceback",
+        None,
+    )
+
+    assert _format_rescale_error(error) == "RayTaskError: remote task failed"
 
 
 @pytest.mark.asyncio
@@ -793,6 +1176,7 @@ async def test_local_rescale_accepts_multiple_physical_sources() -> None:
     manager.job_master.take_retired_rescale_counts.return_value = {}
     manager._job_config = Configuration(include_environment=False)
     manager._job_status = JobStatus.RUNNING
+    manager.run_exclusive = AsyncMock(return_value=None)
 
     result = await manager.rescale_operator(2, 3)
 
@@ -897,6 +1281,35 @@ async def test_rescale_readiness_excludes_disconnected_checkpoint_domains() -> N
     assert operators[2]["can_rescale"] is True
     assert operators[5]["can_rescale"] is False
     assert "CheckpointDomain" in operators[5]["rescale_disabled_reason"]
+    manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_allows_console_sink_rescale_with_multiple_source_tasks() -> None:
+    assert ConsoleSinkFunction.supports_concurrent_rescale is True
+
+    logical, physical = _graphs(source_parallelism=2, console_sink=True)
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = SimpleNamespace(
+        coordinator=None,
+        restart_window=lambda: (0, 0, 0),
+    )
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+
+    snapshot = await manager.dashboard_snapshot()
+    operators = {operator["op_id"]: operator for operator in snapshot["operators"]}
+
+    assert operators[1]["can_rescale"] is False
+    assert "Source operators" in operators[1]["rescale_disabled_reason"]
+    assert operators[2]["can_rescale"] is True
+    assert operators[3]["name"] == "ConsoleSinkAll[3]"
+    assert operators[3]["can_rescale"] is True
+    assert operators[3]["rescale_disabled_reason"] is None
+    assert manager._unsupported_rescale_reason(logical.get(VertexId("job", 3)), 3) is None
     manager._writer.shutdown(wait=False)
 
 
@@ -1653,3 +2066,65 @@ def test_source_rescale_resume_retry_accepts_a_completed_operation() -> None:
 
     assert task.resume_rescale("resize-1") is True
     assert task._source_rescale_resume.is_set() is False
+
+
+def test_source_joins_coordinator_assigned_epoch_at_next_boundary() -> None:
+    task = object.__new__(SourceStreamTask)
+    task._running = True
+    task._eof_reached = False
+    task._drain_requested = False
+    task._inflight_source_states = {}
+    task._requested_checkpoint_ids = deque()
+    task._checkpoint_request_lock = threading.Lock()
+    task._resolved_checkpoint_floor = 0
+    task._forced_checkpoint_requested = threading.Event()
+    task._forced_checkpoint_requested.set()
+    task._source_rescale_requested = threading.Event()
+    strategy = SimpleNamespace(
+        should_trigger=Mock(return_value=False),
+        reset_trigger=Mock(),
+    )
+    task._state = SimpleNamespace(
+        operator=SimpleNamespace(end_of_stream=False),
+        checkpoint_strategy=strategy,
+        metrics=SimpleNamespace(barriers_out=Mock()),
+    )
+    barrier = Barrier(7, ExecutionVertexId(1, 0))
+    task._generate_barrier = Mock(return_value=barrier)
+
+    assert task.request_checkpoint(7) is True
+    assert task._on_records_emitted(record_emitted=False) is barrier
+
+    task._generate_barrier.assert_called_once_with(checkpoint_id=7)
+    strategy.reset_trigger.assert_called_once_with()
+    task._state.metrics.barriers_out.inc.assert_called_once_with()
+    assert task._forced_checkpoint_requested.is_set() is False
+
+
+def test_source_drops_coordinator_epoch_canceled_before_start() -> None:
+    strategy = object.__new__(AlignedCheckpointStrategy)
+    strategy._vertex_id = ExecutionVertexId(1, 0)
+    strategy._coordinator = SimpleNamespace(
+        source_checkpoint_started=Mock(return_value=False),
+    )
+
+    assert strategy.generate_next_barrier(checkpoint_id=7) is None
+    strategy._coordinator.source_checkpoint_started.assert_called_once_with(7, is_eof=False)
+
+
+def test_source_retries_canceled_terminal_epoch_after_servicing_rescale() -> None:
+    task = object.__new__(SourceStreamTask)
+    task._checkpoint_wait_stop = threading.Event()
+    task._emit_pending_rescale_barrier = Mock(return_value=False)
+    replacement = Barrier(8, ExecutionVertexId(1, 0))
+    task._generate_barrier = Mock(side_effect=(None, replacement))
+    task._pop_requested_checkpoint = Mock(return_value=None)
+
+    with patch("ray.klein.runtime.worker.source_stream_task.time.sleep", return_value=None):
+        assert task._await_terminal_barrier(7) is replacement
+
+    assert [invocation.kwargs for invocation in task._generate_barrier.call_args_list] == [
+        {"is_eof": True, "force": True, "checkpoint_id": 7},
+        {"is_eof": True, "force": True, "checkpoint_id": None},
+    ]
+    assert task._emit_pending_rescale_barrier.call_count == 2

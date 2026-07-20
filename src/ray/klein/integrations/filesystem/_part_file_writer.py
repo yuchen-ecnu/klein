@@ -49,7 +49,9 @@ class PartFileWriter:
 
     def write(self, value: Mapping[str, Any]) -> None:
         row = dict(value)
-        if self._columns is not None:
+        if self._columns is None:
+            self._columns = tuple(row)
+        else:
             expected = set(self._columns)
             missing = expected - row.keys()
             extra = row.keys() - expected
@@ -131,8 +133,8 @@ def _json_default(value: Any) -> Any:
         return value.isoformat()
     if isinstance(value, Decimal):
         return str(value)
-    if hasattr(value, "item"):
-        return value.item()
     if hasattr(value, "tolist"):
         return value.tolist()
+    if hasattr(value, "item"):
+        return value.item()
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")

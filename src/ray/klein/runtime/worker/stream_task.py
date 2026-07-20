@@ -311,6 +311,9 @@ class StreamTask(AsyncWorker):
         self._topology_pending_descriptor: TaskDeploymentDescriptor | None = None
         self._topology_active = False
         self._topology_commit_tombstones: list[str] = []
+        self._checkpoint_input_gates: dict[object, tuple[int, asyncio.Event]] = {}
+        self._checkpoint_gate_loop: asyncio.AbstractEventLoop | None = None
+        self._checkpoint_gate_resolved_through = -1
 
     # --- small accessors used by the components / subclass ---
 
@@ -445,6 +448,7 @@ class StreamTask(AsyncWorker):
                 executor,
                 emit,
                 pump.flush_input,
+                pump.flush_input_async_boundary if state.is_async_operator else None,
             )
 
             # Async operator: an ordered concurrency window lets up to
@@ -828,24 +832,16 @@ class StreamTask(AsyncWorker):
             },
         )
 
-    def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
-        """Reclaim barrier alignment state after coordinator epoch recovery."""
-
-        if self._state is None:
-            return 0
-        removed = self._state.checkpoint_strategy.reset_inflight_before(cutoff_barrier_id)
-        if self._pump is not None:
-            removed += self._pump.reset_inflight_before(cutoff_barrier_id)
-        return removed
-
     def discard_checkpoint(self, barrier_id: int) -> int:
         """Reclaim one timed-out/aborted checkpoint from this task aligner."""
 
         if self._state is None:
             return 0
-        removed = self._state.checkpoint_strategy.discard_checkpoint(barrier_id)
-        if self._pump is not None:
-            removed += self._pump.discard_checkpoint(barrier_id)
+        discard = getattr(self._state.checkpoint_strategy, "discard_checkpoint", None)
+        removed = discard(barrier_id) if callable(discard) else 0
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            removed += pump.discard_checkpoint(barrier_id)
         return removed
 
     def prepare_sink_commit(self, barrier_id: int) -> None:
@@ -1209,6 +1205,10 @@ class StreamTask(AsyncWorker):
         return self._rescale_resume_obj
 
     def _begin_rescale(self, operation_id: str, role: str) -> bool:
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ValueError("rescale operation_id cannot be empty")
+        if role not in {"replacement", "upstream", "target", "downstream"}:
+            raise ValueError(f"unknown rescale role {role!r}")
         if self._rescale_operation_id == operation_id:
             if self._rescale_role != role:
                 raise RuntimeError(
@@ -1533,6 +1533,7 @@ class StreamTask(AsyncWorker):
         requested_edges = tuple(edge_indices)
         if not requested_edges:
             raise ValueError("an upstream rescale participant needs a target output edge")
+        barrier = RescaleBarrier(operation_id, target_operator_id)
         new_participant = self._begin_rescale(operation_id, "upstream")
         if not new_participant:
             if self._rescale_edge_indices != requested_edges:
@@ -1540,7 +1541,7 @@ class StreamTask(AsyncWorker):
             await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
             return True
         self._rescale_edge_indices = requested_edges
-        await self._runtime_state.inbox.put(InboxEnvelope(RescaleBarrier(operation_id, target_operator_id)))
+        await self._runtime_state.inbox.put(InboxEnvelope(barrier))
         await asyncio.wait_for(self._rescale_ready.wait(), timeout=timeout)
         return True
 
@@ -1706,6 +1707,142 @@ class StreamTask(AsyncWorker):
             state.output.collect(barrier)
         return snapshot
 
+    # --- checkpoint input gates ---
+
+    def _ensure_checkpoint_gate_state(self) -> None:
+        """Initialize lazily for lightweight tests that bypass ``__init__``."""
+
+        if not hasattr(self, "_checkpoint_input_gates"):
+            self._checkpoint_input_gates = {}
+            self._checkpoint_gate_loop = None
+            self._checkpoint_gate_resolved_through = -1
+
+    async def _claim_checkpoint_input(
+        self,
+        sender_vertex_id: object | None,
+        barrier_id: int,
+    ) -> bool:
+        """Close one sender before its barrier is admitted to the inbox.
+
+        Returning False means the barrier is a duplicate/stale delivery and is
+        already represented locally. A later epoch waits behind the sender's
+        current epoch, preserving per-channel order even when it has no data
+        between the two barriers.
+        """
+
+        if sender_vertex_id is None:
+            return True
+        self._ensure_checkpoint_gate_state()
+        self._checkpoint_gate_loop = asyncio.get_running_loop()
+        while True:
+            if barrier_id <= self._checkpoint_gate_resolved_through:
+                return False
+            current = self._checkpoint_input_gates.get(sender_vertex_id)
+            if current is None:
+                self._checkpoint_input_gates[sender_vertex_id] = (barrier_id, asyncio.Event())
+                return True
+            current_id, released = current
+            if current_id == barrier_id or barrier_id < current_id:
+                return False
+            await released.wait()
+
+    async def _wait_checkpoint_input_open(self, sender_vertex_id: object | None) -> None:
+        if sender_vertex_id is None:
+            return
+        self._ensure_checkpoint_gate_state()
+        while (current := self._checkpoint_input_gates.get(sender_vertex_id)) is not None:
+            await current[1].wait()
+
+    def _mark_checkpoint_gate_resolved(self, barrier_id: int) -> None:
+        self._checkpoint_gate_resolved_through = max(
+            self._checkpoint_gate_resolved_through,
+            barrier_id,
+        )
+
+    def _release_checkpoint_input_gates(self, barrier_id: int, *, resolved: bool = True) -> int:
+        self._ensure_checkpoint_gate_state()
+        if resolved:
+            self._mark_checkpoint_gate_resolved(barrier_id)
+        released = 0
+        for sender_vertex_id, (current_id, event) in tuple(self._checkpoint_input_gates.items()):
+            if current_id != barrier_id:
+                continue
+            self._checkpoint_input_gates.pop(sender_vertex_id, None)
+            event.set()
+            released += 1
+        return released
+
+    def checkpoint_barrier_aligned(self, barrier_id: int) -> None:
+        """Release admission gates after snapshot + downstream enqueue."""
+
+        self._ensure_checkpoint_gate_state()
+        loop = self._checkpoint_gate_loop
+        if loop is None or loop.is_closed():
+            return
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+        if current_loop is loop:
+            self._release_checkpoint_input_gates(barrier_id)
+        else:
+            loop.call_soon_threadsafe(self._release_checkpoint_input_gates, barrier_id)
+
+    async def abort_checkpoint(self, barrier_id: int) -> bool:
+        """Abort local alignment and unblock every input held at this epoch."""
+
+        self._ensure_checkpoint_gate_state()
+        state = self._state
+        removed = False
+        if state is not None:
+            abort = getattr(
+                state.checkpoint_strategy,
+                "abort_checkpoint",
+                state.checkpoint_strategy.discard_checkpoint,
+            )
+            if self._descriptor.operator.source:
+                # A source's sole executor is occupied by its long-running
+                # polling loop. It has no input gate and source-owned state is
+                # discarded separately, so this small idempotent cleanup must
+                # not queue behind that loop indefinitely.
+                removed = abort(barrier_id)
+            else:
+                removed = await asyncio.get_running_loop().run_in_executor(
+                    state.executor,
+                    abort,
+                    barrier_id,
+                )
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            removed = bool(pump.discard_checkpoint(barrier_id) or removed)
+        released = self._release_checkpoint_input_gates(barrier_id)
+        return bool(removed or released)
+
+    async def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
+        """Reclaim old coordinator epochs and release their admission gates."""
+
+        self._ensure_checkpoint_gate_state()
+        state = self._state
+        removed = 0
+        if state is not None:
+            removed = await asyncio.get_running_loop().run_in_executor(
+                state.executor,
+                state.checkpoint_strategy.reset_inflight_before,
+                cutoff_barrier_id,
+            )
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            removed += pump.reset_inflight_before(cutoff_barrier_id)
+        self._mark_checkpoint_gate_resolved(cutoff_barrier_id)
+        released = 0
+        for sender_vertex_id, (barrier_id, event) in tuple(self._checkpoint_input_gates.items()):
+            if barrier_id > cutoff_barrier_id:
+                continue
+            self._checkpoint_input_gates.pop(sender_vertex_id, None)
+            event.set()
+            released += 1
+        return removed + released
+
     # --- inbox RPC surface ---
 
     async def emit_barrier(
@@ -1716,16 +1853,19 @@ class StreamTask(AsyncWorker):
     ) -> int:
         if self._state is None:
             return 0
-        if self._pump is not None:
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
             if barrier.coordinated:
-                if not self._pump.announce_coordinated_barrier(
+                if not pump.announce_coordinated_barrier(
                     barrier,
                     sender_vertex_id,
                     delivery_channel,
                 ):
                     return self._update_buffer_size_metrics()
             else:
-                await self._pump.wait_for_checkpoint_input(sender_vertex_id, barrier, delivery_channel)
+                await pump.wait_for_checkpoint_input(sender_vertex_id, barrier, delivery_channel)
+        elif not await self._claim_checkpoint_input(sender_vertex_id, barrier.id):
+            return self._update_buffer_size_metrics()
         envelope = InboxEnvelope(barrier, sender_vertex_id, delivery_channel=delivery_channel)
         put_control = getattr(self._state.inbox, "put_control", None)
         if barrier.coordinated and callable(put_control):
@@ -1745,8 +1885,11 @@ class StreamTask(AsyncWorker):
 
         if self._state is None:
             return 0
-        if self._pump is not None:
-            await self._pump.wait_for_checkpoint_input(sender_vertex_id, control, delivery_channel)
+        pump = getattr(self, "_pump", None)
+        if pump is not None:
+            await pump.wait_for_checkpoint_input(sender_vertex_id, control, delivery_channel)
+        else:
+            await self._wait_checkpoint_input_open(sender_vertex_id)
         await self._state.inbox.put(InboxEnvelope(control, sender_vertex_id, delivery_channel=delivery_channel))
         return self._update_buffer_size_metrics()
 
@@ -1777,8 +1920,11 @@ class StreamTask(AsyncWorker):
             return PutAck(False, 0, self._forwarded_sequence_for(delivery_channel or sender_vertex_id))
 
         async def admit() -> None:
-            if self._pump is not None:
-                await self._pump.wait_for_checkpoint_input(sender_vertex_id, record, delivery_channel)
+            pump = getattr(self, "_pump", None)
+            if pump is not None:
+                await pump.wait_for_checkpoint_input(sender_vertex_id, record, delivery_channel)
+            else:
+                await self._wait_checkpoint_input_open(sender_vertex_id)
             await self._state.inbox.put(InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel))
 
         try:
@@ -1814,7 +1960,13 @@ class StreamTask(AsyncWorker):
         if self._state is None:
             return PutAck(False, 0, self._forwarded_sequence_for(delivery_channel or sender_vertex_id))
         accepted = False
-        if self._pump is None or not self._pump.checkpoint_input_blocked(sender_vertex_id, delivery_channel):
+        pump = getattr(self, "_pump", None)
+        if pump is None:
+            self._ensure_checkpoint_gate_state()
+            blocked = sender_vertex_id is not None and sender_vertex_id in self._checkpoint_input_gates
+        else:
+            blocked = pump.checkpoint_input_blocked(sender_vertex_id, delivery_channel)
+        if not blocked:
             accepted = await self._state.inbox.try_put(
                 InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel)
             )

@@ -1,14 +1,81 @@
 # SPDX-License-Identifier: Apache-2.0
+import ctypes
+import os
 import time
 import unittest
 from contextlib import contextmanager
+from pathlib import Path
 from threading import Event, Thread
 
 from confluent_kafka import Consumer, Producer, TopicPartition
 
 
+class _LibrdkafkaMockCluster:
+    """Wire-protocol Kafka broker fallback bundled with confluent-kafka."""
+
+    def __init__(self) -> None:
+        self._library = None
+        self._client = None
+        self._cluster = None
+        self._bootstrap_servers = ""
+
+    def start(self, timeout: int = 30) -> "_LibrdkafkaMockCluster":
+        del timeout
+        import confluent_kafka
+
+        library_dir = Path(confluent_kafka.__file__).resolve().parent.parent / "confluent_kafka.libs"
+        candidates = tuple(library_dir.glob("librdkafka*.so*"))
+        if not candidates:
+            candidates = tuple(library_dir.glob("librdkafka*.dylib")) + tuple(library_dir.glob("librdkafka*.dll"))
+        if not candidates:
+            raise RuntimeError("confluent-kafka does not include a librdkafka shared library")
+
+        library = ctypes.CDLL(str(candidates[0]))
+        library.rd_kafka_conf_new.restype = ctypes.c_void_p
+        library.rd_kafka_new.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
+        library.rd_kafka_new.restype = ctypes.c_void_p
+        library.rd_kafka_mock_cluster_new.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        library.rd_kafka_mock_cluster_new.restype = ctypes.c_void_p
+        library.rd_kafka_mock_cluster_bootstraps.argtypes = [ctypes.c_void_p]
+        library.rd_kafka_mock_cluster_bootstraps.restype = ctypes.c_char_p
+        library.rd_kafka_mock_cluster_destroy.argtypes = [ctypes.c_void_p]
+        library.rd_kafka_destroy.argtypes = [ctypes.c_void_p]
+
+        error = ctypes.create_string_buffer(512)
+        client = library.rd_kafka_new(0, library.rd_kafka_conf_new(), error, len(error))
+        if not client:
+            raise RuntimeError(error.value.decode() or "could not create librdkafka client")
+        cluster = library.rd_kafka_mock_cluster_new(client, 1)
+        if not cluster:
+            library.rd_kafka_destroy(client)
+            raise RuntimeError("could not create librdkafka mock cluster")
+
+        self._library = library
+        self._client = client
+        self._cluster = cluster
+        self._bootstrap_servers = library.rd_kafka_mock_cluster_bootstraps(cluster).decode()
+        return self
+
+    def get_bootstrap_server(self) -> str:
+        return self._bootstrap_servers
+
+    def stop(self) -> None:
+        if self._library is None:
+            return
+        if self._cluster is not None:
+            self._library.rd_kafka_mock_cluster_destroy(self._cluster)
+        if self._client is not None:
+            self._library.rd_kafka_destroy(self._client)
+        self._cluster = None
+        self._client = None
+        self._library = None
+
+
 def _create_kafka_container():
     """Build a Kafka testcontainer using the structured wait-strategy API."""
+
+    if os.environ.get("KLEIN_TEST_EMBEDDED_SERVICES") == "1":
+        return _LibrdkafkaMockCluster()
 
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import LogMessageWaitStrategy

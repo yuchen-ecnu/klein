@@ -4,10 +4,10 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from ray.data import SaveMode
 from ray.data.block import UserDefinedFunction
 from ray.util.annotations import PublicAPI
 
-from ray.klein._internal.messages import ChineseMessages
 from ray.klein._internal.streaming_expression import (
     DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE,
     AsyncStreamingWithColumn,
@@ -33,6 +33,7 @@ from ray.klein.api.sink_function import SinkFunction
 from ray.klein.api.stream import Stream
 from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 from ray.klein.integrations.filesystem.streaming_file_sink import StreamingFileSink
+from ray.klein.integrations.iceberg.streaming_iceberg_sink import StreamingIcebergSink
 from ray.klein.integrations.sql.streaming_sql_sink import StreamingSQLSink
 from ray.klein.runtime.backend.batch_only_sink import BatchOnlySink
 from ray.klein.runtime.backend.batch_only_transform import BatchOnlyTransform
@@ -55,6 +56,7 @@ from ray.klein.runtime.resources import Resources
 
 if TYPE_CHECKING:
     from ray.data.datasource import Connection
+    from ray.data.expressions import Expr
 
     from ray.klein.api.keyed_stream import KeyedStream
     from ray.klein.api.klein_context import KleinContext
@@ -227,10 +229,11 @@ class DataStream(Stream):
                 resources=resources,
             ),
             resources=resources,
+            node_type=NodeType.TAKE if call.dataset_method_name in {"take", "take_all"} else None,
             name=f"RayData.{call.display_name}",
         )
         if self.context.interactive_mode_enabled:
-            return input_streams[0].context.execute(sink.name).get()
+            return input_streams[0].context.execute(sink.name, sinks=(sink,)).get()
         return sink
 
     @PublicAPI
@@ -264,15 +267,15 @@ class DataStream(Stream):
             .. testcode::
 
                 from ray.klein.api.klein_context import KleinContext
-                def add_dog_years(batch: dict) -> dict:
-                    return {"age_in_dog_years": batch["age"] * 7}
+                def add_dog_years(row: dict) -> dict:
+                    return {**row, "age_in_dog_years": row["age"] * 7}
 
                 ctx = KleinContext()
                 ctx.from_items([
                     {"name": "Luna", "age": 4},
                     {"name": "Rory", "age": 14},
                     {"name": "Scout", "age": 9},
-                ]).map_batches(add_dog_years).show()
+                ]).map(add_dog_years).show()
                 ctx.execute("demo").wait()
 
         Args:
@@ -569,15 +572,16 @@ class DataStream(Stream):
 
         .. tip::
 
-            通过 ``preprocess_fn`` 将数据拆分后，数据将自动交由 ``batch_process_fn`` 处理，并在 ``postprocess_fn`` 实现数据的
-            后处理和聚合。本方法主要用于 **用户处理数据的粒度与推理的粒度不同** 情况时的数据，以简化用户编程。
+            Use this composite when one input must first expand into smaller
+            records, vectorized work should run on batches of those records,
+            and results must then be grouped by the original logical key.
 
         Examples:
 
             Call :meth:`~DataStream.map_reduce` to transform your data.
             The following is an example using the map-reduce API:
 
-            1. 定义 ``map_reduce`` 所需的处理函数
+            1. Define the functions used by ``map_reduce``.
 
             .. testcode::
 
@@ -606,7 +610,7 @@ class DataStream(Stream):
                     ]
                     return data
 
-            2. 初始化 ``DataStream`` 并使用假数据作为输入
+            2. Create a ``DataStream`` with representative input.
 
             .. testcode::
 
@@ -624,7 +628,7 @@ class DataStream(Stream):
                 {'note_id': '111', 'comment_list': ['可以的', '小猫好乖啊', '好可爱的小猫', '给姨姨吸吸']}
                 {'note_id': '222', 'comment_list': ['好漂亮的花瓶', '哪里买的呀']}
 
-            3. 调用 ``map_reduce`` 并展示处理结果
+            3. Apply ``map_reduce`` and attach an output sink.
 
             .. testcode::
 
@@ -1052,7 +1056,9 @@ class DataStream(Stream):
             name: The name of show operator, defaults to "Show".
 
         Returns:
-            List of records read into the driver.
+            A terminal :class:`StreamSink` outside interactive mode. In
+            interactive mode the bounded graph runs immediately and the
+            terminal operation returns ``None`` after printing.
         """
         return self.write(
             ConsoleSinkFunction,
@@ -1071,17 +1077,18 @@ class DataStream(Stream):
         )
 
     @PublicAPI
-    def take_all(self, limit: int | None = None) -> list[dict[str, Any]]:
-        """Return all the rows in this :class:`DataStream`.
+    def take_all(self, limit: int | None = None) -> "StreamSink | list[dict[str, Any]]":
+        """Attach a sink that collects all rows from this :class:`DataStream`.
 
         Args:
             limit: Raise an error if the size exceeds the specified limit.
 
         Returns:
-            List of records read into the driver.
+            The registered terminal sink. Collection must be its own job;
+            then call :func:`ray.klein.execute` and
+            :meth:`~ray.klein.JobHandle.get` to retrieve the rows. The
+            deprecated interactive mode returns the rows directly.
         """
-        if not self.context.interactive_mode_enabled:
-            raise RuntimeError(ChineseMessages.SET_INTERACTIVE_MODE_FOR_TAKE)
         return self.write(
             CollectFunction,
             fn_constructor_kwargs={"limit": limit},
@@ -1097,17 +1104,18 @@ class DataStream(Stream):
         )
 
     @PublicAPI
-    def take(self, limit: int = 20) -> list[dict[str, Any]]:
-        """Return up to ``limit`` rows from the :class:`DataStream`.
+    def take(self, limit: int = 20) -> "StreamSink | list[dict[str, Any]]":
+        """Attach a sink that collects up to ``limit`` rows.
 
         Args:
             limit: The maximum number of rows to return.
 
         Returns:
-            List of records read into the driver.
+            The registered terminal sink. Collection must be its own job;
+            then call :func:`ray.klein.execute` and
+            :meth:`~ray.klein.JobHandle.get` to retrieve the rows. The
+            deprecated interactive mode returns the rows directly.
         """
-        if not self.context.interactive_mode_enabled:
-            raise RuntimeError(ChineseMessages.SET_INTERACTIVE_MODE_FOR_TAKE)
         return self.write(
             CollectFunction,
             fn_constructor_kwargs={"limit": limit},
@@ -1132,7 +1140,8 @@ class DataStream(Stream):
                 Default is True.
 
         Returns:
-            :class:`StreamSink`.
+            A terminal :class:`StreamSink` outside interactive mode. In
+            interactive mode, returns the schema reported by Ray Data.
         """
         return self.write(
             ConsoleSinkFunction,
@@ -1233,6 +1242,62 @@ class DataStream(Stream):
         """Write Parquet files in batch or streaming mode."""
 
         return self.write_files(path, "parquet", **options)
+
+    @PublicAPI
+    def write_iceberg(
+        self,
+        table_identifier: str,
+        catalog_kwargs: dict[str, Any] | None = None,
+        snapshot_properties: dict[str, str] | None = None,
+        mode: "SaveMode" = SaveMode.APPEND,
+        overwrite_filter: "Expr | None" = None,
+        upsert_kwargs: dict[str, Any] | None = None,
+        overwrite_kwargs: dict[str, Any] | None = None,
+        ray_remote_args: dict[str, Any] | None = None,
+        concurrency: int | None = None,
+    ) -> "StreamSink":
+        """Write this stream to an existing Iceberg table.
+
+        Batch execution delegates the full public argument contract to
+        :meth:`ray.data.Dataset.write_iceberg`. Streaming execution supports
+        append mode and coalesces participating sink subtasks into one
+        idempotent Iceberg snapshot per logical sink and checkpoint-domain
+        epoch.
+        """
+
+        batch_lowering = RayDataCall.dataset_method(
+            "write_iceberg",
+            (table_identifier,),
+            {
+                "catalog_kwargs": catalog_kwargs,
+                "snapshot_properties": snapshot_properties,
+                "mode": mode,
+                "overwrite_filter": overwrite_filter,
+                "upsert_kwargs": upsert_kwargs,
+                "overwrite_kwargs": overwrite_kwargs,
+                "ray_remote_args": ray_remote_args,
+                "concurrency": concurrency,
+            },
+            expects_dataset=False,
+        )
+        remote_args = ray_remote_args or {}
+        return self.write(
+            StreamingIcebergSink,
+            fn_constructor_args=[table_identifier],
+            fn_constructor_kwargs={
+                "catalog_kwargs": catalog_kwargs,
+                "snapshot_properties": snapshot_properties,
+                "mode": mode,
+                "overwrite_filter": overwrite_filter,
+                "upsert_kwargs": upsert_kwargs,
+                "overwrite_kwargs": overwrite_kwargs,
+            },
+            lowering=batch_lowering,
+            num_cpus=remote_args.get("num_cpus"),
+            num_gpus=remote_args.get("num_gpus"),
+            concurrency=concurrency,
+            name="IcebergSink",
+        )
 
     @PublicAPI
     def write_sql(
@@ -1450,7 +1515,7 @@ class DataStream(Stream):
             name=name,
         )
         if self.context.interactive_mode_enabled:
-            return data_stream.context.execute(name).get()
+            return data_stream.context.execute(name, sinks=(stream_sink,)).get()
         return stream_sink
 
 

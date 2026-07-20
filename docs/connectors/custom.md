@@ -47,8 +47,8 @@ class RecordSource(SourceFunction):
         self.next_index = state["next_index"]
 
 
-context = ray.klein.reset_context({"execution.runtime.mode": "streaming"})
-stream = context.source(
+ray.klein.configure({"execution.runtime.mode": "streaming"})
+stream = ray.klein.source(
     RecordSource,
     fn_constructor_args=[[{"id": 1}, {"id": 2}]],
     bounded=True,
@@ -77,7 +77,7 @@ The other context methods are:
 | `mark_idle()` | Exclude this input from downstream minimum-watermark calculation. |
 | `mark_active(resume_watermark=None)` | Reactivate before emitting after an idle period. |
 
-`KleinContext.source` registration options are:
+`ray.klein.source` registration options are:
 
 | Argument | Default | Meaning |
 |---|---:|---|
@@ -128,6 +128,8 @@ stream.write(
     concurrency=4,
     name="client-output",
 )
+
+ray.klein.execute("custom-source").wait()
 ```
 
 `DataStream.write` accepts the same constructor, resource, concurrency, and
@@ -174,7 +176,7 @@ directions the connector supports:
 Register an instance in one SQL session:
 
 ```python
-context.sql_session.register_table_factory(MyTableFactory())
+ray.klein.register_table_factory(MyTableFactory())
 ```
 
 For an installable connector package, publish a Python entry point in the

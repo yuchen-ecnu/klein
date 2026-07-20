@@ -33,6 +33,7 @@ _EXPORTS = {
     "SessionWindow": ("ray.klein.api.session_window", "SessionWindow"),
     "SlidingWindow": ("ray.klein.api.sliding_window", "SlidingWindow"),
     "StreamRuntimeContext": ("ray.klein.api.stream_runtime_context", "StreamRuntimeContext"),
+    "StreamSink": ("ray.klein.api.stream_sink", "StreamSink"),
     "TableColumn": ("ray.klein.api.table_column", "TableColumn"),
     "TableFactory": ("ray.klein.api.table_factory", "TableFactory"),
     "TwoPhaseCommitSinkFunction": (
@@ -43,6 +44,8 @@ _EXPORTS = {
     "TumblingWindow": ("ray.klein.api.tumbling_window", "TumblingWindow"),
     "WindowAssigner": ("ray.klein.api.window_assigner", "WindowAssigner"),
     "WindowedStream": ("ray.klein.api.windowed_stream", "WindowedStream"),
+    "get_config": ("ray.klein.api.klein_context", "get_config"),
+    "register_table_factory": ("ray.klein.api.klein_context", "register_table_factory"),
     "sql": ("ray.klein.api.sql", "sql"),
 }
 

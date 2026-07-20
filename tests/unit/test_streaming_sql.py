@@ -118,6 +118,26 @@ def test_regular_join_emits_insert_and_delete_changes() -> None:
     operator.close()
 
 
+def test_regular_join_does_not_match_or_retain_null_keys() -> None:
+    operator = SQLRegularJoinOperator(
+        left_keys=("o.customer_id",),
+        right_keys=("c.customer_id",),
+    )
+    collector = _open(operator)
+    left = Record({"o.customer_id": None, "o.amount": 10})
+    left.input_tag = 0
+    right = Record({"c.customer_id": None, "c.name": "unknown"})
+    right.input_tag = 1
+
+    operator.process_element(left)
+    operator.process_element(right)
+
+    assert _changes(collector) == []
+    assert list(operator._backend.namespaces(operator._left_state)) == []
+    assert list(operator._backend.namespaces(operator._right_state)) == []
+    operator.close()
+
+
 def test_streaming_planner_builds_managed_join_and_aggregate() -> None:
     context = KleinContext(Configuration("execution.runtime.mode=streaming"))
     orders = context.from_items([{"customer_id": 1, "amount": 10}])
@@ -144,6 +164,18 @@ def test_streaming_global_order_by_follows_flink_restriction() -> None:
 
     with pytest.raises(SQLQueryError, match="ascending time attribute"):
         context.sql("SELECT * FROM orders ORDER BY amount", tables={"orders": orders})
+
+
+@pytest.mark.parametrize("literal", ["1.5", "'2'", "-1"])
+def test_streaming_top_n_rejects_non_integer_limits(literal: str) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    orders = context.from_items([{"amount": 10}])
+
+    with pytest.raises(SQLQueryError, match="non-negative integer literal"):
+        context.sql(
+            f"SELECT * FROM orders ORDER BY amount LIMIT {literal}",
+            tables={"orders": orders},
+        )
 
 
 @pytest.mark.parametrize(

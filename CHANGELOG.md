@@ -29,8 +29,11 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   version-adaptive `stream.data` namespace for installed Dataset methods.
 - A `DataStream.write_sql` API matching Ray Data's DB-API 2.0 writer arguments,
   with Ray Data batch lowering and an at-least-once native streaming sink.
+- A `DataStream.write_iceberg` API matching Ray Data's writer arguments, with
+  Ray Data batch lowering and checkpoint-transactional streaming appends whose
+  snapshot transaction IDs make coordinator retries idempotent.
 - Unified configuration from `RAY_KLEIN_*`, mappings, JSON or `key=value`
-  strings, and an explicit process-global `KleinContext`.
+  strings, exposed through module-level `configure()` and `get_config()`.
 - SQLGlot-based SQL over bounded DataStreams with caller-scope discovery,
   explicit table bindings, persistent temporary views, and native Ray Dataset
   lowering for filters, joins, aggregates, ordering, limits, and unions.
@@ -74,6 +77,11 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 - The default keyed-state max parallelism is now 32768, allowing a larger
   stable key-group space for operator rescaling.
+- The Ray Data-style module API is now the primary graph-building surface:
+  terminal operations remain lazy and one final `execute(job_name)` submits
+  all pending terminals as one job. Explicit sink-root selection remains an
+  advanced option. `reset_context()` and `enable_interactive_mode()` are
+  deprecated compatibility helpers.
 - The operations CLI now discovers stable custom namespaces without requiring
   the Ray Dashboard, reads retained status from the cluster state actor, exits
   `attach` on terminal transitions, reports cancellation races accurately, and
@@ -116,9 +124,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 - Console sinks now write parseable JSON Lines records to stdout while
   operational logs use stderr. Metrics use a `ray_klein` hierarchy, stable job,
   task, and operator labels, and unit-suffixed names.
-- Optional Kafka, Redis, RocksDB, and Ray Serve dependencies no longer load or
-  install with the minimal package, and in-memory managed state is the safe
-  default while durable checkpoints remain the recovery boundary.
+- Optional Iceberg, Kafka, Redis, RocksDB, and Ray Serve dependencies no longer
+  load or install with the minimal package, and in-memory managed state is the
+  safe default while durable checkpoints remain the recovery boundary.
 - Asynchronous emit-pipeline shutdown is cancellation-safe and cannot leave a
   worker task pending when an event loop closes.
 

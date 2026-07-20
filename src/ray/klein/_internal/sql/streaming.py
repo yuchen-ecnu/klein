@@ -15,6 +15,7 @@ from ray.klein._internal.sql.execution import (
     _has_aggregates,
     _join_keys,
     _join_type,
+    _parse_limit_literal,
     _ProjectRow,
 )
 from ray.klein._internal.sql.expression import evaluate_expression
@@ -541,8 +542,7 @@ def _state_ttl_hints(select: exp.Select) -> dict[str, timedelta]:
 
 def _apply_streaming_top_n(stream: DataStream, select: exp.Select, *, num_cpus: float) -> DataStream:
     order = select.args["order"]
-    limit_expression = select.args["limit"].expression
-    limit = int(limit_expression.this)
+    limit = _parse_limit_literal(select.args["limit"].expression)
     stream.partition_by(KeyPartitioner(key_selector=global_top_n_key))
     result = DataStream(
         stream,
@@ -568,8 +568,6 @@ def _validate_streaming_select(select: exp.Select) -> None:
             "Klein SQL time-attribute DDL is not implemented yet"
         )
     if order is not None:
-        expression = limit.expression
-        if not isinstance(expression, exp.Literal) or expression.is_string or int(expression.this) < 0:
-            raise SQLQueryError("LIMIT must be a non-negative integer literal")
+        _parse_limit_literal(limit.expression)
     elif limit is not None:
         raise SQLQueryError("Streaming LIMIT without ORDER BY is not supported")

@@ -1,0 +1,281 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Restore, resubmit, and rescale Klein for Ray jobs from durable checkpoints."
+msgstr "从持久检查点恢复、重新提交并扩缩 Klein for Ray 作业。"
+
+msgid "Restore and rescale a job"
+msgstr "恢复作业并调整并行度"
+
+msgid "This guide covers two recovery paths:"
+msgstr "本指南介绍两条恢复路径："
+
+msgid "an in-place worker or coordinator restart inside the same live job; and"
+msgstr "在同一个活动作业内原地重启 worker 或协调器；以及"
+
+msgid ""
+"a new submission after the JobManager, Ray head node, or entire cluster was "
+"lost."
+msgstr "JobManager、Ray head 节点或整个集群丢失后重新提交。"
+
+msgid ""
+"In-place recovery automatically uses the current job's latest completed "
+"checkpoint. A new submission needs the explicit URI of one completed `chk-N` "
+"directory in `execution.savepoint.path`."
+msgstr "原地恢复会自动使用当前作业最新完成的检查点。新的提交需要在 `execution.savepoint.path` 中显式指定一个已完成的 `chk-N` 目录 URI。"
+
+msgid ""
+"This guide uses *rescale* for changing concurrency while rebuilding a graph "
+"from a checkpoint. To change one operator inside a running job, use the "
+"barrier-aligned procedure in [Autoscaling and live operator rescaling]"
+"(operator-rescaling.md)."
+msgstr "本指南中的“调整并行度”是指从检查点重建图时更改并发度。若要更改运行中作业的单个算子，请使用[自动扩缩与在线算子扩缩容](operator-rescaling.md)中的屏障对齐流程。"
+
+msgid "Prepare before failure"
+msgstr "故障前准备"
+
+msgid ""
+"Use shared durable storage and retain more than one checkpoint while "
+"operating an important job:"
+msgstr "运维重要作业时，请使用共享持久存储，并保留多个检查点："
+
+msgid "Keep the following with the deployment definition:"
+msgstr "请将以下内容与部署定义一并保存："
+
+msgid "source topics, consumer identities, and start-position policy;"
+msgstr "数据源 topic、消费者身份和起始位置策略；"
+
+msgid "the graph-building code and stable operator names;"
+msgstr "图构建代码和稳定的算子名称；"
+
+msgid "`state.keyed.max-parallelism`;"
+msgstr "`state.keyed.max-parallelism`；"
+
+msgid "serializer, schema, and connector versions;"
+msgstr "序列化器、模式和连接器版本；"
+
+msgid "checkpoint storage URI and credential mechanism;"
+msgstr "检查点存储 URI 和凭据机制；"
+
+msgid "output idempotency or deduplication key."
+msgstr "输出幂等性或去重键。"
+
+msgid ""
+"Node-local RocksDB and Ray Object Store snapshots accelerate live recovery "
+"but cannot recover a lost cluster."
+msgstr "节点本地 RocksDB 和 Ray Object Store 快照可加速在线恢复，但无法恢复已丢失的集群。"
+
+msgid "Select a completed checkpoint"
+msgstr "选择已完成的检查点"
+
+msgid "A restorable directory contains `_metadata`:"
+msgstr "可恢复目录包含 `_metadata`："
+
+msgid ""
+"Prefer the newest `chk-N` whose `_metadata` is readable. `_latest` is only "
+"an optimization; Klein falls back to scanning completed checkpoint "
+"directories when the pointer is missing, stale, or corrupt. Do not select an "
+"incomplete directory that lacks `_metadata`."
+msgstr "优先选择 `_metadata` 可读的最新 `chk-N`。`_latest` 只是一项优化；指针缺失、过期或损坏时，Klein 会回退为扫描已完成的检查点目录。不要选择缺少 `_metadata` 的不完整目录。"
+
+msgid ""
+"Job snapshots and checkpoint logs expose recent completion and failure "
+"history. They do not copy durable checkpoint payloads into the state actor."
+msgstr "作业快照和检查点日志会公开近期完成及失败历史，但不会将持久检查点载荷复制到状态 actor。"
+
+msgid "Resubmit from the checkpoint"
+msgstr "从检查点重新提交"
+
+msgid ""
+"Recreate the same logical graph and pass the complete checkpoint-directory "
+"URI:"
+msgstr "重新创建相同的逻辑图，并传入完整的检查点目录 URI："
+
+msgid ""
+"The restore path is intentionally singular: it names one completed "
+"checkpoint, not the checkpoint root. Configuration accepts unknown keys for "
+"application metadata, so a misspelling such as `execution.checkpointing."
+"restore-path` is a silent no-op. Use the canonical `execution.savepoint."
+"path` key."
+msgstr "恢复路径有意设计为单个路径：它指定一个已完成检查点，而不是检查点根目录。配置会接受未知键作为应用元数据，因此 `execution.checkpointing.restore-path` 这类拼写错误会静默无效。请使用规范的 `execution.savepoint.path` 键。"
+
+msgid ""
+"When resubmitting on the same cluster, stop the old job first. A stable `job."
+"namespace` is useful for operational attachment, but reusing a namespace "
+"while its old detached actors still exist can address the wrong job. After a "
+"whole-cluster loss the old actors no longer exist."
+msgstr "在同一集群上重新提交时，请先停止旧作业。稳定的 `job.namespace` 便于运维连接，但若旧的分离 actor 仍存在，复用命名空间可能会连接到错误作业。整个集群丢失后，旧 actor 已不存在。"
+
+msgid "Change parallelism during restore"
+msgstr "恢复期间更改并行度"
+
+msgid ""
+"Managed keyed state is partitioned into a fixed key-group space. You may "
+"change the concurrency of keyed operators during restore when all of these "
+"remain true:"
+msgstr "托管键控状态划分在固定的键组空间中。恢复时可以更改键控算子的并发度，但必须同时满足以下条件："
+
+msgid ""
+"`state.keyed.max-parallelism` is unchanged and is not below the new "
+"concurrency."
+msgstr "`state.keyed.max-parallelism` 保持不变，且不小于新的并发度。"
+
+msgid ""
+"The same logical operators, stable names, state descriptors, and serializers "
+"are reconstructed."
+msgstr "重建相同的逻辑算子、稳定名称、状态描述符和序列化器。"
+
+msgid ""
+"Source and sink connectors support the new parallelism. For example, Kafka "
+"source concurrency above the useful partition count adds idle subtasks."
+msgstr "Source 和 Sink 连接器支持新的并行度。例如，Kafka Source 并发度超过有效分区数只会增加空闲子任务。"
+
+msgid ""
+"External systems tolerate any changed connection or transaction fan-out."
+msgstr "外部系统能够承受连接数或事务扇出的变化。"
+
+msgid ""
+"Klein assigns each restored subtask a contiguous key-group range and loads "
+"only the fragments it now owns. Keys are not rehashed with Python's process-"
+"local `hash()`."
+msgstr "Klein 为每个恢复的子任务分配连续键组范围，并且只加载它现在拥有的分片。键不会通过 Python 的进程本地 `hash()` 重新哈希。"
+
+msgid ""
+"Never change max parallelism for a job whose checkpoint must remain "
+"restorable. Treat state descriptor names and serialized value shapes as "
+"schema."
+msgstr "如果作业的检查点必须保持可恢复，则绝不能更改最大并行度。请把状态描述符名称和序列化值结构视为模式。"
+
+msgid "Validate the restored job"
+msgstr "验证恢复后的作业"
+
+msgid "Before returning traffic or trusting output, check:"
+msgstr "恢复流量或信任输出前，请检查："
+
+msgid "the job reaches `RUNNING` rather than repeatedly entering recovery;"
+msgstr "作业进入 `RUNNING`，而不是反复进入恢复；"
+
+msgid "the first completed checkpoint after restore succeeds;"
+msgstr "恢复后的第一个检查点成功完成；"
+
+msgid ""
+"`state_durable_restore_fallbacks` and restore-duration metrics match the "
+"expected recovery path;"
+msgstr "`state_durable_restore_fallbacks` 和恢复耗时指标符合预期恢复路径；"
+
+msgid ""
+"Kafka lag or another source-position metric resumes near the checkpoint;"
+msgstr "Kafka 延迟或其他数据源位置指标在检查点附近恢复；"
+
+msgid "no unexpected late-record or sink-commit failures appear;"
+msgstr "没有出现意外的迟到记录或 Sink 提交失败；"
+
+msgid "output deduplication absorbs the accepted replay window."
+msgstr "输出去重能够覆盖可接受的重放窗口。"
+
+msgid ""
+"Use `ray-klein status <namespace>` for a summary and `ray-klein attach "
+"<namespace>` for live progress."
+msgstr "使用 `ray-klein status <namespace>` 查看概要，使用 `ray-klein attach <namespace>` 查看实时进度。"
+
+msgid "Common restore failures"
+msgstr "常见恢复故障"
+
+msgid "Symptom"
+msgstr "症状"
+
+msgid "Likely cause"
+msgstr "可能原因"
+
+msgid "Action"
+msgstr "操作"
+
+msgid "`_metadata` missing"
+msgstr "缺少 `_metadata`"
+
+msgid "Incomplete checkpoint publication"
+msgstr "检查点发布不完整"
+
+msgid "Select an earlier completed `chk-N`."
+msgstr "选择更早完成的 `chk-N`。"
+
+msgid "Unsupported checkpoint format"
+msgstr "不支持的检查点格式"
+
+msgid "Code and checkpoint schema are incompatible"
+msgstr "代码与检查点模式不兼容"
+
+msgid ""
+"Run the matching Klein version or a deliberate migration tool; do not edit "
+"pickled metadata."
+msgstr "运行匹配的 Klein 版本或有意设计的迁移工具；不要编辑 pickle 元数据。"
+
+msgid "State checksum/size mismatch"
+msgstr "状态校验和/大小不匹配"
+
+msgid "Missing or corrupt state object"
+msgstr "状态对象缺失或损坏"
+
+msgid ""
+"Verify object-store consistency and restore an earlier retained checkpoint."
+msgstr "验证对象存储一致性，并恢复更早保留的检查点。"
+
+msgid "Missing operator state"
+msgstr "缺少算子状态"
+
+msgid "Graph identity or operator construction order changed"
+msgstr "图身份或算子构造顺序发生变化"
+
+msgid "Rebuild the original logical graph and stable names."
+msgstr "重建原始逻辑图和稳定名称。"
+
+msgid "Max-parallelism mismatch"
+msgstr "最大并行度不匹配"
+
+msgid "`state.keyed.max-parallelism` changed"
+msgstr "`state.keyed.max-parallelism` 已更改"
+
+msgid "Restore with the original value."
+msgstr "使用原值恢复。"
+
+msgid "Connector cannot seek/restore"
+msgstr "连接器无法定位/恢复"
+
+msgid "Source recovery is broker-owned or custom state is incomplete"
+msgstr "Source 恢复由 broker 管理，或自定义状态不完整"
+
+msgid "Follow that connector's documented recovery boundary."
+msgstr "遵循该连接器文档中的恢复边界。"
+
+msgid "Output duplicates"
+msgstr "输出重复"
+
+msgid "Sink commit succeeded before the restored checkpoint became durable"
+msgstr "Sink 在恢复的检查点持久化前已提交成功"
+
+msgid "Apply the documented idempotency/deduplication design."
+msgstr "应用文档中的幂等/去重设计。"
+
+msgid ""
+"Klein does not yet expose a user-triggered command that creates an "
+"independently named savepoint. `execution.savepoint.path` restores from an "
+"already completed checkpoint or compatible savepoint URI."
+msgstr "Klein 尚未提供创建独立具名 savepoint 的用户触发命令。`execution.savepoint.path` 用于从已经完成的检查点或兼容 savepoint URI 恢复。"

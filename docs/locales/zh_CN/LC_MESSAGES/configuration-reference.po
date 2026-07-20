@@ -1,0 +1,986 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Complete Klein for Ray configuration reference with every option, type, "
+"default, constraint, and environment variable."
+msgstr "完整的 Klein for Ray 配置参考，涵盖每个选项、类型、默认值、约束和环境变量。"
+
+msgid "Configuration reference"
+msgstr "配置参考"
+
+msgid ""
+"This page lists every `ConfigOption` declared by Klein. The key column "
+"contains the canonical key accepted by mappings and `key=value` strings. "
+"Every key also has an environment-variable form: add the `RAY_KLEIN_` "
+"prefix, replace dots and hyphens with underscores, and convert the result"
+" to upper case. For example, `execution.runtime.mode` becomes "
+"`RAY_KLEIN_EXECUTION_RUNTIME_MODE`."
+msgstr ""
+"本页列出 Klein 声明的所有 `ConfigOption`。键列包含映射和 `key=value` "
+"字符串接受的规范键。每个键也有对应的环境变量形式：添加 `RAY_KLEIN_` "
+"前缀，将点和连字符替换为下划线，再将结果转换为大写。例如，`execution.runtime.mode` 会变为 "
+"`RAY_KLEIN_EXECUTION_RUNTIME_MODE`。"
+
+msgid ""
+"See [Configure Klein](configuration.md) for source precedence, input "
+"forms, type conversion, and context isolation."
+msgstr "有关配置来源优先级、输入形式、类型转换和上下文隔离，请参阅 [配置 Klein](configuration.md)。"
+
+msgid "How to read the tables"
+msgstr "如何阅读表格"
+
+msgid ""
+"`duration` values are Python `datetime.timedelta` objects in typed code. "
+"In mappings, strings, and environment variables, use a number followed by"
+" `ms`, `s`, `min`, `h`, `d`, or `w`, such as `500ms`, `30s`, or `1.5h`. "
+"An unquoted numeric value in a mapping or `key=value` input is "
+"interpreted as seconds; environment-variable durations need a unit."
+msgstr ""
+"在类型化代码中，`duration` 值是 Python `datetime.timedelta` "
+"对象。在映射、字符串和环境变量中，请使用数字后接 `ms`、`s`、`min`、`h`、`d` 或 `w`，例如 `500ms`、`30s` 或 "
+"`1.5h`。映射或 `key=value` 输入中未加引号的数值会解释为秒；环境变量中的时长必须带单位。"
+
+msgid ""
+"Enum values are case-insensitive. The tables show them in their canonical"
+" lower-case form."
+msgstr "枚举值不区分大小写。表格以其规范小写形式列出。"
+
+msgid ""
+"`None` means the feature has no configured value; it is different from an"
+" empty string, zero, or an empty mapping."
+msgstr "`None` 表示该功能没有配置值；它不同于空字符串、零或空映射。"
+
+msgid ""
+"Paths under `<temp-dir>` use the operating system's temporary directory "
+"and therefore vary by host."
+msgstr "`<temp-dir>` 下的路径使用操作系统临时目录，因此会因主机而异。"
+
+msgid ""
+"Unless a row says otherwise, an option is read when a job is compiled or "
+"its streaming runtime component starts. Configure the context before "
+"calling `execute()`."
+msgstr "除非某行另有说明，否则选项会在作业编译或其流式运行时组件启动时读取。请在调用 `execute()` 前配置上下文。"
+
+msgid ""
+"Klein currently accepts arbitrary canonical keys in a `Configuration`, "
+"but only the options below are read by Klein. Unknown keys are retained "
+"by `to_dict()` and may appear in the dashboard, but they don't change "
+"runtime behavior."
+msgstr ""
+"Klein 当前允许 `Configuration` 包含任意规范键，但只有下列选项会被 Klein 读取。未知键会由 `to_dict()` "
+"保留，并可能显示在 Dashboard 中，但不会改变运行时行为。"
+
+msgid "Execution, recovery, and checkpointing"
+msgstr "执行、恢复与检查点"
+
+msgid ""
+"These options primarily affect the streaming runtime. A bounded job "
+"compiled to Ray Data doesn't create Klein checkpoint, restart, or task-"
+"deployment components."
+msgstr "这些选项主要影响流式运行时。编译到 Ray Data 的有界作业不会创建 Klein 检查点、重启或任务部署组件。"
+
+msgid "Key"
+msgstr "键"
+
+msgid "Type"
+msgstr "类型"
+
+msgid "Default"
+msgstr "默认值"
+
+msgid "Meaning and constraints"
+msgstr "含义与约束"
+
+msgid "`execution.runtime.mode`"
+msgstr "`execution.runtime.mode`"
+
+msgid "enum: `auto`, `batch`, `streaming`"
+msgstr "enum: `auto`, `batch`, `streaming`"
+
+msgid "`auto`"
+msgstr "`auto`"
+
+msgid ""
+"Selects the execution engine. `auto` uses streaming when any source is "
+"unbounded, any graph vertex has no batch lowering, or `udf.ignore-"
+"exception=true`; otherwise it uses batch. Explicit modes must still "
+"support every vertex."
+msgstr ""
+"选择执行引擎。若任一数据源无界、计算图中的任一顶点没有批处理下沉实现，"
+"或设置了 `udf.ignore-exception=true`，`auto` 将使用流处理；否则使用批处理。"
+"显式指定的模式仍须支持每个顶点。"
+
+msgid "`execution.task.deployment.mode`"
+msgstr "`execution.task.deployment.mode`"
+
+msgid "enum: `default`, `balanced`"
+msgstr "enum: `default`, `balanced`"
+
+msgid "`default`"
+msgstr "`default`"
+
+msgid ""
+"Selects streaming-task placement. `default` tries a placement group, then"
+" round-robin placement, then native Ray placement. `balanced` skips the "
+"placement-group attempt."
+msgstr ""
+"选择流任务的放置方式。`default` 依次尝试 placement group、轮询放置和 Ray 原生放置。`balanced` 会跳过 "
+"placement group 尝试。"
+
+msgid "`execution.restart-strategy.fixed-delay.attempts`"
+msgstr "`execution.restart-strategy.fixed-delay.attempts`"
+
+msgid "int"
+msgstr "int"
+
+msgid "`3`"
+msgstr "`3`"
+
+msgid ""
+"Maximum restarts allowed inside the count window. Must be at least `0`; "
+"`0` suppresses the first restart."
+msgstr "计数窗口内允许的最大重启次数。必须至少为 `0`；`0` 会阻止第一次重启。"
+
+msgid "`execution.restart-strategy.fixed-delay.delay`"
+msgstr "`execution.restart-strategy.fixed-delay.delay`"
+
+msgid "duration"
+msgstr "duration"
+
+msgid "`10s`"
+msgstr "`10s`"
+
+msgid "Delay before each restart. Must be non-negative."
+msgstr "每次重启前的延迟。不得为负数。"
+
+msgid "`execution.restart-strategy.fixed-delay.count-interval`"
+msgstr "`execution.restart-strategy.fixed-delay.count-interval`"
+
+msgid "`10min`"
+msgstr "`10min`"
+
+msgid "Sliding window used to count restart attempts. Must be greater than zero."
+msgstr "用于统计重启尝试次数的滑动窗口。必须大于零。"
+
+msgid "`execution.checkpointing.trigger.interval-duration`"
+msgstr "`execution.checkpointing.trigger.interval-duration`"
+
+msgid "`60s`"
+msgstr "`60s`"
+
+msgid ""
+"Maximum wall-clock time between source checkpoint barriers. `0` disables "
+"the time trigger."
+msgstr "源检查点屏障之间允许的最大墙上时钟间隔。`0` 会禁用时间触发器。"
+
+msgid "`execution.checkpointing.trigger.interval-records`"
+msgstr "`execution.checkpointing.trigger.interval-records`"
+
+msgid "`512`"
+msgstr "`512`"
+
+msgid ""
+"Maximum records emitted by a source between checkpoint barriers. `0` "
+"disables the record trigger. Whichever trigger fires first resets both "
+"intervals."
+msgstr "源在检查点屏障之间最多发出的记录数。`0` 会禁用记录触发器。任一触发器先触发时，两个间隔都会重置。"
+
+msgid "`execution.checkpointing.persistence-interval`"
+msgstr "`execution.checkpointing.persistence-interval`"
+
+msgid "int, seconds"
+msgstr "int, seconds"
+
+msgid "`600`"
+msgstr "`600`"
+
+msgid ""
+"Interval for persisting checkpoint-coordinator metadata. Must be at least"
+" `0`; `0` disables periodic persistence. Completion paths can still "
+"persist metadata."
+msgstr "持久化检查点协调器元数据的间隔。必须至少为 `0`；`0` 会禁用周期性持久化。完成路径仍可持久化元数据。"
+
+msgid "`execution.checkpointing.max-concurrent-checkpoints`"
+msgstr "`execution.checkpointing.max-concurrent-checkpoints`"
+
+msgid "`100`"
+msgstr "`100`"
+
+msgid "Maximum checkpoint attempts that may be in flight. Must be at least `1`."
+msgstr "可同时处于进行状态的最大检查点尝试数。必须至少为 `1`。"
+
+msgid "`execution.checkpointing.timeout`"
+msgstr "`execution.checkpointing.timeout`"
+
+msgid ""
+"Maximum time an in-flight checkpoint may take before it is discarded. "
+"Must be at least `0`; `0` disables checkpoint expiry."
+msgstr "进行中的检查点在被丢弃前允许花费的最长时间。必须至少为 `0`；`0` 会禁用检查点过期。"
+
+msgid "`execution.checkpointing.max-history-size`"
+msgstr "`execution.checkpointing.max-history-size`"
+
+msgid ""
+"Maximum checkpoint-history entries retained in coordinator memory. Must "
+"be at least `1`."
+msgstr "协调器内存中保留的最大检查点历史条目数。必须至少为 `1`。"
+
+msgid "`execution.checkpointing.async-notify`"
+msgstr "`execution.checkpointing.async-notify`"
+
+msgid "bool"
+msgstr "bool"
+
+msgid "`false`"
+msgstr "`false`"
+
+msgid ""
+"If `true`, committers send checkpoint-complete notifications without "
+"waiting for the coordinator acknowledgement and reap or retry them at "
+"later barriers."
+msgstr "若为 `true`，提交器会发送检查点完成通知而不等待协调器确认，并在后续屏障处回收或重试这些通知。"
+
+msgid "`execution.checkpointing.dir`"
+msgstr "`execution.checkpointing.dir`"
+
+msgid "string"
+msgstr "string"
+
+msgid "`<temp-dir>/klein/checkpoint`"
+msgstr "`<temp-dir>/klein/checkpoint`"
+
+msgid ""
+"Durable checkpoint root. Supports local paths, `file://`, `s3://`, and "
+"`gs://`. Use shared durable storage for recovery across nodes."
+msgstr "持久检查点根目录。支持本地路径、`file://`、`s3://` 和 `gs://`。跨节点恢复时请使用共享持久存储。"
+
+msgid "`execution.checkpointing.storage-options`"
+msgstr "`execution.checkpointing.storage-options`"
+
+msgid "mapping or `None`"
+msgstr "mapping or `None`"
+
+msgid "`None`"
+msgstr "`None`"
+
+msgid ""
+"Keyword arguments passed to PyArrow `S3FileSystem` or `GcsFileSystem`. "
+"Accepted only when the checkpoint URI uses `s3://` or `gs://`."
+msgstr ""
+"传给 PyArrow `S3FileSystem` 或 `GcsFileSystem` 的关键字参数。仅当检查点 URI 使用 `s3://` 或"
+" `gs://` 时接受。"
+
+msgid "`execution.checkpointing.num-retained`"
+msgstr "`execution.checkpointing.num-retained`"
+
+msgid "`1`"
+msgstr "`1`"
+
+msgid ""
+"Number of completed `chk-N` directories retained per job. Must be at "
+"least `1`."
+msgstr "每个作业保留的已完成 `chk-N` 目录数量。必须至少为 `1`。"
+
+msgid "`execution.savepoint.path`"
+msgstr "`execution.savepoint.path`"
+
+msgid "string or `None`"
+msgstr "string or `None`"
+
+msgid "Checkpoint or savepoint path from which the job restores at submission."
+msgstr "作业提交时用于恢复的检查点或保存点路径。"
+
+msgid ""
+"Setting both checkpoint trigger intervals to `0` prevents sources from "
+"emitting periodic checkpoint barriers. This also delays checkpoint-driven"
+" source offset durability and two-phase-commit sink completion; use that "
+"combination only when you intentionally don't need periodic recovery "
+"points."
+msgstr ""
+"将两个检查点触发间隔都设为 `0`，会阻止源发出周期性检查点屏障。这也会延迟由检查点驱动的源 offset 持久化和两阶段提交 sink "
+"完成；仅当确实不需要周期性恢复点时才使用此组合。"
+
+msgid "Job lifecycle"
+msgstr "作业生命周期"
+
+msgid "`job.scheduler.start.timeout`"
+msgstr "`job.scheduler.start.timeout`"
+
+msgid "`300`"
+msgstr "`300`"
+
+msgid ""
+"Per-step limit for starting workers and for startup-heavy coordinator "
+"operations such as checkpoint restoration."
+msgstr "启动 worker 以及检查点恢复等启动密集型协调器操作的单步时间限制。"
+
+msgid "`job.deploy.timeout`"
+msgstr "`job.deploy.timeout`"
+
+msgid ""
+"Total time budget for coordinator initialization, worker scheduling, and "
+"coordinator start."
+msgstr "协调器初始化、worker 调度和协调器启动的总时间预算。"
+
+msgid "`job.stop.timeout`"
+msgstr "`job.stop.timeout`"
+
+msgid "`60`"
+msgstr "`60`"
+
+msgid ""
+"Total time budget for stopping the supervisor, workers, and coordinator. "
+"It is also the default `cancel()` budget."
+msgstr "停止 supervisor、worker 和协调器的总时间预算。它也是默认的 `cancel()` 时间预算。"
+
+msgid "`job.coordinator.rpc.timeout`"
+msgstr "`job.coordinator.rpc.timeout`"
+
+msgid "`30`"
+msgstr "`30`"
+
+msgid ""
+"Limit for lightweight coordinator RPCs such as health probes, metadata "
+"flush, and stop."
+msgstr "健康探测、元数据刷新和停止等轻量协调器 RPC 的时间限制。"
+
+msgid "`job.healthcheck.interval`"
+msgstr "`job.healthcheck.interval`"
+
+msgid "`15`"
+msgstr "`15`"
+
+msgid "Interval between `JobManager` health checks."
+msgstr "`JobManager` 健康检查之间的间隔。"
+
+msgid "`job.namespace`"
+msgstr "`job.namespace`"
+
+msgid "`\"\"`"
+msgstr "`\"\"`"
+
+msgid ""
+"Ray namespace used for this job's named actors. An empty string generates"
+" a unique `klein-<job>-<id>` namespace. Set a stable value only when "
+"another client or operations tool must attach to the same actors."
+msgstr ""
+"此作业的具名 actor 使用的 Ray 命名空间。空字符串会生成唯一的 `klein-<job>-<id>` "
+"命名空间。只有当其他客户端或运维工具必须连接到同一组 actor 时，才设置稳定值。"
+
+msgid "Pipeline buffers, placement, and data plane"
+msgstr "流水线缓冲区、放置与数据平面"
+
+msgid "`pipeline.input-buffer.size`"
+msgstr "`pipeline.input-buffer.size`"
+
+msgid "`200`"
+msgstr "`200`"
+
+msgid ""
+"Maximum logical rows queued in each streaming task inbox. Must be "
+"positive. A single oversized columnar block is admitted only while the "
+"inbox is otherwise empty."
+msgstr "每个流任务收件箱中排队的最大逻辑行数。必须为正数。只有收件箱原本为空时，才会接纳单个超大的列式块。"
+
+msgid "`pipeline.input-buffer.max-bytes`"
+msgstr "`pipeline.input-buffer.max-bytes`"
+
+msgid "`67108864`"
+msgstr "`67108864`"
+
+msgid ""
+"Maximum estimated payload bytes queued in each task inbox. Must be "
+"positive. One oversized block is admitted exclusively so progress remains"
+" possible."
+msgstr "每个任务收件箱中排队的最大估算负载字节数。必须为正数。为了保证仍可推进，会以独占方式接纳一个超大块。"
+
+msgid "`pipeline.input-buffer.put-timeout`"
+msgstr "`pipeline.input-buffer.put-timeout`"
+
+msgid "`1s`"
+msgstr "`1s`"
+
+msgid ""
+"Compatibility timeout for targets without immediate admission support. "
+"Native tasks use non-blocking capacity probes and backoff."
+msgstr "用于不支持即时准入的目标的兼容性超时。原生任务使用非阻塞容量探测和退避。"
+
+msgid "`pipeline.output-buffer.max-rows`"
+msgstr "`pipeline.output-buffer.max-rows`"
+
+msgid "`1000`"
+msgstr "`1000`"
+
+msgid ""
+"Hard per-edge bound on logical rows retained before transfer to the emit "
+"queue. Exceeding it fails fast instead of growing task memory without "
+"limit."
+msgstr "转移到发出队列前，每条边保留的逻辑行数硬上限。超过此限制会快速失败，而不是让任务内存无限增长。"
+
+msgid "`pipeline.output-buffer.max-bytes`"
+msgstr "`pipeline.output-buffer.max-bytes`"
+
+msgid ""
+"Hard per-edge estimated-byte bound before transfer to the emit queue. One"
+" oversized block is allowed only when exclusive."
+msgstr "转移到发出队列前，每条边的估算字节数硬上限。只有在独占时才允许一个超大块。"
+
+msgid "`pipeline.emit-queue.max-batches`"
+msgstr "`pipeline.emit-queue.max-batches`"
+
+msgid "`2`"
+msgstr "`2`"
+
+msgid ""
+"Maximum detached output batches waiting in the FIFO emit queue. Must be "
+"positive."
+msgstr "FIFO 发出队列中等待的最大分离输出批次数。必须为正数。"
+
+msgid "`pipeline.internal.batch-size`"
+msgstr "`pipeline.internal.batch-size`"
+
+msgid "`10`"
+msgstr "`10`"
+
+msgid ""
+"Records accumulated per downstream target before a micro-batch is "
+"emitted. Must be non-negative; `0` effectively emits each record "
+"immediately."
+msgstr "发出微批次前，针对每个下游目标累积的记录数。不得为负数；`0` 实际上会立即发出每条记录。"
+
+msgid "`pipeline.internal.batch-max-rows`"
+msgstr "`pipeline.internal.batch-max-rows`"
+
+msgid ""
+"Flushes a transport micro-batch once it reaches this many logical rows. "
+"Must be positive."
+msgstr "传输微批次达到此逻辑行数时刷新。必须为正数。"
+
+msgid "`pipeline.internal.batch-max-bytes`"
+msgstr "`pipeline.internal.batch-max-bytes`"
+
+msgid "`4194304`"
+msgstr "`4194304`"
+
+msgid ""
+"Flushes a transport micro-batch once its estimated payload reaches this "
+"size. Must be positive."
+msgstr "传输微批次的估算负载达到此大小时刷新。必须为正数。"
+
+msgid "`pipeline.transport.object-store-threshold-bytes`"
+msgstr "`pipeline.transport.object-store-threshold-bytes`"
+
+msgid "`131072`"
+msgstr "`131072`"
+
+msgid ""
+"Duplicated broadcast batches at or above this size use one shared Ray "
+"Object Store reference. `0` shares every duplicated batch."
+msgstr "达到或超过此大小的重复广播批次会共用一个 Ray Object Store 引用。`0` 会让所有重复批次共享引用。"
+
+msgid "`pipeline.operator-chaining.enabled`"
+msgstr "`pipeline.operator-chaining.enabled`"
+
+msgid "`true`"
+msgstr "`true`"
+
+msgid ""
+"Co-locates compatible non-shuffle operators in one task to avoid "
+"serialization between them."
+msgstr "将兼容的非 shuffle 算子共同放置在一个任务中，避免算子之间的序列化。"
+
+msgid "`pipeline.columnar-passthrough.enabled`"
+msgstr "`pipeline.columnar-passthrough.enabled`"
+
+msgid ""
+"Keeps batched output column-oriented across compatible downstream edges "
+"instead of converting it to rows and back. Keyed and custom-partitioned "
+"edges are sliced by row key. Disable only for the legacy row-oriented "
+"wire shape."
+msgstr "使批量输出在兼容的下游边上保持列式，而不是先转换为行再转换回来。键控边和自定义分区边按行键切片。仅在需要旧版面向行的传输格式时禁用。"
+
+msgid "`pipeline.placement-group.enabled`"
+msgstr "`pipeline.placement-group.enabled`"
+
+msgid ""
+"Tries to gang-schedule the streaming job in a Ray placement group. If "
+"reservation fails, Klein falls back to round-robin and then native "
+"placement. Ignored by `balanced` deployment mode and local debug mode."
+msgstr ""
+"尝试在 Ray placement group 中对流式作业进行成组调度。若资源预留失败，Klein "
+"会回退到轮询放置，再回退到原生放置。`balanced` 部署模式和本地调试模式会忽略此选项。"
+
+msgid "`pipeline.placement-group.strategy`"
+msgstr "`pipeline.placement-group.strategy`"
+
+msgid "`PACK`"
+msgstr "`PACK`"
+
+msgid ""
+"Ray placement-group strategy. Klein documents and tests `PACK` and "
+"`SPREAD`; invalid values are rejected by Ray."
+msgstr "Ray placement group 策略。Klein 记录并测试了 `PACK` 和 `SPREAD`；无效值会被 Ray 拒绝。"
+
+msgid "`pipeline.placement-group.ready-timeout`"
+msgstr "`pipeline.placement-group.ready-timeout`"
+
+msgid "`120s`"
+msgstr "`120s`"
+
+msgid ""
+"Maximum wait for placement-group reservation before Klein tries a "
+"fallback placement strategy."
+msgstr "Klein 尝试回退放置策略前，等待 placement group 资源预留的最长时间。"
+
+msgid "`pipeline.replay-buffer.enabled`"
+msgstr "`pipeline.replay-buffer.enabled`"
+
+msgid ""
+"Retains emitted records until downstream progress confirms they can be "
+"dropped, enabling single-task at-least-once replay. `false` leaves full-"
+"job restart as the recovery path."
+msgstr "保留已发出的记录，直到下游进度确认可以丢弃，从而支持单任务至少一次重放。`false` 会保留全作业重启作为恢复路径。"
+
+msgid "`pipeline.replay-buffer.watermark-flush-batches`"
+msgstr "`pipeline.replay-buffer.watermark-flush-batches`"
+
+msgid "`32`"
+msgstr "`32`"
+
+msgid ""
+"Forces the complete input/operator/output durability boundary and "
+"advances every pending sender after this many processed input batches. "
+"Must be positive."
+msgstr "处理这么多个输入批次后，强制完成输入/算子/输出持久性边界，并推进所有待处理发送方。必须为正数。"
+
+msgid "`pipeline.replay-buffer.max-bytes`"
+msgstr "`pipeline.replay-buffer.max-bytes`"
+
+msgid "`268435456`"
+msgstr "`268435456`"
+
+msgid ""
+"Hard estimated-memory guard for retained replay data. After old "
+"acknowledgements are applied, a new batch that would cross the bound "
+"fails the task into normal recovery before process OOM. Must be positive "
+"while replay is enabled."
+msgstr "保留重放数据的估算内存硬限制。应用旧确认后，若新批次会越过该上限，任务会在进程 OOM 前进入正常恢复流程并失败。启用重放时必须为正数。"
+
+msgid "Managed state, SQL state, event time, and UDFs"
+msgstr "托管状态、SQL 状态、事件时间与 UDF"
+
+msgid "`state.backend.type`"
+msgstr "`state.backend.type`"
+
+msgid "string: `memory`, `rocksdb`"
+msgstr "string: `memory`, `rocksdb`"
+
+msgid "`memory`"
+msgstr "`memory`"
+
+msgid ""
+"Backend for managed keyed state. Both recover from completed checkpoints;"
+" install `ray-klein[rocksdb]` before selecting RocksDB."
+msgstr "托管键控状态使用的后端。两者都能从已完成检查点恢复；选择 RocksDB 前请安装 `ray-klein[rocksdb]`。"
+
+msgid "`state.backend.local-dir`"
+msgstr "`state.backend.local-dir`"
+
+msgid "`<temp-dir>/klein/state`"
+msgstr "`<temp-dir>/klein/state`"
+
+msgid ""
+"Node-local working directory for RocksDB state. This isn't the durable "
+"checkpoint directory."
+msgstr "RocksDB 状态的节点本地工作目录。它不是持久检查点目录。"
+
+msgid "`state.checkpoint.object-store-cache.enabled`"
+msgstr "`state.checkpoint.object-store-cache.enabled`"
+
+msgid ""
+"Caches sufficiently large immutable state snapshots in Ray's Object Store"
+" to accelerate recovery. Disabled automatically in in-process debug mode."
+msgstr "将足够大的不可变状态快照缓存在 Ray Object Store 中，以加快恢复。在进程内调试模式下会自动禁用。"
+
+msgid "`state.checkpoint.object-store-cache.min-bytes`"
+msgstr "`state.checkpoint.object-store-cache.min-bytes`"
+
+msgid "`1048576` (1 MiB)"
+msgstr "`1048576` (1 MiB)"
+
+msgid ""
+"Minimum serialized snapshot size stored in the Object Store instead of "
+"coordinator memory. Must be non-negative."
+msgstr "存入 Object Store 而非协调器内存的最小序列化快照大小。不得为负数。"
+
+msgid "`state.ttl.cleanup.batch-size`"
+msgstr "`state.ttl.cleanup.batch-size`"
+
+msgid ""
+"Maximum expired state entries removed after processing one operator "
+"input. Must be at least `1`."
+msgstr "处理一个算子输入后移除的最大过期状态条目数。必须至少为 `1`。"
+
+msgid "`state.keyed.max-parallelism`"
+msgstr "`state.keyed.max-parallelism`"
+
+msgid "`128`"
+msgstr "`128`"
+
+msgid ""
+"Stable key-group count for keyed state. Must be at least `1`, must not be"
+" lower than operator parallelism, and must match the value stored in a "
+"restored checkpoint."
+msgstr "键控状态的稳定 key-group 数量。必须至少为 `1`，不得小于算子并行度，并且必须与恢复检查点中存储的值一致。"
+
+msgid "`table.exec.state.ttl`"
+msgstr "`table.exec.state.ttl`"
+
+msgid "duration or `None`"
+msgstr "duration or `None`"
+
+msgid ""
+"Default idle retention for streaming SQL regular joins, Top-N, and non-"
+"windowed aggregations. A configured value must be greater than zero. SQL "
+"hints or operator arguments override it for their state."
+msgstr "流式 SQL 常规联接、Top-N 和非窗口聚合的默认空闲保留时长。配置值必须大于零。SQL hint 或算子参数会覆盖其状态的此设置。"
+
+msgid "`event-time.idle-input.check-interval`"
+msgstr "`event-time.idle-input.check-interval`"
+
+msgid ""
+"How often a task evaluates its input-idleness strategy while its inbox is"
+" empty. Must be greater than zero."
+msgstr "任务收件箱为空时，评估输入空闲策略的频率。必须大于零。"
+
+msgid "`udf.ignore-exception`"
+msgstr "`udf.ignore-exception`"
+
+msgid ""
+"If `true`, log a user-function exception and continue processing later "
+"records. In `auto` mode this selects native streaming so Klein can "
+"preserve record-level error and metric semantics. Leave disabled when "
+"dropping a failed record would violate correctness."
+msgstr ""
+"若为 `true`，记录用户函数异常并继续处理后续记录。在 `auto` 模式下，这会"
+"选择原生流处理，使 Klein 能够保留记录级错误处理和指标语义。如果丢弃失败"
+"记录会破坏正确性，请保持禁用。"
+
+msgid ""
+"`state.keyed.max-parallelism` is checkpoint metadata, not a routine "
+"tuning knob. Changing ordinary operator concurrency can rescale keyed "
+"state, but changing the max parallelism prevents restoration of existing "
+"keyed-state checkpoints."
+msgstr ""
+"`state.keyed.max-parallelism` "
+"是检查点元数据，不是常规调优旋钮。更改普通算子并发度可以重新缩放键控状态，但更改最大并行度会使现有键控状态检查点无法恢复。"
+
+msgid "Adaptive partitioner compatibility options"
+msgstr "自适应分区器兼容性选项"
+
+msgid ""
+"The following options remain declared for compatibility with earlier "
+"adaptive partitioner implementations. The current adaptive partitioner "
+"reacts directly to downstream write timeouts and doesn't read them, so "
+"changing them has no runtime effect."
+msgstr "以下选项仍为兼容早期自适应分区器实现而声明。当前自适应分区器直接响应下游写入超时，并不会读取这些选项，因此更改它们不会产生运行时效果。"
+
+msgid "Intended meaning"
+msgstr "预期含义"
+
+msgid "`partitioner.adaptive.buffer-busy-threshold`"
+msgstr "`partitioner.adaptive.buffer-busy-threshold`"
+
+msgid "float"
+msgstr "float"
+
+msgid "`0.5`"
+msgstr "`0.5`"
+
+msgid "Intended fraction of input-buffer capacity above which a target is busy."
+msgstr "预期的输入缓冲区容量比例；超过此比例时目标被视为繁忙。"
+
+msgid "`partitioner.adaptive.busy-ratio`"
+msgstr "`partitioner.adaptive.busy-ratio`"
+
+msgid "Intended fraction of busy targets that triggers a statistics refresh."
+msgstr "预期的繁忙目标比例；达到此比例时触发统计信息刷新。"
+
+msgid "`partitioner.adaptive.update-interval`"
+msgstr "`partitioner.adaptive.update-interval`"
+
+msgid "float, seconds"
+msgstr "float, seconds"
+
+msgid "`3.0`"
+msgstr "`3.0`"
+
+msgid "Intended interval between adaptive-partitioner statistics updates."
+msgstr "自适应分区器统计信息更新之间的预期间隔。"
+
+msgid "Observability"
+msgstr "可观测性"
+
+msgid "`observability.dashboard.enabled`"
+msgstr "`observability.dashboard.enabled`"
+
+msgid ""
+"Publishes redacted, read-only job snapshots to the detached Klein state "
+"actor. It doesn't control logs, metrics, or checkpointing."
+msgstr "向分离的 Klein 状态 actor 发布经过脱敏的只读作业快照。它不控制日志、指标或检查点。"
+
+msgid "`observability.dashboard.history-size`"
+msgstr "`observability.dashboard.history-size`"
+
+msgid ""
+"Maximum current and terminal jobs retained in the state actor's in-memory"
+" history. Must be at least `1`; this history isn't durable."
+msgstr "状态 actor 的内存历史中保留的当前及终止作业最大数量。必须至少为 `1`；此历史不会持久化。"
+
+msgid "Ray Serve integration"
+msgstr "Ray Serve 集成"
+
+msgid ""
+"These settings apply only to regions marked for Ray Serve execution and "
+"require the `ray-klein[serve]` optional dependencies. See the [Ray Serve "
+"integration](connectors/ray-serve.md) for graph constraints, deployment "
+"configuration, request behavior, and retries."
+msgstr ""
+"这些设置仅适用于标记为使用 Ray Serve 执行的区域，并要求安装 `ray-klein[serve]` "
+"可选依赖项。有关图约束、部署配置、请求行为和重试，请参阅 [Ray Serve 集成](connectors/ray-serve.md)。"
+
+msgid "`serve.proxy-endpoints`"
+msgstr "`serve.proxy-endpoints`"
+
+msgid ""
+"Comma-separated HTTP base URLs for Serve proxies. At least one is "
+"required when an embedded proxy client is created."
+msgstr "以逗号分隔的 Serve 代理 HTTP 基础 URL。创建内嵌代理客户端时至少需要一个。"
+
+msgid "`serve.deployment-name`"
+msgstr "`serve.deployment-name`"
+
+msgid "Ray Serve deployment name. Required for an embedded proxy client."
+msgstr "Ray Serve 部署名称。内嵌代理客户端必须配置此项。"
+
+msgid "`serve.route-prefix`"
+msgstr "`serve.route-prefix`"
+
+msgid "`/`"
+msgstr "`/`"
+
+msgid "Route prefix appended to the proxy endpoint and deployment path."
+msgstr "追加到代理端点和部署路径的路由前缀。"
+
+msgid "`serve.client.num-cpus`"
+msgstr "`serve.client.num-cpus`"
+
+msgid "`1.0`"
+msgstr "`1.0`"
+
+msgid ""
+"CPU allocation for an embedded proxy client actor. A single-node Serve "
+"region inherits that node's resource setting instead."
+msgstr "内嵌代理客户端 actor 的 CPU 分配。单节点 Serve 区域改为继承该节点的资源设置。"
+
+msgid "`serve.client.concurrency`"
+msgstr "`serve.client.concurrency`"
+
+msgid ""
+"Embedded proxy client operator concurrency. A single-node Serve region "
+"inherits that node's concurrency instead."
+msgstr "内嵌代理客户端算子并发度。单节点 Serve 区域改为继承该节点的并发度。"
+
+msgid "`serve.client.async-buffer-size`"
+msgstr "`serve.client.async-buffer-size`"
+
+msgid ""
+"Maximum pending asynchronous requests buffered by the embedded proxy "
+"client."
+msgstr "内嵌代理客户端缓冲的最大待处理异步请求数。"
+
+msgid "`serve.client.batch-timeout`"
+msgstr "`serve.client.batch-timeout`"
+
+msgid "`5`"
+msgstr "`5`"
+
+msgid "Maximum time spent accumulating a proxy batch."
+msgstr "累积一个代理批次所用的最长时间。"
+
+msgid "`serve.client.batch-size`"
+msgstr "`serve.client.batch-size`"
+
+msgid "Records per proxy request batch."
+msgstr "每个代理请求批次的记录数。"
+
+msgid "`serve.client.max-attempts`"
+msgstr "`serve.client.max-attempts`"
+
+msgid "Maximum HTTP attempts for one proxy request."
+msgstr "一个代理请求的最大 HTTP 尝试次数。"
+
+msgid "`serve.client.slow-request-warning`"
+msgstr "`serve.client.slow-request-warning`"
+
+msgid "Elapsed request time after which Klein emits a slow-request warning."
+msgstr "请求经过此时长后，Klein 会发出慢请求警告。"
+
+msgid "`serve.client.http-timeout`"
+msgstr "`serve.client.http-timeout`"
+
+msgid "Total logical request budget across all HTTP attempts and retry backoff."
+msgstr "所有 HTTP 尝试与重试退避共用的逻辑请求总预算。"
+
+msgid "`serve.client.http-connect-timeout`"
+msgstr "`serve.client.http-connect-timeout`"
+
+msgid "HTTP connection-establishment timeout passed to `aiohttp`."
+msgstr "传给 `aiohttp` 的 HTTP 连接建立超时。"
+
+msgid "`serve.client.http-limit-per-host`"
+msgstr "`serve.client.http-limit-per-host`"
+
+msgid "Maximum pooled HTTP connections to one host."
+msgstr "一个主机的最大池化 HTTP 连接数。"
+
+msgid "`serve.client.http-connection-limit`"
+msgstr "`serve.client.http-connection-limit`"
+
+msgid "Maximum total pooled HTTP connections."
+msgstr "池化 HTTP 连接总数上限。"
+
+msgid "`serve.client.retry-backoff-max`"
+msgstr "`serve.client.retry-backoff-max`"
+
+msgid ""
+"Maximum randomized exponential retry delay. The runtime also caps this "
+"value at `10s`."
+msgstr "随机指数重试延迟的最大值。运行时还会将此值限制为不超过 `10s`。"
+
+msgid "Direct environment variables"
+msgstr "直接读取的环境变量"
+
+msgid ""
+"The variables below are read directly and aren't typed `ConfigOption` "
+"values. They don't participate in explicit-code-over-environment "
+"precedence and don't appear in `Configuration.to_dict()`."
+msgstr ""
+"下列变量会被直接读取，不是类型化的 `ConfigOption` 值。它们不参与显式代码优先于环境变量的优先级规则，也不会出现在 "
+"`Configuration.to_dict()` 中。"
+
+msgid "Variable"
+msgstr "变量"
+
+msgid "Meaning"
+msgstr "含义"
+
+msgid "`RAY_KLEIN_DEBUG`"
+msgstr "`RAY_KLEIN_DEBUG`"
+
+msgid "`0`"
+msgstr "`0`"
+
+msgid ""
+"Enables in-process debug actors for `1`, `true`, or `yes` (case-"
+"insensitive). This mode doesn't validate Ray serialization, scheduling, "
+"isolation, or failure recovery."
+msgstr "当值为 `1`、`true` 或 `yes`（不区分大小写）时，启用进程内调试 actor。此模式不会验证 Ray 序列化、调度、隔离或故障恢复。"
+
+msgid "`RAY_KLEIN_COMPILE_ONLY`"
+msgstr "`RAY_KLEIN_COMPILE_ONLY`"
+
+msgid "unset"
+msgstr "unset"
+
+msgid ""
+"If present, compiles the stream graph and returns a completed handle "
+"without executing the job. The value itself isn't parsed."
+msgstr "若存在此变量，则编译流图并返回一个已完成句柄，而不执行作业。变量值本身不会被解析。"
+
+msgid "`RAY_KLEIN_RESOURCE_PLAN_LOAD_PATH`"
+msgstr "`RAY_KLEIN_RESOURCE_PLAN_LOAD_PATH`"
+
+msgid "Loads a JSON resource plan and applies it to the compiled graph."
+msgstr "加载 JSON 资源计划并将其应用到编译后的图。"
+
+msgid "`RAY_KLEIN_RESOURCE_PLAN_PERSIST_PATH`"
+msgstr "`RAY_KLEIN_RESOURCE_PLAN_PERSIST_PATH`"
+
+msgid "Writes the compiled graph's resource plan to this path."
+msgstr "将编译后图的资源计划写入此路径。"
+
+msgid "`RAY_SERVICE_NAME`"
+msgstr "`RAY_SERVICE_NAME`"
+
+msgid ""
+"When set inside a Klein Serve deployment, requires incoming requests to "
+"carry the same `rayservice` header."
+msgstr "在 Klein Serve 部署内设置时，要求传入请求携带相同的 `rayservice` header。"
+
+msgid "`RAY_KLEIN_LOGGING_CONFIG`"
+msgstr "`RAY_KLEIN_LOGGING_CONFIG`"
+
+msgid "bundled `logging.yaml`"
+msgstr "bundled `logging.yaml`"
+
+msgid "Path to the YAML `dictConfig` loaded by `ray.klein.configure_logging()`."
+msgstr "由 `ray.klein.configure_logging()` 加载的 YAML `dictConfig` 路径。"
+
+msgid "`RAY_KLEIN_LOG_LEVEL`"
+msgstr "`RAY_KLEIN_LOG_LEVEL`"
+
+msgid "YAML-configured level"
+msgstr "YAML-configured level"
+
+msgid ""
+"Overrides the `ray.klein` logger level when `configure_logging()` runs. "
+"Standard Python levels and `TRACE` are accepted."
+msgstr "`configure_logging()` 运行时覆盖 `ray.klein` 日志记录器级别。接受标准 Python 级别和 `TRACE`。"
+
+msgid "`RAY_KLEIN_LOG_FORMAT`"
+msgstr "`RAY_KLEIN_LOG_FORMAT`"
+
+msgid "`text`"
+msgstr "`text`"
+
+msgid "Selects `text` or `json` formatting when `configure_logging()` runs."
+msgstr "`configure_logging()` 运行时选择 `text` 或 `json` 格式。"
+
+msgid "`KLEIN_NO_RICH_UI`"
+msgstr "`KLEIN_NO_RICH_UI`"
+
+msgid "Any non-empty value disables the interactive terminal progress table."
+msgstr "任何非空值都会禁用交互式终端进度表。"
+
+msgid "`NO_COLOR`"
+msgstr "`NO_COLOR`"
+
+msgid ""
+"Conventional terminal setting; any non-empty value also disables Klein's "
+"rich progress table."
+msgstr "约定俗成的终端设置；任何非空值也会禁用 Klein 的富文本进度表。"
+
+#~ msgid "Total HTTP request timeout passed to `aiohttp`."
+#~ msgstr "传给 `aiohttp` 的 HTTP 请求总超时。"

@@ -28,8 +28,7 @@ RocketMQ 5 gRPC SimpleConsumer implementation.
 
 ```python
 import ray
-
-ray.klein.reset_context()
+import ray.klein
 
 orders = ray.klein.read_rocketmq(
     "orders",

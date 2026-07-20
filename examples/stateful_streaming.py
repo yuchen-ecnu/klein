@@ -2,6 +2,7 @@
 from typing import Any
 
 import ray
+import ray.klein
 from ray.klein import KeyedProcessFunction
 from ray.klein.state import KeyedStateContext, ValueStateDescriptor
 
@@ -17,9 +18,9 @@ class RunningTotal(KeyedProcessFunction):
 
 
 def run() -> list[dict]:
-    context = ray.klein.reset_context({"execution.runtime.mode": "streaming"}).enable_interactive_mode()
-    return (
-        context.from_items(
+    ray.klein.configure({"execution.runtime.mode": "streaming"})
+    result = (
+        ray.klein.from_items(
             [
                 {"customer": "Ada", "amount": 4},
                 {"customer": "Ada", "amount": 7},
@@ -28,8 +29,9 @@ def run() -> list[dict]:
         )
         .key_by(lambda row: row["customer"])
         .process(RunningTotal())
-        .take_all()
     )
+    result.take_all()
+    return ray.klein.execute("stateful-streaming").get()
 
 
 def main() -> None:

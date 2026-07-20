@@ -7,7 +7,7 @@ import pytest
 from sqlglot import parse_one
 
 from ray.klein import KleinContext, SQLQueryError, SQLSession, TableFactory, sql
-from ray.klein._internal.sql.execution import _build_aggregate_plan, _shuffle_partitions
+from ray.klein._internal.sql.execution import _apply_order_and_limit, _build_aggregate_plan, _shuffle_partitions
 from ray.klein._internal.sql.kafka_table_factory import KafkaTableFactory
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
@@ -224,6 +224,14 @@ def test_sql_shuffle_width_uses_cluster_capacity_for_lazy_datasets(monkeypatch) 
 
     assert _shuffle_partitions(_LazyDataset()) == 4
     assert _shuffle_partitions(_LazyDataset(), known_blocks=(3,)) == 3
+
+
+@pytest.mark.parametrize("literal", ["1.5", "'2'", "-1"])
+def test_batch_limit_rejects_non_integer_literals(literal: str) -> None:
+    statement = parse_one(f"SELECT * FROM rows LIMIT {literal}")
+
+    with pytest.raises(SQLQueryError, match="non-negative integer literal"):
+        _apply_order_and_limit(statement, FakeDataset())
 
 
 def test_flink_style_create_and_drop_table() -> None:

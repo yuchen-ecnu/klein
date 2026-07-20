@@ -1,0 +1,274 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Run and write Klein for Ray unit, state, architecture, integration, and "
+"external-service tests."
+msgstr "运行和编写 Klein for Ray 单元、状态、架构、集成及外部服务测试。"
+
+msgid "Testing"
+msgstr "测试"
+
+msgid ""
+"Klein for Ray uses pytest with a `src` layout and importlib import mode. "
+"Tests are classified on two independent axes: a **tier** describes the "
+"dependency boundary the test crosses, while a **component** identifies the "
+"subsystem that owns it."
+msgstr "Klein for Ray 使用 pytest，并采用 `src` 布局和 importlib 导入模式。测试按两个相互独立的维度分类：**层级**描述测试跨越的依赖边界，**组件**标识测试所属的子系统。"
+
+msgid "Tier"
+msgstr "层级"
+
+msgid "Location"
+msgstr "位置"
+
+msgid "Purpose"
+msgstr "用途"
+
+msgid "Command"
+msgstr "命令"
+
+msgid "Unit"
+msgstr "单元"
+
+msgid "`tests/unit`"
+msgstr "`tests/unit`"
+
+msgid "In-process behavior with dependencies replaced at their boundary"
+msgstr "在依赖边界处替换依赖后的进程内行为"
+
+msgid "`make unit`"
+msgstr "`make unit`"
+
+msgid "State"
+msgstr "状态"
+
+msgid "`tests/state`"
+msgstr "`tests/state`"
+
+msgid "Deterministic backend and checkpoint-storage contracts"
+msgstr "确定性的 Backend 和检查点存储契约"
+
+msgid "Architecture"
+msgstr "架构"
+
+msgid "`tests/architecture`"
+msgstr "`tests/architecture`"
+
+msgid "Package and test-suite invariants"
+msgstr "包与测试套件不变量"
+
+msgid "Integration"
+msgstr "集成"
+
+msgid "`tests/integration`"
+msgstr "`tests/integration`"
+
+msgid "Behavior on a managed local Ray cluster"
+msgstr "在托管本地 Ray 集群上的行为"
+
+msgid "`make integration`"
+msgstr "`make integration`"
+
+msgid "External"
+msgstr "外部"
+
+msgid "`tests/integration/external`"
+msgstr "`tests/integration/external`"
+
+msgid "Kafka, Redis, Docker, or another service"
+msgstr "Kafka、Redis、Docker 或其他服务"
+
+msgid "`make external`"
+msgstr "`make external`"
+
+msgid ""
+"`make test` is intentionally the fast, deterministic pull-request loop and "
+"is an alias for `make unit`. Integration modules receive an isolated, "
+"managed Ray runtime through the `ray_cluster` fixture. External tests are "
+"skipped unless `--run-external` is supplied."
+msgstr "`make test` 有意作为快速且确定性的 Pull Request 循环，并且是 `make unit` 的别名。集成模块通过 `ray_cluster` Fixture 获得隔离且受管理的 Ray 运行时。除非提供 `--run-external`，否则外部测试会被跳过。"
+
+msgid "CI components"
+msgstr "CI 组件"
+
+msgid ""
+"Every collected test receives exactly one component marker from `tests/"
+"component_suites.py`. The same markers drive local Make targets and the "
+"GitHub Actions jobs, preventing the two command sets from drifting apart."
+msgstr "每个收集到的测试都会从 `tests/component_suites.py` 获得恰好一个组件 Marker。同一组 Marker 同时驱动本地 Make Target 和 GitHub Actions Job，防止两组命令发生偏离。"
+
+msgid "Component"
+msgstr "组件"
+
+msgid "Marker"
+msgstr "Marker"
+
+msgid "Unit command"
+msgstr "单元测试命令"
+
+msgid "Integration command"
+msgstr "集成测试命令"
+
+msgid "Core"
+msgstr "Core"
+
+msgid "`component_core`"
+msgstr "`component_core`"
+
+msgid "`make unit-core`"
+msgstr "`make unit-core`"
+
+msgid "Covered through its runtime consumers"
+msgstr "通过其运行时使用方覆盖"
+
+msgid "Runtime"
+msgstr "Runtime"
+
+msgid "`component_runtime`"
+msgstr "`component_runtime`"
+
+msgid "`make unit-runtime`"
+msgstr "`make unit-runtime`"
+
+msgid "`make integration-runtime`"
+msgstr "`make integration-runtime`"
+
+msgid "`component_state`"
+msgstr "`component_state`"
+
+msgid "`make unit-state`"
+msgstr "`make unit-state`"
+
+msgid "`make integration-state`"
+msgstr "`make integration-state`"
+
+msgid "SQL"
+msgstr "SQL"
+
+msgid "`component_sql`"
+msgstr "`component_sql`"
+
+msgid "`make unit-sql`"
+msgstr "`make unit-sql`"
+
+msgid "`make integration-sql`"
+msgstr "`make integration-sql`"
+
+msgid "Connectors"
+msgstr "Connector"
+
+msgid "`component_connectors`"
+msgstr "`component_connectors`"
+
+msgid "`make unit-connectors`"
+msgstr "`make unit-connectors`"
+
+msgid "`make integration-connectors`"
+msgstr "`make integration-connectors`"
+
+msgid ""
+"The pull-request workflow encodes the architectural dependency order "
+"explicitly:"
+msgstr "Pull Request 工作流会显式编码架构依赖顺序："
+
+msgid ""
+"State integration includes real-Ray Memory and RocksDB checkpoint "
+"restoration across a parallelism change. SQL integration restores a managed "
+"streaming aggregate from a durable checkpoint. Runtime integration kills a "
+"live StreamTask and requires the JobManager to replace it while keeping the "
+"job running."
+msgstr "状态集成测试包括在真实 Ray 上跨并行度变更恢复 Memory 和 RocksDB 检查点。SQL 集成测试从持久检查点恢复托管流式聚合。Runtime 集成测试会终止运行中的 StreamTask，并要求 JobManager 在保持作业运行的同时替换它。"
+
+msgid "Write tests"
+msgstr "编写测试"
+
+msgid ""
+"Prefer plain test functions, pytest fixtures, and `pytest.mark.parametrize`."
+msgstr "优先使用普通测试函数、pytest Fixture 和 `pytest.mark.parametrize`。"
+
+msgid ""
+"Put reusable doubles and assertion helpers in `tests/support`; do not import "
+"helpers from another test tier."
+msgstr "将可复用的 Test Double 和断言辅助函数放入 `tests/support`；不要从其他测试层级导入辅助函数。"
+
+msgid ""
+"Use `tmp_path` and `monkeypatch` for files, environment variables, and "
+"global state. Do not manually restore process state in `finally` blocks."
+msgstr "对文件、环境变量和全局状态使用 `tmp_path` 与 `monkeypatch`。不要在 `finally` Block 中手动恢复进程状态。"
+
+msgid ""
+"Assert complete observable results. Avoid print-only assertions and tests "
+"whose only expectation is that code does not raise."
+msgstr "应断言完整的可观察结果。避免只打印结果的断言，也不要编写唯一预期仅为代码不抛出异常的测试。"
+
+msgid ""
+"Replace sleeps and open-ended polling with the `eventually` fixture. Every "
+"asynchronous wait must have a timeout and an actionable failure message."
+msgstr "使用 `eventually` Fixture 替代 sleep 和无限期轮询。每次异步等待都必须设置超时，并提供可指导行动的失败消息。"
+
+msgid ""
+"A test that starts Ray belongs in `tests/integration`. A test that requires "
+"a service or Docker also belongs in `tests/integration/external`."
+msgstr "启动 Ray 的测试应放在 `tests/integration` 中。需要服务或 Docker 的测试还应放在 `tests/integration/external` 中。"
+
+msgid ""
+"Keep test data immutable in `tests/data`; create generated output under "
+"`tmp_path`."
+msgstr "保持 `tests/data` 中的测试数据不可变；在 `tmp_path` 下创建生成的输出。"
+
+msgid ""
+"Per-test timeouts, strict marker/config validation, strict expected "
+"failures, and warnings-as-errors are enabled globally in `pyproject.toml`."
+msgstr "`pyproject.toml` 中已全局启用单测试超时、严格的 Marker/配置验证、严格的预期失败，以及将警告视为错误。"
+
+msgid ""
+"Architecture tests also enforce the observability boundaries: production "
+"modules use component-scoped Klein loggers, logging calls use deferred `%s` "
+"formatting, stdout writes are limited to declared user-facing boundaries, "
+"and connector command buffers aren't embedded in log messages."
+msgstr "架构测试还会强制执行可观测性边界：生产模块使用组件作用域的 Klein Logger，日志调用使用延迟 `%s` 格式化，stdout 写入仅限于已声明的用户可见边界，并且 Connector 命令缓冲区不得嵌入日志消息。"
+
+msgid ""
+"Documentation contract tests also keep the reference synchronized with code:"
+msgstr "文档契约测试还会保持参考文档与代码同步："
+
+msgid "every top-level export is accounted for in the API reference;"
+msgstr "API 参考涵盖每个顶层导出；"
+
+msgid "every public `DataStream` member is listed;"
+msgstr "列出每个公开 `DataStream` 成员；"
+
+msgid "every declared `ConfigOption` appears in the configuration reference;"
+msgstr "每个已声明的 `ConfigOption` 都出现在配置参考中；"
+
+msgid "standalone examples compile;"
+msgstr "独立示例可以编译；"
+
+msgid ""
+"CLI and checkpoint-recovery guides use the current command and option names."
+msgstr "CLI 和检查点恢复指南使用当前命令与选项名称。"
+
+msgid ""
+"`tests/integration/test_documented_examples.py` executes the standalone "
+"batch SQL and finite stateful-streaming examples on the managed local Ray "
+"cluster. The Sphinx CI job separately treats documentation warnings as "
+"errors."
+msgstr "`tests/integration/test_documented_examples.py` 会在受管理的本地 Ray 集群上执行独立批处理 SQL 示例和有限有状态流处理示例。Sphinx CI Job 另行将文档警告视为错误。"

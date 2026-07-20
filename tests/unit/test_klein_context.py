@@ -8,6 +8,7 @@ from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
+from ray.klein.api.stream_sink import StreamSink
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.execution_options import ExecutionOptions
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
@@ -70,11 +71,140 @@ class TestKleinContext:
         assert stream.broadcast() is stream
         assert isinstance(stream.partitioner, BroadcastPartitioner)
 
-    def test_take_requires_interactive_mode(self) -> None:
+    def test_take_builds_a_lazy_terminal_sink(self) -> None:
         stream = KleinContext().from_values({"id": 1})
 
-        with pytest.raises(RuntimeError, match="interactive"):
-            stream.take()
+        assert isinstance(stream.take(), StreamSink)
+
+    def test_top_level_execute_accepts_explicit_sink_roots(self, monkeypatch) -> None:
+        context = KleinContext()
+        selected = context.from_values({"id": 1}).take_all()
+        pending = context.from_values({"id": 2}).show()
+        sentinel = object()
+        captured = {}
+
+        def execute(_client, job_name, sinks):
+            captured["job_name"] = job_name
+            captured["sinks"] = tuple(sinks)
+            return sentinel
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        assert klein.execute("selected-job", sinks=(selected,)) is sentinel
+        assert captured == {"job_name": "selected-job", "sinks": (selected,)}
+        assert context.sinks == (pending,)
+
+    def test_top_level_execute_submits_all_pending_side_effect_sinks(self, monkeypatch) -> None:
+        context = KleinContext.reset()
+        first = context.from_values({"id": 1}).show()
+        second = context.from_values({"id": 2}).show()
+        captured = {}
+
+        def execute(_client, job_name, sinks):
+            captured["job_name"] = job_name
+            captured["sinks"] = tuple(sinks)
+            return object()
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        klein.execute("multi-sink")
+
+        assert captured == {"job_name": "multi-sink", "sinks": (first, second)}
+        assert context.sinks == ()
+
+    def test_collecting_sink_must_be_executed_alone(self) -> None:
+        context = KleinContext.reset()
+        collected = context.from_values({"id": 1}).take_all()
+        side_effect = context.from_values({"id": 2}).show()
+
+        with pytest.raises(ValueError, match="cannot be combined"):
+            klein.execute("ambiguous-results")
+        assert context.sinks == (collected, side_effect)
+
+    def test_ray_data_collecting_sink_must_be_executed_alone(self) -> None:
+        context = KleinContext.reset()
+        collected = context.from_values({"id": 1}).data.take_all()
+        side_effect = context.from_values({"id": 2}).show()
+
+        with pytest.raises(ValueError, match="cannot be combined"):
+            klein.execute("ambiguous-ray-data-results")
+        assert context.sinks == (collected, side_effect)
+
+    def test_multiple_collecting_sinks_are_rejected_before_submission(self, monkeypatch) -> None:
+        context = KleinContext.reset()
+        first = context.from_values({"id": 1}).take()
+        second = context.from_values({"id": 2}).take_all()
+
+        def unexpected_execute(*_args, **_kwargs):
+            raise AssertionError("submission should not be attempted")
+
+        monkeypatch.setattr(JobClient, "execute", unexpected_execute)
+
+        with pytest.raises(ValueError, match="only one"):
+            klein.execute("ambiguous-results")
+
+        assert context.sinks == (first, second)
+
+    def test_top_level_execute_rejects_sinks_from_different_pipelines(self) -> None:
+        first = KleinContext().from_values({"id": 1}).show()
+        second = KleinContext().from_values({"id": 2}).show()
+
+        with pytest.raises(ValueError, match="same Klein pipeline"):
+            klein.execute(sinks=(first, second))
+
+    def test_explicit_sink_must_be_pending_and_unique(self, monkeypatch) -> None:
+        context = KleinContext()
+        sink = context.from_values({"id": 1}).show()
+
+        monkeypatch.setattr(JobClient, "execute", lambda *_args, **_kwargs: object())
+
+        with pytest.raises(ValueError, match="only once"):
+            context.execute("duplicate", sinks=(sink, sink))
+        context.execute("first", sinks=(sink,))
+        with pytest.raises(ValueError, match="still be pending"):
+            context.execute("again", sinks=(sink,))
+
+    def test_sink_token_is_not_a_positional_job_name(self) -> None:
+        context = KleinContext.reset()
+        sink = context.from_values({"id": 1}).show()
+
+        with pytest.raises(TypeError, match="job_name"):
+            klein.execute(sink)  # type: ignore[arg-type]
+        assert context.sinks == (sink,)
+
+    def test_sink_cannot_be_submitted_twice_concurrently(self, monkeypatch) -> None:
+        context = KleinContext()
+        sink = context.from_values({"id": 1}).show()
+
+        def execute(_client, _job_name, _sinks):
+            with pytest.raises(RuntimeError, match="already being submitted"):
+                context.execute("nested", sinks=(sink,))
+            return object()
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        context.execute("outer", sinks=(sink,))
+
+    def test_failed_submission_keeps_the_selected_sink_pending(self, monkeypatch) -> None:
+        context = KleinContext()
+        sink = context.from_values({"id": 1}).show()
+        sentinel = object()
+        attempts = 0
+
+        def fail(_client, _job_name, _sinks):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("submission failed")
+            return sentinel
+
+        monkeypatch.setattr(JobClient, "execute", fail)
+
+        with pytest.raises(RuntimeError, match="submission failed"):
+            klein.execute(sinks=(sink,))
+        assert context.sinks == (sink,)
+        assert klein.execute(sinks=(sink,)) is sentinel
+        assert context.sinks == ()
 
     def test_global_context_configuration_and_top_level_read_api(self) -> None:
         context = KleinContext.reset("execution.runtime.mode=batch")
@@ -84,6 +214,14 @@ class TestKleinContext:
         assert stream.context is context
         assert klein.current_context() is context
         assert context.config.get(ExecutionOptions.MODE) is RuntimeExecutionMode.BATCH
+
+    def test_top_level_configuration_does_not_expose_the_pipeline_context(self) -> None:
+        context = KleinContext.reset()
+
+        configured = klein.configure({"state.backend.type": "memory"})
+
+        assert configured is context.config
+        assert klein.get_config() is configured
 
     def test_module_reader_matches_ray_data_style(self) -> None:
         context = KleinContext.reset({"state.backend.type": "memory"})

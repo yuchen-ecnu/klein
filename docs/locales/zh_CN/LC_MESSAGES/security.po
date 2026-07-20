@@ -1,0 +1,434 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "Security model, trust boundaries, and production hardening guidance for Klein for Ray."
+msgstr "Klein for Ray 的安全模型、信任边界和生产加固指南。"
+
+msgid "Security"
+msgstr "安全"
+
+msgid ""
+"Klein is a distributed execution library for trusted Python applications. It is not a sandbox, an"
+" authorization layer, or a tenant-isolation system. A user who can submit a Klein job can execute"
+" Python on Ray workers, open network connections, access worker-visible files and environment "
+"variables, and use the credentials available to that workload."
+msgstr ""
+"Klein 是面向受信任 Python 应用的分布式执行库。它不是沙箱、授权层或租户隔离系统。能够提交 Klein 作业的用户可以在 Ray worker 上执行 "
+"Python、打开网络连接、访问 worker 可见的文件和环境变量，并使用该工作负载可用的凭据。"
+
+msgid ""
+"This page explains deployment security. To report a suspected vulnerability, use the private "
+"process in the repository's [security policy](https://github.com/yuchen-"
+"ecnu/klein/blob/main/SECURITY.md), not a public issue."
+msgstr ""
+"本页说明部署安全。若要报告疑似漏洞，请使用仓库[安全策略](https://github.com/yuchen-"
+"ecnu/klein/blob/main/SECURITY.md)中的私密流程，不要提交公开 issue。"
+
+msgid "Trust model"
+msgstr "信任模型"
+
+msgid "Treat the following principals and artifacts as trusted:"
+msgstr "将以下主体和构件视为受信任："
+
+msgid "everyone allowed to submit code or connect a Python client to the Ray cluster;"
+msgstr "所有获准提交代码或将 Python 客户端连接到 Ray 集群的人员；"
+
+msgid ""
+"application code, UDFs, serializers, source and sink implementations, and their Python/native "
+"dependencies;"
+msgstr "应用代码、UDF、序列化器、数据源和 Sink 实现及其 Python/原生依赖；"
+
+msgid "every process that can write to a checkpoint prefix;"
+msgstr "所有能够写入检查点前缀的进程；"
+
+msgid "the Ray cluster, its node images, runtime environments, and administrators;"
+msgstr "Ray 集群、其节点镜像、运行时环境和管理员；"
+
+msgid "the platform identities that can read secrets or connector data."
+msgstr "能够读取密钥或连接器数据的平台身份。"
+
+msgid ""
+"Treat source records, connector services, users of an application built on Klein, and network "
+"clients outside the protected cluster boundary as untrusted unless the application establishes a "
+"narrower contract."
+msgstr "除非应用建立了更严格的契约，否则应将数据源记录、连接器服务、基于 Klein 构建的应用用户以及受保护集群边界外的网络客户端视为不受信任。"
+
+msgid ""
+"Do not restore a checkpoint from an untrusted or shared-writable location. Klein checkpoint "
+"metadata, source state, managed state, and prepared sink committables can contain Python pickle "
+"payloads. Deserializing a malicious pickle can execute code with the worker's identity. A stored "
+"checksum detects accidental corruption relative to checkpoint metadata; it is not a signature and"
+" does not make an attacker-controlled checkpoint authentic."
+msgstr ""
+"不要从不受信任或可由多个主体写入的位置恢复检查点。Klein 检查点元数据、数据源状态、托管状态和已预备的 Sink 可提交项可能包含 Python pickle 载荷。反序列化恶意 "
+"pickle 会以 worker 身份执行代码。存储的校验和只能根据检查点元数据检测意外损坏；它不是签名，也不能证明由攻击者控制的检查点可信。"
+
+msgid "Responsibility boundaries"
+msgstr "责任边界"
+
+msgid ""
+"Security is the composition of Klein, Ray, the deployment platform, and the application. No one "
+"layer compensates automatically for a missing control in another."
+msgstr "安全由 Klein、Ray、部署平台和应用共同构成。任何一层都不会自动弥补另一层缺失的控制措施。"
+
+msgid "Owner"
+msgstr "责任方"
+
+msgid "Responsible for"
+msgstr "负责内容"
+
+msgid "Not provided by that layer"
+msgstr "该层不提供"
+
+msgid "Klein"
+msgstr "Klein"
+
+msgid ""
+"Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly "
+"overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based "
+"redaction in published configuration and structured log fields; checkpoint size/checksum "
+"validation before managed-state payload use; documenting source/sink recovery boundaries."
+msgstr ""
+"默认绑定回环地址的 Dashboard；除非显式覆盖，否则拒绝绑定非回环地址；Host 请求头和同源检查；限制 Dashboard "
+"请求正文大小；根据键名对已发布配置和结构化日志字段进行脱敏；使用托管状态载荷前验证检查点大小/校验和；记录数据源/Sink 恢复边界。"
+
+msgid ""
+"Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, "
+"checkpoint signatures, record-level encryption, or an audit log independent of Ray."
+msgstr "身份验证、授权、TLS、恶意代码沙箱、密钥存储、租户隔离、检查点签名、记录级加密，或独立于 Ray 的审计日志。"
+
+msgid "Ray"
+msgstr "Ray"
+
+msgid ""
+"Running actors/tasks, namespaces, runtime environments, Object Store, worker/actor logs, metrics,"
+" cluster connectivity, and the authentication/TLS features configured by the Ray operator."
+msgstr "运行 actor/任务、命名空间、运行时环境、Object Store、worker/actor 日志、指标、集群连接，以及 Ray 运维方配置的身份验证/TLS 功能。"
+
+msgid ""
+"Klein-specific authorization or isolation between mutually untrusted Klein jobs. A Ray namespace "
+"avoids actor-name collisions; it is not an access-control boundary."
+msgstr "Klein 专用授权，或互不信任的 Klein 作业之间的隔离。Ray 命名空间可避免 actor 名称冲突，但不是访问控制边界。"
+
+msgid "Platform operator"
+msgstr "平台运维方"
+
+msgid ""
+"Network isolation, firewall and ingress policy, TLS termination, Ray authentication, "
+"Kubernetes/cloud IAM, node and container hardening, image provenance, secret delivery, object-"
+"store IAM/encryption/versioning, log/metric access, backups, and separation of security domains."
+msgstr ""
+"网络隔离、防火墙和入口策略、TLS 终止、Ray 身份验证、Kubernetes/云 IAM、节点和容器加固、镜像来源、密钥交付、对象存储 "
+"IAM/加密/版本控制、日志/指标访问、备份以及安全域隔离。"
+
+msgid "Correct UDF behavior, safe application logging, connector semantics, or sink idempotency."
+msgstr "正确的 UDF 行为、安全的应用日志记录、连接器语义或 Sink 幂等性。"
+
+msgid "Application owner"
+msgstr "应用负责人"
+
+msgid ""
+"Trusted dependencies and code review; input validation; UDF/resource limits; connector credential"
+" use; state/schema choices; sensitive-data classification; safe job/operator names; output "
+"authorization, idempotency, and retention."
+msgstr "受信任依赖和代码审查；输入验证；UDF/资源限制；连接器凭据使用；状态/模式选择；敏感数据分类；安全的作业/算子名称；输出授权、幂等性和保留。"
+
+msgid "Cluster isolation or platform controls that were never configured."
+msgstr "从未配置的集群隔离或平台控制。"
+
+msgid ""
+"Ray's own security guidance requires a controlled network and trusted code and recommends "
+"separate clusters for workloads that need isolation. Configure current Ray controls according to "
+"the [Ray security documentation](https://docs.ray.io/en/latest/ray-security/index.html)."
+msgstr ""
+"Ray 自身的安全指南要求使用受控网络和受信任代码，并建议需要隔离的工作负载使用独立集群。请按照 [Ray 安全文档](https://docs.ray.io/en/latest/ray-"
+"security/index.html)配置当前 Ray 控制措施。"
+
+msgid "Python code, UDFs, and pickle"
+msgstr "Python 代码、UDF 和 pickle"
+
+msgid ""
+"Klein sends application functions and operator objects to Ray workers and uses Python "
+"serialization for application-defined state. This has several consequences:"
+msgstr "Klein 会将应用函数和算子对象发送到 Ray worker，并使用 Python 序列化存储应用定义的状态。这会带来以下影响："
+
+msgid ""
+"UDFs, custom sources, custom sinks, serializers, callbacks, and dependencies have the same "
+"effective trust as the job submitter."
+msgstr "UDF、自定义数据源、自定义 Sink、序列化器、回调和依赖项与作业提交者具有相同的实际信任级别。"
+
+msgid "Pickle and cloudpickle are data/code transport formats, not safe parsers for hostile bytes."
+msgstr "pickle 和 cloudpickle 是数据/代码传输格式，不是用于处理恶意字节的安全解析器。"
+
+msgid ""
+"Moving or renaming Python classes and modules can make a trusted checkpoint unreadable even when "
+"no attacker is involved."
+msgstr "即使不存在攻击者，移动或重命名 Python 类和模块也可能导致受信任的检查点无法读取。"
+
+msgid ""
+"Deserialization must happen only in an environment whose code and dependency versions are "
+"controlled by the operator."
+msgstr "只能在代码和依赖版本受运维方控制的环境中执行反序列化。"
+
+msgid ""
+"Use signed or otherwise provenance-checked application artifacts, pin dependencies, scan the "
+"final worker image, and review custom serialization hooks. Parse untrusted external data with a "
+"constrained data format such as JSON, Avro, or Parquet before it becomes application state. Do "
+"not call `pickle.loads()` on a record supplied by an external user."
+msgstr ""
+"使用已签名或通过其他方式验证来源的应用构件，固定依赖，扫描最终 worker 镜像，并审查自定义序列化钩子。在不受信任的外部数据成为应用状态之前，使用 JSON、Avro 或 Parquet "
+"等受约束的数据格式解析它。不要对外部用户提供的记录调用 `pickle.loads()`。"
+
+msgid "For checkpoint storage:"
+msgstr "对于检查点存储："
+
+msgid "Give the job identity read/write access only to its dedicated prefix."
+msgstr "仅授予作业身份对其专用前缀的读写权限。"
+
+msgid "Give restore tooling read access only to explicitly approved prefixes."
+msgstr "仅授予恢复工具对明确批准前缀的读取权限。"
+
+msgid ""
+"Enable transport encryption, server-side encryption, versioning, retention, and access logging at"
+" the object store."
+msgstr "在对象存储上启用传输加密、服务端加密、版本控制、保留和访问日志。"
+
+msgid "Separate prefixes and credentials across production, staging, and tenants."
+msgstr "在生产、预发布和不同租户之间隔离前缀和凭据。"
+
+msgid ""
+"Treat deletion, replacement of `_metadata`, or writes to `shared/` and `taskowned/` as security-"
+"sensitive actions."
+msgstr "将删除、替换 `_metadata`，或写入 `shared/` 和 `taskowned/` 视为安全敏感操作。"
+
+msgid ""
+"Never copy only `chk-N/_metadata` and assume the checkpoint is self-contained; it can reference "
+"state objects elsewhere in the job prefix."
+msgstr "绝不能只复制 `chk-N/_metadata` 就假定检查点是自包含的；它可能引用作业前缀中其他位置的状态对象。"
+
+msgid ""
+"See [Checkpoint storage](checkpoint-storage.md) for the actual publication and validation "
+"behavior."
+msgstr "实际发布和验证行为请参阅[检查点存储](checkpoint-storage.md)。"
+
+msgid "Dashboard and control APIs"
+msgstr "Dashboard 和控制 API"
+
+msgid ""
+"`ray-klein dashboard` serves a separate Klein HTTP page. It is not part of the Ray Dashboard and "
+"has no built-in user authentication or TLS."
+msgstr "`ray-klein dashboard` 提供独立的 Klein HTTP 页面。它不是 Ray Dashboard 的一部分，也没有内置用户身份验证或 TLS。"
+
+msgid ""
+"The default listener is `127.0.0.1:8266`. Keep that default and use an SSH tunnel or port-forward"
+" when possible:"
+msgstr "默认监听地址为 `127.0.0.1:8266`。请保留该默认值，并尽可能使用 SSH 隧道或端口转发："
+
+msgid ""
+"The server refuses a non-loopback listener unless `--allow-unauthenticated` is present. That flag"
+" only acknowledges the risk; it does not add protection. A remote listener exposes job topology "
+"and status and can submit supported operator-rescale actions."
+msgstr ""
+"除非提供 `--allow-"
+"unauthenticated`，否则服务器会拒绝监听非回环地址。该标志只表示已知晓风险，不会增加任何保护。远程监听器会暴露作业拓扑和状态，并可提交受支持的算子扩缩操作。"
+
+msgid "If remote access is required:"
+msgstr "如果必须远程访问："
+
+msgid "place the listener behind an authenticated, authorized TLS reverse proxy;"
+msgstr "将监听器置于具有身份验证和授权的 TLS 反向代理之后；"
+
+msgid "restrict ingress to the operations network and approved identities;"
+msgstr "将入口限制在运维网络和获批身份；"
+
+msgid "preserve or rewrite `Host` to a host trusted by the listener;"
+msgstr "保留 `Host`，或将其重写为监听器信任的主机；"
+
+msgid "enforce request, rate, and session limits at the proxy;"
+msgstr "在代理处实施请求、速率和会话限制；"
+
+msgid ""
+"monitor control requests at the proxy, because Klein suppresses the base HTTP access log to avoid"
+" leaking job identifiers;"
+msgstr "在代理处监控控制请求，因为 Klein 为避免泄漏作业标识符而禁用了基础 HTTP 访问日志；"
+
+msgid ""
+"do not rely on the built-in Host-header, same-origin, CSP, or frame checks as substitutes for "
+"authentication."
+msgstr "不要依赖内置 Host 请求头、同源、CSP 或框架检查来替代身份验证。"
+
+msgid ""
+"The Python state API and CLI connect through Ray to a detached state actor and JobManager. Any "
+"principal with sufficient Ray access to use those actors must already be trusted to observe and "
+"control the jobs. Protect Ray Client, Ray Jobs, the Ray Dashboard, GCS, and worker ports "
+"according to the platform's Ray deployment. Ray token authentication is defense in depth, not a "
+"replacement for network isolation; see [Ray token authentication](https://docs.ray.io/en/latest"
+"/ray-security/token-auth.html)."
+msgstr ""
+"Python 状态 API 和 CLI 通过 Ray 连接到分离的状态 actor 和 JobManager。任何拥有足够 Ray 访问权限、可以使用这些 actor "
+"的主体，都必须已被信任可以观察和控制作业。请根据平台的 Ray 部署保护 Ray Client、Ray Jobs、Ray Dashboard、GCS 和 worker 端口。Ray token "
+"身份验证属于纵深防御，不能替代网络隔离；请参阅 [Ray token 身份验证](https://docs.ray.io/en/latest/ray-security/token-"
+"auth.html)。"
+
+msgid ""
+"Setting `observability.dashboard.enabled=false` stops publication to Klein's state actor. It does"
+" not disable Ray logs, Ray metrics, checkpointing, or every way trusted Ray code can address job "
+"actors."
+msgstr ""
+"设置 `observability.dashboard.enabled=false` 会停止向 Klein 状态 actor 发布信息。它不会禁用 Ray 日志、Ray "
+"指标、检查点，也不会阻止受信任 Ray 代码通过所有其他方式寻址作业 actor。"
+
+msgid "Credentials and sensitive data"
+msgstr "凭据和敏感数据"
+
+msgid ""
+"Prefer workload identity, instance roles, mounted secret files, or a platform secret provider. "
+"Avoid literals in source code, Table DDL, command lines, resource plans, and committed "
+"configuration. Restrict each job identity to the specific source, sink, and checkpoint resources "
+"it needs."
+msgstr ""
+"优先使用工作负载身份、实例角色、挂载的密钥文件或平台密钥提供方。避免在源代码、Table DDL、命令行、资源计划和已提交配置中使用字面量。将每个作业身份限制为仅能访问所需的特定数据源、Sink"
+" 和检查点资源。"
+
+msgid "Klein applies limited, key-name-based redaction:"
+msgstr "Klein 仅提供有限的、基于键名的脱敏："
+
+msgid ""
+"published configuration recursively redacts keys resembling passwords, secrets, tokens, "
+"credentials, access keys, private keys, and API keys;"
+msgstr "已发布配置会递归脱敏名称类似密码、密钥、token、凭据、访问密钥、私钥和 API 密钥的键；"
+
+msgid "structured Klein log fields redact a similar set of names;"
+msgstr "Klein 结构化日志字段会脱敏一组类似的名称；"
+
+msgid "Redis omits its password from the configuration object's representation."
+msgstr "Redis 会在配置对象的表示形式中省略密码。"
+
+msgid ""
+"Redaction is a guardrail, not a data-loss-prevention system. It does not scan free-form strings "
+"or record values, and application or third-party loggers can bypass it. Do not put sensitive "
+"values in:"
+msgstr "脱敏是一项防护措施，并非数据防泄漏系统。它不会扫描自由格式字符串或记录值，应用或第三方日志记录器也可能绕过它。不要将敏感值放入："
+
+msgid "job, operator, task, metric, or namespace names;"
+msgstr "作业、算子、任务、指标或命名空间名称；"
+
+msgid "record values sent to a console sink;"
+msgstr "发送到控制台 Sink 的记录值；"
+
+msgid "exception messages or manually formatted log text;"
+msgstr "异常消息或手动格式化的日志文本；"
+
+msgid "metric labels;"
+msgstr "指标标签；"
+
+msgid "connector URLs or checkpoint paths;"
+msgstr "连接器 URL 或检查点路径；"
+
+msgid "arbitrary configuration keys whose name does not look secret."
+msgstr "名称看起来不像密钥的任意配置键。"
+
+msgid ""
+"Configuration and connector objects are serialized to workers. Iceberg catalog properties, "
+"checkpoint storage options, Kafka/Redis/RocketMQ settings, and custom source/sink objects "
+"therefore remain visible to trusted worker code and may also appear in process memory. Rotate a "
+"credential after suspected exposure and review Ray logs, runtime-environment metadata, shell "
+"history, and object-store access logs."
+msgstr ""
+"配置和连接器对象会被序列化到 worker。因此，Iceberg catalog 属性、检查点存储选项、Kafka/Redis/RocketMQ 设置以及自定义数据源/Sink 对象仍对受信任的"
+" worker 代码可见，也可能出现在进程内存中。怀疑凭据暴露后应立即轮换，并审查 Ray 日志、运行时环境元数据、shell 历史和对象存储访问日志。"
+
+msgid "Multi-tenancy"
+msgstr "多租户"
+
+msgid ""
+"Klein does not provide isolation between hostile jobs in one Ray cluster. Per-job Ray namespaces "
+"prevent named-actor collisions and help operations find a job, but they do not prevent another "
+"trusted cluster client or workload from discovering actors, consuming cluster resources, "
+"accessing worker-visible credentials, or attacking shared services."
+msgstr ""
+"Klein 不提供同一 Ray 集群内恶意作业之间的隔离。每个作业的 Ray 命名空间可防止具名 actor 冲突，并帮助运维人员查找作业，但无法阻止另一个受信任的集群客户端或工作负载发现 "
+"actor、消耗集群资源、访问 worker 可见的凭据或攻击共享服务。"
+
+msgid ""
+"Use separate Ray clusters, service accounts, networks, checkpoint roots, connector identities, "
+"log stores, and encryption domains when workloads or teams do not fully trust one another. "
+"Resource quotas and placement groups are capacity controls, not security boundaries. In-process "
+"debug mode provides even less isolation and must not be used to evaluate production security."
+msgstr ""
+"当工作负载或团队之间并非完全互信时，请使用独立的 Ray "
+"集群、服务账户、网络、检查点根目录、连接器身份、日志存储和加密域。资源配额和放置组是容量控制，而不是安全边界。进程内调试模式的隔离性更弱，不得用于评估生产安全。"
+
+msgid "Production hardening checklist"
+msgstr "生产加固检查清单"
+
+msgid "Allow only reviewed identities to submit Ray jobs or connect Ray clients."
+msgstr "仅允许经过审查的身份提交 Ray 作业或连接 Ray 客户端。"
+
+msgid "Keep all Ray and Klein control endpoints off the public internet."
+msgstr "不要将任何 Ray 和 Klein 控制端点暴露到公共互联网。"
+
+msgid ""
+"Enable the Ray authentication and encryption controls supported by the deployed Ray version, plus"
+" network isolation and external authorization."
+msgstr "启用已部署 Ray 版本支持的身份验证和加密控制，并配合网络隔离和外部授权。"
+
+msgid "Run mutually untrusted workloads in separate Ray clusters."
+msgstr "在独立的 Ray 集群中运行互不信任的工作负载。"
+
+msgid "Use immutable, scanned head and worker images with the same pinned dependencies."
+msgstr "对 head 和 worker 使用依赖固定且经过扫描的相同不可变镜像。"
+
+msgid ""
+"Run workers without unnecessary host mounts, cloud permissions, Linux capabilities, or access to "
+"another job's secrets."
+msgstr "运行 worker 时，不要提供不必要的主机挂载、云权限、Linux capability 或对其他作业密钥的访问权限。"
+
+msgid ""
+"Keep the Klein Dashboard on loopback, or place it behind authenticated TLS ingress with audit "
+"logging."
+msgstr "将 Klein Dashboard 保持在回环地址上，或置于带审计日志、经过身份验证的 TLS 入口之后。"
+
+msgid ""
+"Give each job a dedicated, versioned, encrypted checkpoint prefix and test restore with the same "
+"least-privilege identity."
+msgstr "为每个作业提供专用、版本化、加密的检查点前缀，并使用相同的最小权限身份测试恢复。"
+
+msgid ""
+"Use different identities for sources, sinks, and administrative recovery when the platform can "
+"support that separation."
+msgstr "当平台支持这种隔离时，为数据源、Sink 和管理恢复使用不同身份。"
+
+msgid ""
+"Export Ray/Klein logs and metrics to access-controlled durable stores; test that secret values do"
+" not appear in a representative failure."
+msgstr "将 Ray/Klein 日志和指标导出到受访问控制的持久存储；测试具有代表性的故障中不会出现密钥值。"
+
+msgid ""
+"Define credential rotation, artifact rollback, checkpoint revocation, and incident-response "
+"procedures before launch."
+msgstr "上线前定义凭据轮换、构件回滚、检查点撤销和事件响应流程。"
+
+msgid ""
+"For operational release gates, use the [Production readiness checklist](production-readiness.md)."
+" For upgrade and rollback security, including trusted checkpoint handling, see [Upgrade Klein "
+"jobs](upgrading.md)."
+msgstr "运维发布门槛请使用[生产就绪检查清单](production-readiness.md)。升级和回滚安全（包括受信任检查点处理）请参阅[升级 Klein 作业](upgrading.md)。"

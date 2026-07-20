@@ -1,0 +1,322 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "Start"
+msgstr "开始使用"
+
+msgid "Learn"
+msgstr "学习"
+
+msgid "Features"
+msgstr "特色功能"
+
+msgid "Develop"
+msgstr "开发"
+
+msgid "Deploy and operate"
+msgstr "部署与运维"
+
+msgid "Reference"
+msgstr "参考"
+
+msgid "Internals and contribute"
+msgstr "内部机制与贡献"
+
+msgid ""
+"Klein for Ray documentation for building stateful batch and streaming "
+"dataflows on Ray."
+msgstr "Klein for Ray 文档：在 Ray 上构建有状态批处理与流式数据流。"
+
+msgid "Klein for Ray: Stateful stream processing on Ray"
+msgstr "Klein for Ray：基于 Ray 的有状态流处理"
+
+msgid ""
+"Klein for Ray is a stateful stream processing library built on Ray. Use "
+"the `DataStream` API to run bounded Ray Data inputs and long-running "
+"streaming inputs with event time, managed keyed state, checkpoint "
+"recovery, and SQL and Table APIs."
+msgstr ""
+"Klein for Ray 是一个构建于 Ray 之上的有状态流处理库。使用 `DataStream` API，可以运行有界 Ray Data "
+"输入和长时间运行的流式输入，并获得事件时间、托管键控状态、检查点恢复以及 SQL 和 Table API 支持。"
+
+msgid ""
+"Klein for Ray is independent alpha software. It is not affiliated with, "
+"endorsed by, or maintained by the Ray project."
+msgstr "Klein for Ray 是独立开发的 alpha 阶段软件，与 Ray 项目没有隶属关系，也未获得其认可或由其维护。"
+
+msgid "When should you use Klein?"
+msgstr "何时应使用 Klein？"
+
+msgid ""
+"Use Klein when a Ray application needs long-running, record-oriented "
+"processing and state that survives task failures or parallelism changes. "
+"Klein provides event-time windows, interval joins, state time-to-live "
+"(TTL), durable checkpoints, and idle-input-aware watermarks."
+msgstr ""
+"当 Ray 应用需要面向记录的长时间运行处理，并要求状态在任务故障或并行度变化后仍能保留时，可使用 Klein。Klein "
+"提供事件时间窗口、区间连接、状态生存时间 (TTL)、持久检查点以及能感知空闲输入的水位线。"
+
+msgid ""
+"Use [Ray Data](https://docs.ray.io/en/latest/data/data.html) directly "
+"when a workload is bounded, its operations are supported by Ray Data, and"
+" it doesn't need streaming state or event-time progress. Klein delegates "
+"compatible bounded execution to Ray Data instead of implementing another "
+"batch engine."
+msgstr ""
+"当工作负载有界、其操作受 Ray Data 支持，且不需要流式状态或事件时间推进时，请直接"
+"使用 [Ray Data](https://docs.ray.io/en/latest/data/data.html)。Klein 将兼容的有界执行"
+"委托给 Ray Data，而不是另行实现一个批处理引擎。"
+
+msgid "Install Klein"
+msgstr "安装 Klein"
+
+msgid ""
+"Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.x "
+"(`ray[data]>=2.56.1,<2.57`). Install the project from this checkout:"
+msgstr ""
+"Klein for Ray 面向 Python 3.10 至 3.12 和 Ray "
+"2.56.x（`ray[data]>=2.56.1,<2.57`）。请从当前检出版本安装项目："
+
+msgid ""
+"See the complete [installation guide](installation.md) for optional "
+"extras, cluster environment checks, verification, upgrades, and "
+"troubleshooting. Read [Compatibility](compatibility.md) before changing "
+"the Ray dependency range."
+msgstr ""
+"完整的[安装指南](installation.md)介绍可选依赖、集群环境检查、验证、升级和故障排查。更改 Ray "
+"依赖版本范围前，请阅读[兼容性](compatibility.md)。"
+
+msgid "Learn Klein"
+msgstr "学习 Klein"
+
+msgid "Getting started"
+msgstr "快速入门"
+
+msgid ""
+"Build and run your first bounded pipeline, then learn how to submit a "
+"streaming job."
+msgstr "构建并运行第一个有界管道，然后学习如何提交流式作业。"
+
+msgid "Key concepts"
+msgstr "核心概念"
+
+msgid ""
+"Learn how Klein represents a dataflow, chooses an execution mode, tracks "
+"event time, and recovers state."
+msgstr "了解 Klein 如何表示数据流、选择执行模式、跟踪事件时间以及恢复状态。"
+
+msgid "Feature highlights"
+msgstr "特色功能"
+
+msgid ""
+"Compare hybrid execution, state, event time, continuous SQL, checkpoint-"
+"aware outputs, live rescaling, detached jobs, and Ray Serve integration."
+msgstr "对比混合执行、状态、事件时间、持续 SQL、检查点感知输出、在线扩缩容、detached 作业和 Ray Serve 集成。"
+
+msgid "Architecture"
+msgstr "架构"
+
+msgid ""
+"Follow a graph from public APIs through planning, Ray Data or streaming "
+"actors, ordered transport, checkpoints, and recovery."
+msgstr "跟随一张图，了解它如何从公共 API 经过规划、Ray Data 或流式 actor、有序传输、检查点，直至恢复。"
+
+msgid "User guides"
+msgstr "用户指南"
+
+msgid ""
+"Configure jobs, use Ray Data and SQL, manage state, store checkpoints, "
+"and operate pipelines."
+msgstr "配置作业、使用 Ray Data 和 SQL、管理状态、存储检查点并运维管道。"
+
+msgid "DataStream programming"
+msgstr "DataStream 编程"
+
+msgid ""
+"Choose row or batch functions, manage callable lifecycles, preserve "
+"ordering, and design serializable, observable user code."
+msgstr "选择逐行或批量函数，管理可调用对象生命周期，保持顺序，并设计可序列化、可观测的用户代码。"
+
+msgid "Production walkthrough"
+msgstr "生产环境实战"
+
+msgid ""
+"Build, observe, stop, and restore a Kafka pipeline with event-time state "
+"and checkpoint-transactional output."
+msgstr "构建、观测、停止和恢复一个具有事件时间状态及检查点事务型输出的 Kafka 管道。"
+
+msgid "Production readiness"
+msgstr "生产就绪"
+
+msgid ""
+"Verify compatibility, recovery, delivery, capacity, observability, "
+"security, and rollback before a launch."
+msgstr "上线前验证兼容性、恢复、交付、容量、可观测性、安全性和回滚能力。"
+
+msgid "Connector catalog"
+msgstr "连接器目录"
+
+msgid ""
+"Choose inputs and outputs, then review every option, default, schema, "
+"execution mode, and delivery guarantee."
+msgstr "选择输入和输出，然后查看每个选项、默认值、模式、执行模式和交付保证。"
+
+msgid "API reference"
+msgstr "API 参考"
+
+msgid "Find public classes, functions, methods, and configuration options."
+msgstr "查找公共类、函数、方法和配置选项。"
+
+msgid "Limits and stability"
+msgstr "限制与稳定性"
+
+msgid ""
+"Review unsupported combinations, non-goals, API stability, and alpha "
+"upgrade boundaries before committing to an architecture."
+msgstr "确定架构前，审阅不支持的组合、非目标、API 稳定性和 alpha 阶段的升级边界。"
+
+msgid "Explore features"
+msgstr "探索特色功能"
+
+msgid "Hybrid Ray execution"
+msgstr "Ray 混合执行"
+
+msgid ""
+"Use one lazy graph with Ray Data lowering for compatible bounded work and"
+" native Ray Core operators for continuous or streaming-only work."
+msgstr "使用同一张惰性图：兼容的有界工作负载降低为 Ray Data，持续或仅支持流式处理的工作负载则使用原生 Ray Core 算子。"
+
+msgid "Managed state and event time"
+msgstr "托管状态与事件时间"
+
+msgid ""
+"Use keyed state, TTL, timers, key groups, checkpoint restore, and idle-"
+"aware watermarks; continue into the event-time guide for windows and "
+"joins."
+msgstr "使用键控状态、TTL、定时器、键组、检查点恢复和空闲感知水位线；有关窗口和连接，请继续阅读事件时间指南。"
+
+msgid "Continuous SQL and tables"
+msgstr "持续 SQL 与表"
+
+msgid ""
+"Run bounded or continuous SQL, work with explicit changelog rows, and "
+"define connector tables with DDL."
+msgstr "运行有界或持续 SQL、处理显式变更日志行，并使用 DDL 定义连接器表。"
+
+msgid "Checkpoint-aware output"
+msgstr "检查点感知输出"
+
+msgid ""
+"Understand how source progress, state, replay, and transactional sink "
+"publication compose into an end-to-end guarantee."
+msgstr "了解源进度、状态、重放和事务型 sink 发布如何共同构成端到端保证。"
+
+msgid "Live operator rescaling"
+msgstr "在线算子扩缩容"
+
+msgid ""
+"Resize a supported running streaming operator through a checkpoint-"
+"coordinated topology change."
+msgstr "通过检查点协调的拓扑变更，调整受支持的运行中流式算子的并行度。"
+
+msgid "Driver-independent jobs"
+msgstr "独立于 driver 的作业"
+
+msgid ""
+"Keep detached streaming jobs alive after the submitting driver exits, "
+"then reattach, observe, cancel, or recover them explicitly."
+msgstr "提交作业的 driver 退出后，仍保持 detached 流式作业运行；随后可显式重新附加、观测、取消或恢复作业。"
+
+msgid "Ray Serve execution regions"
+msgstr "Ray Serve 执行区域"
+
+msgid ""
+"Move an eligible transform chain behind an independently deployed Ray "
+"Serve endpoint and review its retry and checkpoint boundary."
+msgstr "通过独立部署的 Ray Serve 端点运行符合条件的转换链，并检查其重试和检查点边界。"
+
+msgid "Feature boundaries"
+msgstr "功能边界"
+
+msgid ""
+"Check execution-mode, connector, recovery, scaling, and alpha-"
+"compatibility limits before choosing an architecture."
+msgstr "选择架构前，请检查执行模式、连接器、恢复、扩缩容和 alpha 兼容性限制。"
+
+msgid "How does Klein use Ray?"
+msgstr "Klein 如何使用 Ray？"
+
+msgid ""
+"In `auto` mode, Klein compiles a fully batch-lowerable bounded dataflow "
+"to Ray Data operations when `udf.ignore-exception=false`. An unbounded "
+"source, a streaming-only vertex, or the record-level ignore-exception "
+"policy selects long-lived operators on Ray Core. Those operators store "
+"records in ordered micro-batches. When enabled, Ray's Object Store can "
+"cache sufficiently large immutable checkpoint fragments, while external "
+"storage provides the durable recovery boundary."
+msgstr ""
+"在 `auto` 模式下，当 `udf.ignore-exception=false` 时，Klein 会将可完全降低为批处理的"
+"有界数据流编译为 Ray Data 操作。无界数据源、仅支持流式处理的顶点或记录级忽略异常"
+"策略，会让作业选择 Ray Core 上的长生命周期算子。这些算子以有序微批存储记录。启用"
+"缓存后，Ray Object Store 可缓存达到大小阈值的不可变检查点片段；外部存储则提供持久"
+"恢复边界。"
+
+msgid ""
+"Klein's distribution contributes the `ray.klein` namespace package. It "
+"doesn't install or replace Ray's `ray/__init__.py`, which keeps the "
+"source tree compatible with a future move into the Ray repository."
+msgstr ""
+"Klein 发行包提供 `ray.klein` 命名空间包。它不会安装或替换 Ray 的 "
+"`ray/__init__.py`，从而使源代码树能够兼容未来迁入 Ray 仓库的计划。"
+
+msgid "Get help and contribute"
+msgstr "获取帮助与参与贡献"
+
+msgid ""
+"Start with the [FAQ](faq.md) and [troubleshooting "
+"guide](troubleshooting.md). For project support channels and the "
+"information to include, see the [support policy](https://github.com"
+"/yuchen-ecnu/klein/blob/main/SUPPORT.md). Read the [contribution "
+"guide](https://github.com/yuchen-ecnu/klein/blob/main/CONTRIBUTING.md) "
+"before changing public APIs or runtime behavior. Use the process in the "
+"[security policy](https://github.com/yuchen-"
+"ecnu/klein/blob/main/SECURITY.md) to report a vulnerability."
+msgstr ""
+"请先查看 [FAQ](faq.md) "
+"和[故障排查指南](troubleshooting.md)。项目支持渠道及求助时需提供的信息见[支持策略](https://github.com"
+"/yuchen-ecnu/klein/blob/main/SUPPORT.md)。更改公共 API "
+"或运行时行为前，请阅读[贡献指南](https://github.com/yuchen-"
+"ecnu/klein/blob/main/CONTRIBUTING.md)。报告漏洞时，请遵循[安全策略](https://github.com"
+"/yuchen-ecnu/klein/blob/main/SECURITY.md) 中的流程。"
+
+#~ msgid ""
+#~ "See [Compatibility](compatibility.md) before "
+#~ "changing the Ray dependency range."
+#~ msgstr "更改 Ray 依赖版本范围前，请参阅[兼容性](compatibility.md)。"
+
+#~ msgid ""
+#~ "Choose the right scaling layer, "
+#~ "autoscale bounded Ray Data workers, and"
+#~ " resize a running streaming operator "
+#~ "safely."
+#~ msgstr "选择合适的伸缩层，自动伸缩有界 Ray Data worker，并安全调整运行中流式算子的并行度。"

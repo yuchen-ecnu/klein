@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid "Developing a pipeline"
+msgstr "开发流水线"
+
+msgid ""
+"Klein for Ray builds one directed dataflow graph and chooses batch or "
+"streaming execution from its sources. Create sources directly from :mod:`ray."
+"klein`, add transforms, attach at least one sink, and execute the current "
+"graph."
+msgstr "Klein for Ray 构建一张有向数据流图，并根据其数据源选择批处理或流处理执行。从 :mod:`ray.klein` 直接创建数据源，添加转换，连接至少一个 Sink，然后执行当前图。"
+
+msgid "Execution modes"
+msgstr "执行模式"
+
+msgid ""
+"Bounded Ray Data sources such as CSV, Parquet, JSON, and ``from_items`` use "
+"batch execution. Long-running sources such as Kafka and user-defined "
+"``SourceFunction`` implementations use streaming execution. Applications can "
+"override automatic detection with ``ExecutionOptions.MODE``."
+msgstr "CSV、Parquet、JSON 和 ``from_items`` 等有限 Ray Data 数据源使用批处理执行。Kafka 和用户定义的 ``SourceFunction`` 实现等长期运行的数据源使用流处理执行。应用可以通过 ``ExecutionOptions.MODE`` 覆盖自动检测结果。"
+
+msgid "Transform functions"
+msgstr "转换函数"
+
+msgid ""
+"``map``, ``flat_map``, and ``filter`` operate on record dictionaries. "
+"``map_batches`` accepts a dictionary of columns and is preferred for "
+"vectorized workloads such as model inference. A callable class can request a "
+"``runtime_context`` constructor argument to inspect its task index or "
+"register metrics."
+msgstr "``map``、``flat_map`` 和 ``filter`` 操作记录字典。``map_batches`` 接收列字典，更适合模型推理等向量化工作负载。可调用类可以声明 ``runtime_context`` 构造参数，以查看任务索引或注册指标。"
+
+msgid "Source and sink lifecycle"
+msgstr "Source 和 Sink 生命周期"
+
+msgid ""
+"Pass ``SourceFunction`` and ``SinkFunction`` implementations as classes, "
+"along with constructor arguments, so every physical subtask owns one "
+"independent instance. Passing a pre-created lifecycle object is rejected "
+"because it can share mutable state or network connections across subtasks."
+msgstr "请以类以及构造参数的形式传入 ``SourceFunction`` 和 ``SinkFunction`` 实现，使每个物理子任务拥有一个独立实例。预先创建的生命周期对象会被拒绝，因为它可能在多个子任务之间共享可变状态或网络连接。"
+
+msgid ""
+"For a streaming source, ``cancel()`` is the cooperative stop signal for the "
+"running loop. Keep resource release in ``close()``; the runtime invokes it "
+"once after the loop exits. Sink ``flush()`` publishes buffered writes at "
+"aligned barriers, while ``close()`` performs final resource cleanup."
+msgstr "对于流处理 Source，``cancel()`` 是运行循环的协作式停止信号。资源释放应放在 ``close()`` 中；循环退出后，运行时会调用它一次。Sink 的 ``flush()`` 会在对齐屏障处发布缓冲写入，而 ``close()`` 负责最终的资源清理。"
+
+msgid "Resources and partitioning"
+msgstr "资源与分区"
+
+msgid ""
+"Sources, transforms, and sinks accept ``num_cpus``, ``num_gpus``, and "
+"``concurrency``. Streaming graphs also support ``round_robin``, ``rescale``, "
+"``adaptive_shuffle``, and ``partition_by``. Keep resource requests explicit "
+"for production graphs and validate them with ``ray.klein.explain`` before "
+"deployment."
+msgstr "Source、转换和 Sink 接受 ``num_cpus``、``num_gpus`` 和 ``concurrency``。流处理图还支持 ``round_robin``、``rescale``、``adaptive_shuffle`` 和 ``partition_by``。生产图应明确指定资源请求，并在部署前使用 ``ray.klein.explain`` 进行验证。"
+
+msgid "Connectors"
+msgstr "连接器"
+
+msgid ""
+"The core distribution supports Ray Data connectors, collections, Kafka, "
+"filesystems, Redis, console output, and custom sources or sinks. Ray Serve "
+"is an optional execution integration. The dedicated :doc:`connector catalog "
+"<connectors/index>` provides a capability matrix and a separate page for "
+"every connector, including options, defaults, schemas, and delivery "
+"guarantees."
+msgstr "核心发行版支持 Ray Data 连接器、集合、Kafka、文件系统、Redis、控制台输出以及自定义 Source 或 Sink。Ray Serve 是可选的执行集成。专门的 :doc:`连接器目录 <connectors/index>` 提供能力矩阵，并为每种连接器提供独立页面，其中包括选项、默认值、模式和交付保证。"
+
+msgid ""
+"Service discovery and organization-specific storage clients are "
+"intentionally outside the core package. Optional connectors should be "
+"separate distributions that depend on ``ray-klein`` and may expose a Table "
+"factory through the ``ray.klein.table_factories`` entry-point group."
+msgstr "服务发现和组织专用的存储客户端有意不包含在核心包中。可选连接器应作为依赖 ``ray-klein`` 的独立发行版，并可通过 ``ray.klein.table_factories`` 入口点组公开 Table 工厂。"
+
+msgid ""
+"See :ref:`klein-context-api`, :ref:`data-stream-api`, and :ref:"
+"`configuration-options-api` for the generated API reference."
+msgstr "生成的 API 参考请参阅 :ref:`klein-context-api`、:ref:`data-stream-api` 和 :ref:`configuration-options-api`。"

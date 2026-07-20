@@ -57,6 +57,80 @@ class BarrierAlignerReceiveTest(unittest.TestCase):
         self.assertFalse(aligner.receive(Barrier(10, source_id=src)))
 
 
+class BarrierAlignerDirectInputTest(unittest.TestCase):
+    def test_shared_epoch_ignores_root_source_and_aligns_direct_senders_once(self):
+        root_a, root_b = _src(1), _src(2)
+        upstream_a, upstream_b = _src(3, 0), _src(3, 1)
+        aligner = _BarrierAligner(
+            {root_a: 1, root_b: 1},
+            (upstream_a, upstream_b),
+        )
+
+        self.assertFalse(aligner.receive(Barrier(10, source_id=root_a), upstream_a))
+        self.assertTrue(aligner.receive(Barrier(10, source_id=root_b), upstream_b))
+        self.assertFalse(aligner.receive(Barrier(10, source_id=root_a), upstream_a))
+
+    def test_duplicate_sender_does_not_complete_an_epoch(self):
+        root = _src(1)
+        upstream_a, upstream_b = _src(2, 0), _src(2, 1)
+        aligner = _BarrierAligner({root: 2}, (upstream_a, upstream_b))
+
+        self.assertFalse(aligner.receive(Barrier(7, source_id=root), upstream_a))
+        self.assertFalse(aligner.receive(Barrier(7, source_id=root), upstream_a))
+        self.assertTrue(aligner.receive(Barrier(7, source_id=root), upstream_b))
+
+    def test_unknown_direct_sender_is_rejected(self):
+        root, expected, unknown = _src(1), _src(2), _src(99)
+        aligner = _BarrierAligner({root: 1}, (expected,))
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected checkpoint barrier sender"):
+            aligner.receive(Barrier(3, source_id=root), unknown)
+
+    def test_mixed_terminal_epoch_forwards_normal_until_all_inputs_finish(self):
+        root_a, root_b = _src(1), _src(2)
+        upstream_a, upstream_b = _src(3, 0), _src(3, 1)
+        aligner = _BarrierAligner(
+            {root_a: 1, root_b: 1},
+            (upstream_a, upstream_b),
+        )
+
+        self.assertFalse(aligner.receive(EndOfData(10, source_id=root_a), upstream_a))
+        last = Barrier(10, source_id=root_b)
+        self.assertTrue(aligner.receive(last, upstream_b))
+        self.assertIs(type(aligner.barrier_to_forward(last)), Barrier)
+        self.assertFalse(aligner.last_alignment_is_terminal)
+
+        last = EndOfData(11, source_id=root_b)
+        self.assertTrue(aligner.receive(last, upstream_b))
+        self.assertIs(type(aligner.barrier_to_forward(last)), EndOfData)
+        self.assertTrue(aligner.last_alignment_is_terminal)
+
+    def test_terminal_barrier_arriving_last_is_downgraded_for_mixed_inputs(self):
+        root_a, root_b = _src(1), _src(2)
+        upstream_a, upstream_b = _src(3, 0), _src(3, 1)
+        aligner = _BarrierAligner(
+            {root_a: 1, root_b: 1},
+            (upstream_a, upstream_b),
+        )
+
+        self.assertFalse(aligner.receive(Barrier(10, source_id=root_a), upstream_a))
+        last = EndOfData(10, source_id=root_b)
+        self.assertTrue(aligner.receive(last, upstream_b))
+        self.assertIs(type(aligner.barrier_to_forward(last)), Barrier)
+        self.assertFalse(aligner.last_alignment_is_terminal)
+
+    def test_abort_discards_partial_epoch_and_ignores_late_barriers(self):
+        root = _src(1)
+        upstream_a, upstream_b = _src(2, 0), _src(2, 1)
+        aligner = _BarrierAligner({root: 2}, (upstream_a, upstream_b))
+        self.assertFalse(aligner.receive(Barrier(5, source_id=root), upstream_a))
+
+        self.assertTrue(aligner.abort(5))
+        self.assertFalse(aligner.receive(Barrier(5, source_id=root), upstream_b))
+        self.assertFalse(aligner.receive(Barrier(6, source_id=root), upstream_a))
+        self.assertTrue(aligner.receive(Barrier(6, source_id=root), upstream_b))
+
+
 class BarrierAlignerEofTest(unittest.TestCase):
     def test_eof_aligns_when_all_sources_report(self):
         s1, s2 = _src(1), _src(2)

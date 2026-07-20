@@ -81,6 +81,12 @@ def test_sql_expression_keeps_three_valued_in_projection_semantics() -> None:
     assert predicate is not None
 
 
+@pytest.mark.parametrize("sql", ["active AND score > 0", "active OR score > 0", "NOT active"])
+def test_sql_boolean_logic_uses_row_fallback_for_all_null_arrow_blocks(sql: str) -> None:
+    assert to_ray_data_expression(parse_one(sql), ("rows",)) is None
+    assert to_ray_data_expression(parse_one(sql), ("rows",), predicate=True) is None
+
+
 def test_sql_download_rejects_unsupported_composition_and_predicates() -> None:
     with pytest.raises(SQLQueryError, match="standalone"):
         to_ray_data_expression(parse_one("DOWNLOAD(uri) + 'suffix'"), ("files",))

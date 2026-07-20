@@ -31,6 +31,7 @@ from ray.klein.api.resource_plan import ResourcePlan
 from ray.klein.api.stream import Stream
 from ray.klein.api.stream_sink import StreamSink
 from ray.klein.config.configuration import Configuration
+from ray.klein.config.udf_options import UDFOptions
 from ray.klein.runtime.graph.edge_spec import EdgeSpec
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
@@ -356,17 +357,21 @@ class LogicalGraph:
 
     @property
     def runtime_mode_requires_streaming(self) -> bool:
+        # Ray Data has no row/batch-equivalent of Klein's UDF policy: its
+        # max_errored_blocks option drops whole blocks and does not increment
+        # Klein's per-UDF metric.  AUTO must therefore preserve the configured
+        # semantics by selecting the native streaming runtime.
+        if self._config.get(UDFOptions.IGNORE_EXCEPTIONS):
+            return True
         for source_id in self.sources:
             source = self._vertices[source_id]
             if source.operator.operator_type is not OperatorType.SOURCE:
                 raise TypeError(f"Logical source {source_id} does not contain a source operator")
             if not bool(source.operator.parameters.get("bounded", False)):
                 return True
-        sink_ids = set(self.sinks)
         return any(
             vertex.operator.logical_function is None or not vertex.operator.logical_function.batch_supported
-            for vertex_id, vertex in self._vertices.items()
-            if vertex_id in sink_ids
+            for vertex in self._vertices.values()
         )
 
     def to_builder(self) -> "LogicalGraphBuilder":

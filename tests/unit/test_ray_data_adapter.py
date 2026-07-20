@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 import ray.data
-from ray.data import Dataset
+from ray.data import Dataset, SaveMode
 from ray.data.expressions import col, download
 
 import ray.klein as klein
@@ -25,6 +25,7 @@ from ray.klein.api.ray_data import (
     public_dataset_factories,
     public_dataset_methods,
 )
+from ray.klein.integrations.iceberg import StreamingIcebergSink
 from ray.klein.integrations.sql import StreamingSQLSink
 from tests.support.ray_data import FakeDataset, logical_function_of
 
@@ -170,6 +171,50 @@ def test_write_sql_matches_ray_data_arguments_and_lowers_to_its_consumer(monkeyp
     ]
 
 
+def test_write_iceberg_matches_ray_data_arguments_and_selects_streaming_sink(monkeypatch) -> None:
+    ray_parameters = tuple(inspect.signature(Dataset.write_iceberg).parameters.values())[1:]
+    klein_parameters = tuple(inspect.signature(DataStream.write_iceberg).parameters.values())[1:]
+    assert [(parameter.name, parameter.kind, parameter.default) for parameter in klein_parameters] == [
+        (parameter.name, parameter.kind, parameter.default) for parameter in ray_parameters
+    ]
+
+    dataset = FakeDataset()
+    stream = KleinContext().data.source(lambda: dataset)
+    captured = []
+
+    def replacement_write_iceberg(dataset, *args, **kwargs):
+        captured.append((dataset, args, kwargs))
+
+    sink = stream.write_iceberg(
+        "analytics.events",
+        catalog_kwargs={"name": "test", "type": "sql"},
+        snapshot_properties={"application": "test"},
+        mode=SaveMode.OVERWRITE,
+        ray_remote_args={"num_cpus": 2},
+        concurrency=3,
+    )
+    monkeypatch.setattr(Dataset, "write_iceberg", replacement_write_iceberg)
+
+    assert logical_function_of(sink).function is StreamingIcebergSink
+    assert logical_function_of(sink).to_batch([dataset]) is None
+    assert captured == [
+        (
+            dataset,
+            ("analytics.events",),
+            {
+                "catalog_kwargs": {"name": "test", "type": "sql"},
+                "snapshot_properties": {"application": "test"},
+                "mode": SaveMode.OVERWRITE,
+                "overwrite_filter": None,
+                "upsert_kwargs": None,
+                "overwrite_kwargs": None,
+                "ray_remote_args": {"num_cpus": 2},
+                "concurrency": 3,
+            },
+        )
+    ]
+
+
 def test_source_callable_is_lazy_and_validates_its_result() -> None:
     expected = FakeDataset()
     stream = KleinContext().data.source(lambda value: value, expected)
@@ -227,6 +272,7 @@ def test_other_klein_streams_become_dataset_dependencies_even_when_nested() -> N
         ("rename_columns", RayDataMethodKind.TRANSFORM),
         ("take_all", RayDataMethodKind.CONSUME),
         ("write_csv", RayDataMethodKind.CONSUME),
+        ("write_iceberg", RayDataMethodKind.CONSUME),
         ("write_sql", RayDataMethodKind.CONSUME),
         ("groupby", RayDataMethodKind.CONSUME),
     ],
@@ -279,11 +325,12 @@ def test_manual_ray_data_api_mirrors_do_not_grow_back() -> None:
         "from_values",
     }
     # These are intentional Klein sink APIs. File methods share Ray Data's
-    # familiar spelling but add checkpointed 2PC, while write_sql selects Ray
-    # Data in batch mode and Klein's native SQL sink in streaming mode.
+    # familiar spelling but add checkpointed 2PC. Iceberg and SQL select Ray
+    # Data in batch mode and Klein-native sinks in streaming mode.
     assert {name for name in stream_methods if name.startswith("write_")} == {
         "write_csv",
         "write_files",
+        "write_iceberg",
         "write_json",
         "write_kafka",
         "write_parquet",

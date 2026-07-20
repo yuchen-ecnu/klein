@@ -50,15 +50,21 @@ class _FakeState:
         return self.snapshot if job_id == self.job_id else None
 
     def rescale_operator(self, job_id, operator_id, parallelism):
+        return self.submit_operator_rescale(job_id, operator_id, parallelism)
+
+    def submit_operator_rescale(self, job_id, operator_id, parallelism):
         self.rescale_calls.append((job_id, operator_id, parallelism))
         if self.rescale_error is not None:
             raise self.rescale_error
         return {
+            "operation_id": "resize-1",
             "job_id": job_id,
             "operator_id": operator_id,
             "previous_parallelism": 2,
             "parallelism": parallelism,
-            "status": "COMPLETED",
+            "target_parallelism": parallelism,
+            "status": "ACCEPTED",
+            "phase": "QUEUED",
         }
 
     def cancel_job(self, job_id, timeout=60):
@@ -268,10 +274,40 @@ def test_dashboard_forwards_operator_rescale_and_returns_operation(
         headers={"Content-Type": "application/json", "Content-Length": str(len(body))},
     )
 
-    assert status == 200
+    assert status == 202
     assert state.rescale_calls == [(state.job_id, 7, 5)]
-    assert json.loads(payload)["status"] == "COMPLETED"
+    assert json.loads(payload)["status"] == "ACCEPTED"
+    assert json.loads(payload)["operation_id"] == "resize-1"
     assert json.loads(payload)["parallelism"] == 5
+
+
+def test_dashboard_returns_conflict_for_concurrent_rescale(dashboard_server) -> None:
+    server, state = dashboard_server
+
+    def reject(job_id, operator_id, parallelism):
+        return {
+            "operation_id": "resize-2",
+            "active_operation_id": "resize-1",
+            "job_id": job_id,
+            "operator_id": operator_id,
+            "parallelism": parallelism,
+            "status": "REJECTED",
+            "error": "another operator rescale is already in progress",
+        }
+
+    state.submit_operator_rescale = reject
+    body = json.dumps({"parallelism": 5})
+    status, _, payload = _request(
+        server,
+        "POST",
+        f"/api/jobs/{quote(state.job_id, safe='')}/operators/7/rescale",
+        body=body,
+        headers={"Content-Type": "application/json", "Content-Length": str(len(body))},
+    )
+
+    assert status == 409
+    assert json.loads(payload)["status"] == "REJECTED"
+    assert json.loads(payload)["active_operation_id"] == "resize-1"
 
 
 @pytest.mark.parametrize("parallelism", [0, -1, 1.5, True, "2"])
