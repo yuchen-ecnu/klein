@@ -49,6 +49,8 @@ class TaskMetrics:
         input_buffer_capacity: int,
         input_buffer_byte_capacity: int,
         emit_queue_capacity: int,
+        *,
+        initialize: bool = True,
     ) -> TaskMetrics:
         metrics = cls(
             barriers_in=group.builtin_counter(KleinMetrics.BARRIERS_IN),
@@ -80,16 +82,31 @@ class TaskMetrics:
             replay_buffer_records=group.builtin_gauge(KleinMetrics.REPLAY_BUFFER_RECORDS),
             replay_buffer_bytes=group.builtin_gauge(KleinMetrics.REPLAY_BUFFER_BYTES),
         )
-        metrics.input_buffer_capacity_records.set(input_buffer_capacity)
-        metrics.input_buffer_capacity_bytes.set(input_buffer_byte_capacity)
-        metrics.emit_queue_capacity_batches.set(emit_queue_capacity)
-        metrics.update_input_buffer(0, input_buffer_capacity, 0, input_buffer_byte_capacity)
-        metrics.emit_queue_batches.set(0)
-        metrics.transport_inflight_requests.set(0)
-        metrics.idle_inputs.set(0)
-        metrics.replay_buffer_records.set(0)
-        metrics.replay_buffer_bytes.set(0)
+        if initialize:
+            metrics.initialize_runtime(
+                input_buffer_capacity,
+                input_buffer_byte_capacity,
+                emit_queue_capacity,
+            )
         return metrics
+
+    def initialize_runtime(
+        self,
+        input_buffer_capacity: int,
+        input_buffer_byte_capacity: int,
+        emit_queue_capacity: int,
+    ) -> None:
+        """Publish the initial gauges when a task runtime becomes active."""
+
+        self.input_buffer_capacity_records.set(input_buffer_capacity)
+        self.input_buffer_capacity_bytes.set(input_buffer_byte_capacity)
+        self.emit_queue_capacity_batches.set(emit_queue_capacity)
+        self.update_input_buffer(0, input_buffer_capacity, 0, input_buffer_byte_capacity)
+        self.emit_queue_batches.set(0)
+        self.transport_inflight_requests.set(0)
+        self.idle_inputs.set(0)
+        self.replay_buffer_records.set(0)
+        self.replay_buffer_bytes.set(0)
 
     def update_input_buffer(self, size: int, capacity: int, size_bytes: int, byte_capacity: int) -> None:
         self.input_buffer_records.set(size)

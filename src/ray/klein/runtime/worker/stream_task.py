@@ -30,6 +30,7 @@ import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
 import ray.klein as klein
@@ -73,6 +74,7 @@ from ray.klein.runtime.worker.pump import (
 from ray.klein.runtime.worker.watermark import WatermarkController, WatermarkMode
 from ray.klein.runtime.worker.weighted_queue import WeightedQueue
 from ray.klein.state.object_store_snapshot_cache import ObjectStoreSnapshotCache
+from ray.klein.state.state_backend_factory import discard_state_backend
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
 
 if TYPE_CHECKING:
@@ -83,6 +85,52 @@ if TYPE_CHECKING:
 
 
 logger = get_logger(__name__)
+
+
+def _operator_runtime_identity(operator) -> tuple:
+    """Return the stable part of an OperatorSpec across Ray serialization.
+
+    User functions are cloudpickled for every actor RPC, so ordinary dataclass
+    equality can report two copies of the same logical operator as different.
+    The execution-graph identity and operator recipe shape remain stable and
+    are sufficient here; the JobMaster separately guarantees that a rescale
+    changes only parallelism before it sends any descriptor to an actor.
+    """
+
+    operator_class = operator.operator_class
+    return (
+        operator.id,
+        operator.name,
+        operator.operator_type,
+        operator_class.__module__,
+        operator_class.__qualname__,
+        operator.owns_state,
+        tuple(_operator_runtime_identity(child) for child in operator.children),
+    )
+
+
+def _runtime_rescale_descriptor_identity(descriptor: "TaskDeploymentDescriptor") -> tuple:
+    """Stable identity for idempotent prepare retries across serialization."""
+
+    return (
+        descriptor.vertex_id,
+        descriptor.task_name,
+        descriptor.task_generation,
+        descriptor.task_index,
+        descriptor.parallelism,
+        descriptor.namespace,
+        descriptor.restore_operation_id,
+        _operator_runtime_identity(descriptor.operator),
+        tuple(getattr(descriptor, "input_vertex_ids", ())),
+        tuple(
+            (
+                edge.target_task_names,
+                edge.control_target_indices,
+                edge.topology_epoch,
+            )
+            for edge in getattr(descriptor, "out_edges", ())
+        ),
+    )
 
 
 class _OperatorRunner:
@@ -137,6 +185,36 @@ class _RuntimeState:
     event_time_tracker: InputWatermarkTracker | None = None
 
 
+@dataclass(slots=True)
+class _TaskRuntime:
+    """One complete operator runtime owned by a StreamTask actor.
+
+    The actor normally exposes exactly one active instance through its legacy
+    ``_state``/``_watermark``/``_emit``/``_pump`` pointers. During retained-actor
+    rescaling a second instance can be built and restored here without changing
+    any of those live pointers.
+    """
+
+    descriptor: "TaskDeploymentDescriptor"
+    context: TaskRuntimeContext
+    state: _RuntimeState
+    watermark: WatermarkController
+    emit: EmitPipeline
+    pump: InboxPump
+    state_backend_task_name: str
+    closed: bool = False
+    async_runner_closed: bool = False
+    emit_closed: bool = False
+    operator_closed: bool = False
+
+
+@dataclass(slots=True)
+class _RuntimeRescaleTransaction:
+    operation_id: str
+    previous: _TaskRuntime
+    pending: _TaskRuntime
+
+
 class StreamTask(AsyncWorker):
     """Async Ray actor that runs one operator of the execution graph."""
 
@@ -156,6 +234,12 @@ class StreamTask(AsyncWorker):
         self._watermark: WatermarkController | None = None
         self._emit: EmitPipeline | None = None
         self._pump: InboxPump | None = None
+        self._active_runtime: _TaskRuntime | None = None
+        self._runtime_rescale_transaction: _RuntimeRescaleTransaction | None = None
+        self._runtime_rescale_preparing_operation_id: str | None = None
+        self._runtime_rescale_outcomes: dict[str, bool] = {}
+        self._runtime_rescale_lock_obj: asyncio.Lock | None = None
+        self._retired_runtimes: list[_TaskRuntime] = []
         self._last_checkpoint_id: int | None = None
         self._last_checkpoint_state_size_bytes = 0
         self._rescale_operation_id: str | None = None
@@ -198,102 +282,246 @@ class StreamTask(AsyncWorker):
     async def setup_and_run(self) -> None:
         if self._running:
             return
-        runtime_context = self._build_runtime_context()
+        runtime = await self._build_runtime(self._descriptor)
+        self._install_runtime(runtime)
+        try:
+            await self._on_setup_done(runtime.context)
+            await self.start()
+        except BaseException:
+            try:
+                await self._close_runtime(runtime, discard_backend=True)
+            finally:
+                self._clear_installed_runtime(runtime)
+            raise
+        self._running = True
+
+    async def _build_runtime(
+        self,
+        descriptor: "TaskDeploymentDescriptor",
+        *,
+        state_backend_task_name: str | None = None,
+        publish_metrics: bool = True,
+    ) -> _TaskRuntime:
+        """Build and restore a runtime without exposing it to input RPCs."""
+
+        backend_task_name = state_backend_task_name or descriptor.task_name
+        runtime_context = self._build_runtime_context(
+            descriptor,
+            state_backend_task_name=backend_task_name,
+        )
         runtime_context.checkpoint_strategy.open()
         delivery_mode = (
-            DeliveryMode.INLINE
-            if self._descriptor.operator.operator_type is OperatorType.SOURCE
-            else DeliveryMode.PIPELINED
+            DeliveryMode.INLINE if descriptor.operator.operator_type is OperatorType.SOURCE else DeliveryMode.PIPELINED
         )
-        output = self._build_output(delivery_mode)
-        operator = self._descriptor.operator.build(self._descriptor.output_queue)
-        operator.open(output, runtime_context)
+        output = self._build_output(delivery_mode, descriptor)
+        operator = descriptor.operator.build(descriptor.output_queue)
+        executor: ThreadPoolExecutor | None = None
+        try:
+            operator.open(output, runtime_context)
+            input_buffer_max_bytes = runtime_context.config.get(PipelineOptions.INPUT_BUFFER_MAX_BYTES)
+            emit_queue_max_batches = descriptor.config.get(PipelineOptions.EMIT_QUEUE_MAX_BATCHES)
+            inbox = WeightedQueue(
+                descriptor.input_buffer_size,
+                inbox_envelope_rows,
+                max_bytes=input_buffer_max_bytes,
+                size_bytes=inbox_envelope_bytes,
+            )
+            # Single-thread executor so the (non-thread-safe) operator runs off loop.
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{descriptor.task_name}-op")
+            task_metrics = TaskMetrics.create(
+                descriptor.metric_group,
+                descriptor.input_buffer_size,
+                input_buffer_max_bytes,
+                emit_queue_max_batches,
+                initialize=publish_metrics,
+            )
+            state = _RuntimeState(
+                inbox=inbox,
+                operator=operator,
+                output=output,
+                executor=executor,
+                input_batches=InputBatchAccumulator(runtime_context.runtime_info),
+                checkpoint_strategy=runtime_context.checkpoint_strategy,
+                is_async_operator=runtime_context.runtime_info.async_enabled,
+                pipelined=delivery_mode is DeliveryMode.PIPELINED,
+                metrics=task_metrics,
+            )
+            state.runner = _OperatorRunner(state)
+            state.state_snapshot_cache = self._build_state_snapshot_cache(operator, descriptor)
+            state.event_time_tracker = InputWatermarkTracker(descriptor.input_vertex_ids)
+            if output is not None:
+                self._attach_output_metrics(output, state)
 
-        input_buffer_max_bytes = runtime_context.config.get(PipelineOptions.INPUT_BUFFER_MAX_BYTES)
-        emit_queue_max_batches = self._descriptor.config.get(PipelineOptions.EMIT_QUEUE_MAX_BATCHES)
-        inbox = WeightedQueue(
-            self._descriptor.input_buffer_size,
-            inbox_envelope_rows,
-            max_bytes=input_buffer_max_bytes,
-            size_bytes=inbox_envelope_bytes,
-        )
-        # Single-thread executor so the (non-thread-safe) operator runs off loop.
-        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"{self._task_name}-op")
-        task_metrics = TaskMetrics.create(
-            self._descriptor.metric_group,
-            self._descriptor.input_buffer_size,
-            input_buffer_max_bytes,
-            emit_queue_max_batches,
-        )
-        state = _RuntimeState(
-            inbox=inbox,
-            operator=operator,
-            output=output,
-            executor=executor,
-            input_batches=InputBatchAccumulator(runtime_context.runtime_info),
-            checkpoint_strategy=runtime_context.checkpoint_strategy,
-            is_async_operator=runtime_context.runtime_info.async_enabled,
-            pipelined=delivery_mode is DeliveryMode.PIPELINED,
-            metrics=task_metrics,
-        )
-        state.runner = _OperatorRunner(state)
-        state.state_snapshot_cache = self._build_state_snapshot_cache(operator)
-        state.event_time_tracker = InputWatermarkTracker(self._descriptor.input_vertex_ids)
-        self._state = state
-
-        if output is not None:
-            self._attach_output_metrics(output, state)
-
-        await self._restore_operator_state(runtime_context)
-
-        # Replay watermark + emit pipeline.
-        self._watermark = self._build_watermark(operator, output)
-        self._emit = EmitPipeline(
-            output,
-            self._watermark,
-            self.handle_exception,
-            self._task_name,
-            queue_maxsize=emit_queue_max_batches,
-            queue_size_observer=state.metrics.emit_queue_batches.set,
-        )
-
-        # The pump owns dispatch of records returned by the input accumulator.
-        from ray.klein.config.event_time_options import EventTimeOptions
-
-        idle_check_interval = self._descriptor.config.get(EventTimeOptions.IDLE_INPUT_CHECK_INTERVAL)
-        if idle_check_interval.total_seconds() <= 0:
-            raise ValueError("event-time.idle-input.check-interval must be greater than zero")
-        self._pump = InboxPump(
-            self,
-            state,
-            self._watermark,
-            self._emit,
-            inbox_timeout=idle_check_interval.total_seconds(),
-        )
-        self._watermark.bind(
-            output,
-            operator,
-            executor,
-            self._emit,
-            self._pump.flush_input,
-        )
-
-        # Async operator: an ordered concurrency window lets up to
-        # async_buffer_size requests run in flight while emission stays in input
-        # order (see AsyncOrderedRunner). Sized from the operator's
-        # async_buffer_size; the runner's FIFO consumer emits via the pump.
-        if state.is_async_operator:
-            capacity = runtime_context.runtime_info.async_buffer_size or 1
-            state.async_runner = AsyncOrderedRunner(
-                capacity=capacity,
-                on_result=self._pump.on_async_result,
-                on_fatal=self.handle_exception,
-                task_name=self._task_name,
+            await self._restore_operator_state(
+                runtime_context,
+                descriptor=descriptor,
+                state=state,
+                record_metrics=publish_metrics,
             )
 
-        await self._on_setup_done(runtime_context)
-        await self.start()
-        self._running = True
+            # Replay watermark + emit pipeline.
+            watermark = self._build_watermark(operator, output, descriptor)
+            emit = EmitPipeline(
+                output,
+                watermark,
+                self.handle_exception,
+                descriptor.task_name,
+                queue_maxsize=emit_queue_max_batches,
+                queue_size_observer=state.metrics.emit_queue_batches.set,
+            )
+
+            # The pump owns dispatch of records returned by the input accumulator.
+            from ray.klein.config.event_time_options import EventTimeOptions
+
+            idle_check_interval = descriptor.config.get(EventTimeOptions.IDLE_INPUT_CHECK_INTERVAL)
+            if idle_check_interval.total_seconds() <= 0:
+                raise ValueError("event-time.idle-input.check-interval must be greater than zero")
+            pump = InboxPump(
+                self,
+                state,
+                watermark,
+                emit,
+                inbox_timeout=idle_check_interval.total_seconds(),
+            )
+            watermark.bind(
+                output,
+                operator,
+                executor,
+                emit,
+                pump.flush_input,
+            )
+
+            # Async operator: an ordered concurrency window lets up to
+            # async_buffer_size requests run in flight while emission stays in input
+            # order (see AsyncOrderedRunner).
+            if state.is_async_operator:
+                capacity = runtime_context.runtime_info.async_buffer_size or 1
+                state.async_runner = AsyncOrderedRunner(
+                    capacity=capacity,
+                    on_result=pump.on_async_result,
+                    on_fatal=self.handle_exception,
+                    task_name=descriptor.task_name,
+                )
+            return _TaskRuntime(
+                descriptor,
+                runtime_context,
+                state,
+                watermark,
+                emit,
+                pump,
+                backend_task_name,
+            )
+        except BaseException:
+            try:
+                if executor is None:
+                    operator.close()
+                else:
+                    await asyncio.get_running_loop().run_in_executor(executor, operator.close)
+            except Exception:
+                logger.exception("Failed to close a partially built runtime for %s", descriptor.task_name)
+            finally:
+                if executor is not None:
+                    executor.shutdown(wait=False)
+                discard_state_backend(descriptor.config, descriptor.namespace, backend_task_name)
+            raise
+
+    def _install_runtime(self, runtime: _TaskRuntime) -> None:
+        """Atomically redirect every actor data-plane pointer to one runtime."""
+
+        self._descriptor = runtime.descriptor
+        self._state = runtime.state
+        self._watermark = runtime.watermark
+        self._emit = runtime.emit
+        self._pump = runtime.pump
+        self._active_runtime = runtime
+
+    def _clear_installed_runtime(self, runtime: _TaskRuntime) -> None:
+        if self._active_runtime is not runtime:
+            return
+        self._state = None
+        self._watermark = None
+        self._emit = None
+        self._pump = None
+        self._active_runtime = None
+
+    @staticmethod
+    def _start_runtime_components(runtime: _TaskRuntime) -> None:
+        if runtime.state.pipelined:
+            runtime.emit.start()
+        if runtime.state.async_runner is not None:
+            runtime.state.async_runner.start()
+
+    @staticmethod
+    def _initialize_runtime_metrics(runtime: _TaskRuntime) -> None:
+        runtime.state.metrics.initialize_runtime(
+            runtime.descriptor.input_buffer_size,
+            runtime.descriptor.config.get(PipelineOptions.INPUT_BUFFER_MAX_BYTES),
+            runtime.descriptor.config.get(PipelineOptions.EMIT_QUEUE_MAX_BATCHES),
+        )
+        if isinstance(runtime.state.operator, ManagedStateOperator):
+            runtime.state.operator.publish_deferred_restore_metrics()
+
+    async def _close_runtime(
+        self,
+        runtime: _TaskRuntime,
+        timeout: float = 30.0,
+        *,
+        discard_backend: bool,
+    ) -> None:
+        if runtime.closed:
+            return
+        errors = [
+            await self._close_runtime_async_runner(runtime, timeout),
+            await self._close_runtime_emit(runtime, timeout),
+            await self._close_runtime_operator(runtime),
+        ]
+        if discard_backend and runtime.operator_closed:
+            discard_state_backend(
+                runtime.descriptor.config,
+                runtime.descriptor.namespace,
+                runtime.state_backend_task_name,
+            )
+        runtime.closed = runtime.async_runner_closed and runtime.emit_closed and runtime.operator_closed
+        first_error = next((error for error in errors if error is not None), None)
+        if first_error is not None:
+            raise first_error
+
+    @staticmethod
+    async def _close_runtime_async_runner(runtime: _TaskRuntime, timeout: float) -> BaseException | None:
+        if runtime.state.async_runner is None:
+            runtime.async_runner_closed = True
+            return None
+        if not runtime.async_runner_closed:
+            try:
+                await runtime.state.async_runner.shutdown(timeout)
+                runtime.async_runner_closed = True
+            except BaseException as error:
+                return error
+        return None
+
+    @staticmethod
+    async def _close_runtime_emit(runtime: _TaskRuntime, timeout: float) -> BaseException | None:
+        if not runtime.emit_closed:
+            try:
+                await runtime.emit.shutdown(timeout)
+                runtime.emit_closed = True
+            except BaseException as error:
+                return error
+        return None
+
+    @staticmethod
+    async def _close_runtime_operator(runtime: _TaskRuntime) -> BaseException | None:
+        if not runtime.operator_closed:
+            try:
+                await asyncio.get_running_loop().run_in_executor(
+                    runtime.state.executor,
+                    runtime.state.operator.close,
+                )
+                runtime.operator_closed = True
+                runtime.state.executor.shutdown(wait=False)
+            except BaseException as error:
+                return error
+        return None
 
     async def setup_for_rescale(self, operation_id: str) -> None:
         """Restore a replacement task completely while keeping its pump fenced."""
@@ -328,15 +556,24 @@ class StreamTask(AsyncWorker):
             raise ValueError("a rebuilt task must keep its task name")
         if descriptor.task_generation != self._task_generation:
             raise ValueError("a rebuilt task must keep its task generation")
-        if descriptor.parallelism != self._descriptor.parallelism:
-            raise ValueError("a rebuilt task cannot change its own parallelism")
+        # A retained Ray actor keeps its original constructor recipe across an
+        # actor-process restart. The scheduler's descriptor is authoritative once
+        # that actor is not running, including a parallelism adopted by a committed
+        # local rescale. Live tasks still reject own-parallelism changes through
+        # prepare_topology_reconfiguration().
         self._descriptor = descriptor
         await self.setup_and_run()
 
-    def _build_watermark(self, operator: StreamOperator, output: TaskOutput | None) -> WatermarkController:
+    def _build_watermark(
+        self,
+        operator: StreamOperator,
+        output: TaskOutput | None,
+        descriptor: "TaskDeploymentDescriptor | None" = None,
+    ) -> WatermarkController:
         from ray.klein.config.pipeline_options import PipelineOptions
 
-        config = self._descriptor.config
+        descriptor = self._descriptor if descriptor is None else descriptor
+        config = descriptor.config
         enabled = config.get(PipelineOptions.REPLAY_BUFFER_ENABLED)
         flush_interval_batches = config.get(PipelineOptions.REPLAY_WATERMARK_FLUSH_BATCHES)
         replay_max_bytes = config.get(PipelineOptions.REPLAY_BUFFER_MAX_BYTES)
@@ -349,7 +586,7 @@ class StreamTask(AsyncWorker):
                 self._vertex_id,
                 replay_max_bytes,
                 sender_task_name=self._task_name,
-                topology_epochs=tuple(edge.topology_epoch for edge in self._descriptor.out_edges),
+                topology_epochs=tuple(edge.topology_epoch for edge in descriptor.out_edges),
             )
         if not enabled:
             mode = WatermarkMode.DISABLED
@@ -362,42 +599,50 @@ class StreamTask(AsyncWorker):
                 self._vertex_id,
                 replay_max_bytes,
                 sender_task_name=self._task_name,
-                topology_epochs=tuple(edge.topology_epoch for edge in self._descriptor.out_edges),
+                topology_epochs=tuple(edge.topology_epoch for edge in descriptor.out_edges),
             )
         else:
             mode = WatermarkMode.DISABLED
-        return WatermarkController(mode, flush_interval_batches, namespace=self._descriptor.namespace)
+        return WatermarkController(mode, flush_interval_batches, namespace=descriptor.namespace)
 
     def _build_state_snapshot_cache(
         self,
         operator: StreamOperator,
+        descriptor: "TaskDeploymentDescriptor | None" = None,
     ) -> ObjectStoreSnapshotCache | None:
         if not operator.stateful:
             return None
         import ray
         from ray.klein.config.state_options import StateOptions
 
-        enabled = self._descriptor.config.get(StateOptions.OBJECT_STORE_CACHE_ENABLED)
+        descriptor = self._descriptor if descriptor is None else descriptor
+        enabled = descriptor.config.get(StateOptions.OBJECT_STORE_CACHE_ENABLED)
         # Debug mode has no Ray Object Store. The same codec remains exercised,
         # with snapshots kept inline.
         enabled = enabled and not klein.is_debug_mode()
         return ObjectStoreSnapshotCache(
             ray.put,
             klein.get,
-            min_size_bytes=self._descriptor.config.get(StateOptions.OBJECT_STORE_CACHE_MIN_BYTES),
+            min_size_bytes=descriptor.config.get(StateOptions.OBJECT_STORE_CACHE_MIN_BYTES),
             enabled=enabled,
         )
 
     async def _restore_operator_state(
         self,
         runtime_context: TaskRuntimeContext,
+        *,
+        descriptor: "TaskDeploymentDescriptor | None" = None,
+        state: _RuntimeState | None = None,
+        record_metrics: bool = True,
     ) -> None:
-        operator = self._runtime_state.operator
-        cache = self._runtime_state.state_snapshot_cache
+        descriptor = self._descriptor if descriptor is None else descriptor
+        state = self._runtime_state if state is None else state
+        operator = state.operator
+        cache = state.state_snapshot_cache
         if not operator.stateful or cache is None:
             return
         strategy = runtime_context.checkpoint_strategy
-        restore_operation_id = self._descriptor.restore_operation_id
+        restore_operation_id = descriptor.restore_operation_id
         references = (
             tuple(await strategy.restore_rescale_operator_states_async(restore_operation_id))
             if restore_operation_id is not None
@@ -410,8 +655,8 @@ class StreamTask(AsyncWorker):
         try:
             payloads = await self._materialize_state(cache, references)
             hot_restores = sum(1 for reference in references if reference.object_ref is not None)
-            if hot_restores:
-                self._runtime_state.metrics.state_object_store_restores.inc(hot_restores)
+            if hot_restores and record_metrics:
+                state.metrics.state_object_store_restores.inc(hot_restores)
         except Exception:
             if restore_operation_id is not None:
                 raise
@@ -422,9 +667,15 @@ class StreamTask(AsyncWorker):
                 "Hot Object Store state for %s is unavailable; restoring the durable checkpoint.",
                 self._task_name,
             )
-            self._runtime_state.metrics.state_durable_restore_fallbacks.inc()
+            if record_metrics:
+                state.metrics.state_durable_restore_fallbacks.inc()
             payloads = await self._materialize_state(cache, durable_references)
-        await self._apply_operator_state(operator, payloads)
+        await self._apply_operator_state(
+            operator,
+            payloads,
+            executor=state.executor,
+            publish_metrics=record_metrics,
+        )
 
     @staticmethod
     async def _materialize_state(cache: ObjectStoreSnapshotCache, references: tuple) -> tuple[bytes, ...]:
@@ -432,13 +683,23 @@ class StreamTask(AsyncWorker):
             await asyncio.gather(*(asyncio.to_thread(cache.materialize, reference) for reference in references))
         )
 
-    async def _apply_operator_state(self, operator: StreamOperator, payloads: tuple[bytes, ...]) -> None:
+    async def _apply_operator_state(
+        self,
+        operator: StreamOperator,
+        payloads: tuple[bytes, ...],
+        *,
+        executor: ThreadPoolExecutor | None = None,
+        publish_metrics: bool = True,
+    ) -> None:
         if not isinstance(operator, ManagedStateOperator):
             raise TypeError(f"stateful operator {type(operator).__name__} must inherit ManagedStateOperator")
         await asyncio.get_running_loop().run_in_executor(
-            self._runtime_state.executor,
-            operator.restore_state_fragments,
-            payloads,
+            self._runtime_state.executor if executor is None else executor,
+            partial(
+                operator.restore_state_fragments,
+                payloads,
+                publish_metrics=publish_metrics,
+            ),
         )
 
     def snapshot_operator_state(self, barrier_id: int) -> int:
@@ -502,46 +763,62 @@ class StreamTask(AsyncWorker):
         before the pump starts. Async so a subclass can ``await`` coordinator
         RPCs without blocking the actor event loop."""
 
-    def _build_runtime_context(self) -> TaskRuntimeContext:
+    def _build_runtime_context(
+        self,
+        descriptor: "TaskDeploymentDescriptor | None" = None,
+        *,
+        state_backend_task_name: str | None = None,
+    ) -> TaskRuntimeContext:
         from ray.klein.runtime.coordinator.checkpoint_strategy import (
             AlignedCheckpointStrategy,
         )
 
+        descriptor = self._descriptor if descriptor is None else descriptor
         coordinator = klein.get_actor_by_name(
             ComponentName.KLEIN_CHECKPOINT_COORDINATOR,
-            namespace=self._descriptor.namespace,
+            namespace=descriptor.namespace,
         )
         checkpoint_strategy = AlignedCheckpointStrategy(
             coordinator,
-            self._descriptor.barrier_split,
-            self._descriptor.vertex_id,
-            self._descriptor.operator.operator_type,
-            self._descriptor.config,
-            is_committer=self._descriptor.is_committer,
-            synchronous_notify=self._descriptor.operator.transactional_sink,
-            metric_group=self._descriptor.metric_group,
+            descriptor.barrier_split,
+            descriptor.vertex_id,
+            descriptor.operator.operator_type,
+            descriptor.config,
+            is_committer=descriptor.is_committer,
+            synchronous_notify=descriptor.operator.transactional_sink,
+            metric_group=descriptor.metric_group,
         )
         return TaskRuntimeContext(
-            self._descriptor.task_name,
-            self._descriptor.task_index,
-            self._descriptor.parallelism,
-            self._descriptor.config,
-            self._descriptor.metric_group,
+            descriptor.task_name,
+            descriptor.task_index,
+            descriptor.parallelism,
+            descriptor.config,
+            descriptor.metric_group,
             checkpoint_strategy,
-            self._descriptor.operator.runtime_info,
-            self._descriptor.namespace,
+            descriptor.operator.runtime_info,
+            descriptor.namespace,
+            state_backend_task_name=state_backend_task_name,
         )
 
-    def _build_output(self, delivery_mode: DeliveryMode) -> TaskOutput | None:
-        edges = [self._build_output_edge(edge, delivery_mode) for edge in self._descriptor.out_edges]
+    def _build_output(
+        self,
+        delivery_mode: DeliveryMode,
+        descriptor: "TaskDeploymentDescriptor | None" = None,
+    ) -> TaskOutput | None:
+        descriptor = self._descriptor if descriptor is None else descriptor
+        edges = [self._build_output_edge(edge, delivery_mode, descriptor) for edge in descriptor.out_edges]
         if not edges:
             return None
         return TaskOutput(edges)
 
-    def _build_output_edge(self, edge, delivery_mode: DeliveryMode) -> EdgeOutput:
-        targets = [
-            klein.get_actor_by_name(name, namespace=self._descriptor.namespace) for name in edge.target_task_names
-        ]
+    def _build_output_edge(
+        self,
+        edge,
+        delivery_mode: DeliveryMode,
+        descriptor: "TaskDeploymentDescriptor | None" = None,
+    ) -> EdgeOutput:
+        descriptor = self._descriptor if descriptor is None else descriptor
+        targets = [klein.get_actor_by_name(name, namespace=descriptor.namespace) for name in edge.target_task_names]
         if any(target is None for target in targets):
             missing = [name for name, target in zip(edge.target_task_names, targets, strict=True) if target is None]
             raise RuntimeError(f"downstream task actor(s) not found: {missing}")
@@ -552,7 +829,7 @@ class StreamTask(AsyncWorker):
             output_buffer_max_rows=edge.output_buffer_max_rows,
             target_task_names=edge.target_task_names,
             put_timeout=edge.put_timeout,
-            namespace=self._descriptor.namespace,
+            namespace=descriptor.namespace,
             delivery_mode=delivery_mode,
         )
 
@@ -662,7 +939,11 @@ class StreamTask(AsyncWorker):
         if operation_id in self._topology_commit_tombstones:
             return False
         if self._topology_operation_id is None:
-            return False
+            # No transaction means this actor is already on its exact old
+            # topology (never prepared, or a previous rollback succeeded).
+            # Treat that state as an idempotent rollback success so a partial
+            # batched prepare does not force a whole-job recovery.
+            return True
         previous, descriptor = self._require_topology_transaction(operation_id)
         self._restore_topology_transaction(
             operation_id,
@@ -814,6 +1095,205 @@ class StreamTask(AsyncWorker):
         self._rescale_ready.clear()
         self._rescale_resume.clear()
 
+    async def prepare_runtime_rescale(
+        self,
+        operation_id: str,
+        descriptor: "TaskDeploymentDescriptor",
+    ) -> bool:
+        async with self._runtime_rescale_lock:
+            return await self._prepare_runtime_rescale_locked(operation_id, descriptor)
+
+    async def _prepare_runtime_rescale_locked(
+        self,
+        operation_id: str,
+        descriptor: "TaskDeploymentDescriptor",
+    ) -> bool:
+        """Build a retained actor's next runtime without exposing it to input.
+
+        The old target must already be paused at its aligned local barrier. The
+        pending runtime owns a separate inbox, operator, output, executor,
+        checkpoint strategy, watermark, emit pipeline and managed-state backend.
+        Only ``commit_runtime_rescale`` redirects the actor's live pointers.
+        """
+
+        await self._retry_retired_runtimes()
+        outcome = self._runtime_rescale_outcomes.get(operation_id)
+        if outcome is not None:
+            return outcome
+        transaction = self._runtime_rescale_transaction
+        if transaction is not None:
+            return self._validate_existing_runtime_rescale(transaction, operation_id, descriptor)
+        if self._runtime_rescale_preparing_operation_id is not None:
+            raise RuntimeError(
+                f"runtime rescale {self._runtime_rescale_preparing_operation_id} is already being prepared"
+            )
+        self._runtime_rescale_preparing_operation_id = operation_id
+        try:
+            if self._rescale_operation_id != operation_id or self._rescale_role != "target":
+                raise RuntimeError(f"{self._task_name} is not an old target of rescale {operation_id}")
+            if self._rescale_ready_obj is None or not self._rescale_ready_obj.is_set():
+                raise RuntimeError(f"{self._task_name} has not reached the rescale cut")
+            if not self._running or self._active_runtime is None:
+                raise RuntimeError(f"{self._task_name} has no live runtime to retain")
+            self._validate_runtime_rescale_descriptor(descriptor, operation_id)
+
+            previous = self._active_runtime
+            backend_task_name = f"{descriptor.task_name}.__rescale__.{operation_id}"
+            pending = await self._build_runtime(
+                descriptor,
+                state_backend_task_name=backend_task_name,
+                publish_metrics=False,
+            )
+            if self._active_runtime is not previous:
+                await self._close_runtime(pending, discard_backend=True)
+                raise RuntimeError(f"{self._task_name}'s active runtime changed while preparing rescale")
+            self._runtime_rescale_transaction = _RuntimeRescaleTransaction(
+                operation_id,
+                previous,
+                pending,
+            )
+            return True
+        except BaseException:
+            # Nothing has been published yet and _build_runtime owns cleanup of
+            # every partially constructed component. Remember that this actor is
+            # already back on its exact old runtime so a coordinator-wide
+            # rollback remains idempotent even when one actor failed to prepare.
+            self._remember_runtime_rescale_outcome(operation_id, committed=False)
+            raise
+        finally:
+            self._runtime_rescale_preparing_operation_id = None
+
+    @staticmethod
+    def _validate_existing_runtime_rescale(
+        transaction: _RuntimeRescaleTransaction,
+        operation_id: str,
+        descriptor: "TaskDeploymentDescriptor",
+    ) -> bool:
+        if transaction.operation_id != operation_id:
+            raise RuntimeError(f"runtime rescale {transaction.operation_id} is already prepared")
+        if _runtime_rescale_descriptor_identity(transaction.pending.descriptor) != _runtime_rescale_descriptor_identity(
+            descriptor
+        ):
+            raise ValueError(f"runtime rescale {operation_id} was retried with a different descriptor")
+        return True
+
+    async def commit_runtime_rescale(self, operation_id: str) -> bool:
+        async with self._runtime_rescale_lock:
+            return await self._commit_runtime_rescale_locked(operation_id)
+
+    async def _commit_runtime_rescale_locked(self, operation_id: str) -> bool:
+        """Atomically publish a prepared runtime and retire its predecessor."""
+
+        outcome = self._runtime_rescale_outcomes.get(operation_id)
+        if outcome is not None:
+            if outcome:
+                await self._retry_retired_runtimes()
+            return outcome
+        transaction = self._require_runtime_rescale_transaction(operation_id)
+        if self._active_runtime is not transaction.previous:
+            raise RuntimeError(f"{self._task_name}'s previous runtime is no longer active")
+
+        # These consumers are idle because the pending inbox/output are still
+        # unreachable. Starting them cannot expose the pending runtime; the five
+        # pointer assignments in _install_runtime are the actor-local commit point.
+        self._start_runtime_components(transaction.pending)
+        self._install_runtime(transaction.pending)
+        self._runtime_rescale_transaction = None
+        self._remember_runtime_rescale_outcome(operation_id, committed=True)
+        try:
+            self._initialize_runtime_metrics(transaction.pending)
+        except Exception:
+            logger.exception("Failed to publish committed runtime metrics for %s", self._task_name)
+        try:
+            await self._close_runtime(transaction.previous, discard_backend=True)
+        except Exception:
+            # The new runtime is already visible and the old one can never be
+            # rolled back after its close began. Cleanup failure is non-fatal and
+            # must not misreport the actor-local commit as reversible.
+            self._retired_runtimes.append(transaction.previous)
+            logger.exception("Failed to clean up the previous runtime of %s", self._task_name)
+        return True
+
+    async def rollback_runtime_rescale(self, operation_id: str) -> bool:
+        async with self._runtime_rescale_lock:
+            return await self._rollback_runtime_rescale_locked(operation_id)
+
+    async def _rollback_runtime_rescale_locked(self, operation_id: str) -> bool:
+        """Discard a pending runtime while leaving the exact old runtime active."""
+
+        outcome = self._runtime_rescale_outcomes.get(operation_id)
+        if outcome is not None:
+            return not outcome
+        transaction = self._require_runtime_rescale_transaction(operation_id)
+        await self._close_runtime(transaction.pending, discard_backend=True)
+        self._runtime_rescale_transaction = None
+        self._remember_runtime_rescale_outcome(operation_id, committed=False)
+        return True
+
+    @property
+    def _runtime_rescale_lock(self) -> asyncio.Lock:
+        if getattr(self, "_runtime_rescale_lock_obj", None) is None:
+            self._runtime_rescale_lock_obj = asyncio.Lock()
+        return self._runtime_rescale_lock_obj
+
+    def _validate_runtime_rescale_descriptor(
+        self,
+        descriptor: "TaskDeploymentDescriptor",
+        operation_id: str,
+    ) -> None:
+        current = self._descriptor
+        if descriptor.vertex_id != self._vertex_id:
+            raise ValueError("a retained task must keep its execution vertex id")
+        if descriptor.task_name != self._task_name:
+            raise ValueError("a retained task must keep its Ray actor name")
+        if descriptor.task_generation != self._task_generation:
+            raise ValueError("a retained task must keep its task generation")
+        if descriptor.task_index != current.task_index:
+            raise ValueError("a retained task must keep its subtask index")
+        if descriptor.namespace != current.namespace:
+            raise ValueError("a retained task cannot move to another job namespace")
+        if _operator_runtime_identity(descriptor.operator) != _operator_runtime_identity(current.operator):
+            raise ValueError("runtime rescale cannot replace the retained task's operator")
+        if descriptor.operator.source:
+            raise ValueError("source operators cannot prepare a retained runtime")
+        if descriptor.parallelism <= 0:
+            raise ValueError("runtime rescale parallelism must be positive")
+        if descriptor.operator.stateful and descriptor.restore_operation_id != operation_id:
+            raise ValueError("a managed-state runtime must restore the active rescale cut")
+
+    def _require_runtime_rescale_transaction(self, operation_id: str) -> _RuntimeRescaleTransaction:
+        transaction = self._runtime_rescale_transaction
+        if transaction is None or transaction.operation_id != operation_id:
+            raise RuntimeError(f"runtime rescale {operation_id} has not been prepared")
+        return transaction
+
+    def _remember_runtime_rescale_outcome(self, operation_id: str, *, committed: bool) -> None:
+        self._runtime_rescale_outcomes[operation_id] = committed
+        while len(self._runtime_rescale_outcomes) > 16:
+            self._runtime_rescale_outcomes.pop(next(iter(self._runtime_rescale_outcomes)))
+
+    async def _retry_retired_runtimes(self, timeout: float = 30.0) -> BaseException | None:
+        if not self._retired_runtimes:
+            return None
+        remaining: list[_TaskRuntime] = []
+        first_error: BaseException | None = None
+        for runtime in self._retired_runtimes:
+            try:
+                await self._close_runtime(runtime, timeout, discard_backend=True)
+            except BaseException as error:
+                remaining.append(runtime)
+                if first_error is None:
+                    first_error = error
+        self._retired_runtimes = remaining
+        if first_error is not None:
+            logger.warning(
+                "Failed to retry cleanup of %d retired runtime(s) for %s: %s",
+                len(remaining),
+                self._task_name,
+                first_error,
+            )
+        return first_error
+
     async def prepare_rescale_upstream(
         self,
         operation_id: str,
@@ -858,8 +1338,15 @@ class StreamTask(AsyncWorker):
         return self._rescale_snapshot
 
     def resume_rescale(self, operation_id: str) -> bool:
+        if operation_id in self._rescale_tombstones:
+            return True
         if self._rescale_operation_id != operation_id:
             return False
+        if getattr(self, "_runtime_rescale_preparing_operation_id", None) == operation_id:
+            raise RuntimeError(f"runtime rescale {operation_id} is still being prepared")
+        transaction = getattr(self, "_runtime_rescale_transaction", None)
+        if transaction is not None and transaction.operation_id == operation_id:
+            raise RuntimeError(f"runtime rescale {operation_id} must be committed or rolled back before resume")
         if self._topology_operation_id == operation_id and self._topology_active:
             self.commit_topology_reconfiguration(operation_id)
         self._rescale_resume.set()
@@ -1188,26 +1675,44 @@ class StreamTask(AsyncWorker):
         if self._rescale_resume_obj is not None:
             self._rescale_resume_obj.set()
         await super().stop(timeout)
-        if self._state is None:
+        async with self._runtime_rescale_lock:
+            await self._close_task_runtimes(timeout)
+
+    async def _close_task_runtimes(self, timeout: float) -> None:
+        first_error: BaseException | None = None
+        transaction = self._runtime_rescale_transaction
+        if transaction is not None:
+            try:
+                await self._close_runtime(
+                    transaction.pending,
+                    timeout,
+                    discard_backend=True,
+                )
+            except BaseException as error:
+                first_error = error
+            finally:
+                self._runtime_rescale_transaction = None
+        retired_error = await self._retry_retired_runtimes(timeout)
+        if first_error is None:
+            first_error = retired_error
+        runtime = self._active_runtime
+        if runtime is None:
             self._running = False
             logger.info("Stream task %s stopped without initialized runtime state", self._task_name)
+            if first_error is not None:
+                raise first_error
             return
         try:
-            # Shut the async runner down first so any still-in-flight result is
-            # emitted while the emit pipeline below is still alive to drain it.
-            if self._state.async_runner is not None:
-                await self._state.async_runner.shutdown(timeout)
-            if self._emit is not None:
-                await self._emit.shutdown(timeout)
+            await self._close_runtime(runtime, timeout, discard_backend=False)
+        except BaseException as error:
+            if first_error is None:
+                first_error = error
         finally:
-            if self._state.operator is not None:
-                await asyncio.get_running_loop().run_in_executor(
-                    self._state.executor,
-                    self._state.operator.close,
-                )
-            self._state.executor.shutdown(wait=False)
+            self._clear_installed_runtime(runtime)
             self._running = False
             logger.info("Stream task %s stopped", self._task_name)
+        if first_error is not None:
+            raise first_error
 
     def _get_name(self) -> str:
         return self._task_name

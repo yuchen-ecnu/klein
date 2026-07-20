@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import uuid
+from copy import copy
 from typing import ClassVar
 
 from ray.klein.config.configuration import Configuration
@@ -122,6 +123,42 @@ class ExecutionVertex:
         """Give the next actor incarnation a unique status-report identity."""
 
         self.task_generation = uuid.uuid4().hex
+
+    def rebind(
+        self,
+        *,
+        concurrency: int,
+        vertex_resources: Resources,
+        operator_spec: OperatorSpec,
+        config: Configuration,
+    ) -> "ExecutionVertex":
+        """Clone this live subtask into a resized job-vertex wrapper.
+
+        The wrapper deliberately preserves the immutable actor identity (physical
+        vertex id, Ray actor name and generation), actor handle, status and metric
+        group.  Only graph-owned attributes that describe the resized logical
+        operator are rebound.  A shallow clone is sufficient because those shared
+        runtime objects are intentionally retained, while scalar status writes on
+        the returned wrapper no longer mutate the pre-rescale graph.
+        """
+
+        if isinstance(concurrency, bool) or not isinstance(concurrency, int):
+            raise TypeError("concurrency must be an integer")
+        if concurrency <= self.index:
+            raise ValueError("concurrency must include the retained subtask index")
+        if not isinstance(vertex_resources, Resources):
+            raise TypeError("vertex_resources must be Resources")
+        if not isinstance(operator_spec, OperatorSpec):
+            raise TypeError("operator_spec must be OperatorSpec")
+        if not isinstance(config, Configuration):
+            raise TypeError("config must be Configuration")
+
+        rebound = copy(self)
+        rebound.concurrency = concurrency
+        rebound.resources = vertex_resources
+        rebound.operator_spec = operator_spec
+        rebound.config = config
+        return rebound
 
     @property
     def status(self) -> ExecutionVertexStatus:

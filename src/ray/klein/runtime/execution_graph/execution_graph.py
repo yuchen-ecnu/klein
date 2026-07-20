@@ -236,13 +236,15 @@ class ExecutionGraph:
         logical_graph: "LogicalGraph",
         operator_id: int | str,
     ) -> "ExecutionGraph":
-        """Build a replacement topology while retaining every unaffected task.
+        """Build a resized topology while retaining every reusable task actor.
 
-        Only the resized job vertex gets fresh :class:`ExecutionVertex`
-        instances.  The other job vertices (including their live actor handles,
-        statuses, output queues and metric groups) are deliberately shared with
-        this graph so the scheduler can apply the topology as a local runtime
-        change instead of a global redeployment.
+        Unaffected job vertices remain shared.  For the resized job vertex,
+        overlapping subtask indices receive new graph wrappers via
+        :meth:`ExecutionVertex.rebind`; those wrappers retain their actor
+        identity/handle and runtime status without allowing later new-graph state
+        writes to mutate the old graph.  Only scale-out indices are fresh actors.
+        Scale-in indices remain discoverable on ``old_target`` by ordinary index
+        difference, so the scheduler can retire exactly that subset.
         """
 
         target_id = logical_graph.resolve_operator(operator_id).index
@@ -254,11 +256,21 @@ class ExecutionGraph:
             return self
 
         job_vertices = dict(self._job_vertices)
-        job_vertices[target_id] = ExecutionJobVertex(
+        new_target = ExecutionJobVertex(
             new_spec,
             old_target.config,
             old_target.job_metric_group,
         )
+        retained_count = min(old_target.concurrency, new_target.concurrency)
+        for index in range(retained_count):
+            new_target.execution_vertices[index] = old_target.execution_vertex(index).rebind(
+                concurrency=new_target.concurrency,
+                vertex_resources=new_target.resources,
+                operator_spec=new_target.operator_spec,
+                config=new_target.config,
+            )
+        new_target.output_queue = old_target.output_queue
+        job_vertices[target_id] = new_target
         job_edges = [
             ExecutionJobEdge(
                 job_vertices[edge.source.index],

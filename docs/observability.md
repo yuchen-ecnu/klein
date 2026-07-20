@@ -79,8 +79,11 @@ remain printed in each node and in the operator table for accessibility.
 
 The page also shows each operator's live parallelism and rates, and lets you
 apply a new positive parallelism to one running operator. A stale or terminal
-job is read-only. For a supported operator, every direct upstream task inserts
-an ordered local barrier on the incident edge and pauses at that cut. The old
+job is read-only. Rescaling changes only the physical delta: subtasks whose
+indexes exist at both parallelisms retain their actor identities. On a
+scale-out, Klein creates the added actors and waits for them to answer a ping
+before it interrupts the data path. It then asks every direct upstream task to
+insert an ordered local barrier on the incident edge and pause at that cut. The
 target aligns those barriers, snapshots managed state, and fences its direct
 downstream tasks before Klein swaps routing and resumes the region. Unrelated
 actors stay alive; there is no whole-job restart or global source stop.
@@ -95,12 +98,16 @@ post-commit recovery checkpoint on one consistent source cut until Klein gains
 a shared checkpoint epoch across parallel sources. Unsupported controls are
 disabled with the runtime-provided reason.
 
-The replacement operator is created and restores its state before the old
-operator is removed, but its input pump stays fenced until the topology commit.
-A scale operation therefore needs temporary capacity for both parallelisms.
-Existing job-wide PlacementGroup bundles are not resized: replacement actors
-use Ray's native placement, and bundles made surplus by a scale-in remain
-reserved until the job ends.
+Added actors remain fenced while the local cut is formed. At the cut, retained
+actors prepare their new runtime descriptors and managed state transactionally,
+and added actors prepare their initial runtime and assigned state. The old
+runtime remains available until topology commit, so a pre-commit failure can
+roll back without changing the retained actor identities. On a scale-in, Klein
+does not create replacements: the removed actors stay fenced and available for
+rollback until commit, and only those removed actors are stopped afterward.
+Existing job-wide PlacementGroup bundles are not resized: added actors use
+Ray's native placement, and bundles made surplus by a scale-in remain reserved
+until the job ends.
 
 The normal scale path does not restart the job. After commit, the checkpoint
 coordinator asks the source to emit an ordinary checkpoint at its next record

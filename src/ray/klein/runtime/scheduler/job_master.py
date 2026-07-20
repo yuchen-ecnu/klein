@@ -44,9 +44,31 @@ logger = get_logger(__name__)
 @dataclass(slots=True)
 class _LocalRescaleAttempt:
     candidate_created: bool = False
+    checkpoint_gate_attempted: bool = False
+    participants_prepare_attempted: bool = False
+    runtime_prepare_attempted: bool = False
     routes_prepared: bool = False
     coordinator_reconfiguration_attempted: bool = False
     committed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _LocalRescaleDelta:
+    """Physical actor sets for one target-parallelism change."""
+
+    retained: tuple[object, ...]
+    added: tuple[object, ...]
+    removed: tuple[object, ...]
+
+    @classmethod
+    def between(cls, old_target, new_target) -> "_LocalRescaleDelta":
+        old_indices = set(old_target.execution_vertices)
+        new_indices = set(new_target.execution_vertices)
+        return cls(
+            retained=tuple(new_target.execution_vertex(index) for index in sorted(old_indices & new_indices)),
+            added=tuple(new_target.execution_vertex(index) for index in sorted(new_indices - old_indices)),
+            removed=tuple(old_target.execution_vertex(index) for index in sorted(old_indices - new_indices)),
+        )
 
 
 class JobMaster:
@@ -90,6 +112,10 @@ class JobMaster:
             rpc_timeout=self._coordinator_rpc_timeout,
             start_timeout=self._schedule_start_timeout,
         )
+        # A failed Ray kill must not make a rescale-only vertex unreachable
+        # after its candidate/old graph is discarded. Keep the physical wrapper
+        # until a later rescale or whole-job stop confirms the name is gone.
+        self._pending_rescale_actor_cleanup: dict[str, tuple[object, object]] = {}
 
     def schedule(self, restore_path: str | None = None) -> None:
         """Deploy the job as an ordered sequence of named stages.
@@ -167,6 +193,7 @@ class JobMaster:
         # stop_workers force-kills survivors internally, so anything it still
         # raises is a genuine teardown failure restart() relies on to return FAILED.
         task_terminator.stop_workers(self.execution_graph, deadline.step(self._stop_timeout), force)
+        self._cleanup_pending_rescale_actors(deadline.step(self._stop_timeout))
         # Release the PG so its bundles return to the cluster (rebuilt next schedule()).
         self._remove_placement_group()
         if self.coordinator is not None and self._coordinator_alive():
@@ -296,17 +323,20 @@ class JobMaster:
         execution_graph: ExecutionGraph,
         operation_id: str,
     ) -> None:
-        """Replace one operator while every unrelated actor stays alive.
+        """Resize one operator while preserving every overlapping actor.
 
-        Direct upstream tasks insert an ordered local fence and pause. The old
-        target aligns those fences, snapshots managed state and forwards a
-        fence downstream. Only after downstreams acknowledge that cut are the
-        replacement actors started and live tasks hot-reconfigured.
+        Scale-out creates only the added physical subtasks; scale-in retires
+        only the surplus subtasks.  Direct upstream tasks insert an ordered
+        local fence and pause.  The old target aligns those fences, snapshots
+        managed state and forwards a fence downstream.  Retained actors prepare
+        a second runtime under the new parallelism, then atomically swap it at
+        the topology commit while keeping their Ray actor identity.
         """
 
+        timeout = self._schedule_start_timeout
+        self._cleanup_pending_rescale_actors(timeout)
         self._recovery.clear_stable_rescale_metadata()
         target_id, old_graph, old_target, new_target = self._validate_local_rescale(execution_graph)
-        timeout = self._schedule_start_timeout
         attempt = _LocalRescaleAttempt()
         try:
             self._apply_local_rescale(
@@ -350,6 +380,8 @@ class JobMaster:
         old_graph = self.execution_graph
         old_target = old_graph.job_vertex(target_id)
         new_target = execution_graph.job_vertex(target_id)
+        if old_target.operator_spec != new_target.operator_spec:
+            raise ValueError("local rescale cannot replace the target operator")
         if old_target.operator_spec.source:
             raise ValueError("source operators cannot be locally rescaled")
         if old_target.operator_spec.transactional_sink:
@@ -378,29 +410,50 @@ class JobMaster:
         attempt: _LocalRescaleAttempt,
     ) -> None:
         execution_graph.mark_rescale_epoch(target_id, operation_id)
+        delta = _LocalRescaleDelta.between(old_target, new_target)
+        for vertex in new_target.execution_vertices.values():
+            # The committed graph must retain this identity until its first
+            # durable checkpoint, including for actor wrappers that are reused.
+            vertex.restore_operation_id = operation_id
+
+        # Allocate and confirm only the scale-out delta before inserting the
+        # data-plane fence.  Ray actor creation is asynchronous, so ping is the
+        # point at which resource placement and construction are known to have
+        # completed.  Stateful setup still waits for the local-cut snapshots.
+        if delta.added:
+            attempt.candidate_created = True
+            task_deployer.instantiate_job_vertex(
+                execution_graph,
+                new_target,
+                NativeStrategy().plan(execution_graph),
+                restore_operation_id=operation_id,
+                vertices=delta.added,
+            )
+            task_deployer.deploy_job_vertex(new_target, vertices=delta.added)
+            task_deployer.wait_job_vertex_created(new_target, timeout, vertices=delta.added)
+
+        attempt.checkpoint_gate_attempted = True
         klein.get(self.coordinator.begin_operator_rescale(operation_id, timeout), timeout=timeout)
         if not self._recovery.clear_stable_rescale_metadata():
             raise RuntimeError("could not retire the previous durable rescale identity")
+        attempt.participants_prepare_attempted = True
         participants = self._prepare_local_rescale(old_graph, target_id, operation_id, timeout)
         snapshots = self._await_local_rescale_cut(old_target, participants, operation_id, timeout)
         self._stage_local_rescale_state(old_target, snapshots, operation_id, target_id, timeout)
-        # Set before actor creation so rollback also cleans up a partially
-        # instantiated candidate when one of the later creates fails.
-        attempt.candidate_created = True
-        task_deployer.instantiate_job_vertex(
+        if delta.added:
+            task_deployer.start_job_vertex(
+                new_target,
+                timeout,
+                paused_operation_id=operation_id,
+                vertices=delta.added,
+            )
+        attempt.runtime_prepare_attempted = True
+        self._prepare_retained_target_runtimes(
             execution_graph,
             new_target,
-            NativeStrategy().plan(execution_graph),
-            # Stateful candidates use this to find the transient local cut;
-            # stateless candidates retain it as recovery-fence metadata until
-            # the first new-topology checkpoint completes.
-            restore_operation_id=operation_id,
-        )
-        task_deployer.deploy_job_vertex(new_target)
-        task_deployer.start_job_vertex(
-            new_target,
+            delta.retained,
+            operation_id,
             timeout,
-            paused_operation_id=operation_id,
         )
         # From prepare through coordinator activation every task remains fenced,
         # and old EdgeOutput objects remain available for an exact rollback.
@@ -419,32 +472,62 @@ class JobMaster:
         # The first retained-journal commit is irreversible. Every operation
         # below is idempotent/best-effort and rolls forward on the new graph.
         attempt.committed = True
-        self._commit_live_task_topologies(live_handles, operation_id, timeout)
-        self.execution_graph = execution_graph
-        self._replace_recovery_graph(execution_graph)
         try:
             try:
+                self._commit_live_task_topologies(live_handles, operation_id, timeout)
+                self.execution_graph = execution_graph
+                self._replace_recovery_graph(execution_graph)
+                self._commit_retained_target_runtimes(delta.retained, operation_id, timeout)
                 # Install the recovery fence and reopen checkpoint admission
                 # before any participant can resume on the committed routes.
                 self._finish_local_rescale_gate(operation_id, committed=True)
+                self._release_committed_rescale(
+                    old_graph,
+                    new_target,
+                    target_id,
+                    operation_id,
+                    timeout,
+                )
             except Exception:
                 self._recovery.require_global_recovery(
-                    "the committed operator topology could not install its checkpoint recovery fence"
+                    "the committed operator topology could not be fully activated or fenced for recovery"
                 )
+                try:
+                    self._finish_local_rescale_gate(operation_id, committed=True)
+                except Exception:
+                    logger.warning("Failed to install the committed rescale recovery fence", exc_info=True)
                 raise
-            self._release_committed_rescale(
-                old_graph,
-                new_target,
-                target_id,
-                operation_id,
-                timeout,
-            )
             self._request_rescale_stabilization_checkpoint(execution_graph)
         finally:
-            try:
-                task_terminator.stop_job_vertex(old_target, old_graph.namespace, timeout, force=False)
-            except Exception:
-                logger.warning("Failed to clean up old rescaled operator actors", exc_info=True)
+            if delta.removed:
+                try:
+                    task_terminator.stop_job_vertex(
+                        old_target,
+                        old_graph.namespace,
+                        timeout,
+                        force=False,
+                        vertices=delta.removed,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Graceful cleanup of retired rescaled actors failed; force-killing the same delta",
+                        exc_info=True,
+                    )
+                    try:
+                        task_terminator.stop_job_vertex(
+                            old_target,
+                            old_graph.namespace,
+                            timeout,
+                            force=True,
+                            vertices=delta.removed,
+                        )
+                    except Exception:
+                        self._remember_pending_rescale_actors(old_target, delta.removed)
+                        self._recovery.require_global_recovery(
+                            "one or more retired operator actors survived post-rescale cleanup"
+                        )
+                        logger.exception("Failed to force-clean retired rescaled operator actors")
+                        raise
 
     def _stage_local_rescale_state(
         self,
@@ -462,6 +545,65 @@ class JobMaster:
             self.coordinator.stage_operator_rescale_state(operation_id, target_id, tuple(snapshots)),
             timeout=timeout,
         )
+
+    @staticmethod
+    def _prepare_retained_target_runtimes(
+        execution_graph: ExecutionGraph,
+        new_target,
+        retained: tuple[object, ...],
+        operation_id: str,
+        timeout: float,
+    ) -> None:
+        """Build the new runtime beside each retained actor's paused runtime."""
+
+        calls = [
+            vertex.stream_task.prepare_runtime_rescale(
+                operation_id,
+                task_deployer.build_descriptor(
+                    execution_graph,
+                    new_target,
+                    vertex,
+                    restore_operation_id=operation_id,
+                ),
+            )
+            for vertex in retained
+        ]
+        if calls:
+            results = klein.get(calls, timeout=timeout)
+            if not all(result is True for result in results):
+                raise RuntimeError("one or more retained target runtimes rejected rescale preparation")
+
+    @staticmethod
+    def _commit_retained_target_runtimes(
+        retained: tuple[object, ...],
+        operation_id: str,
+        timeout: float,
+    ) -> None:
+        calls = [vertex.stream_task.commit_runtime_rescale(operation_id) for vertex in retained]
+        if calls:
+            results = klein.get(calls, timeout=timeout)
+            if not all(result is True for result in results):
+                raise RuntimeError("one or more retained target runtimes rejected the rescale commit")
+
+    @staticmethod
+    def _rollback_retained_target_runtimes(
+        retained: tuple[object, ...],
+        operation_id: str,
+        timeout: float,
+    ) -> bool:
+        restored = True
+        for vertex in retained:
+            try:
+                result = klein.get(
+                    vertex.stream_task.rollback_runtime_rescale(operation_id),
+                    timeout=timeout,
+                )
+                if result is not True:
+                    restored = False
+            except Exception:
+                restored = False
+                logger.warning("Failed to roll back one retained target runtime", exc_info=True)
+        return restored
 
     def _rollback_local_rescale(
         self,
@@ -496,19 +638,24 @@ class JobMaster:
             )
         finally:
             if rollback_safe:
-                try:
-                    self._finish_local_rescale_gate(operation_id, committed=False)
-                except Exception:
-                    rollback_safe = False
-                    logger.warning("Failed to release the checkpoint gate after rescale rollback", exc_info=True)
-                else:
-                    self._release_rescale_participants(
-                        old_graph,
-                        target_id,
-                        operation_id,
-                        timeout,
-                        include_target=True,
-                    )
+                if attempt.participants_prepare_attempted:
+                    try:
+                        self._release_rescale_participants(
+                            old_graph,
+                            target_id,
+                            operation_id,
+                            timeout,
+                            include_target=True,
+                        )
+                    except Exception:
+                        rollback_safe = False
+                        logger.warning("Failed to resume every participant after rescale rollback", exc_info=True)
+                if rollback_safe and attempt.checkpoint_gate_attempted:
+                    try:
+                        self._finish_local_rescale_gate(operation_id, committed=False)
+                    except Exception:
+                        rollback_safe = False
+                        logger.warning("Failed to release the checkpoint gate after rescale rollback", exc_info=True)
             if not rollback_safe:
                 # Do not resume a possibly split topology. Fenced tasks make the
                 # health probe fail, and this explicit policy flag guarantees
@@ -532,6 +679,16 @@ class JobMaster:
         attempt: _LocalRescaleAttempt,
     ) -> bool:
         restored = True
+        delta = _LocalRescaleDelta.between(old_graph.job_vertex(target_id), new_target)
+        if attempt.runtime_prepare_attempted:
+            restored = (
+                self._rollback_retained_target_runtimes(
+                    delta.retained,
+                    operation_id,
+                    timeout,
+                )
+                and restored
+            )
         if attempt.candidate_created:
             try:
                 task_terminator.stop_job_vertex(
@@ -539,8 +696,11 @@ class JobMaster:
                     execution_graph.namespace,
                     timeout,
                     force=True,
+                    vertices=delta.added,
                 )
             except Exception:
+                restored = False
+                self._remember_pending_rescale_actors(new_target, delta.added)
                 logger.warning("Failed to stop replacement actors during rescale rollback", exc_info=True)
         self.execution_graph = old_graph
         try:
@@ -823,10 +983,9 @@ class JobMaster:
             if vertex.stream_task is not None
         ]
         if candidate_calls:
-            try:
-                klein.get(candidate_calls, timeout=timeout)
-            except Exception:
-                logger.warning("Failed to activate one or more replacement tasks", exc_info=True)
+            results = klein.get(candidate_calls, timeout=timeout)
+            if not all(result is True for result in results):
+                raise RuntimeError("one or more resized target tasks did not resume")
         cls._release_rescale_participants(
             old_graph,
             target_id,
@@ -855,10 +1014,9 @@ class JobMaster:
             if vertex.stream_task is not None
         ]
         if calls:
-            try:
-                klein.get(calls, timeout=timeout)
-            except Exception:
-                logger.warning("Failed to release one or more rescale participants", exc_info=True)
+            results = klein.get(calls, timeout=timeout)
+            if not all(result is True for result in results):
+                raise RuntimeError("one or more rescale participants did not resume")
 
     def _replace_recovery_graph(self, execution_graph: ExecutionGraph) -> None:
         self._recovery = RecoveryManager(
@@ -867,6 +1025,28 @@ class JobMaster:
             rpc_timeout=self._coordinator_rpc_timeout,
             start_timeout=self._schedule_start_timeout,
         )
+
+    def _remember_pending_rescale_actors(self, job_vertex, vertices: tuple[object, ...]) -> None:
+        for vertex in vertices:
+            self._pending_rescale_actor_cleanup[vertex.name] = (job_vertex, vertex)
+
+    def _cleanup_pending_rescale_actors(self, timeout: float) -> None:
+        if not self._pending_rescale_actor_cleanup:
+            return
+        groups: dict[int, tuple[object, list[object]]] = {}
+        for job_vertex, vertex in self._pending_rescale_actor_cleanup.values():
+            group = groups.setdefault(id(job_vertex), (job_vertex, []))
+            group[1].append(vertex)
+        for job_vertex, vertices in groups.values():
+            task_terminator.stop_job_vertex(
+                job_vertex,
+                self.namespace,
+                timeout,
+                force=True,
+                vertices=tuple(vertices),
+            )
+            for vertex in vertices:
+                self._pending_rescale_actor_cleanup.pop(vertex.name, None)
 
     def on_task_status_report(
         self,

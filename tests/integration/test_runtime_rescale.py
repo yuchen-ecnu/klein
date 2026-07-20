@@ -73,6 +73,10 @@ def _unrelated_actor_ids(snapshot: dict, target_id: int) -> dict[int, tuple[str 
     }
 
 
+def _actor_ids_by_subtask(operator: dict) -> dict[int, str | None]:
+    return {subtask["subtask_index"]: subtask["actor_id"] for subtask in operator["subtasks"]}
+
+
 def _collect_sequence_phase(output_queue: Queue, expected_indices: range) -> list[dict]:
     expected = set(expected_indices)
     received: dict[int, dict] = {}
@@ -172,6 +176,9 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         assert _operator(before, "UpstreamMap")["op_id"] != target_id
         unrelated_before = _unrelated_actor_ids(before, target_id)
         assert all(actor_id is not None for actor_ids in unrelated_before.values() for actor_id in actor_ids)
+        target_before = _actor_ids_by_subtask(target)
+        assert set(target_before) == {0, 1}
+        assert all(target_before.values())
 
         producer.start()
         wait_until(
@@ -188,7 +195,12 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         assert produced[0] > produced_before_scale_out
         after_scale_out = klein.get_job_snapshot(handle.namespace)
         assert after_scale_out is not None
-        assert _operator(after_scale_out, "DynamicMap")["parallelism"] == 3
+        target_after_scale_out = _operator(after_scale_out, "DynamicMap")
+        assert target_after_scale_out["parallelism"] == 3
+        scale_out_actor_ids = _actor_ids_by_subtask(target_after_scale_out)
+        assert set(scale_out_actor_ids) == {0, 1, 2}
+        assert {index: scale_out_actor_ids[index] for index in target_before} == target_before
+        assert scale_out_actor_ids[2] not in set(target_before.values())
         assert _unrelated_actor_ids(after_scale_out, target_id) == unrelated_before
         produced_before_scale_in = produced[0]
 
@@ -198,7 +210,12 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         assert produced[0] > produced_before_scale_in
         after_scale_in = klein.get_job_snapshot(handle.namespace)
         assert after_scale_in is not None
-        assert _operator(after_scale_in, "DynamicMap")["parallelism"] == 2
+        target_after_scale_in = _operator(after_scale_in, "DynamicMap")
+        assert target_after_scale_in["parallelism"] == 2
+        scale_in_actor_ids = _actor_ids_by_subtask(target_after_scale_in)
+        assert set(scale_in_actor_ids) == {0, 1}
+        assert scale_in_actor_ids == {index: scale_out_actor_ids[index] for index in scale_in_actor_ids}
+        assert scale_in_actor_ids == target_before
         assert _unrelated_actor_ids(after_scale_in, target_id) == unrelated_before
         stop_producer.set()
         producer.join(timeout=5)

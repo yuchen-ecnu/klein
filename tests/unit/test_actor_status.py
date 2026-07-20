@@ -17,7 +17,7 @@ from ray.klein.api.stream_task_status import StreamTaskStatus
 
 class GetActorStatusTest(unittest.TestCase):
     def setUp(self):
-        # Force real (non-debug) path; debug mode short-circuits to ALIVE.
+        # Force real (non-debug) path; debug mode reads the local actor registry.
         self._debug_patch = mock.patch.object(w_mod, "is_debug_mode", return_value=False)
         self._debug_patch.start()
         self.addCleanup(self._debug_patch.stop)
@@ -43,10 +43,14 @@ class GetActorStatusTest(unittest.TestCase):
         ):
             self.assertEqual(w_mod.get_actor_status("rebuilding"), StreamTaskStatus.DEAD)
 
-    def test_debug_mode_is_always_alive(self):
+    def test_debug_mode_uses_the_local_actor_registry(self):
         # The base setUp patch forces non-debug; re-patch to True here.
-        with mock.patch.object(w_mod, "is_debug_mode", return_value=True):
-            self.assertEqual(w_mod.get_actor_status("anything"), StreamTaskStatus.ALIVE)
+        with (
+            mock.patch.object(w_mod, "is_debug_mode", return_value=True),
+            mock.patch.dict(w_mod.KLEIN_DEBUG_OBJECT_STORE, {"up": mock.MagicMock()}, clear=True),
+        ):
+            self.assertEqual(w_mod.get_actor_status("up"), StreamTaskStatus.ALIVE)
+            self.assertEqual(w_mod.get_actor_status("gone"), StreamTaskStatus.NOT_EXIST)
 
     def test_namespace_forwarded_to_get_actor(self):
         actor = mock.MagicMock()
