@@ -8,8 +8,10 @@ include SECURITY.md SUPPORT.md Makefile pyproject.toml
 recursive-include LICENSES *
 recursive-include docs *
 recursive-include examples *
+recursive-include frontend *.html *.json *.svg *.ts *.tsx
 recursive-include scripts *
 recursive-include tests *
 global-exclude __pycache__ *.py[cod] .DS_Store
 prune .github
 prune docs/_build
+prune frontend/node_modules

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import signal
@@ -243,6 +244,91 @@ def klein_cli_group() -> None:
 
     Set RAY_ADDRESS to manage a remote Ray cluster.
     """
+
+
+@klein_cli_group.command(name="dashboard")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Address for the Klein Dashboard listener.")
+@click.option("--port", type=click.IntRange(1, 65535), default=8266, show_default=True, help="Klein Dashboard port.")
+@click.option(
+    "--ray-dashboard-url",
+    envvar="RAY_KLEIN_RAY_DASHBOARD_URL",
+    default="http://127.0.0.1:8265",
+    show_default=True,
+    help="Browser-visible Ray Dashboard base URL used by the external navigation links.",
+)
+@click.option(
+    "--frontend-url",
+    envvar="RAY_KLEIN_DASHBOARD_FRONTEND_URL",
+    help="Use a development frontend instead of the UI bundled with ray-klein.",
+)
+@click.option("--open", "open_browser", is_flag=True, help="Open the Klein Dashboard in the default browser.")
+@click.option(
+    "--allow-unauthenticated",
+    is_flag=True,
+    help="Allow the unauthenticated control endpoint on a non-loopback listener.",
+)
+def klein_dashboard(
+    host: str,
+    port: int,
+    ray_dashboard_url: str,
+    frontend_url: str | None,
+    open_browser: bool,
+    allow_unauthenticated: bool,
+) -> None:
+    """Serve the bundled Klein UI with links to the native Ray Dashboard."""
+
+    if not _is_loopback_dashboard_host(host) and not allow_unauthenticated:
+        raise click.ClickException(
+            "Refusing to expose the unauthenticated Dashboard control endpoint on a non-loopback address. "
+            "Use the default listener, an SSH tunnel, or explicitly pass --allow-unauthenticated."
+        )
+    if not _is_loopback_dashboard_host(host):
+        click.secho(
+            "WARNING: the Dashboard control endpoint is unauthenticated; protect it with a trusted proxy.",
+            fg="yellow",
+            err=True,
+        )
+    _ensure_ray_init()
+    from ray.klein.observability.dashboard.server import create_dashboard_server
+
+    try:
+        server = create_dashboard_server(
+            host,
+            port,
+            ray_dashboard_url=ray_dashboard_url,
+            frontend_url=frontend_url,
+        )
+    except (OSError, TypeError, ValueError) as error:
+        raise click.ClickException(f"Cannot start the Klein Dashboard on {host}:{port}: {error}") from error
+
+    browser_host = "127.0.0.1" if host in {"0.0.0.0", ""} else ("::1" if host == "::" else host)
+    url_host = f"[{browser_host}]" if ":" in browser_host and not browser_host.startswith("[") else browser_host
+    url = f"http://{url_host}:{server.server_port}/"
+    click.echo(f"Klein Dashboard is running at {click.style(url, bold=True)}")
+    if server.frontend_url is not None:
+        click.echo(f"Klein UI is reused from {click.style(server.frontend_url, bold=True)}")
+    click.echo(f"Ray navigation opens {click.style(server.ray_dashboard_url, bold=True)}")
+    click.echo("Press Ctrl+C to stop it.")
+    if open_browser:
+        import webbrowser
+
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        click.echo("\nKlein Dashboard stopped.")
+    finally:
+        server.server_close()
+
+
+def _is_loopback_dashboard_host(host: str) -> bool:
+    candidate = host.strip().strip("[]")
+    if candidate.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(candidate).is_loopback
+    except ValueError:
+        return False
 
 
 @klein_cli_group.command(name="list")

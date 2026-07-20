@@ -106,6 +106,7 @@ namespaces = true
 [tool.setuptools.package-data]
 "ray.klein" = ["py.typed"]
 "ray.klein._internal" = ["logging.yaml"]
+"ray.klein.observability.dashboard" = ["static/*", "static/assets/*"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
@@ -159,6 +160,7 @@ files = [
   "src/ray/klein/config",
   "src/ray/klein/_internal/duration.py",
   "src/ray/klein/observability/dashboard/serialization.py",
+  "src/ray/klein/observability/dashboard/server.py",
   "src/ray/klein/observability/state_api.py",
   "src/ray/klein/state/checkpoint_file_scope.py",
   "src/ray/klein/state/checkpoint_layout.py",

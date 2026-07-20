@@ -16,6 +16,7 @@ path = [
   "PKG-INFO",
   "docs/**",
   "examples/**",
+  "frontend/**",
   "scripts/**",
   "src/**",
   "tests/**",

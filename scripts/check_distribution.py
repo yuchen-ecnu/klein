@@ -12,13 +12,16 @@ WHEEL_REQUIRED_SUFFIXES = {
     "ray/klein/__init__.py",
     "ray/klein/py.typed",
     "ray/klein/_internal/logging.yaml",
+    "ray/klein/observability/dashboard/static/index.html",
 }
 SDIST_REQUIRED_SUFFIXES = {
     "LICENSE",
     "NOTICE",
     "README.md",
     "pyproject.toml",
+    "frontend/package.json",
     "src/ray/klein/__init__.py",
+    "src/ray/klein/observability/dashboard/static/index.html",
 }
 FORBIDDEN_PARTS = {".github", "__pycache__", "docs/_build"}
 
@@ -44,6 +47,7 @@ def check_wheel(path: Path) -> None:
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         _assert_required(names, WHEEL_REQUIRED_SUFFIXES, path)
+        _assert_dashboard_assets(names, path)
         _assert_clean(names, path)
         if any(name.startswith(("tests/", "docs/")) for name in names):
             raise ValueError(f"{path.name} contains development-only files")
@@ -57,7 +61,17 @@ def check_sdist(path: Path) -> None:
     with tarfile.open(path, mode="r:gz") as archive:
         names = set(archive.getnames())
         _assert_required(names, SDIST_REQUIRED_SUFFIXES, path)
+        _assert_dashboard_assets(names, path)
         _assert_clean(names, path)
+
+
+def _assert_dashboard_assets(names: set[str], artifact: Path) -> None:
+    dashboard_assets = {name for name in names if "/ray/klein/observability/dashboard/static/assets/" in f"/{name}"}
+    missing_types = [
+        suffix for suffix in (".css", ".js") if not any(name.endswith(suffix) for name in dashboard_assets)
+    ]
+    if missing_types:
+        raise ValueError(f"{artifact.name} is missing Klein Dashboard assets: {', '.join(missing_types)}")
 
 
 def main() -> None:

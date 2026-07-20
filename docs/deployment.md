@@ -129,6 +129,8 @@ ray-klein list
 ray-klein status orders-production
 ray-klein attach orders-production
 ray-klein stop --force orders-production
+ray-klein dashboard \
+  --ray-dashboard-url https://ray.example.com
 ```
 
 `attach` requires a TTY and detaches on Ctrl+C without stopping the job.
@@ -136,9 +138,13 @@ ray-klein stop --force orders-production
 completed checkpoint exists before an upgrade or cluster shutdown when the job
 must be restored later.
 
-Use the Klein page in the cluster's Ray Dashboard at `/#/klein`. Publish the
-Ray Dashboard only through the same authenticated operations proxy used for
-the rest of the cluster UI.
+The Klein Dashboard listens on `127.0.0.1:8266` by default and serves its
+packaged MUI/React Flow application without a Ray source checkout or a separate
+frontend process. Ray-owned navigation opens the configured native Ray
+Dashboard. When publishing either service, put both behind the cluster's normal
+authenticated operations proxy and pass browser-visible URLs, not loopback
+addresses that exist only inside a remote host. `--frontend-url` is an optional
+development override for testing an unbuilt UI served elsewhere.
 
 ## Upgrade procedure
 

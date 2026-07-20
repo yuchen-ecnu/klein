@@ -77,7 +77,7 @@ def test_documented_cli_covers_operations_commands() -> None:
     observability = (DOCS_ROOT / "observability.md").read_text(encoding="utf-8")
     assert "ray-klein stop" in observability
     assert "ray-klein cancel" in observability
-    assert "`/#/klein`" in observability
+    assert "ray-klein dashboard" in observability
 
 
 def test_restore_guide_uses_the_canonical_option() -> None:
