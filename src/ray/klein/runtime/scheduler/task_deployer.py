@@ -22,6 +22,7 @@ from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
+from ray.klein.runtime.message import DeliveryChannel
 from ray.klein.runtime.scheduler.errors import DeploymentError, PlacementCleanupError
 from ray.klein.runtime.scheduler.placement import PlacementPlan, PlacementStrategy
 from ray.klein.runtime.scheduler.task_deployment_descriptor import (
@@ -178,12 +179,19 @@ def build_descriptor(
         )
         for output_edge in graph.output_job_edges(job_vertex.id)
     )
-    input_vertex_ids = tuple(
-        edge.source.id
+    input_channels = tuple(
+        DeliveryChannel(
+            edge.source.id,
+            edge.source.name,
+            graph.output_job_edges(input_edge.source).index(input_edge),
+            edge.target.index,
+            graph.topology_epoch(input_edge.source, input_edge.target),
+        )
         for input_edge in graph.input_job_edges(job_vertex.id)
         for edge in input_edge.execution_edges
         if edge.target.id == vertex.id
     )
+    input_vertex_ids = tuple(channel.sender_vertex_id for channel in input_channels)
     return TaskDeploymentDescriptor(
         operator=job_vertex.operator_spec,
         vertex_id=vertex.id,
@@ -200,6 +208,7 @@ def build_descriptor(
         output_queue=job_vertex.output_queue,
         namespace=graph.namespace,
         input_vertex_ids=input_vertex_ids,
+        input_channels=input_channels,
         restore_operation_id=restore_operation_id,
     )
 

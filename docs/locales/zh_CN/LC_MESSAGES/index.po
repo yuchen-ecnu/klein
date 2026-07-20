@@ -320,3 +320,6 @@ msgstr ""
 #~ " resize a running streaming operator "
 #~ "safely."
 #~ msgstr "选择合适的伸缩层，自动伸缩有界 Ray Data worker，并安全调整运行中流式算子的并行度。"
+
+msgid "Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.x (`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:"
+msgstr "Klein for Ray 面向 Python 3.10 至 3.12 和 Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。请从 PyPI 安装 Alpha 版本："

@@ -14,6 +14,7 @@ from ray.data.datatype import DataType
 from ray.data.expressions import col, download, udf
 from sqlglot import parse_one
 
+from ray.klein._compat import ray_data_expression
 from ray.klein._internal import streaming_expression
 from ray.klein._internal.sql.ray_data_expression import to_ray_data_expression
 from ray.klein._internal.streaming_expression import (
@@ -44,7 +45,7 @@ def test_evaluator_runs_ray_expression_in_the_stream_task_context(monkeypatch) -
         return pa.array([9])
 
     expression = col("amount") * 2 + 1
-    monkeypatch.setattr(streaming_expression, "eval_expr", evaluate)
+    monkeypatch.setattr(ray_data_expression, "eval_expr", evaluate)
     evaluator = StreamingExpressionEvaluator(expression, _runtime_context())
 
     assert evaluator.evaluate({"amount": 4}) == 9
@@ -62,7 +63,7 @@ def test_task_context_is_reset_when_expression_evaluation_fails(monkeypatch) -> 
         assert TaskContext.get_current() is not None
         raise ValueError("invalid value")
 
-    monkeypatch.setattr(streaming_expression, "eval_expr", fail)
+    monkeypatch.setattr(ray_data_expression, "eval_expr", fail)
     evaluator = StreamingExpressionEvaluator(col("value"), _runtime_context())
 
     with pytest.raises(ValueError, match="invalid value"):
@@ -209,13 +210,13 @@ def _configure_download_filesystem(monkeypatch, *, paths, resolved_filesystem):
     validated = object()
     retrying = Mock()
     retrying_errors = [OSError]
-    monkeypatch.setattr(streaming_expression, "_validate_and_wrap_filesystem", Mock(return_value=validated))
+    monkeypatch.setattr(ray_data_expression, "_validate_and_wrap_filesystem", Mock(return_value=validated))
     resolve = Mock(return_value=(paths, resolved_filesystem))
-    monkeypatch.setattr(streaming_expression, "_resolve_paths_and_filesystem", resolve)
+    monkeypatch.setattr(ray_data_expression, "_resolve_paths_and_filesystem", resolve)
     wrap = Mock(return_value=retrying)
-    monkeypatch.setattr(streaming_expression.RetryingPyFileSystem, "wrap", wrap)
+    monkeypatch.setattr(ray_data_expression.RetryingPyFileSystem, "wrap", wrap)
     monkeypatch.setattr(
-        streaming_expression.DataContext,
+        ray_data_expression.DataContext,
         "get_current",
         Mock(return_value=SimpleNamespace(retried_io_errors=retrying_errors)),
     )
@@ -264,7 +265,7 @@ def test_download_uri_returns_none_when_resolution_has_no_readable_target(
 )
 def test_download_uri_soft_fails_and_logs_by_error_type(monkeypatch, error: Exception, log_method: str) -> None:
     logger_method = Mock()
-    monkeypatch.setattr(streaming_expression, "_validate_and_wrap_filesystem", Mock(side_effect=error))
+    monkeypatch.setattr(ray_data_expression, "_validate_and_wrap_filesystem", Mock(side_effect=error))
     monkeypatch.setattr(streaming_expression.logger, log_method, logger_method)
 
     assert streaming_expression._download_uri("bad://uri", None, "uri") is None

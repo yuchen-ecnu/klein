@@ -272,3 +272,12 @@ msgid ""
 "cluster. The Sphinx CI job separately treats documentation warnings as "
 "errors."
 msgstr "`tests/integration/test_documented_examples.py` 会在受管理的本地 Ray 集群上执行独立批处理 SQL 示例和有限有状态流处理示例。Sphinx CI Job 另行将文档警告视为错误。"
+
+msgid "CI also resolves the exact lowest supported direct dependencies on Python 3.10 and Python 3.12, plus the newest versions within the declared bounds. Hypothesis property tests exercise configuration encodings and durable state binary round-trips across generated values."
+msgstr "CI 还会在 Python 3.10 和 Python 3.12 上解析精确的最低受支持直接依赖，以及声明范围内的最新版本。Hypothesis 属性测试会使用生成的值检验配置编码和持久状态二进制往返转换。"
+
+msgid "Nightly CI runs the real-Ray integration graph, a ten-minute unbounded backpressure soak, and machine-readable data-plane regression benchmarks. The weekly/manual reliability workflow uses a two-hour default soak; its duration can be changed through the workflow input without changing test code."
+msgstr "夜间 CI 会运行真实 Ray 集成图、十分钟无界反压浸泡测试，以及机器可读的数据平面回归基准。每周或手动可靠性工作流默认浸泡两小时；无需修改测试代码，即可通过工作流输入调整持续时间。"
+
+msgid "The combined line-and-branch gate is 68%. Risk-based component floors protect state, configuration, connectors, checkpoint coordination, event time, partitioning, and observability independently so growth in unrelated modules cannot hide a regression in recovery-critical code."
+msgstr "行覆盖率与分支覆盖率的综合门禁为 68%。基于风险设置的组件下限会分别保护状态、配置、连接器、检查点协调、事件时间、分区和可观测性模块，避免无关模块的代码增长掩盖恢复关键代码中的回归。"

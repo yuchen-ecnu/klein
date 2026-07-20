@@ -3,16 +3,25 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from ray.klein.api.stream_task_status import StreamTaskStatus
+from ray.klein.runtime.actor import create_remote_actor
 from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionVertexStatus
 from ray.klein.runtime.scheduler import task_terminator as terminator
 from ray.klein.runtime.scheduler.errors import TeardownError
+
+
+class _SlowStopActor:
+    async def stop(self) -> None:
+        await asyncio.sleep(0.2)
 
 
 def _vertex(index: int, status: ExecutionVertexStatus, *, handle=...) -> ExecutionVertex:
@@ -51,13 +60,18 @@ class _Graph:
 
 def test_stop_workers_always_runs_survivor_sweep_after_phase_one_failure() -> None:
     graph = MagicMock()
+    deadline = MagicMock()
+    deadline.step.return_value = 3
+    deadline.remaining.return_value = 0.25
     with (
+        patch.object(terminator, "Deadline", return_value=deadline) as deadline_factory,
         patch.object(terminator, "_request_graceful_stop", side_effect=RuntimeError("stop RPC failed")),
-        patch.object(terminator, "_force_kill_survivors") as force_kill,
+        patch.object(terminator, "force_kill_survivors") as force_kill,
     ):
         terminator.stop_workers(graph, timeout=3, force=False)
 
-    force_kill.assert_called_once_with(graph)
+    deadline_factory.assert_called_once_with(3)
+    force_kill.assert_called_once_with(graph, timeout=0.25)
 
 
 def test_stop_workers_propagates_a_genuine_survivor_failure() -> None:
@@ -65,10 +79,37 @@ def test_stop_workers_propagates_a_genuine_survivor_failure() -> None:
     error = TeardownError("actor survived")
     with (
         patch.object(terminator, "_request_graceful_stop"),
-        patch.object(terminator, "_force_kill_survivors", side_effect=error),
+        patch.object(terminator, "force_kill_survivors", side_effect=error),
         pytest.raises(TeardownError, match="actor survived"),
     ):
         terminator.stop_workers(graph, timeout=3, force=True)
+
+
+def test_stop_workers_batches_multiple_survivors_under_one_remaining_budget() -> None:
+    first = _vertex(0, ExecutionVertexStatus.RUNNING)
+    second = _vertex(1, ExecutionVertexStatus.DEPLOYED)
+    graph = _Graph({1: _job_vertex(first, second)}, {})
+    deadline = MagicMock()
+    deadline.step.return_value = 5
+    deadline.remaining.return_value = 0.125
+
+    with (
+        patch.object(terminator, "Deadline", return_value=deadline),
+        patch.object(terminator, "_request_graceful_stop"),
+        patch.object(terminator, "_kill_actor_names", return_value=set()) as batch_kill,
+        patch.object(terminator, "_kill_actor_with_retry") as per_actor_kill,
+    ):
+        terminator.stop_workers(graph, timeout=5, force=False)
+
+    batch_kill.assert_called_once()
+    names, namespace, kill_budget = batch_kill.call_args.args
+    assert set(names) == {first.name, second.name}
+    assert namespace == "job-ns"
+    assert kill_budget == 0.125
+    per_actor_kill.assert_not_called()
+    assert first.status is ExecutionVertexStatus.CANCELLED
+    assert second.status is ExecutionVertexStatus.CANCELLED
+    assert first.stream_task is second.stream_task is None
 
 
 def test_graceful_stop_visits_diamond_join_only_once() -> None:
@@ -81,8 +122,29 @@ def test_graceful_stop_visits_diamond_join_only_once() -> None:
     ):
         terminator._request_graceful_stop(graph, timeout=4, force=False)
 
-    assert stop_worker.call_args_list == [call(jobs[1], False), call(jobs[2], False), call(jobs[3], False)]
-    get.assert_called_once_with([], timeout=4)
+    assert [entry.args for entry in stop_worker.call_args_list] == [
+        (jobs[1], False),
+        (jobs[2], False),
+        (jobs[3], False),
+    ]
+    assert all(0 <= entry.kwargs["timeout"] <= 4 for entry in stop_worker.call_args_list)
+    assert 0 <= get.call_args.kwargs["timeout"] <= 4
+
+
+def test_stop_workers_reaches_survivor_sweep_after_debug_proxy_timeout() -> None:
+    vertex = _vertex(0, ExecutionVertexStatus.RUNNING)
+    handle = create_remote_actor(_SlowStopActor, local_mode=True)
+    vertex.stream_task = handle
+    graph = _Graph({1: _job_vertex(vertex)}, {})
+    started = time.monotonic()
+    try:
+        with patch.object(terminator, "force_kill_survivors") as force_kill:
+            terminator.stop_workers(graph, timeout=0.01, force=False)
+
+        assert time.monotonic() - started < 0.15
+        force_kill.assert_called_once()
+    finally:
+        terminator.klein.kill(handle)
 
 
 def test_graceful_stop_timeout_is_best_effort() -> None:
@@ -111,6 +173,51 @@ def test_actor_status_controls_whether_named_kill_is_needed(status, expected: bo
 def test_actor_status_failure_is_treated_as_a_possible_survivor() -> None:
     with patch.object(terminator.klein, "get_actor_status", side_effect=RuntimeError("GCS unavailable")):
         assert terminator._actor_may_exist("task", "job-ns") is True
+
+
+def test_batch_kill_status_probes_share_one_short_deadline() -> None:
+    names = {f"task-{index}" for index in range(8)}
+    calls = 0
+    probe_timeouts: list[float] = []
+    timer = threading.Event()
+
+    def status(_name: str, *, namespace: str, timeout: float) -> StreamTaskStatus:
+        nonlocal calls
+        assert namespace == "job-ns"
+        calls += 1
+        probe_timeouts.append(timeout)
+        # The existence batch is immediate. Every status in the first kill
+        # round then consumes its assigned share of the remaining total budget.
+        if calls > len(names):
+            timer.wait(timeout)
+        return StreamTaskStatus.ALIVE
+
+    started = time.monotonic()
+    with (
+        patch.object(terminator.klein, "get_actor_status", side_effect=status),
+        patch.object(terminator.klein, "kill_actor_by_name"),
+    ):
+        survivors = terminator._kill_actor_names(names, "job-ns", timeout=0.02)
+    elapsed = time.monotonic() - started
+
+    assert survivors == names
+    assert elapsed < 0.15
+    assert calls >= len(names)
+    assert all(0 < timeout <= 0.02 for timeout in probe_timeouts)
+
+
+def test_batch_kill_fires_once_when_shared_budget_is_already_exhausted() -> None:
+    names = {"task-0", "task-1"}
+    with (
+        patch.object(terminator.klein, "get_actor_status") as status,
+        patch.object(terminator.klein, "kill_actor_by_name") as kill,
+    ):
+        survivors = terminator._kill_actor_names(names, "job-ns", timeout=0)
+
+    assert survivors == names
+    assert {entry.args for entry in kill.call_args_list} == {("task-0",), ("task-1",)}
+    assert all(entry.kwargs == {"namespace": "job-ns", "timeout": 0.0} for entry in kill.call_args_list)
+    status.assert_not_called()
 
 
 def test_force_sweep_reconciles_live_status_but_preserves_terminal_status() -> None:
@@ -210,9 +317,12 @@ def test_force_stop_continues_after_handle_kill_failure() -> None:
     first = _vertex(0, ExecutionVertexStatus.RUNNING)
     second = _vertex(1, ExecutionVertexStatus.RUNNING)
     with patch.object(terminator.klein, "kill", side_effect=[RuntimeError("lost handle"), None]) as kill:
-        assert terminator._stop_worker(_job_vertex(first, second), force=True) == []
+        assert terminator._stop_worker(_job_vertex(first, second), force=True, timeout=0) == []
 
-    assert kill.call_args_list == [call(first.stream_task), call(second.stream_task)]
+    assert kill.call_args_list == [
+        call(first.stream_task, timeout=0.0),
+        call(second.stream_task, timeout=0.0),
+    ]
 
 
 def test_stop_job_vertex_sweeps_by_name_after_stop_rpc_failure() -> None:
@@ -220,10 +330,11 @@ def test_stop_job_vertex_sweeps_by_name_after_stop_rpc_failure() -> None:
     job_vertex = _job_vertex(vertex)
     with (
         patch.object(terminator, "_stop_worker", side_effect=RuntimeError("RPC construction failed")),
-        patch.object(terminator, "_actor_may_exist", return_value=False),
+        patch.object(terminator, "_kill_actor_names", return_value=set()) as kill,
     ):
         terminator.stop_job_vertex(job_vertex, "job-ns", timeout=1)
 
+    kill.assert_called_once()
     assert vertex.status is ExecutionVertexStatus.CANCELLED
     assert vertex.stream_task is None
 
@@ -233,15 +344,22 @@ def test_stop_job_vertex_waits_then_kills_named_survivor() -> None:
     reference = object()
     vertex.stream_task.stop.return_value = reference
     job_vertex = _job_vertex(vertex)
+    deadline = MagicMock()
+    deadline.remaining.side_effect = [1.75, 1.25]
+    deadline.step.return_value = 0.25
     with (
+        patch.object(terminator, "Deadline", return_value=deadline) as deadline_factory,
         patch.object(terminator.klein, "get") as get,
-        patch.object(terminator, "_actor_may_exist", return_value=True),
-        patch.object(terminator, "_kill_actor_with_retry", return_value=True) as kill,
+        patch.object(terminator, "_kill_actor_names", return_value=set()) as kill,
     ):
         terminator.stop_job_vertex(job_vertex, "job-ns", timeout=2)
 
-    get.assert_called_once_with([reference], timeout=2)
-    kill.assert_called_once_with(vertex.name, "job-ns")
+    assert deadline_factory.call_args_list == [call(2), call(1.75)]
+    get.assert_called_once_with([reference], timeout=1.25)
+    names, namespace, timeout = kill.call_args.args
+    assert tuple(names) == (vertex.name,)
+    assert namespace == "job-ns"
+    assert timeout == 0.25
     assert vertex.status is ExecutionVertexStatus.CANCELLED
     assert vertex.stream_task is None
 

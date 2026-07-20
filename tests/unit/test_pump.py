@@ -67,7 +67,8 @@ def _runtime(*, async_operator: bool = False, inbox_timeout: float = 0.01):
         prepare_sink_commit=MagicMock(),
         snapshot_operator_state=MagicMock(return_value=0),
         register_checkpoint_metrics=MagicMock(),
-        report_eof_finished=MagicMock(),
+        mark_eof_finished=MagicMock(),
+        report_eof_finished=AsyncMock(),
         checkpoint_barrier_aligned=MagicMock(),
     )
     watermark = SimpleNamespace(note_processed=MagicMock(return_value=False), advance=AsyncMock())
@@ -307,6 +308,7 @@ async def test_eof_check_stops_when_operator_reaches_end() -> None:
     await pump._check_eof_and_stop()
 
     task._check_end_of_stream.assert_called_once_with()
+    task.report_eof_finished.assert_awaited_once_with()
     task.stop.assert_awaited_once_with()
 
 
@@ -471,7 +473,7 @@ def test_aligned_terminal_barrier_snapshots_forwards_and_finishes() -> None:
     task.register_checkpoint_metrics.assert_called_once_with(barrier, 42)
     state.metrics.barriers_out.inc.assert_called_once_with()
     state.operator.collect.assert_called_once_with(forwarded)
-    task.report_eof_finished.assert_called_once_with()
+    task.mark_eof_finished.assert_called_once_with()
     task.checkpoint_barrier_aligned.assert_called_once_with(7)
     state.metrics.observe_barrier.assert_called_once_with(barrier.timestamp)
 

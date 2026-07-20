@@ -8,6 +8,7 @@ import copy
 import inspect
 import threading
 from collections.abc import Coroutine
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import suppress
 from typing import Any
 
@@ -92,9 +93,14 @@ def run_on_actor_loop(
         raise
     try:
         return future.result(timeout=timeout)
-    except TimeoutError:
+    except FutureTimeoutError as error:
+        # Since Python 3.11 concurrent.futures.TimeoutError aliases the
+        # built-in TimeoutError. Preserve a TimeoutError raised by the actor
+        # coroutine itself; only translate an unfinished wait that expired.
+        if future.done():
+            raise
         future.cancel()
-        raise
+        raise TimeoutError("Debug actor call exceeded its timeout") from error
 
 
 def stop_debug_loop_for(actor: Any, *, timeout: float = 2.0) -> None:
@@ -151,14 +157,33 @@ class _LocalFunctionProxy:
         self._args = args
         self._kwargs = kwargs
 
-    def __call__(self) -> Any:
+    def __call__(self, *, timeout: float | None = None) -> Any:
         result = self._function(*self._args, **self._kwargs)
         if not inspect.iscoroutine(result):
             return result
         actor = getattr(self._function, "__self__", None)
         if actor is not None:
-            return run_on_actor_loop(actor, result)
+            return run_on_actor_loop(actor, result, timeout=timeout)
         return _run_unbound_coroutine(result)
+
+    async def resolve_async(self) -> Any:
+        """Resolve without blocking the caller's event loop."""
+
+        result = self._function(*self._args, **self._kwargs)
+        if not inspect.iscoroutine(result):
+            return result
+        actor = getattr(self._function, "__self__", None)
+        if actor is None:
+            return await result
+        loop = _loop_for_actor(actor)
+        if loop is asyncio.get_running_loop():
+            return await result
+        try:
+            future = asyncio.run_coroutine_threadsafe(result, loop)
+        except BaseException:
+            result.close()
+            raise
+        return await asyncio.wrap_future(future)
 
     def __deepcopy__(self, _memo: dict[int, Any]) -> _LocalFunctionProxy:
         return self
@@ -225,11 +250,19 @@ def is_local_function_proxy(value: Any) -> bool:
     return isinstance(value, _LocalFunctionProxy)
 
 
-def resolve_local_function_proxy(value: Any) -> Any:
+def resolve_local_function_proxy(value: Any, *, timeout: float | None = None) -> Any:
     """Resolve a deferred debug-actor call."""
     if not isinstance(value, _LocalFunctionProxy):
         raise TypeError(f"Expected a local function proxy, got {type(value).__name__}")
-    return value()
+    return value(timeout=timeout)
+
+
+async def resolve_local_function_proxy_async(value: Any) -> Any:
+    """Resolve a deferred debug-actor call without blocking the caller loop."""
+
+    if not isinstance(value, _LocalFunctionProxy):
+        raise TypeError(f"Expected a local function proxy, got {type(value).__name__}")
+    return await value.resolve_async()
 
 
 def _create_remote_actor(actor_class: type[Any], **ray_remote_args: Any) -> Any:

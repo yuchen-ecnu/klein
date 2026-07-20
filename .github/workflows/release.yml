@@ -61,6 +61,8 @@ jobs:
       - name: External connector integration
         run: make external
       - run: make docs
+        env:
+          KLEIN_DOCS_OFFLINE: "1"
       - run: pip-audit --local --skip-editable --progress-spinner off
       - run: python scripts/check_dependency_licenses.py
 

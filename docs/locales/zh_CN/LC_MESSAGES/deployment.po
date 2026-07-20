@@ -206,3 +206,9 @@ msgid ""
 "upgrade against a copy of production-shaped state before using it as the "
 "only recovery path."
 msgstr "Alpha 版本不承诺自动迁移检查点模式。在将升级作为唯一恢复路径前，请使用符合生产规模特征的状态副本进行测试。"
+
+msgid "Connector-specific native dependencies also belong in the worker image. For example, RocketMQ requires a compatible `librocketmq`; RocksDB uses `rocksdict`; Serve needs `ray[serve]`, `httpx`, and `orjson`."
+msgstr "连接器专用的原生依赖也必须放入 Worker 镜像。例如，RocketMQ 需要兼容的 `librocketmq`，RocksDB 使用 `rocksdict`，Serve 则需要 `ray[serve]`、`httpx` 和 `orjson`。"
+
+msgid "The Klein Dashboard listens on `127.0.0.1:8266` by default and serves its packaged MUI/React Flow application without a Ray source checkout or a separate frontend process. Ray-owned navigation opens the configured native Ray Dashboard. When publishing either service, put both behind the cluster's normal authenticated operations proxy and pass browser-visible URLs, not loopback addresses that exist only inside a remote host. `--frontend-url` is an optional development override for testing an unbuilt UI served elsewhere."
+msgstr "Klein Dashboard 默认监听 `127.0.0.1:8266`，并直接提供打包好的 MUI/React Flow 应用，无需检出 Ray 源码或运行独立前端进程。由 Ray 管理的导航会打开已配置的原生 Ray Dashboard。发布任一服务时，应将两者都置于集群常规的已认证运维代理之后，并传入浏览器可访问的 URL，而不是仅存在于远程主机内部的回环地址。`--frontend-url` 是可选的开发覆盖项，用于测试由其他位置提供、尚未构建的 UI。"

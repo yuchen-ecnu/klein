@@ -8,12 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 import ray.cloudpickle as cloudpickle
 
-import ray.klein as klein
 from ray.klein._internal.logging import get_logger
 from ray.klein.api.runtime_context import RuntimeContext
-from ray.klein.runtime.execution_graph.execution_vertex_status import (
-    ExecutionVertexStatus,
-)
 from ray.klein.runtime.message import MAX_WATERMARK, Barrier, EndOfData, RescaleBarrier, Watermark
 from ray.klein.runtime.operator.source import SourceOperator
 from ray.klein.runtime.worker.stream_task import StreamTask
@@ -35,9 +31,8 @@ class SourceStreamTask(StreamTask):
     running the (blocking) source loop ``operator.run()``. That loop is driven on
     the StreamTask executor thread so it doesn't pin the actor event loop, while
     the actor stays responsive to checkpoint and health-check RPCs. Barrier
-    generation and downstream emission happen on that
-    same executor thread (sync ``klein.get``), consistent with inline
-    ``TaskOutput`` delivery.
+    generation and downstream emission happen on that same executor thread,
+    consistent with inline ``TaskOutput`` delivery.
     """
 
     def __init__(self, descriptor: "TaskDeploymentDescriptor") -> None:
@@ -74,6 +69,10 @@ class SourceStreamTask(StreamTask):
 
     async def _on_setup_done(self, runtime_context: RuntimeContext) -> None:
         # Source delivery mode is fixed to INLINE when TaskOutput is built.
+        source_exhausted = getattr(self, "_source_exhausted", None)
+        if source_exhausted is None:
+            source_exhausted = self._source_exhausted = threading.Event()
+        source_exhausted.clear()
         source_shutdown = getattr(self, "_source_shutdown_requested", None)
         if source_shutdown is None:
             source_shutdown = self._source_shutdown_requested = threading.Event()
@@ -95,6 +94,8 @@ class SourceStreamTask(StreamTask):
         # Run the (blocking) source loop on the executor thread. It returns when
         # the source is exhausted (bounded) or never (unbounded, until cancel).
         await asyncio.get_running_loop().run_in_executor(self._state.executor, self._run_source)
+        if self._eof_reached:
+            await self.report_eof_finished()
         await self.stop()
 
     async def stop(self, timeout: float = 30.0) -> None:
@@ -189,16 +190,9 @@ class SourceStreamTask(StreamTask):
             if barrier is None:
                 return
             self._emit_checkpoint_barrier(barrier)
-        # Close the arm-vs-FINISHED race before the scheduler status RPC.
+        # Close the arm-vs-FINISHED race before returning to the actor loop,
+        # which performs the status RPC asynchronously.
         self._eof_reached = True
-        klein.get(
-            self._job_manager.update_stream_task_status(
-                self._vertex_id,
-                ExecutionVertexStatus.FINISHED,
-                task_name=self._task_name,
-                task_generation=self._task_generation,
-            )
-        )
 
     def _await_end_of_data_barrier(self) -> Barrier | None:
         """Wait out a short rescale checkpoint gate without failing the source."""

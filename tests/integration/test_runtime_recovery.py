@@ -46,15 +46,17 @@ def _task_actors(address: str, namespace: str):
     ]
 
 
-def _drain_max_index(output_queue: Queue) -> int:
-    maximum = 0
-    for _ in range(output_queue.qsize()):
+def _drain_indices(output_queue: Queue) -> list[int]:
+    indices = []
+    # Snapshot and cap the available count so an infinite producer cannot keep
+    # this diagnostic drain alive indefinitely while it is being consumed.
+    for _ in range(min(output_queue.qsize(), 256)):
         try:
             row = output_queue.get(block=False)
         except Empty:
             break
-        maximum = max(maximum, row["idx"])
-    return maximum
+        indices.append(row["idx"])
+    return indices
 
 
 def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path, ray_cluster) -> None:
@@ -110,6 +112,24 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
             description="a live stream task",
         )
         original_handle = ray.get_actor(original.name, namespace=handle.namespace)
+
+        delivered_before_failure: set[int] = set()
+
+        def contiguous_prefix_before_failure() -> int | None:
+            delivered_before_failure.update(_drain_indices(output_queue))
+            if not delivered_before_failure:
+                return None
+            boundary = max(delivered_before_failure)
+            if boundary < 10 or not set(range(1, boundary + 1)).issubset(delivered_before_failure):
+                return None
+            return boundary
+
+        failure_boundary = wait_until(
+            contiguous_prefix_before_failure,
+            timeout=20,
+            interval=0.05,
+            description="a contiguous output prefix before fault injection",
+        )
         ray.kill(original_handle, no_restart=True)
 
         replacement = wait_until(
@@ -126,22 +146,21 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
             description=f"replacement actor for {original.name}",
         )
         assert replacement.actor_id != original.actor_id
-        index_after_replacement = _drain_max_index(output_queue)
 
-        def next_new_row():
-            try:
-                row = output_queue.get(timeout=0.2)
-            except Empty:
-                return None
-            return row if row["idx"] > index_after_replacement else None
+        expected_after_failure = set(range(failure_boundary + 1, failure_boundary + 26))
+        delivered_after_failure: list[int] = []
 
-        progressed = wait_until(
-            next_new_row,
+        def recovered_without_loss() -> bool:
+            delivered_after_failure.extend(_drain_indices(output_queue))
+            return expected_after_failure.issubset(delivered_after_failure)
+
+        wait_until(
+            recovered_without_loss,
             timeout=30,
-            interval=0,
-            description="data to continue after task recovery",
+            interval=0.05,
+            description=f"every source id from {min(expected_after_failure)} through {max(expected_after_failure)}",
         )
-        assert progressed["idx"] > index_after_replacement
+        assert expected_after_failure.issubset(delivered_after_failure)
         assert handle.status == JobStatus.RUNNING
     finally:
         if not handle.status.is_terminal:

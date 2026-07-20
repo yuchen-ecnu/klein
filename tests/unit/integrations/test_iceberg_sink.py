@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 import pickle
+import threading
 from types import SimpleNamespace
 
 import pyarrow as pa
@@ -7,8 +9,11 @@ import pytest
 from pyiceberg import schema as iceberg_schema
 from pyiceberg import types as iceberg_types
 from pyiceberg.catalog import load_catalog
+from pyiceberg.exceptions import CommitFailedException, CommitStateUnknownException
+from pyiceberg.table import Table
 
 from ray.klein.config.configuration import Configuration
+from ray.klein.integrations.iceberg import iceberg_sink_committable
 from ray.klein.integrations.iceberg.iceberg_global_committable import (
     IcebergGlobalCommittable,
     combine_iceberg_committables,
@@ -102,6 +107,212 @@ def test_checkpoint_commit_is_invisible_until_commit_and_idempotent(tmp_path) ->
         sum(summary.get(TRANSACTION_ID_SNAPSHOT_PROPERTY) == committable.transaction_id for summary in summaries) == 1
     )
     assert summaries[-1].get("application") == "test"
+
+
+@pytest.mark.asyncio
+async def test_overlapping_retry_serializes_check_and_append(monkeypatch, tmp_path) -> None:
+    """A timed-out background append and its retry publish one snapshot."""
+
+    catalog_kwargs = _create_table(tmp_path)
+    sink = _opened_sink(catalog_kwargs)
+    sink.write({"id": 1, "name": "first"})
+    committable = sink.prepare_commit(7)
+    assert isinstance(committable, IcebergSinkCommittable)
+
+    original_append = Table.append
+    activity_lock = threading.Lock()
+    append_entered = threading.Event()
+    release_append = threading.Event()
+    retry_waiting = threading.Event()
+    append_finished = threading.Event()
+    table_lock = iceberg_sink_committable._table_commit_lock(committable.table_identifier)
+    assert iceberg_sink_committable._table_commit_lock(committable.table_identifier) is table_lock
+
+    lock_attempts = 0
+    active = 0
+    max_active = 0
+    append_calls = 0
+
+    class ObservedTableLock:
+        def __enter__(self):
+            nonlocal active, lock_attempts, max_active
+            with activity_lock:
+                lock_attempts += 1
+                if lock_attempts == 2:
+                    retry_waiting.set()
+            table_lock.acquire()
+            with activity_lock:
+                active += 1
+                max_active = max(max_active, active)
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            nonlocal active
+            with activity_lock:
+                active -= 1
+            table_lock.release()
+
+    observed_table_lock = ObservedTableLock()
+
+    def observed_table_commit_lock(table_identifier):
+        assert table_identifier == committable.table_identifier
+        return observed_table_lock
+
+    def observed_append(table, *args, **kwargs):
+        nonlocal append_calls
+        with activity_lock:
+            append_calls += 1
+            call_number = append_calls
+        if call_number == 1:
+            append_entered.set()
+            if not release_append.wait(timeout=5):
+                raise TimeoutError("test did not release the timed-out Iceberg append")
+        try:
+            return original_append(table, *args, **kwargs)
+        finally:
+            append_finished.set()
+
+    monkeypatch.setattr(iceberg_sink_committable, "_table_commit_lock", observed_table_commit_lock)
+    monkeypatch.setattr(Table, "append", observed_append)
+
+    first_commit = asyncio.create_task(
+        asyncio.wait_for(
+            asyncio.to_thread(committable.commit),
+            timeout=0.1,
+        )
+    )
+    assert await asyncio.to_thread(append_entered.wait, 2)
+    with pytest.raises(asyncio.TimeoutError):
+        await first_commit
+
+    retry = asyncio.create_task(asyncio.to_thread(committable.commit))
+    assert await asyncio.to_thread(retry_waiting.wait, 2)
+    with activity_lock:
+        assert active == 1
+        assert max_active == 1
+
+    release_append.set()
+    await asyncio.wait_for(retry, timeout=5)
+
+    assert append_finished.is_set()
+    assert lock_attempts == 2
+    assert append_calls == 1
+    assert max_active == 1
+    assert _rows(catalog_kwargs) == [{"id": 1, "name": "first"}]
+    options = dict(catalog_kwargs)
+    name = options.pop("name")
+    table = load_catalog(name, **options).load_table("analytics.events")
+    matching = [
+        snapshot
+        for snapshot in table.metadata.snapshots
+        if snapshot.summary.get(TRANSACTION_ID_SNAPSHOT_PROPERTY) == committable.transaction_id
+    ]
+    assert len(matching) == 1
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [CommitFailedException, CommitStateUnknownException],
+)
+@pytest.mark.parametrize("marker_exists", [True, False], ids=["marker-present", "marker-absent"])
+def test_optimistic_commit_conflict_requires_fresh_transaction_marker(
+    monkeypatch,
+    error_type,
+    marker_exists,
+) -> None:
+    transaction_id = "iceberg-transaction"
+    error = error_type("optimistic conflict")
+    arrow_table = SimpleNamespace(num_rows=1, schema=object())
+
+    def fail_append(*args, **kwargs):
+        raise error
+
+    initial_table = SimpleNamespace(
+        metadata=SimpleNamespace(snapshots=[]),
+        append=fail_append,
+    )
+    refreshed_snapshots = (
+        [SimpleNamespace(summary={TRANSACTION_ID_SNAPSHOT_PROPERTY: transaction_id})] if marker_exists else []
+    )
+    refreshed_table = SimpleNamespace(metadata=SimpleNamespace(snapshots=refreshed_snapshots))
+    tables = iter((initial_table, refreshed_table))
+    load_calls = 0
+
+    class Catalog:
+        def load_table(self, table_identifier):
+            nonlocal load_calls
+            assert table_identifier == "analytics.events"
+            load_calls += 1
+            return next(tables)
+
+    monkeypatch.setattr(iceberg_sink_committable, "_load_catalog", lambda options: Catalog())
+    monkeypatch.setattr(
+        iceberg_sink_committable,
+        "_concatenate_arrow_payloads",
+        lambda payloads: arrow_table,
+    )
+    monkeypatch.setattr(iceberg_sink_committable, "_evolve_top_level_schema", lambda table, schema: False)
+    monkeypatch.setattr(iceberg_sink_committable, "_align_arrow_schema", lambda table, incoming: incoming)
+
+    def commit() -> None:
+        iceberg_sink_committable._commit_arrow_payloads_locked(
+            table_identifier="analytics.events",
+            catalog_kwargs=None,
+            snapshot_properties=None,
+            arrow_ipcs=(b"payload",),
+            transaction_id=transaction_id,
+        )
+
+    if marker_exists:
+        commit()
+    else:
+        with pytest.raises(error_type) as raised:
+            commit()
+        assert raised.value is error
+
+    assert load_calls == 2
+
+
+def test_non_conflict_append_error_propagates_without_refresh(monkeypatch) -> None:
+    error = RuntimeError("append failed")
+    arrow_table = SimpleNamespace(num_rows=1, schema=object())
+
+    def fail_append(*args, **kwargs):
+        raise error
+
+    table = SimpleNamespace(
+        metadata=SimpleNamespace(snapshots=[]),
+        append=fail_append,
+    )
+    load_calls = 0
+
+    class Catalog:
+        def load_table(self, table_identifier):
+            nonlocal load_calls
+            assert table_identifier == "analytics.events"
+            load_calls += 1
+            return table
+
+    monkeypatch.setattr(iceberg_sink_committable, "_load_catalog", lambda options: Catalog())
+    monkeypatch.setattr(
+        iceberg_sink_committable,
+        "_concatenate_arrow_payloads",
+        lambda payloads: arrow_table,
+    )
+    monkeypatch.setattr(iceberg_sink_committable, "_evolve_top_level_schema", lambda current, schema: False)
+    monkeypatch.setattr(iceberg_sink_committable, "_align_arrow_schema", lambda current, incoming: incoming)
+
+    with pytest.raises(RuntimeError) as raised:
+        iceberg_sink_committable._commit_arrow_payloads_locked(
+            table_identifier="analytics.events",
+            catalog_kwargs=None,
+            snapshot_properties=None,
+            arrow_ipcs=(b"payload",),
+            transaction_id="iceberg-transaction",
+        )
+
+    assert raised.value is error
+    assert load_calls == 1
 
 
 def test_global_committable_publishes_all_writer_batches_in_one_snapshot(tmp_path) -> None:

@@ -60,3 +60,6 @@ msgid ""
 "attribute, which protobuf 7 removed. Klein for Ray therefore constrains "
 "`protobuf<7` until that incompatibility is fixed upstream."
 msgstr "受支持的 Ray Serve 版本仍会读取 protobuf 的 `FieldDescriptor.label` 属性，而 protobuf 7 已移除该属性。因此，在上游修复此不兼容问题前，Klein for Ray 将依赖约束为 `protobuf<7`。"
+
+msgid "The distributed package keeps its small set of unavoidable Ray Data private imports inside `ray.klein._compat`. New private imports are compatibility debt and require an exact inventory entry, an isolated adapter, and tests against the supported Ray line. Normal Klein modules are forbidden from importing them. See [the inventory](private-api-inventory.md)."
+msgstr "分发包将少量不可避免的 Ray Data 私有导入集中在 `ray.klein._compat` 中。新增私有导入属于兼容性债务，必须提供精确的清单条目、隔离的适配器，并针对受支持的 Ray 版本系列进行测试。普通 Klein 模块禁止导入这些符号。请参阅[私有 API 清单](private-api-inventory.md)。"

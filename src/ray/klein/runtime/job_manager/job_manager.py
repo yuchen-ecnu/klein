@@ -134,6 +134,7 @@ class JobManager(AsyncWorker):
         self._rescale_operations: dict[str, dict[str, object]] = {}
         self._active_rescale_operation_id: str | None = None
         self._rescale_task_obj: asyncio.Task | None = None
+        self._completion_task_obj: asyncio.Task[None] | None = None
         # Serialize whole lifecycle transactions (local rescale, cancellation
         # and failover), not only their individual execution-graph writes.
         self._lifecycle_lock_obj: asyncio.Lock | None = None
@@ -240,6 +241,8 @@ class JobManager(AsyncWorker):
             await self.run_exclusive(self.job_master.schedule, restore_path)
         except Exception as error:
             self._submission_error = f"{type(error).__name__}: {error}"
+            self._lifecycle_stop_requested = True
+            self._wake_event.set()
             log_event(
                 logger,
                 logging.ERROR,
@@ -250,8 +253,22 @@ class JobManager(AsyncWorker):
                 job_id=self.namespace,
                 job_name=job_name,
             )
-            await self._stop_job()
-            self._update_job_status(JobStatus.FAILED)
+            try:
+                await self._stop_job()
+            except Exception as teardown_error:
+                self._record_teardown_failure("Deployment teardown failed", teardown_error)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "job.deployment.teardown_failed",
+                    "Failed to tear down partially deployed job %s",
+                    job_name,
+                    exc_info=True,
+                    job_id=self.namespace,
+                    job_name=job_name,
+                )
+            finally:
+                self._update_job_status(JobStatus.FAILED)
             return False
         await self.start_job_supervisor()
         self._update_job_status(JobStatus.RUNNING)
@@ -271,7 +288,22 @@ class JobManager(AsyncWorker):
         try:
             if self.job_status().is_terminal:
                 return False
-            await self._stop_job(force=True, timeout=timeout)
+            try:
+                await self._stop_job(force=True, timeout=timeout)
+            except Exception as error:
+                self._record_teardown_failure("Cancellation teardown failed", error)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "job.cancellation.teardown_failed",
+                    "Failed to tear down cancelled job %s",
+                    self.job_name,
+                    exc_info=True,
+                    job_id=self.namespace,
+                    job_name=self.job_name,
+                )
+                self._update_job_status(JobStatus.FAILED)
+                return False
             self._update_job_status(JobStatus.CANCELLED)
             return True
         finally:
@@ -846,7 +878,10 @@ class JobManager(AsyncWorker):
     ) -> None:
         # The status update + all-sinks-finished scan are atomic inside
         # on_task_status_report (one run_exclusive call); we only react here.
-        if self.job_master is None:
+        # Once lifecycle teardown starts, its writer transaction owns the graph
+        # until every worker is gone. A late FINISHED/FAILED report must neither
+        # mutate that graph nor retain an actor RPC while the actor is closing.
+        if self.job_master is None or self._lifecycle_stop_requested:
             return
         accepted, all_finished, resolved_name = await self.run_exclusive(
             self.job_master.apply_task_status_report,
@@ -864,11 +899,47 @@ class JobManager(AsyncWorker):
             return
         self._lifecycle_stop_requested = True
         self._wake_event.set()
-        async with self._lifecycle_lock:
-            if self._job_status.is_terminal:
-                return
-            await self._stop_job()
-            self._update_job_status(JobStatus.FINISHED)
+        completion_task = self._completion_task_obj
+        if completion_task is None or completion_task.done():
+            self._completion_task_obj = asyncio.create_task(
+                self._complete_finished_job(),
+                name=f"{self.namespace}-complete-job",
+            )
+
+    async def _complete_finished_job(self) -> None:
+        """Tear down a naturally finished job outside the reporting worker RPC.
+
+        A terminal worker reports its status while still unwinding its pump and
+        executor.  Running the survivor sweep inline in that status RPC can
+        synchronously re-enter ``worker.stop()`` (notably for debug actors),
+        deadlocking the worker that is waiting for the RPC response.  Deferring
+        the lifecycle transaction lets the report return before actor cleanup.
+        """
+
+        try:
+            async with self._lifecycle_lock:
+                if self._job_status.is_terminal:
+                    return
+                try:
+                    await self._stop_job()
+                except Exception as error:
+                    self._submission_error = f"{type(error).__name__}: {error}"
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "job.completion.teardown_failed",
+                        "Failed to tear down naturally completed job %s",
+                        self.job_name,
+                        exc_info=True,
+                        job_id=self.namespace,
+                        job_name=self.job_name,
+                    )
+                    self._update_job_status(JobStatus.FAILED)
+                else:
+                    self._update_job_status(JobStatus.FINISHED)
+        finally:
+            if self._completion_task_obj is asyncio.current_task():
+                self._completion_task_obj = None
 
     async def _stop_job(self, force: bool = False, timeout: int | None = None) -> None:
         # One Deadline bounds the whole teardown (supervisor stop + writer queue +
@@ -1119,8 +1190,25 @@ class JobManager(AsyncWorker):
 
     async def _fail_permanently(self, force: bool) -> None:
         """Tear the job down and mark it FAILED — the supervisor's SUPPRESSED path."""
-        await self._stop_job(force=force)
-        self._update_job_status(JobStatus.FAILED)
+        self._lifecycle_stop_requested = True
+        self._wake_event.set()
+        try:
+            await self._stop_job(force=force)
+        except Exception as error:
+            self._record_teardown_failure("Permanent-failure teardown failed", error)
+            log_event(
+                logger,
+                logging.ERROR,
+                "job.permanent_failure.teardown_failed",
+                "Failed to tear down permanently failed job %s",
+                self.job_name,
+                exc_info=True,
+                job_id=self.namespace,
+                job_name=self.job_name,
+            )
+        finally:
+            # Teardown errors must not strand a fenced job in RUNNING forever.
+            self._update_job_status(JobStatus.FAILED)
 
     async def restart(self, force: bool = False) -> None:
         if self.job_master is None:
@@ -1158,8 +1246,31 @@ class JobManager(AsyncWorker):
         self._lifecycle_stop_requested = True
         self._wake_event.set()
         async with self._lifecycle_lock:
-            await self._stop_job(force=True)
-            self._update_job_status(JobStatus.FAILED)
+            try:
+                await self._stop_job(force=True)
+            except Exception as error:
+                self._record_teardown_failure("Supervisor-failure teardown failed", error)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "job.supervisor.teardown_failed",
+                    "Failed to tear down job %s after a supervisor failure",
+                    self.job_name,
+                    exc_info=True,
+                    job_id=self.namespace,
+                    job_name=self.job_name,
+                )
+            finally:
+                self._update_job_status(JobStatus.FAILED)
+
+    def _record_teardown_failure(self, context: str, error: Exception) -> None:
+        """Preserve the root cause while retaining cleanup diagnostics."""
+
+        diagnostic = f"{type(error).__name__}: {error}"
+        if self._submission_error:
+            self._submission_error = f"{self._submission_error}\n{context}: {diagnostic}"
+        else:
+            self._submission_error = diagnostic
 
     async def start_job_supervisor(self) -> None:
         log_event(

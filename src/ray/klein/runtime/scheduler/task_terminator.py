@@ -46,7 +46,7 @@ def stop_workers(execution_graph: ExecutionGraph, timeout: float, force: bool) -
         # Teardown is deliberately two-phase. An unexpected phase-one failure
         # must never prevent the named-actor survivor sweep.
         logger.exception("Graceful stop phase failed; force-killing survivors")
-    _force_kill_survivors(execution_graph)
+    force_kill_survivors(execution_graph, timeout=deadline.remaining())
 
 
 def stop_job_vertex(
@@ -70,22 +70,14 @@ def stop_job_vertex(
             rescale_operation_id=rescale_operation_id,
             timeout=deadline.remaining(),
         )
-        klein.get(references, timeout=timeout)
+        klein.get(references, timeout=deadline.remaining())
     except Exception as error:
         logger.warning("Operator stop did not complete within %.1fs; force-killing survivors: %s", timeout, error)
-    if len(selected) == 1:
-        name = selected[0].name
-        survivor_names = {
-            name
-            for name in (name,)
-            if _actor_may_exist(name, namespace) and not _kill_actor_with_retry(name, namespace)
-        }
-    else:
-        survivor_names = _kill_actor_names(
-            (vertex.name for vertex in selected),
-            namespace,
-            deadline.step(timeout),
-        )
+    survivor_names = _kill_actor_names(
+        (vertex.name for vertex in selected),
+        namespace,
+        deadline.step(timeout),
+    )
     for vertex in selected:
         if vertex.name in survivor_names:
             continue
@@ -104,6 +96,7 @@ def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, forc
     resources.
     """
     references = []
+    deadline = Deadline(timeout)
     pending_queue: deque = deque()
     visited = set()
     for job_vertex_id in execution_graph.source_job_vertices:
@@ -115,12 +108,12 @@ def _request_graceful_stop(execution_graph: ExecutionGraph, timeout: float, forc
             continue
         visited.add(job_vertex_id)
         job_vertex = execution_graph.job_vertex(job_vertex_id)
-        references.extend(_stop_worker(job_vertex, force))
+        references.extend(_stop_worker(job_vertex, force, timeout=deadline.remaining()))
         for downstream_job_vertex_id in execution_graph.downstream_job_vertices(job_vertex.id):
             pending_queue.append(downstream_job_vertex_id)
 
     try:
-        klein.get(references, timeout=timeout)
+        klein.get(references, timeout=deadline.remaining())
     except Exception as error:
         logger.warning("Graceful stop did not complete within %.1fs; force-killing survivors: %s", timeout, error)
 
@@ -181,12 +174,18 @@ def _kill_actor_names(
 ) -> set[str]:
     """Kill many named actors in shared retry rounds under one deadline."""
 
-    pending = _existing_actor_names(set(names), namespace)
+    deadline = Deadline(timeout)
+    pending = _existing_actor_names(set(names), namespace, deadline)
     if not pending:
         return set()
-    deadline = Deadline(timeout)
     for attempt in range(_KILL_ACTOR_MAX_RETRIES):
-        pending = _kill_actor_round(pending, namespace)
+        # The graceful phase is allowed to consume the whole shared deadline,
+        # but that must not turn phase two into a no-op.  Named kills are
+        # fire-and-forget, so always issue one complete first round; the
+        # deadline only bounds status confirmation and subsequent retries.
+        if attempt > 0 and deadline.expired():
+            break
+        pending = _kill_actor_round(pending, namespace, deadline)
         if not pending:
             return set()
         if attempt < _KILL_ACTOR_MAX_RETRIES - 1:
@@ -207,34 +206,78 @@ def _kill_actor_names(
     return pending
 
 
-def _existing_actor_names(names: set[str], namespace: str) -> set[str]:
-    return {name for name in names if _actor_may_exist(name, namespace)}
+def _probe_actor_statuses(
+    names: set[str],
+    namespace: str,
+    deadline: Deadline,
+) -> dict[str, StreamTaskStatus | None]:
+    """Probe a batch without allowing serial pings to multiply the timeout.
+
+    Each remaining actor receives an equal share of the one deadline. Unknown
+    or timed-out actors stay conservative survivors; only NOT_EXIST removes a
+    name from teardown tracking.
+    """
+
+    ordered = tuple(sorted(names))
+    statuses: dict[str, StreamTaskStatus | None] = {}
+    for index, name in enumerate(ordered):
+        remaining = deadline.remaining()
+        if remaining <= 0:
+            statuses[name] = None
+            continue
+        probe_timeout = remaining / (len(ordered) - index)
+        try:
+            statuses[name] = klein.get_actor_status(
+                name,
+                namespace=namespace,
+                timeout=probe_timeout,
+            )
+        except Exception:
+            statuses[name] = None
+    return statuses
 
 
-def _kill_actor_round(names: set[str], namespace: str) -> set[str]:
+def _existing_actor_names(names: set[str], namespace: str, deadline: Deadline) -> set[str]:
+    statuses = _probe_actor_statuses(names, namespace, deadline)
+    return {name for name, status in statuses.items() if status != StreamTaskStatus.NOT_EXIST}
+
+
+def _kill_actor_round(names: set[str], namespace: str, deadline: Deadline) -> set[str]:
     for name in names:
         try:
             logger.debug("Force-killing stream task %s", name)
-            klein.kill_actor_by_name(name, namespace=namespace)
+            klein.kill_actor_by_name(name, namespace=namespace, timeout=deadline.remaining())
         except Exception:
             logger.debug("Named actor kill failed for %s", name, exc_info=True)
-    survivors = set()
-    for name in names:
-        try:
-            if klein.get_actor_status(name, namespace=namespace) != StreamTaskStatus.NOT_EXIST:
-                survivors.add(name)
-        except Exception:
-            survivors.add(name)
-    return survivors
+    statuses = _probe_actor_statuses(names, namespace, deadline)
+    return {name for name, status in statuses.items() if status != StreamTaskStatus.NOT_EXIST}
 
 
 def _kill_actor_with_retry(name: str, namespace: str, timeout: float = 2.0) -> bool:
-    """Compatibility wrapper for one named actor."""
+    """Kill one named actor and wait until its registration disappears.
+
+    Once Ray reports the actor as ``DEAD``, another kill cannot make the
+    process any deader; only poll for GCS name cleanup.  ``ALIVE`` and status
+    query failures remain conservative and trigger another kill attempt.
+    """
     deadline = Deadline(timeout)
-    pending = {name}
+    status: StreamTaskStatus | None = None
     for attempt in range(_KILL_ACTOR_MAX_RETRIES):
-        pending = _kill_actor_round(pending, namespace)
-        if not pending:
+        if status != StreamTaskStatus.DEAD:
+            try:
+                logger.debug("Force-killing stream task %s", name)
+                klein.kill_actor_by_name(name, namespace=namespace, timeout=deadline.remaining())
+            except Exception:
+                logger.debug("Named actor kill failed for %s", name, exc_info=True)
+        try:
+            status = klein.get_actor_status(
+                name,
+                namespace=namespace,
+                timeout=deadline.remaining(),
+            )
+        except Exception:
+            status = None
+        if status == StreamTaskStatus.NOT_EXIST:
             return True
         if attempt < _KILL_ACTOR_MAX_RETRIES - 1:
             remaining = deadline.remaining()
@@ -253,19 +296,20 @@ def _stop_worker(
     timeout: float = 30.0,
 ) -> list[KleinActorHandle]:
     references = []
+    deadline = Deadline(timeout)
     for vertex in select_vertices(job_vertex, vertices):
         if force:
             if vertex.stream_task is not None:
                 try:
-                    klein.kill(vertex.stream_task)
+                    klein.kill(vertex.stream_task, timeout=deadline.remaining())
                 except Exception as error:
-                    logger.warning("Could not force-kill execution vertex %s by handle: %s", vertex, error)
+                    logger.warning("Could not force-kill execution vertex %s by handle: %s", vertex.name, error)
             continue
         if vertex.status == ExecutionVertexStatus.CREATED or vertex.status.is_terminal:
-            logger.debug("Skipping inactive execution vertex %s during task shutdown", vertex)
+            logger.debug("Skipping inactive execution vertex %s during task shutdown", vertex.name)
             continue
         if vertex.stream_task is None:
-            logger.warning("Execution vertex %s has no actor handle; deferring to named-actor cleanup", vertex)
+            logger.warning("Execution vertex %s has no actor handle; deferring to named-actor cleanup", vertex.name)
             continue
         try:
             if rescale_operation_id is None:
@@ -273,7 +317,7 @@ def _stop_worker(
             else:
                 reference = vertex.stream_task.retire_rescale(rescale_operation_id, timeout)
         except Exception as error:
-            logger.warning("Execution vertex %s rejected graceful stop: %s", vertex, error)
+            logger.warning("Execution vertex %s rejected graceful stop: %s", vertex.name, error)
             continue
         references.append(reference)
         vertex.transition_to(ExecutionVertexStatus.CANCELLING)

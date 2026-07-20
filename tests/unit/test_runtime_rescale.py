@@ -1424,6 +1424,12 @@ async def test_downstream_fence_advances_durability_boundary_and_pauses() -> Non
 @pytest.mark.asyncio
 async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare() -> None:
     input_id = ExecutionVertexId(1, 0)
+    added_input_id = ExecutionVertexId(1, 1)
+    previous_channel = DeliveryChannel(input_id, "source (1)", 0, 0, "epoch-1")
+    pending_channels = (
+        DeliveryChannel(input_id, "source (1)", 0, 0, "epoch-2"),
+        DeliveryChannel(added_input_id, "source (2)", 0, 0, "epoch-2"),
+    )
     previous = SimpleNamespace(
         vertex_id=ExecutionVertexId(2, 0),
         parallelism=1,
@@ -1433,6 +1439,7 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
         out_edges=("old",),
         barrier_split={input_id: 1},
         input_vertex_ids=(input_id,),
+        input_channels=(previous_channel,),
     )
     pending = SimpleNamespace(
         vertex_id=previous.vertex_id,
@@ -1442,10 +1449,12 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
         operator=previous.operator,
         out_edges=("new",),
         barrier_split={input_id: 2},
-        input_vertex_ids=(input_id, ExecutionVertexId(1, 1)),
+        input_vertex_ids=(input_id, added_input_id),
+        input_channels=pending_channels,
     )
     output = MagicMock(spec=TaskOutput)
     checkpoint = MagicMock()
+    pump = MagicMock()
     tracker = MagicMock()
     task = _bare_rescale_task("target")
     task._descriptor = previous
@@ -1463,6 +1472,7 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
     )
     task._build_output_edge = MagicMock(return_value="replacement")
     task._configure_output_replay = MagicMock()
+    task._pump = pump
 
     assert await task.prepare_topology_reconfiguration("resize-1", pending) is True
     assert await task.prepare_topology_reconfiguration("resize-1", pending) is True
@@ -1477,6 +1487,11 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
     checkpoint.reconfigure_barrier_split.assert_called_once_with(
         dict(pending.barrier_split),
         pending.input_vertex_ids,
+        pending.input_channels,
+    )
+    pump.reconfigure_checkpoint_inputs.assert_called_once_with(
+        pending.input_vertex_ids,
+        pending.input_channels,
     )
     tracker.reconfigure_inputs.assert_called_once_with(pending.input_vertex_ids)
 
@@ -1736,18 +1751,26 @@ async def test_async_rescale_boundary_flushes_partial_batch_before_runner_barrie
 
 
 def test_actor_topology_activation_failure_restores_every_local_component() -> None:
+    input_id = ExecutionVertexId(1, 0)
+    added_input_id = ExecutionVertexId(1, 1)
     previous = SimpleNamespace(
         out_edges=("old",),
-        barrier_split={ExecutionVertexId(1, 0): 1},
-        input_vertex_ids=(ExecutionVertexId(1, 0),),
+        barrier_split={input_id: 1},
+        input_vertex_ids=(input_id,),
+        input_channels=(DeliveryChannel(input_id, "source (1)", 0, 0, "epoch-1"),),
     )
     pending = SimpleNamespace(
         out_edges=("new",),
-        barrier_split={ExecutionVertexId(1, 0): 2},
-        input_vertex_ids=(ExecutionVertexId(1, 0), ExecutionVertexId(1, 1)),
+        barrier_split={input_id: 2},
+        input_vertex_ids=(input_id, added_input_id),
+        input_channels=(
+            DeliveryChannel(input_id, "source (1)", 0, 0, "epoch-2"),
+            DeliveryChannel(added_input_id, "source (2)", 0, 0, "epoch-2"),
+        ),
     )
     output = MagicMock(spec=TaskOutput)
     checkpoint = MagicMock()
+    pump = MagicMock()
     tracker = MagicMock()
     tracker.reconfigure_inputs.side_effect = [RuntimeError("tracker failed"), None]
     task = object.__new__(StreamTask)
@@ -1764,6 +1787,7 @@ def test_actor_topology_activation_failure_restores_every_local_component() -> N
     task._topology_active = False
     task._topology_commit_tombstones = []
     task._configure_output_replay = MagicMock()
+    task._pump = pump
 
     with pytest.raises(RuntimeError, match="tracker failed"):
         task.activate_topology_reconfiguration("resize-1")
@@ -1773,12 +1797,16 @@ def test_actor_topology_activation_failure_restores_every_local_component() -> N
     output.activate_edge_swap.assert_called_once_with("resize-1")
     output.rollback_edge_swap.assert_called_once_with("resize-1")
     assert checkpoint.reconfigure_barrier_split.call_args_list == [
-        ((dict(pending.barrier_split), pending.input_vertex_ids),),
-        ((dict(previous.barrier_split), previous.input_vertex_ids),),
+        ((dict(pending.barrier_split), pending.input_vertex_ids, pending.input_channels),),
+        ((dict(previous.barrier_split), previous.input_vertex_ids, previous.input_channels),),
     ]
     assert tracker.reconfigure_inputs.call_args_list == [
         ((pending.input_vertex_ids,),),
         ((previous.input_vertex_ids,),),
+    ]
+    assert pump.reconfigure_checkpoint_inputs.call_args_list == [
+        ((pending.input_vertex_ids, pending.input_channels),),
+        ((previous.input_vertex_ids, previous.input_channels),),
     ]
 
 
@@ -1889,7 +1917,9 @@ def test_force_stop_kills_a_partially_created_candidate_handle() -> None:
     with patch.object(task_terminator.klein, "kill") as kill:
         assert task_terminator._stop_worker(job_vertex, force=True) == []
 
-    kill.assert_called_once_with(handle)
+    kill.assert_called_once()
+    assert kill.call_args.args == (handle,)
+    assert 0 < kill.call_args.kwargs["timeout"] <= 30
 
 
 def test_bootstrap_descriptor_preserves_rescale_restore_identity() -> None:

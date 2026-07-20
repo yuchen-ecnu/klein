@@ -5,7 +5,7 @@ import ast
 from pathlib import Path
 
 import yaml
-from tests.component_suites import CI_COMPONENTS, component_for_test_path
+from tests.component_suites import CI_COMPONENTS, UNIT_COMPONENT_BY_MODULE, component_for_test_path
 
 TEST_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = TEST_ROOT.parent
@@ -90,6 +90,12 @@ def test_every_test_module_belongs_to_one_known_ci_component() -> None:
 
     assert assignments
     assert set(assignments.values()) == set(CI_COMPONENTS)
+
+
+def test_every_top_level_unit_module_has_an_explicit_component_owner() -> None:
+    modules = {path.name for path in UNIT_ROOT.glob("test_*.py")}
+
+    assert modules == set(UNIT_COMPONENT_BY_MODULE)
 
 
 def test_critical_integration_modules_keep_their_component_boundary() -> None:

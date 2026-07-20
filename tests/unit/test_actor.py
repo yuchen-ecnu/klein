@@ -5,6 +5,8 @@ import asyncio
 import time
 from types import SimpleNamespace
 
+import pytest
+
 from ray.klein._internal import ray as klein_ray
 from ray.klein._internal.constants import ComponentName
 from ray.klein.runtime.actor import KleinActorHandle, create_remote_actor
@@ -19,6 +21,13 @@ class _AsyncActor:
     async def ping(self) -> str:
         return "pong"
 
+    async def delayed_ping(self) -> str:
+        await asyncio.sleep(0.05)
+        return "pong"
+
+    async def raise_timeout(self) -> None:
+        raise TimeoutError("actor operation timed out")
+
 
 class _StuckActor:
     async def ping(self) -> str:
@@ -26,6 +35,17 @@ class _StuckActor:
 
     async def stop(self) -> None:
         await asyncio.Event().wait()
+
+
+class _PreparedActor:
+    def __init__(self) -> None:
+        self.prepared = False
+
+    def prepare_force_stop(self) -> None:
+        self.prepared = True
+
+    async def stop(self) -> None:
+        assert self.prepared
 
 
 class _ActorId:
@@ -72,6 +92,41 @@ def test_debug_actor_loop_is_released_on_kill() -> None:
     assert not hasattr(handle.inner_actor, "_klein_debug_loop")
 
 
+def test_debug_actor_get_honors_timeout() -> None:
+    handle = create_remote_actor(_AsyncActor, local_mode=True)
+    started = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError):
+            klein_ray.get(handle.delayed_ping(), timeout=0.001)
+    finally:
+        klein_ray.kill(handle)
+
+    assert time.monotonic() - started < 0.1
+
+
+def test_debug_actor_preserves_timeout_raised_by_coroutine() -> None:
+    handle = create_remote_actor(_AsyncActor, local_mode=True)
+    try:
+        with pytest.raises(TimeoutError, match="actor operation timed out"):
+            klein_ray.get(handle.raise_timeout(), timeout=1)
+    finally:
+        klein_ray.kill(handle)
+
+
+@pytest.mark.asyncio
+async def test_async_debug_call_does_not_block_the_calling_loop() -> None:
+    handle = create_remote_actor(_AsyncActor, local_mode=True)
+    try:
+        lookup = asyncio.create_task(klein_ray.aget(handle.delayed_ping()))
+
+        await asyncio.sleep(0)
+
+        assert not lookup.done()
+        assert await lookup == "pong"
+    finally:
+        klein_ray.kill(handle)
+
+
 def test_named_debug_actor_is_removed_and_stopped(monkeypatch) -> None:
     monkeypatch.setenv("RAY_KLEIN_DEBUG", "1")
     handle = create_remote_actor(
@@ -100,6 +155,14 @@ def test_kill_of_stuck_debug_actor_is_bounded(monkeypatch) -> None:
     assert time.monotonic() - started < 1
     assert not loop.is_running()
     assert not thread.is_alive()
+
+
+def test_debug_force_kill_prepares_actor_before_resource_close() -> None:
+    handle = create_remote_actor(_PreparedActor, local_mode=True)
+
+    klein_ray.kill(handle)
+
+    assert handle.inner_actor.prepared is True
 
 
 def test_actor_options_do_not_mutate_callers(monkeypatch) -> None:

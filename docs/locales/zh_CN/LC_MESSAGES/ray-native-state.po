@@ -314,3 +314,6 @@ msgid ""
 "[Flink state backends](https://nightlies.apache.org/flink/flink-docs-stable/"
 "docs/ops/state/state_backends/)"
 msgstr "[Flink 状态后端](https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/state/state_backends/)"
+
+msgid "On rescale, the coordinator materializes and decodes each prior fragment once, then partitions its opaque key-group payloads into one snapshot per target subtask. Each target fetches and decodes only its assigned snapshot before merging those groups into an empty local backend. Scale-up and scale-down therefore preserve keyed state, TTL indexes, and timers without rehashing keys, without an old-by-new decode loop, and without depending on the previous subtask count."
+msgstr "扩缩容时，协调器只会物化并解码每个旧分片一次，然后将其中不透明的键组载荷划分为每个目标子任务一个快照。每个目标仅获取并解码分配给自己的快照，再把这些键组合并到空的本地后端。因此，无论扩容还是缩容，都能保留键控状态、TTL 索引和定时器，既不重新散列键，也不执行旧子任务数乘以新子任务数的解码循环，并且不依赖此前的子任务数量。"

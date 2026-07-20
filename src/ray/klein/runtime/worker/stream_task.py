@@ -118,6 +118,7 @@ def _operator_runtime_identity(operator) -> tuple:
 def _runtime_rescale_descriptor_identity(descriptor: "TaskDeploymentDescriptor") -> tuple:
     """Stable identity for idempotent prepare retries across serialization."""
 
+    input_channels = getattr(descriptor, "input_channels", None)
     return (
         descriptor.vertex_id,
         descriptor.task_name,
@@ -128,6 +129,7 @@ def _runtime_rescale_descriptor_identity(descriptor: "TaskDeploymentDescriptor")
         descriptor.restore_operation_id,
         _operator_runtime_identity(descriptor.operator),
         tuple(getattr(descriptor, "input_vertex_ids", ())),
+        None if input_channels is None else tuple(input_channels),
         tuple(
             (
                 edge.target_task_names,
@@ -314,6 +316,8 @@ class StreamTask(AsyncWorker):
         self._checkpoint_input_gates: dict[object, tuple[int, asyncio.Event]] = {}
         self._checkpoint_gate_loop: asyncio.AbstractEventLoop | None = None
         self._checkpoint_gate_resolved_through = -1
+        self._failure_report_task_obj: asyncio.Task[None] | None = None
+        self._force_stop_requested = False
 
     # --- small accessors used by the components / subclass ---
 
@@ -340,6 +344,12 @@ class StreamTask(AsyncWorker):
     async def setup_and_run(self) -> None:
         if self._running:
             return
+        # Ray may retain the actor process after a terminal status RPC fails
+        # and ask this same instance to bootstrap again.  These flags describe
+        # one runtime incarnation; carrying them forward would make the fresh
+        # runtime stop immediately or suppress a new drain request.
+        self._eof_reached = False
+        self._drain_requested = False
         runtime = await self._build_runtime(self._descriptor)
         self._install_runtime(runtime)
         try:
@@ -441,6 +451,7 @@ class StreamTask(AsyncWorker):
                 emit,
                 inbox_timeout=idle_check_interval.total_seconds(),
                 input_vertex_ids=descriptor.input_vertex_ids,
+                input_channels=getattr(descriptor, "input_channels", None),
             )
             watermark.bind(
                 output,
@@ -887,6 +898,7 @@ class StreamTask(AsyncWorker):
             synchronous_notify=descriptor.operator.transactional_sink,
             metric_group=descriptor.metric_group,
             input_vertex_ids=descriptor.input_vertex_ids,
+            input_channels=getattr(descriptor, "input_channels", None),
         )
         return TaskRuntimeContext(
             descriptor.task_name,
@@ -1029,10 +1041,14 @@ class StreamTask(AsyncWorker):
             state.checkpoint_strategy.reconfigure_barrier_split(
                 dict(descriptor.barrier_split),
                 descriptor.input_vertex_ids,
+                getattr(descriptor, "input_channels", None),
             )
             pump = getattr(self, "_pump", None)
             if pump is not None:
-                pump.reconfigure_checkpoint_inputs(descriptor.input_vertex_ids)
+                pump.reconfigure_checkpoint_inputs(
+                    descriptor.input_vertex_ids,
+                    getattr(descriptor, "input_channels", None),
+                )
             if state.event_time_tracker is not None:
                 state.event_time_tracker.reconfigure_inputs(descriptor.input_vertex_ids)
             self._descriptor = descriptor
@@ -1094,6 +1110,7 @@ class StreamTask(AsyncWorker):
             state.checkpoint_strategy.reconfigure_barrier_split(
                 dict(previous.barrier_split),
                 previous.input_vertex_ids,
+                getattr(previous, "input_channels", None),
             )
         except Exception as error:
             failures.append(error)
@@ -1101,7 +1118,10 @@ class StreamTask(AsyncWorker):
         pump = getattr(self, "_pump", None)
         if pump is not None:
             try:
-                pump.reconfigure_checkpoint_inputs(previous.input_vertex_ids)
+                pump.reconfigure_checkpoint_inputs(
+                    previous.input_vertex_ids,
+                    getattr(previous, "input_channels", None),
+                )
             except Exception as error:
                 failures.append(error)
                 logger.exception("Failed to restore checkpoint input gates after topology rollback")
@@ -1717,40 +1737,66 @@ class StreamTask(AsyncWorker):
             self._checkpoint_gate_loop = None
             self._checkpoint_gate_resolved_through = -1
 
+    @staticmethod
+    def _checkpoint_input_channel(
+        sender_vertex_id: object | None,
+        delivery_channel: DeliveryChannel | None,
+    ) -> object | None:
+        """Return the stable physical lane used by checkpoint admission gates."""
+
+        return delivery_channel if delivery_channel is not None else sender_vertex_id
+
+    def _current_checkpoint_delivery_channel(
+        self,
+        sender_vertex_id: ExecutionVertexId | None,
+        delivery_channel: DeliveryChannel | None,
+    ) -> bool:
+        """Reject a delayed old-topology barrier before it can close a lane gate."""
+
+        descriptor = getattr(self, "_descriptor", None)
+        input_channels = getattr(descriptor, "input_channels", None)
+        if input_channels is None:
+            return True
+        if delivery_channel is None:
+            raise ValueError("checkpoint delivery_channel is required by the current topology")
+        if delivery_channel.sender_vertex_id != sender_vertex_id:
+            raise ValueError("checkpoint delivery_channel does not match its sender")
+        return delivery_channel in input_channels
+
     async def _claim_checkpoint_input(
         self,
-        sender_vertex_id: object | None,
+        input_channel: object | None,
         barrier_id: int,
     ) -> bool:
-        """Close one sender before its barrier is admitted to the inbox.
+        """Close one delivery lane before its barrier is admitted to the inbox.
 
         Returning False means the barrier is a duplicate/stale delivery and is
-        already represented locally. A later epoch waits behind the sender's
+        already represented locally. A later epoch waits behind the lane's
         current epoch, preserving per-channel order even when it has no data
         between the two barriers.
         """
 
-        if sender_vertex_id is None:
+        if input_channel is None:
             return True
         self._ensure_checkpoint_gate_state()
         self._checkpoint_gate_loop = asyncio.get_running_loop()
         while True:
             if barrier_id <= self._checkpoint_gate_resolved_through:
                 return False
-            current = self._checkpoint_input_gates.get(sender_vertex_id)
+            current = self._checkpoint_input_gates.get(input_channel)
             if current is None:
-                self._checkpoint_input_gates[sender_vertex_id] = (barrier_id, asyncio.Event())
+                self._checkpoint_input_gates[input_channel] = (barrier_id, asyncio.Event())
                 return True
             current_id, released = current
             if current_id == barrier_id or barrier_id < current_id:
                 return False
             await released.wait()
 
-    async def _wait_checkpoint_input_open(self, sender_vertex_id: object | None) -> None:
-        if sender_vertex_id is None:
+    async def _wait_checkpoint_input_open(self, input_channel: object | None) -> None:
+        if input_channel is None:
             return
         self._ensure_checkpoint_gate_state()
-        while (current := self._checkpoint_input_gates.get(sender_vertex_id)) is not None:
+        while (current := self._checkpoint_input_gates.get(input_channel)) is not None:
             await current[1].wait()
 
     def _mark_checkpoint_gate_resolved(self, barrier_id: int) -> None:
@@ -1764,13 +1810,23 @@ class StreamTask(AsyncWorker):
         if resolved:
             self._mark_checkpoint_gate_resolved(barrier_id)
         released = 0
-        for sender_vertex_id, (current_id, event) in tuple(self._checkpoint_input_gates.items()):
+        for input_channel, (current_id, event) in tuple(self._checkpoint_input_gates.items()):
             if current_id != barrier_id:
                 continue
-            self._checkpoint_input_gates.pop(sender_vertex_id, None)
+            self._checkpoint_input_gates.pop(input_channel, None)
             event.set()
             released += 1
         return released
+
+    def _release_all_checkpoint_input_gates(self) -> int:
+        """Unblock every ordinary checkpoint lane during task teardown."""
+
+        self._ensure_checkpoint_gate_state()
+        gates = tuple(self._checkpoint_input_gates.values())
+        self._checkpoint_input_gates.clear()
+        for _barrier_id, event in gates:
+            event.set()
+        return len(gates)
 
     def checkpoint_barrier_aligned(self, barrier_id: int) -> None:
         """Release admission gates after snapshot + downstream enqueue."""
@@ -1835,10 +1891,10 @@ class StreamTask(AsyncWorker):
             removed += pump.reset_inflight_before(cutoff_barrier_id)
         self._mark_checkpoint_gate_resolved(cutoff_barrier_id)
         released = 0
-        for sender_vertex_id, (barrier_id, event) in tuple(self._checkpoint_input_gates.items()):
+        for input_channel, (barrier_id, event) in tuple(self._checkpoint_input_gates.items()):
             if barrier_id > cutoff_barrier_id:
                 continue
-            self._checkpoint_input_gates.pop(sender_vertex_id, None)
+            self._checkpoint_input_gates.pop(input_channel, None)
             event.set()
             released += 1
         return removed + released
@@ -1853,6 +1909,8 @@ class StreamTask(AsyncWorker):
     ) -> int:
         if self._state is None:
             return 0
+        if not self._current_checkpoint_delivery_channel(sender_vertex_id, delivery_channel):
+            return self._update_buffer_size_metrics()
         pump = getattr(self, "_pump", None)
         if pump is not None:
             if barrier.coordinated:
@@ -1863,9 +1921,14 @@ class StreamTask(AsyncWorker):
                 ):
                     return self._update_buffer_size_metrics()
             else:
+                input_channel = self._checkpoint_input_channel(sender_vertex_id, delivery_channel)
+                if not await self._claim_checkpoint_input(input_channel, barrier.id):
+                    return self._update_buffer_size_metrics()
                 await pump.wait_for_checkpoint_input(sender_vertex_id, barrier, delivery_channel)
-        elif not await self._claim_checkpoint_input(sender_vertex_id, barrier.id):
-            return self._update_buffer_size_metrics()
+        else:
+            input_channel = self._checkpoint_input_channel(sender_vertex_id, delivery_channel)
+            if not await self._claim_checkpoint_input(input_channel, barrier.id):
+                return self._update_buffer_size_metrics()
         envelope = InboxEnvelope(barrier, sender_vertex_id, delivery_channel=delivery_channel)
         put_control = getattr(self._state.inbox, "put_control", None)
         if barrier.coordinated and callable(put_control):
@@ -1885,11 +1948,11 @@ class StreamTask(AsyncWorker):
 
         if self._state is None:
             return 0
+        input_channel = self._checkpoint_input_channel(sender_vertex_id, delivery_channel)
+        await self._wait_checkpoint_input_open(input_channel)
         pump = getattr(self, "_pump", None)
         if pump is not None:
             await pump.wait_for_checkpoint_input(sender_vertex_id, control, delivery_channel)
-        else:
-            await self._wait_checkpoint_input_open(sender_vertex_id)
         await self._state.inbox.put(InboxEnvelope(control, sender_vertex_id, delivery_channel=delivery_channel))
         return self._update_buffer_size_metrics()
 
@@ -1920,11 +1983,11 @@ class StreamTask(AsyncWorker):
             return PutAck(False, 0, self._forwarded_sequence_for(delivery_channel or sender_vertex_id))
 
         async def admit() -> None:
+            input_channel = self._checkpoint_input_channel(sender_vertex_id, delivery_channel)
+            await self._wait_checkpoint_input_open(input_channel)
             pump = getattr(self, "_pump", None)
             if pump is not None:
                 await pump.wait_for_checkpoint_input(sender_vertex_id, record, delivery_channel)
-            else:
-                await self._wait_checkpoint_input_open(sender_vertex_id)
             await self._state.inbox.put(InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel))
 
         try:
@@ -1960,12 +2023,12 @@ class StreamTask(AsyncWorker):
         if self._state is None:
             return PutAck(False, 0, self._forwarded_sequence_for(delivery_channel or sender_vertex_id))
         accepted = False
+        self._ensure_checkpoint_gate_state()
+        input_channel = self._checkpoint_input_channel(sender_vertex_id, delivery_channel)
+        blocked = input_channel is not None and input_channel in self._checkpoint_input_gates
         pump = getattr(self, "_pump", None)
-        if pump is None:
-            self._ensure_checkpoint_gate_state()
-            blocked = sender_vertex_id is not None and sender_vertex_id in self._checkpoint_input_gates
-        else:
-            blocked = pump.checkpoint_input_blocked(sender_vertex_id, delivery_channel)
+        if pump is not None:
+            blocked = blocked or pump.checkpoint_input_blocked(sender_vertex_id, delivery_channel)
         if not blocked:
             accepted = await self._state.inbox.try_put(
                 InboxEnvelope(record, sender_vertex_id, batch_sequence, delivery_channel)
@@ -2074,9 +2137,15 @@ class StreamTask(AsyncWorker):
             return True
         return False
 
-    def report_eof_finished(self) -> None:
-        """Report FINISHED after the final EndOfData aligned (called from the pump)."""
-        klein.get(
+    def mark_eof_finished(self) -> None:
+        """Fence new work once the final EndOfData has aligned."""
+
+        self._eof_reached = True
+
+    async def report_eof_finished(self) -> None:
+        """Report FINISHED without blocking the operator executor."""
+
+        await klein.aget(
             self._job_manager.update_stream_task_status(
                 self._vertex_id,
                 ExecutionVertexStatus.FINISHED,
@@ -2084,14 +2153,37 @@ class StreamTask(AsyncWorker):
                 task_generation=self._task_generation,
             )
         )
-        self._eof_reached = True
 
     # --- failure / lifecycle ---
 
     def handle_exception(self, exc: Exception) -> None:
         logger.error("Stream task %s failed", self._task_name, exc_info=exc)
+        if self._force_stop_requested:
+            return
+        report_task = self._failure_report_task_obj
+        if report_task is not None and not report_task.done():
+            return
         error_message = current_exception_diagnostic()
-        asyncio.get_running_loop().create_task(self._report_failure(error_message))
+        report_task = asyncio.get_running_loop().create_task(
+            self._report_failure(error_message),
+            name=f"{self._task_name}-failure-report",
+        )
+        self._failure_report_task_obj = report_task
+        report_task.add_done_callback(self._on_failure_report_done)
+
+    def _on_failure_report_done(self, report_task: asyncio.Task[None]) -> None:
+        if self._failure_report_task_obj is report_task:
+            self._failure_report_task_obj = None
+        if report_task.cancelled():
+            return
+        error = report_task.exception()
+        if error is not None:
+            logger.error(
+                "Failure report task failed for %s: %s",
+                self._task_name,
+                error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
 
     async def _report_failure(self, error_message: str) -> None:
         try:
@@ -2107,6 +2199,28 @@ class StreamTask(AsyncWorker):
         finally:
             await self.stop()
 
+    def prepare_force_stop(self) -> None:
+        """Drop buffered delivery before debug mode emulates ``ray.kill``."""
+
+        self._force_stop_requested = True
+        report_task = self._failure_report_task_obj
+        if report_task is not None and not report_task.done():
+            with suppress(RuntimeError):
+                report_task.get_loop().call_soon_threadsafe(report_task.cancel)
+        runtimes = list(self._retired_runtimes)
+        if self._active_runtime is not None:
+            runtimes.append(self._active_runtime)
+        transaction = self._runtime_rescale_transaction
+        if transaction is not None:
+            runtimes.extend((transaction.previous, transaction.pending))
+        seen: set[int] = set()
+        for runtime in runtimes:
+            output = runtime.state.output
+            if output is None or id(output) in seen:
+                continue
+            seen.add(id(output))
+            output.abort_delivery()
+
     async def stop(self, timeout: float = 30.0) -> None:
         await self._stop_stream_task(timeout, release_rescale=True)
 
@@ -2120,13 +2234,44 @@ class StreamTask(AsyncWorker):
 
     async def _stop_stream_task(self, timeout: float, *, release_rescale: bool) -> None:
         logger.debug("Stopping stream task %s", self._task_name)
+        deadline = asyncio.get_running_loop().time() + max(0.0, timeout)
+
+        def remaining() -> float:
+            return max(0.0, deadline - asyncio.get_running_loop().time())
+
         if release_rescale and self._rescale_resume_obj is not None:
             self._rescale_resume_obj.set()
+        self._release_all_checkpoint_input_gates()
         if self._pump is not None:
             self._pump.release_all_checkpoint_inputs()
-        await super().stop(timeout)
+        await super().stop(remaining())
+        # A cancelled reporter runs its own ``finally: await self.stop()``.
+        # Reap it before taking the runtime-close lock so that nested stop can
+        # finish rather than waiting behind the task that is awaiting it.
+        await self._settle_force_stopped_failure_report(remaining())
         async with self._runtime_rescale_lock:
-            await self._close_task_runtimes(timeout)
+            await self._close_task_runtimes(remaining())
+
+    async def _settle_force_stopped_failure_report(self, timeout: float) -> None:
+        """Cancel and reap the debug failure reporter before its loop closes."""
+
+        if not self._force_stop_requested:
+            return
+        report_task = self._failure_report_task_obj
+        if report_task is None or report_task is asyncio.current_task():
+            return
+        report_task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(report_task), timeout=max(0.0, timeout))
+        except asyncio.TimeoutError:
+            logger.warning("Failure report task for %s did not stop before debug actor teardown", self._task_name)
+        except asyncio.CancelledError:
+            if not report_task.done():
+                raise
+        except Exception as error:
+            # _on_failure_report_done logs and consumes the full traceback. A
+            # failed status RPC must not prevent the force-stop itself.
+            logger.debug("Failure report task already failed during teardown of %s: %s", self._task_name, error)
 
     async def _close_task_runtimes(self, timeout: float) -> None:
         errors: list[tuple[str, BaseException]] = []

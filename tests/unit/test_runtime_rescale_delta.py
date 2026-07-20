@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Focused contracts for delta actor lifecycle during operator rescaling."""
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,7 +22,7 @@ from ray.klein.runtime.partitioning import RoundRobinPartitioner
 from ray.klein.runtime.resources import Resources
 from ray.klein.runtime.scheduler import job_master as job_master_module
 from ray.klein.runtime.scheduler import task_deployer, task_terminator
-from ray.klein.runtime.scheduler.errors import DeploymentError
+from ray.klein.runtime.scheduler.errors import DeploymentError, TeardownError
 from ray.klein.runtime.scheduler.job_master import JobMaster
 from ray.klein.runtime.scheduler.placement import NativeStrategy
 from ray.klein.runtime.scheduler.rescale_plan import (
@@ -229,7 +229,11 @@ def test_terminator_stops_only_explicit_vertex_subset() -> None:
             vertices=removed,
         )
 
-    assert kill.call_args_list == [call(handles[2]), call(handles[3])]
+    assert [invocation.args for invocation in kill.call_args_list] == [
+        (handles[2],),
+        (handles[3],),
+    ]
+    assert all(0 < invocation.kwargs["timeout"] <= 5 for invocation in kill.call_args_list)
     for index in (0, 1):
         retained = target.execution_vertex(index)
         assert retained.stream_task is handles[index]
@@ -285,7 +289,7 @@ def test_terminator_does_not_forget_an_actor_that_survives_every_kill() -> None:
         patch.object(task_terminator.klein, "kill_actor_by_name") as kill_by_name,
         patch.object(task_terminator, "_KILL_ACTOR_MAX_RETRIES", 2),
         patch.object(task_terminator, "_KILL_ACTOR_RETRY_DELAY", 0),
-        pytest.raises(RuntimeError, match="failed to stop operator actor"),
+        pytest.raises(TeardownError, match="failed to stop operator actor"),
     ):
         task_terminator.stop_job_vertex(
             target,
@@ -312,7 +316,7 @@ def test_whole_job_terminator_reports_actors_that_survive_every_kill() -> None:
         ),
         patch.object(task_terminator.klein, "kill_actor_by_name"),
         patch.object(task_terminator, "_KILL_ACTOR_MAX_RETRIES", 1),
-        pytest.raises(RuntimeError, match="failed to stop job actor"),
+        pytest.raises(TeardownError, match="failed to stop worker actor"),
     ):
         task_terminator.force_kill_survivors(graph)
 
@@ -495,6 +499,10 @@ def test_job_master_prewarms_only_added_actors_before_the_rescale_barrier() -> N
 def test_candidate_readiness_timeout_rolls_back_before_checkpoint_gate() -> None:
     logical, old_graph = _graphs(2)
     retained_handles = _mark_target_running(old_graph)
+    source = old_graph.job_vertex(1).execution_vertex(0)
+    source.stream_task = MagicMock(name="source-task")
+    source.transition_to(ExecutionVertexStatus.DEPLOYED)
+    source.transition_to(ExecutionVertexStatus.RUNNING)
     new_graph = old_graph.rescale_operator(logical.rescale_operator(2, 3), 2)
     new_target = new_graph.job_vertex(2)
     added = (new_target.execution_vertex(2),)
@@ -504,6 +512,7 @@ def test_candidate_readiness_timeout_rolls_back_before_checkpoint_gate() -> None
     master = JobMaster(old_graph, Configuration(include_environment=False))
     master.coordinator = MagicMock()
     master._recovery = MagicMock()
+    master.placement_plan = NativeStrategy().plan(old_graph)
     timeout = master._schedule_start_timeout
 
     with (
@@ -529,28 +538,37 @@ def test_candidate_readiness_timeout_rolls_back_before_checkpoint_gate() -> None
         patch.object(task_terminator, "stop_job_vertex", wraps=task_terminator.stop_job_vertex) as stop,
         pytest.raises(DeploymentError) as raised,
     ):
-        master.rescale_operator(new_graph, "resize-1")
+        master.rescale_operator(2, 3, "resize-1")
 
     assert raised.value is readiness_error
     create.assert_called_once()
-    wait_created.assert_called_once_with(new_target, timeout, vertices=added)
+    wait_created.assert_called_once()
+    candidate_target, readiness_timeout = wait_created.call_args.args
+    candidate_vertices = wait_created.call_args.kwargs["vertices"]
+    assert candidate_target.id == new_target.id
+    assert 0 < readiness_timeout <= timeout
+    assert tuple(vertex.id for vertex in candidate_vertices) == tuple(vertex.id for vertex in added)
     start.assert_not_called()
-    stop.assert_called_once_with(
-        new_target,
-        new_graph.namespace,
-        timeout,
-        force=True,
-        vertices=added,
-    )
-    kill.assert_called_once_with(candidate_handle)
-    assert added[0].stream_task is None
-    assert added[0].status == ExecutionVertexStatus.CANCELLED
+    stop.assert_called_once()
+    stopped_target, stopped_namespace, stop_timeout = stop.call_args.args
+    assert stopped_target is candidate_target
+    assert stopped_namespace == new_graph.namespace
+    assert 0 < stop_timeout <= timeout
+    assert stop.call_args.kwargs == {"force": True, "vertices": candidate_vertices}
+    kill.assert_called_once()
+    assert kill.call_args.args == (candidate_handle,)
+    assert 0 < kill.call_args.kwargs["timeout"] <= timeout
+    assert candidate_vertices[0].stream_task is None
+    assert candidate_vertices[0].status == ExecutionVertexStatus.CANCELLED
     assert master._pending_rescale_actor_cleanup == {}
 
     assert master.execution_graph is old_graph
     assert tuple(old_graph.job_vertex(2).execution_vertex(index).stream_task for index in range(2)) == retained_handles
     replace_recovery_graph.assert_called_once_with(old_graph)
-    discard_local_state.assert_called_once_with("resize-1", 2)
+    discard_local_state.assert_called_once()
+    discarded_operation, discarded_target, discard_timeout = discard_local_state.call_args.args
+    assert (discarded_operation, discarded_target) == ("resize-1", 2)
+    assert 0 < discard_timeout <= timeout
 
     master.coordinator.begin_operator_rescale.assert_not_called()
     master.coordinator.reconfigure_execution_graph.assert_not_called()

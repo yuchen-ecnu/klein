@@ -48,6 +48,7 @@ def _task(*, output=...) -> SourceStreamTask:
     task._checkpoint_request_lock = threading.Lock()
     task._resolved_checkpoint_floor = 0
     task._checkpoint_wait_stop = threading.Event()
+    task._source_exhausted = threading.Event()
     task._rescale_operation_id = None
     task._rescale_role = None
     task._rescale_edge_indices = ()
@@ -82,6 +83,7 @@ def test_constructor_initializes_source_coordination_state() -> None:
     assert list(task._requested_checkpoint_ids) == []
     assert task._resolved_checkpoint_floor == 0
     assert not task._checkpoint_wait_stop.is_set()
+    assert not task._source_exhausted.is_set()
 
 
 def test_source_operator_property_rejects_non_source_operator() -> None:
@@ -98,6 +100,7 @@ def test_source_operator_property_rejects_non_source_operator() -> None:
 async def test_setup_binds_emitter_and_optionally_restores_source_state(restore) -> None:
     task = _task()
     task._checkpoint_wait_stop.set()
+    task._source_exhausted.set()
     task._state.checkpoint_strategy.restore_source_state_async.return_value = restore
 
     await task._on_setup_done(MagicMock())
@@ -106,6 +109,7 @@ async def test_setup_binds_emitter_and_optionally_restores_source_state(restore)
     assert task._state.operator.bind_record_emitter.call_args.args[0].__self__ is task
     assert task._source_rescale_loop is asyncio.get_running_loop()
     assert not task._checkpoint_wait_stop.is_set()
+    assert not task._source_exhausted.is_set()
     if restore is None:
         task._state.operator.restore_state.assert_not_called()
     else:
@@ -115,13 +119,47 @@ async def test_setup_binds_emitter_and_optionally_restores_source_state(restore)
 @pytest.mark.asyncio
 async def test_run_executes_blocking_source_then_stops() -> None:
     task = _task()
-    task._run_source = Mock()
+    task._run_source = Mock(side_effect=lambda: setattr(task, "_eof_reached", True))
+    task.report_eof_finished = AsyncMock()
     task.stop = AsyncMock()
 
     await task._run()
 
     task._run_source.assert_called_once_with()
+    task.report_eof_finished.assert_awaited_once_with()
     task.stop.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_run_without_terminal_eof_stops_without_reporting_finished() -> None:
+    task = _task()
+    task._run_source = Mock()
+    task.report_eof_finished = AsyncMock()
+    task.stop = AsyncMock()
+
+    await task._run()
+
+    task.report_eof_finished.assert_not_awaited()
+    task.stop.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_report_eof_finished_awaits_status_rpc_with_generation() -> None:
+    task = _task()
+    status_ref = object()
+    task._job_manager.update_stream_task_status.return_value = status_ref
+    aget = AsyncMock()
+
+    with patch("ray.klein.runtime.worker.stream_task.klein.aget", new=aget):
+        await task.report_eof_finished()
+
+    task._job_manager.update_stream_task_status.assert_called_once_with(
+        task._vertex_id,
+        ExecutionVertexStatus.FINISHED,
+        task_name="source-1",
+        task_generation=4,
+    )
+    aget.assert_awaited_once_with(status_ref)
 
 
 @pytest.mark.asyncio
@@ -222,36 +260,26 @@ def test_run_source_returns_immediately_after_stop_interrupt() -> None:
     task._job_manager.update_stream_task_status.assert_not_called()
 
 
-def test_run_source_without_output_reports_finished() -> None:
+def test_run_source_without_output_marks_eof_without_blocking_status_rpc() -> None:
     task = _task(output=None)
-    status_ref = object()
-    task._job_manager.update_stream_task_status.return_value = status_ref
 
-    with patch("ray.klein.runtime.worker.source_stream_task.klein.get", return_value=None) as get:
-        task._run_source()
+    task._run_source()
 
-    get.assert_called_once_with(status_ref)
-    task._job_manager.update_stream_task_status.assert_called_once_with(
-        task._vertex_id,
-        ExecutionVertexStatus.FINISHED,
-        task_name="source-1",
-        task_generation=4,
-    )
+    task._job_manager.update_stream_task_status.assert_not_called()
     assert task._eof_reached is True
 
 
-def test_run_source_emits_terminal_watermark_barrier_and_status() -> None:
+def test_run_source_emits_terminal_watermark_barrier_and_marks_eof() -> None:
     task = _task()
     terminal = Barrier(10, task._vertex_id)
     task._pop_requested_checkpoint = Mock(return_value=9)
     task._await_terminal_barrier = Mock(return_value=terminal)
 
-    with patch("ray.klein.runtime.worker.source_stream_task.klein.get"):
-        task._run_source()
+    task._run_source()
 
     assert task._state.output.collect.call_args_list == [call(Watermark(MAX_WATERMARK)), call(terminal)]
     task._await_terminal_barrier.assert_called_once_with(9)
-    task._job_manager.update_stream_task_status.assert_called_once()
+    task._job_manager.update_stream_task_status.assert_not_called()
     assert task._eof_reached is True
 
 

@@ -56,3 +56,9 @@ msgid ""
 "Do not publish from an unclean worktree or reuse a version already uploaded "
 "to PyPI. Test releases should use a PEP 440 pre-release version."
 msgstr "不要从不干净的工作树发布，也不要复用已上传至 PyPI 的版本。测试版本应使用符合 PEP 440 的预发布版本号。"
+
+msgid "Build with `python -m build`, run `python scripts/check_distribution.py dist/*`, and inspect both archives for `LICENSE`, `NOTICE`, expected package data, and absence of credentials, workflows, caches, or private endpoints."
+msgstr "使用 `python -m build` 构建，运行 `python scripts/check_distribution.py dist/*`，并检查两种归档均包含 `LICENSE`、`NOTICE` 和预期的包数据，同时不包含凭据、工作流、缓存或私有端点。"
+
+msgid "Verify the CycloneDX SBOM, `SHA256SUMS`, GitHub build-provenance attestation, immutable GitHub release assets, and PyPI Trusted Publisher provenance."
+msgstr "验证 CycloneDX SBOM、`SHA256SUMS`、GitHub 构建来源证明、不可变的 GitHub Release 资产以及 PyPI Trusted Publisher 来源信息。"

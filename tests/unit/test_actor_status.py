@@ -30,9 +30,19 @@ class GetActorStatusTest(unittest.TestCase):
         actor = mock.MagicMock()
         with (
             mock.patch.object(w_mod.ray, "get_actor", return_value=actor),
-            mock.patch.object(w_mod.ray, "get", return_value="pong"),
+            mock.patch.object(w_mod.ray, "get", return_value="pong") as get,
         ):
-            self.assertEqual(w_mod.get_actor_status("up"), StreamTaskStatus.ALIVE)
+            self.assertEqual(w_mod.get_actor_status("up", timeout=0.01), StreamTaskStatus.ALIVE)
+        get.assert_called_once_with(actor.ping.remote.return_value, timeout=0.01)
+
+    def test_zero_timeout_conservatively_skips_the_ping(self):
+        actor = mock.MagicMock()
+        with (
+            mock.patch.object(w_mod.ray, "get_actor", return_value=actor),
+            mock.patch.object(w_mod.ray, "get") as get,
+        ):
+            self.assertEqual(w_mod.get_actor_status("up", timeout=0), StreamTaskStatus.DEAD)
+        get.assert_not_called()
 
     def test_dead_when_ping_times_out(self):
         # Exists by name but ping fails -> being rebuilt -> DEAD (recoverable).

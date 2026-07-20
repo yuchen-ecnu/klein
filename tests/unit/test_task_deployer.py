@@ -17,6 +17,7 @@ from ray.klein.runtime.graph.edge_spec import EdgeSpec
 from ray.klein.runtime.graph.logical_graph_builder import LogicalGraphBuilder
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
+from ray.klein.runtime.message import DeliveryChannel
 from ray.klein.runtime.operator.operator import StreamOperator
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.operator.operator_type import OperatorType
@@ -129,6 +130,10 @@ def test_build_descriptor_preserves_routing_buffer_and_identity_data() -> None:
     assert descriptor.output_queue is target.output_queue
     assert descriptor.namespace == "deploy-ns"
     assert descriptor.input_vertex_ids == source_ids
+    assert descriptor.input_channels == tuple(
+        DeliveryChannel(source.id, source.name, 0, vertex.index, "topology-epoch-2")
+        for source in graph.job_vertex(1).execution_vertices.values()
+    )
     assert descriptor.restore_operation_id == "restore-7"
     assert len(descriptor.out_edges) == 1
     edge = descriptor.out_edges[0]
@@ -148,6 +153,7 @@ def test_build_descriptor_for_source_and_sink_has_exact_boundary_fields() -> Non
     sink_descriptor = task_deployer.build_descriptor(graph, sink, sink.execution_vertex(0))
 
     assert source_descriptor.input_vertex_ids == ()
+    assert source_descriptor.input_channels == ()
     assert source_descriptor.out_edges[0].target_task_names == tuple(
         vertex.name for vertex in graph.job_vertex(2).execution_vertices.values()
     )
@@ -157,6 +163,32 @@ def test_build_descriptor_for_source_and_sink_has_exact_boundary_fields() -> Non
     assert sink_descriptor.out_edges == ()
     assert sink_descriptor.input_vertex_ids == tuple(
         vertex.id for vertex in graph.job_vertex(2).execution_vertices.values()
+    )
+    assert sink_descriptor.input_channels == tuple(
+        DeliveryChannel(vertex.id, vertex.name, 0, 0, "topology-epoch-2")
+        for vertex in graph.job_vertex(2).execution_vertices.values()
+    )
+
+
+def test_build_descriptor_uses_the_sender_output_edge_index() -> None:
+    config = Configuration(include_environment=False)
+    builder = LogicalGraphBuilder("deploy-test", config)
+    source = _vertex(1, NodeType.SOURCE, 2)
+    side_sink = _vertex(2, NodeType.SINK, 1)
+    target_sink = _vertex(3, NodeType.SINK, 1)
+    for spec in (source, side_sink, target_sink):
+        builder.add_vertex(spec)
+    builder.add_edge(EdgeSpec(source.id, side_sink.id, RoundRobinPartitioner().to_spec()))
+    builder.add_edge(EdgeSpec(source.id, target_sink.id, RoundRobinPartitioner().to_spec()))
+    graph = ExecutionGraph.expand(builder.build(), config, JobMetricGroup("deploy-test"), "deploy-ns")
+    graph.mark_rescale_epoch(3, "target-epoch")
+    target = graph.job_vertex(3)
+
+    descriptor = task_deployer.build_descriptor(graph, target, target.execution_vertex(0))
+
+    assert descriptor.input_channels == tuple(
+        DeliveryChannel(vertex.id, vertex.name, 1, 0, "target-epoch")
+        for vertex in graph.job_vertex(1).execution_vertices.values()
     )
 
 

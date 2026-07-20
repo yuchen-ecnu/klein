@@ -122,10 +122,11 @@ class CheckpointStrategy(ABC):
         self,
         barrier_splits: dict[ExecutionVertexId, int],
         input_vertex_ids: tuple[ExecutionVertexId, ...] | None = None,
+        input_channels: Iterable[DeliveryChannel] | None = None,
     ) -> None:
         """Replace physical-input alignment counts at a quiescent rescale cut."""
 
-        del barrier_splits, input_vertex_ids
+        del barrier_splits, input_vertex_ids, input_channels
         raise NotImplementedError(f"{type(self).__name__} does not support runtime topology changes")
 
     def validate_barrier_reconfiguration(self) -> None:
@@ -133,10 +134,14 @@ class CheckpointStrategy(ABC):
 
         return
 
-    def reconfigure_barrier_inputs(self, input_vertex_ids: Iterable[ExecutionVertexId]) -> None:
+    def reconfigure_barrier_inputs(
+        self,
+        input_vertex_ids: Iterable[ExecutionVertexId],
+        input_channels: Iterable[DeliveryChannel] | None = None,
+    ) -> None:
         """Replace direct physical inputs at a quiescent topology cut."""
 
-        del input_vertex_ids
+        del input_vertex_ids, input_channels
         raise NotImplementedError(f"{type(self).__name__} does not support runtime topology changes")
 
     def reset_inflight_before(self, cutoff_barrier_id: int) -> int:
@@ -186,6 +191,7 @@ class _BarrierAligner:
         self,
         barrier_splits: dict[ExecutionVertexId, int],
         input_vertex_ids: Iterable[ExecutionVertexId] | None = None,
+        input_channels: Iterable[DeliveryChannel] | None = None,
     ) -> None:
         inputs = None if input_vertex_ids is None else tuple(input_vertex_ids)
         self._split = dict(barrier_splits)
@@ -194,14 +200,24 @@ class _BarrierAligner:
         self._coordinated_inflight: dict[int, Counter[ExecutionVertexId]] = {}
         self._coordinated_channels: dict[int, set[object]] = {}
         self._last_coordinated_barrier_id = -1
-        self._direct_input_vertex_ids = None if inputs is None else frozenset(inputs)
-        self._direct_inflight: dict[int, dict[ExecutionVertexId, bool]] = {}
-        self._direct_expected: dict[int, frozenset[ExecutionVertexId]] = {}
+        self._direct_input_vertex_ids = None if inputs is None else Counter(inputs)
+        self._direct_inflight: dict[int, dict[object, tuple[ExecutionVertexId, bool]]] = {}
+        self._direct_expected: dict[int, Counter[ExecutionVertexId]] = {}
         self._direct_resolved_through = -1
-        self._terminal_inputs: set[ExecutionVertexId] = set()
+        self._terminal_inputs: Counter[ExecutionVertexId] = Counter()
+        self._terminal_input_channels: set[object] = set()
+        # Removed terminal lanes remain tombstoned so a delayed old-topology RPC
+        # is ignored instead of failing the task or satisfying a new epoch.
+        self._retired_terminal_input_channels: set[object] = set()
+        self._retired_input_channels: set[DeliveryChannel] = set()
+        self._configured_input_channels: frozenset[DeliveryChannel] | None = None
         self._last_aligned_id: int | None = None
         self._last_alignment_is_terminal = False
         self._eof_from_src: dict[ExecutionVertexId, bool] = dict.fromkeys(barrier_splits, False)
+        if input_channels is not None:
+            if self._direct_input_vertex_ids is None:
+                raise ValueError("checkpoint input channels require input vertex ids")
+            self._reconfigure_terminal_inputs(self._direct_input_vertex_ids, input_channels)
 
     def _expected(self, source_id: ExecutionVertexId) -> int:
         return self._split.get(source_id, 1)
@@ -219,7 +235,7 @@ class _BarrierAligner:
         if barrier.coordinated:
             return self._receive_coordinated(barrier, sender_vertex_id, delivery_channel)
         if sender_vertex_id is not None:
-            return self._receive_direct(barrier, sender_vertex_id)
+            return self._receive_direct(barrier, sender_vertex_id, delivery_channel)
         count = self._inflight.pop(barrier.id, 0) + 1
         if count >= self._expected(barrier.source_id):
             return True
@@ -241,9 +257,15 @@ class _BarrierAligner:
             return True
         if sender_vertex_id is None:
             raise ValueError("a coordinated checkpoint barrier requires its direct sender identity")
+        channel = delivery_channel or sender_vertex_id
+        if delivery_channel is not None and delivery_channel.sender_vertex_id != sender_vertex_id:
+            raise ValueError("checkpoint delivery_channel does not match its sender")
+        if channel in self._retired_input_channels:
+            return False
+        if self._configured_input_channels is not None and channel not in self._configured_input_channels:
+            raise RuntimeError(f"unexpected checkpoint delivery channel {channel}")
         if sender_vertex_id not in self._input_vertex_ids:
             raise ValueError(f"unexpected coordinated checkpoint sender {sender_vertex_id}")
-        channel = delivery_channel or sender_vertex_id
         channels = self._coordinated_channels.setdefault(barrier.id, set())
         if channel in channels:
             return False
@@ -257,43 +279,213 @@ class _BarrierAligner:
         self._last_coordinated_barrier_id = barrier.id
         return True
 
-    def _receive_direct(self, barrier: Barrier, sender_vertex_id: ExecutionVertexId) -> bool:
+    def _receive_direct(
+        self,
+        barrier: Barrier,
+        sender_vertex_id: ExecutionVertexId,
+        delivery_channel: DeliveryChannel | None,
+    ) -> bool:
         inputs = self._direct_input_vertex_ids
-        if inputs is not None and sender_vertex_id not in inputs:
-            raise RuntimeError(f"unexpected checkpoint barrier sender {sender_vertex_id}")
         if barrier.id <= self._direct_resolved_through:
             return False
+
+        channel = self._direct_channel(barrier, sender_vertex_id, delivery_channel, inputs)
+        if (
+            channel in self._terminal_input_channels
+            or channel in self._retired_terminal_input_channels
+            or channel in self._retired_input_channels
+        ):
+            return False
+        if self._configured_input_channels is not None and channel not in self._configured_input_channels:
+            raise RuntimeError(f"unexpected checkpoint delivery channel {channel}")
+        if inputs is not None and sender_vertex_id not in inputs:
+            raise RuntimeError(f"unexpected checkpoint barrier sender {sender_vertex_id}")
+        self._retire_replaced_terminal_channel(channel)
         if self._direct_inflight and barrier.id not in self._direct_inflight:
-            current = min(self._direct_inflight)
-            raise RuntimeError(f"checkpoint barrier {barrier.id} arrived before epoch {current} aligned")
+            current_barrier_id = min(self._direct_inflight)
+            raise RuntimeError(f"checkpoint barrier {barrier.id} arrived before epoch {current_barrier_id} aligned")
 
         seen = self._direct_inflight.setdefault(barrier.id, {})
         terminal = isinstance(barrier, EndOfData)
-        previous = seen.get(sender_vertex_id)
+        previous = seen.get(channel)
+        incoming = (sender_vertex_id, terminal)
         if previous is not None:
-            if previous != terminal:
-                raise RuntimeError(f"checkpoint barrier {barrier.id} from {sender_vertex_id} changed terminal kind")
+            if previous != incoming:
+                raise RuntimeError(
+                    f"checkpoint barrier {barrier.id} on channel {channel} changed sender or terminal kind"
+                )
             return False
-        seen[sender_vertex_id] = terminal
+        seen[channel] = incoming
 
-        if inputs is None:
-            aligned = len(seen) >= self._expected(barrier.source_id)
-        else:
-            expected = self._direct_expected.setdefault(
-                barrier.id,
-                frozenset(inputs.difference(self._terminal_inputs)),
-            )
-            aligned = seen.keys() >= expected
-        if not aligned:
+        if not self._direct_alignment_complete(barrier, seen, inputs):
             return False
 
-        self._direct_inflight.pop(barrier.id, None)
-        self._direct_expected.pop(barrier.id, None)
-        self._direct_resolved_through = barrier.id
-        self._terminal_inputs.update(sender for sender, is_terminal in seen.items() if is_terminal)
-        self._last_aligned_id = barrier.id
-        self._last_alignment_is_terminal = inputs is not None and self._terminal_inputs >= inputs
+        self._complete_direct_alignment(barrier.id, seen, inputs)
         return True
+
+    def _direct_channel(
+        self,
+        barrier: Barrier,
+        sender_vertex_id: ExecutionVertexId,
+        delivery_channel: DeliveryChannel | None,
+        inputs: Counter[ExecutionVertexId] | None,
+    ) -> object:
+        expected_multiplicity = self._expected(barrier.source_id) if inputs is None else inputs[sender_vertex_id]
+        if delivery_channel is None:
+            if expected_multiplicity > 1:
+                raise ValueError(
+                    f"checkpoint sender {sender_vertex_id} has {expected_multiplicity} input lanes; "
+                    "delivery_channel is required"
+                )
+            return sender_vertex_id
+        if delivery_channel.sender_vertex_id != sender_vertex_id:
+            raise ValueError("checkpoint delivery_channel does not match its sender")
+        return delivery_channel
+
+    def _direct_alignment_complete(
+        self,
+        barrier: Barrier,
+        seen: dict[object, tuple[ExecutionVertexId, bool]],
+        inputs: Counter[ExecutionVertexId] | None,
+    ) -> bool:
+        if inputs is None:
+            return len(seen) >= self._expected(barrier.source_id)
+        expected = self._direct_expected.setdefault(
+            barrier.id,
+            inputs - self._terminal_inputs,
+        )
+        observed = Counter(sender for sender, _terminal in seen.values())
+        return all(observed[sender] >= count for sender, count in expected.items())
+
+    def _complete_direct_alignment(
+        self,
+        barrier_id: int,
+        seen: dict[object, tuple[ExecutionVertexId, bool]],
+        inputs: Counter[ExecutionVertexId] | None,
+    ) -> None:
+        self._direct_inflight.pop(barrier_id, None)
+        self._direct_expected.pop(barrier_id, None)
+        self._direct_resolved_through = barrier_id
+        for input_channel, (_sender, is_terminal) in seen.items():
+            if not is_terminal or input_channel in self._terminal_input_channels:
+                continue
+            self._terminal_input_channels.add(input_channel)
+            self._retired_terminal_input_channels.discard(input_channel)
+        self._rebuild_terminal_inputs()
+        self._last_aligned_id = barrier_id
+        self._last_alignment_is_terminal = inputs is not None and all(
+            self._terminal_inputs[sender] >= count for sender, count in inputs.items()
+        )
+
+    @staticmethod
+    def _terminal_channel_sender(channel: object) -> ExecutionVertexId | None:
+        if isinstance(channel, DeliveryChannel):
+            sender = channel.sender_vertex_id
+            return sender if isinstance(sender, ExecutionVertexId) else None
+        return channel if isinstance(channel, ExecutionVertexId) else None
+
+    @staticmethod
+    def _delivery_lane_coordinates(channel: DeliveryChannel) -> tuple[object, str, int, int]:
+        """Identify one route independently of its topology incarnation."""
+
+        return (
+            channel.sender_vertex_id,
+            channel.sender_task_name,
+            channel.edge_index,
+            channel.target_index,
+        )
+
+    def _retire_replaced_terminal_channel(self, channel: object) -> None:
+        """Prevent a new topology incarnation from inheriting an old EOF.
+
+        ``DeliveryChannel`` equality includes ``topology_epoch``.  An exact
+        channel therefore denotes the same physical lane and remains terminal;
+        the same route coordinates with a different epoch denote a new lane.
+        """
+
+        if not isinstance(channel, DeliveryChannel):
+            return
+        coordinates = self._delivery_lane_coordinates(channel)
+        replaced = {
+            terminal
+            for terminal in self._terminal_input_channels
+            if isinstance(terminal, DeliveryChannel)
+            and self._delivery_lane_coordinates(terminal) == coordinates
+            and terminal.topology_epoch != channel.topology_epoch
+        }
+        if not replaced:
+            return
+        self._terminal_input_channels.difference_update(replaced)
+        self._retired_terminal_input_channels.update(replaced)
+        self._rebuild_terminal_inputs()
+
+    def _rebuild_terminal_inputs(self) -> None:
+        """Derive the sender Counter exclusively from current terminal lanes."""
+
+        self._terminal_inputs = Counter(
+            sender
+            for channel in self._terminal_input_channels
+            if (sender := self._terminal_channel_sender(channel)) is not None
+        )
+
+    def _reconfigure_terminal_inputs(
+        self,
+        inputs: Counter[ExecutionVertexId],
+        input_channels: Iterable[DeliveryChannel] | None,
+    ) -> None:
+        """Retain EOF only for physical lanes present in the new topology.
+
+        Callers that know the complete channel inventory should provide it.  An
+        exact ``DeliveryChannel`` (including ``topology_epoch``) preserves EOF;
+        a removed channel is tombstoned and a newly-added channel starts active.
+        The vertex-only compatibility path retains at most the new multiplicity
+        for each still-present sender and never transfers EOF to a new sender.
+        """
+
+        candidates = set(self._terminal_input_channels)
+        configured: frozenset[DeliveryChannel] | None = None
+        if input_channels is not None:
+            channels = tuple(input_channels)
+            if len(channels) != len(set(channels)):
+                raise ValueError("checkpoint input channels cannot contain duplicates")
+            channel_inputs: Counter[ExecutionVertexId] = Counter()
+            for channel in channels:
+                if not isinstance(channel, DeliveryChannel):
+                    raise TypeError("checkpoint input channels must contain DeliveryChannel values")
+                sender = self._terminal_channel_sender(channel)
+                if sender is None:
+                    raise TypeError("checkpoint delivery channels require an ExecutionVertexId sender")
+                channel_inputs[sender] += 1
+            if channel_inputs != inputs:
+                raise ValueError("checkpoint input channel inventory does not match input vertex multiplicity")
+            configured = frozenset(channels)
+            if self._configured_input_channels is not None:
+                self._retired_input_channels.update(self._configured_input_channels.difference(configured))
+            self._retired_input_channels.difference_update(configured)
+            # An exact lane explicitly restored after an earlier topology can
+            # retain its terminal state; a new topology epoch is a new identity.
+            candidates.update(self._retired_terminal_input_channels.intersection(configured))
+            retained = candidates.intersection(configured)
+        else:
+            self._retired_input_channels.clear()
+            remaining = inputs.copy()
+            retained = set()
+            for channel in sorted(candidates, key=repr):
+                sender = self._terminal_channel_sender(channel)
+                if sender is None or remaining[sender] <= 0:
+                    continue
+                retained.add(channel)
+                remaining[sender] -= 1
+
+        removed = candidates.difference(retained)
+        self._retired_terminal_input_channels.update(removed)
+        self._retired_terminal_input_channels.difference_update(retained)
+        self._terminal_input_channels = retained
+        self._configured_input_channels = configured
+        self._rebuild_terminal_inputs()
+        self._last_alignment_is_terminal = bool(inputs) and all(
+            self._terminal_inputs[sender] >= count for sender, count in inputs.items()
+        )
 
     def receive_eof(self, barrier: EndOfData) -> bool:
         """Mark a source's eof; return True once every source has sent eof."""
@@ -371,6 +563,7 @@ class _BarrierAligner:
         self,
         barrier_splits: dict[ExecutionVertexId, int],
         input_vertex_ids: Iterable[ExecutionVertexId] | None = None,
+        input_channels: Iterable[DeliveryChannel] | None = None,
     ) -> None:
         """Install a new topology after every old-topology barrier completed."""
 
@@ -380,16 +573,23 @@ class _BarrierAligner:
         if input_vertex_ids is not None:
             inputs = tuple(input_vertex_ids)
             self._input_vertex_ids = Counter(inputs)
-            self._direct_input_vertex_ids = frozenset(inputs)
+            self._direct_input_vertex_ids = Counter(inputs)
+            self._reconfigure_terminal_inputs(self._direct_input_vertex_ids, input_channels)
+        elif input_channels is not None:
+            raise ValueError("checkpoint input channels require input vertex ids")
         self._eof_from_src = {source_id: previous_eof.get(source_id, False) for source_id in barrier_splits}
 
-    def reconfigure_inputs(self, input_vertex_ids: Iterable[ExecutionVertexId]) -> None:
+    def reconfigure_inputs(
+        self,
+        input_vertex_ids: Iterable[ExecutionVertexId],
+        input_channels: Iterable[DeliveryChannel] | None = None,
+    ) -> None:
         self.validate_reconfiguration()
         inputs = tuple(input_vertex_ids)
         self._input_vertex_ids = Counter(inputs)
-        direct_inputs = frozenset(inputs)
+        direct_inputs = Counter(inputs)
         self._direct_input_vertex_ids = direct_inputs
-        self._terminal_inputs.intersection_update(direct_inputs)
+        self._reconfigure_terminal_inputs(direct_inputs, input_channels)
 
     def validate_reconfiguration(self) -> None:
         if self._inflight or self._coordinated_inflight or self._direct_inflight:
@@ -529,11 +729,12 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
         synchronous_notify: bool = False,
         metric_group: MetricGroup | None = None,
         input_vertex_ids: Iterable[ExecutionVertexId] | None = None,
+        input_channels: Iterable[DeliveryChannel] | None = None,
     ) -> None:
         self._vertex_id = vertex_id
         self._operator_type = operator_type
         self._is_committer = is_committer
-        self._aligner = _BarrierAligner(barrier_splits, input_vertex_ids)
+        self._aligner = _BarrierAligner(barrier_splits, input_vertex_ids, input_channels)
         config = config if config is not None else Configuration()
         async_notify = config.get(CheckpointOptions.ASYNC_NOTIFY) and not synchronous_notify
         self._coordinator = _CoordinatorClient(coordinator, vertex_id, async_notify=async_notify)
@@ -598,11 +799,16 @@ class AlignedCheckpointStrategy(CheckpointStrategy):
         self,
         barrier_splits: dict[ExecutionVertexId, int],
         input_vertex_ids: Iterable[ExecutionVertexId] | None = None,
+        input_channels: Iterable[DeliveryChannel] | None = None,
     ) -> None:
-        self._aligner.reconfigure(barrier_splits, input_vertex_ids)
+        self._aligner.reconfigure(barrier_splits, input_vertex_ids, input_channels)
 
-    def reconfigure_barrier_inputs(self, input_vertex_ids: Iterable[ExecutionVertexId]) -> None:
-        self._aligner.reconfigure_inputs(input_vertex_ids)
+    def reconfigure_barrier_inputs(
+        self,
+        input_vertex_ids: Iterable[ExecutionVertexId],
+        input_channels: Iterable[DeliveryChannel] | None = None,
+    ) -> None:
+        self._aligner.reconfigure_inputs(input_vertex_ids, input_channels)
 
     def validate_barrier_reconfiguration(self) -> None:
         self._aligner.validate_reconfiguration()

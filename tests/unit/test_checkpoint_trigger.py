@@ -69,6 +69,31 @@ class CheckpointTriggerTest(unittest.TestCase):
         clock.advance(1)
         self.assertTrue(trig.should_trigger(record_emitted=False))  # 10s since reset
 
+    def test_explicit_reset_discards_partial_record_count(self):
+        clock = _FakeClock()
+        trig = CheckpointTrigger(interval_records=3, interval_seconds=0, clock=clock)
+        self.assertFalse(trig.should_trigger(record_emitted=True))
+        self.assertFalse(trig.should_trigger(record_emitted=True))
+
+        trig.reset()
+
+        self.assertFalse(trig.should_trigger(record_emitted=True))
+        self.assertFalse(trig.should_trigger(record_emitted=True))
+        self.assertTrue(trig.should_trigger(record_emitted=True))
+
+    def test_explicit_reset_restarts_time_threshold_at_current_clock(self):
+        clock = _FakeClock()
+        trig = CheckpointTrigger(interval_records=0, interval_seconds=10, clock=clock)
+        clock.advance(8)
+        self.assertFalse(trig.should_trigger(record_emitted=False))
+
+        trig.reset()
+
+        clock.advance(9)
+        self.assertFalse(trig.should_trigger(record_emitted=False))
+        clock.advance(1)
+        self.assertTrue(trig.should_trigger(record_emitted=False))
+
     def test_both_disabled_never_fires(self):
         clock = _FakeClock()
         trig = CheckpointTrigger(interval_records=0, interval_seconds=0, clock=clock)

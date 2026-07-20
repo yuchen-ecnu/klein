@@ -2,11 +2,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 
 from ray.klein.api.sink_committable import SinkCommittable
 
 TRANSACTION_ID_SNAPSHOT_PROPERTY = "ray-klein.transaction-id"
+
+# ``asyncio.to_thread`` cannot cancel an append that has already entered the
+# catalog.  A checkpoint retry can therefore overlap the timed-out call.  Keep
+# commits to one logical table serialized in this process so the retry observes
+# the first call's transaction marker instead of racing the check-and-append.
+_TABLE_COMMIT_LOCKS_GUARD = Lock()
+_TABLE_COMMIT_LOCKS: dict[str, Lock] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +54,31 @@ def _commit_arrow_payloads(
     arrow_ipcs: tuple[bytes, ...],
     transaction_id: str,
 ) -> None:
+    with _table_commit_lock(table_identifier):
+        _commit_arrow_payloads_locked(
+            table_identifier=table_identifier,
+            catalog_kwargs=catalog_kwargs,
+            snapshot_properties=snapshot_properties,
+            arrow_ipcs=arrow_ipcs,
+            transaction_id=transaction_id,
+        )
+
+
+def _table_commit_lock(table_identifier: str) -> Lock:
+    """Return the process-local lock for one logical Iceberg table."""
+
+    with _TABLE_COMMIT_LOCKS_GUARD:
+        return _TABLE_COMMIT_LOCKS.setdefault(table_identifier, Lock())
+
+
+def _commit_arrow_payloads_locked(
+    *,
+    table_identifier: str,
+    catalog_kwargs: dict[str, Any] | None,
+    snapshot_properties: dict[str, str] | None,
+    arrow_ipcs: tuple[bytes, ...],
+    transaction_id: str,
+) -> None:
     catalog = _load_catalog(catalog_kwargs)
     table = catalog.load_table(table_identifier)
     if _snapshot_exists(table, transaction_id):
@@ -62,7 +95,22 @@ def _commit_arrow_payloads(
 
     properties = dict(snapshot_properties or {})
     properties[TRANSACTION_ID_SNAPSHOT_PROPERTY] = transaction_id
-    table.append(_align_arrow_schema(table, arrow_table), snapshot_properties=properties)
+    try:
+        table.append(_align_arrow_schema(table, arrow_table), snapshot_properties=properties)
+    except Exception as error:
+        # Another coordinator process can win the optimistic Iceberg commit
+        # after our initial lookup.  Treat that conflict (or an indeterminate
+        # commit response) as success only when a fresh table view proves this
+        # exact transaction is already durable.
+        try:
+            from pyiceberg.exceptions import CommitFailedException, CommitStateUnknownException
+        except ModuleNotFoundError:
+            raise error from None
+        if not isinstance(error, (CommitFailedException, CommitStateUnknownException)):
+            raise
+        refreshed = catalog.load_table(table_identifier)
+        if not _snapshot_exists(refreshed, transaction_id):
+            raise
 
 
 def _concatenate_arrow_payloads(payloads: tuple[bytes, ...]) -> Any:

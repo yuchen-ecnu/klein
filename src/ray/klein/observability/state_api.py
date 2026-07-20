@@ -90,9 +90,12 @@ def submit_operator_rescale(
     actor = get_state_actor()
     if actor is None:
         return None
-    return ray.get(
-        actor.submit_operator_rescale.remote(job_id, operator_id, parallelism, timeout),
-        timeout=timeout + _CONTROL_RESPONSE_GRACE_SECONDS,
+    return cast(
+        dict[str, Any] | None,
+        ray.get(
+            actor.submit_operator_rescale.remote(job_id, operator_id, parallelism, timeout),
+            timeout=timeout + _CONTROL_RESPONSE_GRACE_SECONDS,
+        ),
     )
 
 

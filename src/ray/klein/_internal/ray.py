@@ -6,6 +6,7 @@ from typing import Any
 
 import ray
 from ray import ObjectRef
+from ray.klein._internal.deadline import Deadline
 from ray.klein._internal.logging import get_logger
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.config.environment_variables import EnvironmentVariables
@@ -13,6 +14,7 @@ from ray.klein.runtime.actor import (
     KleinActorHandle,
     is_local_function_proxy,
     resolve_local_function_proxy,
+    resolve_local_function_proxy_async,
     run_on_actor_loop,
     stop_debug_loop_for,
 )
@@ -34,14 +36,17 @@ def _get_list(obj_list: list[Any], timeout: float | None = None) -> list[Any]:
         return []
     if all(isinstance(obj, ObjectRef) for obj in obj_list):
         return ray.get(obj_list, timeout=timeout)
-    return [
-        ray.get(obj, timeout=timeout)
-        if isinstance(obj, ObjectRef)
-        else resolve_local_function_proxy(obj)
-        if is_local_function_proxy(obj)
-        else obj
-        for obj in obj_list
-    ]
+    deadline = None if timeout is None else Deadline(timeout)
+    resolved = []
+    for obj in obj_list:
+        remaining = None if deadline is None else deadline.remaining()
+        if isinstance(obj, ObjectRef):
+            resolved.append(ray.get(obj, timeout=remaining))
+        elif is_local_function_proxy(obj):
+            resolved.append(resolve_local_function_proxy(obj, timeout=remaining))
+        else:
+            resolved.append(obj)
+    return resolved
 
 
 def get(obj, timeout: float | None = None) -> Any:
@@ -57,16 +62,13 @@ async def _aget_one(obj: Any) -> Any:
     Inside an async Ray actor, ``ray.get`` is forbidden because it blocks the
     actor's event loop. Use this to ``await`` the result instead. ObjectRefs are
     wrapped as asyncio futures (the portable form across Python 3.9-3.11). In
-    debug mode the proxy is just called directly; if it returns a coroutine we
-    await it.
+    Debug-mode proxies are submitted to the target actor's loop and awaited
+    without blocking the caller's loop.
     """
     if isinstance(obj, ObjectRef):
         return await asyncio.wrap_future(obj.future())
     if is_local_function_proxy(obj):
-        result = resolve_local_function_proxy(obj)
-        if inspect.isawaitable(result):
-            return await result
-        return result
+        return await resolve_local_function_proxy_async(obj)
     return obj
 
 
@@ -93,32 +95,56 @@ async def aget(obj, timeout: float | None = None, return_exceptions: bool = Fals
     return await coro
 
 
-def kill(actor_handle: KleinActorHandle | None) -> None:
-    if actor_handle is None:
-        return
+def _kill_debug_actor(actor_handle: KleinActorHandle, timeout: float | None) -> None:
+    budget = (
+        _DEBUG_ACTOR_STOP_TIMEOUT_SECONDS
+        if timeout is None
+        else min(
+            _DEBUG_ACTOR_STOP_TIMEOUT_SECONDS,
+            max(0.0, timeout),
+        )
+    )
+    deadline = Deadline(budget)
     try:
-        if actor_handle.debug_mode:
-            if hasattr(actor_handle.inner_actor, "stop"):
-                result = actor_handle.inner_actor.stop()
-                if inspect.iscoroutine(result):
-                    run_on_actor_loop(
-                        actor_handle.inner_actor,
-                        result,
-                        timeout=_DEBUG_ACTOR_STOP_TIMEOUT_SECONDS,
-                    )
-        else:
-            ray.kill(actor_handle.inner_actor)
+        prepare_force_stop = getattr(actor_handle.inner_actor, "prepare_force_stop", None)
+        if callable(prepare_force_stop):
+            prepare_force_stop()
+        if hasattr(actor_handle.inner_actor, "stop"):
+            result = actor_handle.inner_actor.stop()
+            if inspect.iscoroutine(result):
+                run_on_actor_loop(
+                    actor_handle.inner_actor,
+                    result,
+                    # Preserve part of the one budget for stopping and joining
+                    # the dedicated loop after a stuck stop RPC.
+                    timeout=deadline.step(budget / 2),
+                )
     except Exception as error:
         logger.debug("Failed to kill actor: %s", error)
     finally:
-        if actor_handle.debug_mode:
-            stop_debug_loop_for(actor_handle.inner_actor)
-            for name, handle in list(KLEIN_DEBUG_OBJECT_STORE.items()):
-                if handle.inner_actor is actor_handle.inner_actor:
-                    KLEIN_DEBUG_OBJECT_STORE.pop(name, None)
+        stop_debug_loop_for(actor_handle.inner_actor, timeout=deadline.remaining())
+        for name, handle in list(KLEIN_DEBUG_OBJECT_STORE.items()):
+            if handle.inner_actor is actor_handle.inner_actor:
+                KLEIN_DEBUG_OBJECT_STORE.pop(name, None)
 
 
-def kill_actor_by_name(name: str, namespace: str | None = None) -> None:
+def kill(actor_handle: KleinActorHandle | None, timeout: float | None = None) -> None:
+    if actor_handle is None:
+        return
+    if actor_handle.debug_mode:
+        _kill_debug_actor(actor_handle, timeout)
+        return
+    try:
+        ray.kill(actor_handle.inner_actor)
+    except Exception as error:
+        logger.debug("Failed to kill actor: %s", error)
+
+
+def kill_actor_by_name(
+    name: str,
+    namespace: str | None = None,
+    timeout: float | None = None,
+) -> None:
     """Kill a named actor.
 
     ``namespace`` scopes the lookup to a specific Ray namespace so Klein's
@@ -127,7 +153,7 @@ def kill_actor_by_name(name: str, namespace: str | None = None) -> None:
     debug mode has no Ray actor namespaces.
     """
     if is_debug_mode():
-        kill(KLEIN_DEBUG_OBJECT_STORE.pop(name, None))
+        kill(KLEIN_DEBUG_OBJECT_STORE.pop(name, None), timeout=timeout)
         return
     try:
         ray.kill(ray.get_actor(name, namespace=namespace))
@@ -178,7 +204,11 @@ def register_debug_actor(name: str, actor: KleinActorHandle) -> None:
     KLEIN_DEBUG_OBJECT_STORE[name] = actor
 
 
-def get_actor_status(task_name: str, namespace: str | None = None) -> StreamTaskStatus:
+def get_actor_status(
+    task_name: str,
+    namespace: str | None = None,
+    timeout: float | None = None,
+) -> StreamTaskStatus:
     """Classify an actor as ALIVE / DEAD / NOT_EXIST for the health loop.
 
     Uses only the cheap control-plane calls instead of the rate-limited
@@ -201,8 +231,11 @@ def get_actor_status(task_name: str, namespace: str | None = None) -> StreamTask
         return StreamTaskStatus.NOT_EXIST
     if actor is None:
         return StreamTaskStatus.NOT_EXIST
+    ping_timeout = PING_TIMEOUT_SECONDS if timeout is None else min(PING_TIMEOUT_SECONDS, max(0.0, timeout))
+    if ping_timeout <= 0:
+        return StreamTaskStatus.DEAD
     try:
-        ray.get(actor.ping.remote(), timeout=PING_TIMEOUT_SECONDS)
+        ray.get(actor.ping.remote(), timeout=ping_timeout)
         return StreamTaskStatus.ALIVE
     except Exception:
         # Exists by name but not answering -> being rebuilt; recoverable later.
