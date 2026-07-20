@@ -56,6 +56,7 @@ _RUNTIME_UNIT_MODULES = {
     "test_partitioner.py",
     "test_placement.py",
     "test_restart_strategy.py",
+    "test_serve_client.py",
     "test_source_operator.py",
     "test_worker_controller.py",
     "test_worker_pool_dispatch.py",

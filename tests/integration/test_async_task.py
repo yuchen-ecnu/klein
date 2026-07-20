@@ -2,7 +2,7 @@
 import asyncio
 from typing import Any
 
-import aiohttp
+import httpx
 import orjson
 import pytest
 
@@ -27,15 +27,14 @@ app = MockHttpServer.options(name="mock_http_server").bind()
 
 class AsyncMap:
     async def __call__(self, batch: dict[str, Any]) -> dict[str, Any]:
-        async with (
-            aiohttp.ClientSession() as session,
-            session.post(
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
                 "http://0.0.0.0:8000/",
-                data=orjson.dumps(batch, default=numpy_encoder),
+                content=orjson.dumps(batch, default=numpy_encoder),
                 headers={"Content-Type": "application/json"},
-            ) as resp,
-        ):
-            return await resp.json()
+            )
+            response.raise_for_status()
+            return response.json()
 
 
 @pytest.fixture(scope="module", autouse=True)

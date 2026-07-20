@@ -163,8 +163,8 @@ deployment configuration, request behavior, and retries.
 | `serve.client.batch-size` | int | `2` | Records per proxy request batch. |
 | `serve.client.max-attempts` | int | `30` | Maximum HTTP attempts for one proxy request. |
 | `serve.client.slow-request-warning` | int, seconds | `600` | Elapsed request time after which Klein emits a slow-request warning. |
-| `serve.client.http-timeout` | int, seconds | `300` | Total HTTP request timeout passed to `aiohttp`. |
-| `serve.client.http-connect-timeout` | int, seconds | `5` | HTTP connection-establishment timeout passed to `aiohttp`. |
+| `serve.client.http-timeout` | int, seconds | `300` | Total timeout for each HTTPX request attempt. |
+| `serve.client.http-connect-timeout` | int, seconds | `5` | HTTPX connection-establishment and pool-acquisition timeout. |
 | `serve.client.http-limit-per-host` | int | `1000` | Maximum pooled HTTP connections to one host. |
 | `serve.client.http-connection-limit` | int | `1000` | Maximum total pooled HTTP connections. |
 | `serve.client.retry-backoff-max` | float, seconds | `3.0` | Maximum randomized exponential retry delay. The runtime also caps this value at `10s`. |
