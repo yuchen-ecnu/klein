@@ -515,9 +515,7 @@ class JobMaster:
         )
         if gate_acquired is not True:
             raise RuntimeError(f"checkpoint coordinator rejected operator rescale {operation_id}")
-        if not self._recovery.clear_stable_rescale_metadata(
-            deadline.step(self._coordinator_rpc_timeout)
-        ):
+        if not self._recovery.clear_stable_rescale_metadata(deadline.step(self._coordinator_rpc_timeout)):
             raise RuntimeError("could not retire the previous durable rescale identity")
         transaction.enter(RescalePhase.PARTICIPANTS)
         participants = self._prepare_local_rescale(
@@ -637,9 +635,7 @@ class JobMaster:
             if delta.removed:
                 self._retire_removed_actors(
                     plan,
-                    deadline
-                    if compensation_budget is None
-                    else Deadline(compensation_budget + deadline.remaining()),
+                    deadline if compensation_budget is None else Deadline(compensation_budget + deadline.remaining()),
                     placement_transition,
                 )
 
@@ -1005,9 +1001,7 @@ class JobMaster:
                 )
             except Exception as error:
                 last_error = error
-        raise RuntimeError(
-            f"failed to release checkpoint gate for operator rescale {operation_id}"
-        ) from last_error
+        raise RuntimeError(f"failed to release checkpoint gate for operator rescale {operation_id}") from last_error
 
     def _request_rescale_stabilization_checkpoint(
         self,
@@ -1026,9 +1020,7 @@ class JobMaster:
 
         sources = self._rescale_stabilization_sources(execution_graph, target_job_vertex_id)
         unavailable = [
-            vertex
-            for vertex in sources
-            if vertex.stream_task is None or vertex.status != ExecutionVertexStatus.RUNNING
+            vertex for vertex in sources if vertex.stream_task is None or vertex.status != ExecutionVertexStatus.RUNNING
         ]
         if unavailable:
             raise RuntimeError("one or more sources became unavailable before stabilization was armed")
@@ -1052,11 +1044,7 @@ class JobMaster:
             if isinstance(domain, CheckpointDomain)
             for source_id in domain.source_vertex_ids
         }
-        return tuple(
-            source
-            for source in execution_graph.source_execution_vertices
-            if source.id in source_ids
-        )
+        return tuple(source for source in execution_graph.source_execution_vertices if source.id in source_ids)
 
     def _prepare_local_rescale(
         self,
@@ -1067,8 +1055,7 @@ class JobMaster:
     ) -> tuple[list[Any], list[Any]]:
         target = graph.job_vertex(target_id)
         prepare_calls = [
-            vertex.stream_task.prepare_rescale_target(operation_id)
-            for vertex in target.execution_vertices.values()
+            vertex.stream_task.prepare_rescale_target(operation_id) for vertex in target.execution_vertices.values()
         ]
         downstream_vertices: list[ExecutionVertex] = []
         for downstream_id in graph.downstream_job_vertices(target_id):
@@ -1076,15 +1063,12 @@ class JobMaster:
             for vertex in job_vertex.execution_vertices.values():
                 descriptor = task_deployer.build_descriptor(graph, job_vertex, vertex)
                 expected = tuple(sender for sender in descriptor.input_vertex_ids if sender.job_vertex_id == target_id)
-                prepare_calls.append(
-                    vertex.stream_task.prepare_rescale_downstream(operation_id, expected)
-                )
+                prepare_calls.append(vertex.stream_task.prepare_rescale_downstream(operation_id, expected))
                 downstream_vertices.append(vertex)
         if prepare_calls:
             klein.get(prepare_calls, timeout=timeout)
         downstream_waits = [
-            vertex.stream_task.await_rescale_ready(operation_id, timeout)
-            for vertex in downstream_vertices
+            vertex.stream_task.await_rescale_ready(operation_id, timeout) for vertex in downstream_vertices
         ]
 
         upstream_waits: list[Any] = []
@@ -1233,10 +1217,7 @@ class JobMaster:
             return True
         try:
             results = klein.get(
-                [
-                    vertex.stream_task.rollback_topology_reconfiguration(operation_id)
-                    for vertex in vertices
-                ],
+                [vertex.stream_task.rollback_topology_reconfiguration(operation_id) for vertex in vertices],
                 timeout=timeout,
             )
             return all(result is True for result in results)

@@ -574,15 +574,9 @@ class CheckpointCoordinator(AsyncWorker):
         # No sink path downstream -> nothing to align/ack -> checkpointing this
         # source is meaningless without a required sink acknowledgement count.
         domain = self._checkpoint_domain_for_source(vertex_id)
-        required_committers = (
-            self._reachable_domain_sinks(domain, (vertex_id,))
-            if domain is not None
-            else ()
-        )
+        required_committers = self._reachable_domain_sinks(domain, (vertex_id,)) if domain is not None else ()
         required_acknowledgements = (
-            len(required_committers)
-            if required_committers
-            else self._required_acknowledgements.get(vertex_id, 0)
+            len(required_committers) if required_committers else self._required_acknowledgements.get(vertex_id, 0)
         )
         if required_acknowledgements <= 0:
             reason = f"Source {vertex_id} has no checkpointable sink path; skipping checkpoint"
@@ -634,9 +628,7 @@ class CheckpointCoordinator(AsyncWorker):
             )
         barrier_id = self._coordinated_checkpoint_barrier_id
         if barrier_id in self._pending_checkpoint_releases:
-            return CheckpointRegistration.skip(
-                f"Rescale stabilization barrier {barrier_id} is awaiting abort cleanup"
-            )
+            return CheckpointRegistration.skip(f"Rescale stabilization barrier {barrier_id} is awaiting abort cleanup")
         if barrier_id is not None and (
             barrier_id not in self._inflight_checkpoints and barrier_id not in self._completing_checkpoints
         ):
@@ -1340,16 +1332,13 @@ class CheckpointCoordinator(AsyncWorker):
                 "operation_id": self._rescale_recovery_fence,
                 "barrier_id": self._coordinated_checkpoint_barrier_id,
                 "pending_sources": sorted(
-                    self._source_state_key(vertex_id)
-                    for vertex_id in self._rescale_recovery_pending_sources
+                    self._source_state_key(vertex_id) for vertex_id in self._rescale_recovery_pending_sources
                 ),
                 "registered_sources": sorted(
-                    self._source_state_key(vertex_id)
-                    for vertex_id in self._coordinated_checkpoint_registered_sources
+                    self._source_state_key(vertex_id) for vertex_id in self._coordinated_checkpoint_registered_sources
                 ),
                 "pending_sinks": sorted(
-                    self._operator_state_key(vertex_id)
-                    for vertex_id in self._rescale_recovery_pending_sinks
+                    self._operator_state_key(vertex_id) for vertex_id in self._rescale_recovery_pending_sinks
                 ),
                 "required_state_revision": self._rescale_recovery_required_state_revision,
                 "persisted_state_revision": self._persisted_state_revision,
@@ -1513,11 +1502,7 @@ class CheckpointCoordinator(AsyncWorker):
             ray.put,
             klein.get,
             min_size_bytes=self._state_object_store_cache_min_bytes,
-            enabled=(
-                self._state_object_store_cache_enabled
-                and ray.is_initialized()
-                and not klein.is_debug_mode()
-            ),
+            enabled=(self._state_object_store_cache_enabled and ray.is_initialized() and not klein.is_debug_mode()),
         )
         return cache.cache(payload)
 
@@ -1656,9 +1641,7 @@ class CheckpointCoordinator(AsyncWorker):
         if graph is None:
             return ()
         members = frozenset(domain.vertex_ids)
-        adjacency: dict[ExecutionVertexId, list[ExecutionVertexId]] = {
-            vertex_id: [] for vertex_id in members
-        }
+        adjacency: dict[ExecutionVertexId, list[ExecutionVertexId]] = {vertex_id: [] for vertex_id in members}
         for job_edge in getattr(graph, "job_edges", ()):
             for edge in getattr(job_edge, "execution_edges", ()):
                 source_id = edge.source.id

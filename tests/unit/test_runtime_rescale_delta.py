@@ -75,10 +75,14 @@ def _rescale_context(
         RescaleDelta.between(old_target, new_target),
     )
     transaction = RescaleTransaction(plan)
-    placement_transition = NativeStrategy().plan(old_graph).begin_rescale(
-        new_graph,
-        added=plan.delta.added,
-        removed=plan.delta.removed,
+    placement_transition = (
+        NativeStrategy()
+        .plan(old_graph)
+        .begin_rescale(
+            new_graph,
+            added=plan.delta.added,
+            removed=plan.delta.removed,
+        )
     )
     return plan, transaction, placement_transition
 
@@ -363,8 +367,8 @@ def test_job_master_prewarms_only_added_actors_before_the_rescale_barrier() -> N
         events.append("coordinator-topology") or True
     )
     master._recovery = MagicMock()
-    master._recovery.clear_stable_rescale_metadata.side_effect = (
-        lambda *_args: events.append("retire-old-identity") or True
+    master._recovery.clear_stable_rescale_metadata.side_effect = lambda *_args: (
+        events.append("retire-old-identity") or True
     )
     plan, transaction, placement_transition = _rescale_context(old_graph, new_graph)
 
@@ -675,9 +679,7 @@ def test_failed_retired_actor_cleanup_also_registers_placement_transition() -> N
             placement_transition,
         )
 
-    assert set(master._pending_rescale_actor_cleanup) == {
-        vertex.name for vertex in plan.delta.removed
-    }
+    assert set(master._pending_rescale_actor_cleanup) == {vertex.name for vertex in plan.delta.removed}
     assert master._pending_placement_cleanup == [placement_transition]
 
 

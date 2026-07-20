@@ -134,7 +134,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         if relative_path is None:
             return False
         try:
-            payload = files("ray.klein.observability.dashboard").joinpath("static", relative_path).read_bytes()
+            payload = files("ray.klein.observability.dashboard").joinpath("static").joinpath(relative_path).read_bytes()
         except (FileNotFoundError, IsADirectoryError):
             return False
         if relative_path == "index.html":

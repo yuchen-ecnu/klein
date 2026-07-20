@@ -399,10 +399,13 @@ def test_cli_dashboard_starts_bound_server(monkeypatch) -> None:
     )
 
     assert result.exit_code == 0
-    assert "http://127.0.0.1:8765/" in result.output
-    assert "https://ray.example.com" in result.output
-    assert "http://127.0.0.1:3001" in result.output
-    assert "WARNING" in result.output
+    assert result.output.splitlines() == [
+        "WARNING: the Dashboard control endpoint is unauthenticated; protect it with a trusted proxy.",
+        "Klein Dashboard is running at http://127.0.0.1:8765/",
+        "Klein UI is reused from http://127.0.0.1:3001",
+        "Ray navigation opens https://ray.example.com",
+        "Press Ctrl+C to stop it.",
+    ]
     assert events == [
         "connected",
         ("0.0.0.0", 8765, "https://ray.example.com", "http://127.0.0.1:3001"),
