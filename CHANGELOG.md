@@ -39,9 +39,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   backpressure, checkpoints, redacted configuration, failure details, and
   cancellation and local operator rescaling, backed by a detached head-node
   actor and last-good snapshots.
-- A build-free standalone jobs dashboard with a Ray-style operations layout,
-  Flink-style operator and checkpoint views, secure response headers, JSON
-  endpoints, retained-state handling, and guarded operator-rescaling controls.
+- Native Ray Dashboard integration with Flink-style operator and checkpoint
+  views, retained-state handling, and job controls.
 - Transactional local operator rescaling with aligned topology fences, exact
   route rollback before commit, generation fencing, and a post-commit durable
   stabilization checkpoint.

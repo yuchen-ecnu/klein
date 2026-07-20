@@ -22,7 +22,6 @@ ray-klein list
 ray-klein status klein-orders-0123abcd
 ray-klein attach klein-orders-0123abcd
 ray-klein stop klein-orders-0123abcd
-ray-klein dashboard
 ```
 
 Omit the namespace when exactly one job is running, or when you want the CLI
@@ -63,30 +62,37 @@ checkpointing.
 
 ## Use the Klein Dashboard
 
-Start the bundled web Dashboard from a machine that can connect to the Ray
-cluster:
+Open the cluster's Ray Dashboard and select **Klein**, or navigate directly to
+`/#/klein`. A local Ray Dashboard uses
+`http://127.0.0.1:8265/#/klein` by default. During Ray Dashboard frontend
+development, use the configured development server (commonly port `3000` or a
+local proxy such as `3001`) with the same hash route.
 
-```bash
-ray-klein dashboard --open
+Klein is part of the native Ray Dashboard layout; there is no separate Klein
+web server, theme, or port. The page polls published job snapshots and renders
+the operator DAG. Like Flink's JobGraph, node color mixes idle (blue), busy
+(red), and backpressured (black) time. The graph uses the maximum busy and
+backpressure percentage across an operator's subtasks so one hot or skewed
+subtask is not hidden by the operator average; the exact values remain printed
+in each node and in the operator table for accessibility.
+
+The page also shows each operator's live parallelism and rates. Operator
+rescaling remains available through the stable Python state API instead of a
+separate unauthenticated web endpoint:
+
+```python
+result = ray.klein.rescale_operator(job_id, operator_id, parallelism=4)
 ```
 
-It listens on `127.0.0.1:8266` by default. The page polls the published job
-snapshots and renders the operator DAG. Like Flink's JobGraph, node color mixes
-idle (blue), busy (red), and backpressured (black) time. The graph uses the
-maximum busy and backpressure percentage across an operator's subtasks so one
-hot or skewed subtask is not hidden by the operator average; the exact values
-remain printed in each node and in the operator table for accessibility.
-
-The page also shows each operator's live parallelism and rates, and lets you
-apply a new positive parallelism to one running operator. A stale or terminal
-job is read-only. Rescaling changes only the physical delta: subtasks whose
-indexes exist at both parallelisms retain their actor identities. On a
-scale-out, Klein creates the added actors and waits for them to answer a ping
-before it interrupts the data path. It then asks every direct upstream task to
-insert an ordered local barrier on the incident edge and pause at that cut. The
-target aligns those barriers, snapshots managed state, and fences its direct
-downstream tasks before Klein swaps routing and resumes the region. Unrelated
-actors stay alive; there is no whole-job restart or global source stop.
+A stale or terminal job is read-only. Rescaling changes only the physical
+delta: subtasks whose indexes exist at both parallelisms retain their actor
+identities. On a scale-out, Klein creates the added actors and waits for them
+to answer a ping before it interrupts the data path. It then asks every direct
+upstream task to insert an ordered local barrier on the incident edge and pause
+at that cut. The target aligns those barriers, snapshots managed state, and
+fences its direct downstream tasks before Klein swaps routing and resumes the
+region. Unrelated actors stay alive; there is no whole-job restart or global
+source stop.
 
 If a source is itself a direct upstream of the target, that source task pauses
 cooperatively at a record boundary while the local cut is installed. Sources
@@ -95,8 +101,8 @@ target, and transactional or collecting sinks are also unsupported in the
 first version. Local rescaling also currently requires the job to have exactly
 one physical source task (one source operator at concurrency 1); this keeps the
 post-commit recovery checkpoint on one consistent source cut until Klein gains
-a shared checkpoint epoch across parallel sources. Unsupported controls are
-disabled with the runtime-provided reason.
+a shared checkpoint epoch across parallel sources. Unsupported API requests
+are rejected with the runtime-provided reason.
 
 Added actors remain fenced while the local cut is formed. At the cut, retained
 actors prepare their new runtime descriptors and managed state transactionally,
@@ -126,21 +132,8 @@ back to a consistent global checkpoint recovery instead of restoring one task
 from stale state. If the coordinator is rebuilt during this window, Klein
 re-requests the stabilization checkpoint automatically.
 
-Use `--host` and `--port` to change the listener. Binding to a non-loopback
-address exposes an unauthenticated control endpoint and is refused unless you
-explicitly pass `--allow-unauthenticated`. Put such a listener behind an
-authenticated reverse proxy, or access the default listener through an SSH
-tunnel instead. A reverse proxy should rewrite `Host` to the configured
-listener host; the server rejects untrusted host names to prevent DNS-rebinding
-control requests.
-
-:::{note}
-The standalone wheel does not patch Ray Dashboard backend or React files. The
-bundled Klein Dashboard is a small, independent HTTP page over the stable state
-API. Embedding the same controls inside Ray's native Dashboard still requires
-an upstream Ray integration; Klein deliberately avoids Ray's private dashboard
-implementation.
-:::
+Expose the Ray Dashboard through the cluster's normal authenticated operations
+proxy. Do not start a second unauthenticated Dashboard listener for Klein.
 
 ## Configure operational logs
 
