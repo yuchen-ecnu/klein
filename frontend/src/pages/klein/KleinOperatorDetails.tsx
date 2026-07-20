@@ -18,7 +18,6 @@ import { Link as RouterLink } from "react-router-dom";
 import { generateActorLink } from "../../common/links";
 import { StatusChip } from "../../components/StatusChip";
 import { KleinOperator } from "../../type/klein";
-import { getKleinOperatorActorsLink } from "./KleinActorLinks";
 import {
   formatByteRate,
   formatBytes,
@@ -33,13 +32,11 @@ export const KleinOperatorDetails = ({
   inDrawer = false,
   jobId,
   onRefresh,
-  rayNamespace,
 }: {
   operator?: KleinOperator;
   inDrawer?: boolean;
   jobId?: string;
   onRefresh: () => Promise<unknown>;
-  rayNamespace?: string;
 }) => {
   if (!operator) {
     return (
@@ -71,15 +68,9 @@ export const KleinOperatorDetails = ({
             {operator.gpus} GPU each
           </Typography>
         </Box>
-        <Button
-          component={RouterLink}
-          size="small"
-          startIcon={<RiExternalLinkLine />}
-          to={getKleinOperatorActorsLink(operator.name, rayNamespace)}
-          variant="outlined"
-        >
-          View actors
-        </Button>
+        {operator.parallelism === 1 && (
+          <OperatorActorButton operator={operator} />
+        )}
         <StatusChip type="kleinOperator" status={operator.status} />
       </Stack>
       <KleinOperatorRescaleControl
@@ -213,6 +204,26 @@ export const KleinOperatorDetails = ({
         </TableContainer>
       )}
     </Paper>
+  );
+};
+
+const OperatorActorButton = ({ operator }: { operator: KleinOperator }) => {
+  const actorId = operator.subtasks?.[0]?.actor_id;
+  return actorId ? (
+    <Button
+      component={RouterLink}
+      size="small"
+      startIcon={<RiExternalLinkLine />}
+      title={`Open Ray actor ${actorId}`}
+      to={generateActorLink(actorId)}
+      variant="outlined"
+    >
+      View actor
+    </Button>
+  ) : (
+    <Button disabled size="small" variant="outlined">
+      Actor unavailable
+    </Button>
   );
 };
 

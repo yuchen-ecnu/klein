@@ -83,8 +83,10 @@ Frontend contributors can run the source in `frontend/` and temporarily point
 8266 at it with `--frontend-url`; production installations use the packaged UI.
 
 The page polls published job snapshots and renders the operator DAG. Like
-Flink's JobGraph, node color mixes idle (blue), busy (red), and backpressured
-(black) time. Selecting a node or operator row opens a right-side drawer with
+Flink's JobGraph, the whole node and its border continuously blend using the
+hottest subtask. Klein uses light cool-blue and warm-coral surfaces for idle
+and busy nodes, then blends toward amber for backpressure so dense metric text
+stays readable. Selecting a node or operator row opens a right-side drawer with
 subtask metrics. Separate views expose checkpoint history, per-operator state
 size, barrier alignment and latency, and redacted configuration.
 

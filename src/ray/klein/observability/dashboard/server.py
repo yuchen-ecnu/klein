@@ -500,7 +500,7 @@ def _join_upstream_url(base_url: str, request_target: str) -> str:
 
 def _inject_navigation_bridge(payload: bytes) -> bytes:
     marker = b"</head>"
-    script = b'<script src="/__klein/navigation.js"></script>'
+    script = b'<script src="__klein/navigation.js"></script>'
     if marker in payload.lower():
         index = payload.lower().index(marker)
         return payload[:index] + script + payload[index:]

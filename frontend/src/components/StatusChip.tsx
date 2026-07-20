@@ -37,22 +37,30 @@ export type StatusChipProps = {
   status: string | ReactNode;
   suffix?: ReactNode;
   icon?: ReactNode;
+  style?: CSSProperties;
 };
 
-export const StatusChip = ({ type, status, suffix, icon }: StatusChipProps) => {
+export const StatusChip = ({
+  type,
+  status,
+  suffix,
+  icon,
+  style,
+}: StatusChipProps) => {
   const color =
     typeof status === "string"
       ? colorMap[type]?.[status] ?? blueGrey[500]
       : blueGrey[500];
-  const style: CSSProperties = {
+  const statusStyle: CSSProperties = {
     borderColor: color,
     color,
     backgroundColor: color === blueGrey[500] ? undefined : `${color}20`,
+    ...style,
   };
   return (
     <Box
       component="span"
-      style={style}
+      style={statusStyle}
       sx={{
         alignItems: "center",
         border: "solid 1px",

@@ -144,7 +144,6 @@ export const KleinJobOverviewPage = () => {
         <KleinOperatorsTable
           onSelectOperator={openOperatorDetails}
           operators={job.operators}
-          rayNamespace={job.namespace}
           selectedOperatorId={highlightedOperatorId}
         />
       </Section>
@@ -194,7 +193,6 @@ export const KleinJobOverviewPage = () => {
             jobId={job.job_id}
             onRefresh={refresh}
             operator={selectedOperator}
-            rayNamespace={job.namespace}
           />
         </Box>
       </Drawer>
