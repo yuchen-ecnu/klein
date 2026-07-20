@@ -15,6 +15,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 - Dashboard JobGraph nodes now use Flink-style whole-node coloring, blending
   continuously from cool blue to warm coral and toward amber for backpressure
   based on the hottest subtask, with light surfaces for metric readability.
+- Pre-commit now installs a `commit-msg` hook that rejects commits without a
+  Developer Certificate of Origin sign-off before they reach CI.
 
 ## [0.1.0a1] - 2026-07-20
 

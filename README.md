@@ -102,7 +102,7 @@ tooling dependencies:
 git clone https://github.com/yuchen-ecnu/klein.git
 cd klein
 python -m pip install -e ".[dev]"
-pre-commit install
+pre-commit install --hook-type pre-commit --hook-type commit-msg
 ```
 
 ## Quick start

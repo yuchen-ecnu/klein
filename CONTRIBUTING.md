@@ -15,7 +15,7 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 python -m pip install -e ".[dev]"
-pre-commit install
+pre-commit install --hook-type pre-commit --hook-type commit-msg
 ```
 
 Before opening a pull request, run:
@@ -57,6 +57,9 @@ appears in the commit message as:
 ```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
+
+The installed `commit-msg` hook rejects unsigned commits before they reach CI.
+Existing checkouts should rerun the `pre-commit install` command above once.
 
 ## Reporting security issues
 
