@@ -77,6 +77,13 @@ def _actor_ids_by_subtask(operator: dict) -> dict[int, str | None]:
     return {subtask["subtask_index"]: subtask["actor_id"] for subtask in operator["subtasks"]}
 
 
+def _rows_by_subtask(operator: dict) -> dict[int, tuple[int, int]]:
+    return {
+        subtask["subtask_index"]: (subtask["rows_in"], subtask["rows_out"])
+        for subtask in operator["subtasks"]
+    }
+
+
 def _collect_sequence_phase(output_queue: Queue, expected_indices: range) -> list[dict]:
     expected = set(expected_indices)
     received: dict[int, dict] = {}
@@ -202,6 +209,7 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         assert {index: scale_out_actor_ids[index] for index in target_before} == target_before
         assert scale_out_actor_ids[2] not in set(target_before.values())
         assert _unrelated_actor_ids(after_scale_out, target_id) == unrelated_before
+        scale_out_rows = _rows_by_subtask(target_after_scale_out)
         produced_before_scale_in = produced[0]
 
         scaled_in = klein.rescale_operator(handle.namespace, target_id, 2, timeout=30)
@@ -216,6 +224,13 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         assert set(scale_in_actor_ids) == {0, 1}
         assert scale_in_actor_ids == {index: scale_out_actor_ids[index] for index in scale_in_actor_ids}
         assert scale_in_actor_ids == target_before
+        scale_in_rows = _rows_by_subtask(target_after_scale_in)
+        for index, previous_counts in scale_out_rows.items():
+            if index in scale_in_rows:
+                assert all(
+                    current >= previous
+                    for current, previous in zip(scale_in_rows[index], previous_counts, strict=True)
+                )
         assert _unrelated_actor_ids(after_scale_in, target_id) == unrelated_before
         stop_producer.set()
         producer.join(timeout=5)
