@@ -1962,9 +1962,7 @@ class StreamTask(AsyncWorker):
         """Stop a scale-in delta without reopening its fenced data path."""
 
         if self._rescale_operation_id != operation_id or self._rescale_role != "target":
-            raise RuntimeError(
-                f"{self._task_name} is not a retired target of rescale {operation_id}"
-            )
+            raise RuntimeError(f"{self._task_name} is not a retired target of rescale {operation_id}")
         await self._stop_stream_task(timeout, release_rescale=False)
         return True
 

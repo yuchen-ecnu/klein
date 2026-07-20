@@ -78,10 +78,7 @@ def _actor_ids_by_subtask(operator: dict) -> dict[int, str | None]:
 
 
 def _rows_by_subtask(operator: dict) -> dict[int, tuple[int, int]]:
-    return {
-        subtask["subtask_index"]: (subtask["rows_in"], subtask["rows_out"])
-        for subtask in operator["subtasks"]
-    }
+    return {subtask["subtask_index"]: (subtask["rows_in"], subtask["rows_out"]) for subtask in operator["subtasks"]}
 
 
 def _collect_sequence_phase(output_queue: Queue, expected_indices: range) -> list[dict]:
@@ -230,8 +227,7 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
         for index, previous_counts in scale_out_rows.items():
             if index in scale_in_rows:
                 assert all(
-                    current >= previous
-                    for current, previous in zip(scale_in_rows[index], previous_counts, strict=True)
+                    current >= previous for current, previous in zip(scale_in_rows[index], previous_counts, strict=True)
                 )
         assert _unrelated_actor_ids(after_scale_in, target_id) == unrelated_before
         stop_producer.set()

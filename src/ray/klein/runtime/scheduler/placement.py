@@ -180,9 +180,7 @@ class PlacementPlan:
             )
         groups = _unique_objects(
             tuple(
-                group
-                for vertex_id in selected
-                if (group := self.placement_group_by_vertex.get(vertex_id)) is not None
+                group for vertex_id in selected if (group := self.placement_group_by_vertex.get(vertex_id)) is not None
             )
         )
         if (groups or (self.placement_group is not None and selected)) and self._remove_group is None:
@@ -193,9 +191,7 @@ class PlacementPlan:
         cleanup_errors: list[Exception] = []
         for group in groups:
             owners = {
-                vertex_id
-                for vertex_id, owned_group in self.placement_group_by_vertex.items()
-                if owned_group is group
+                vertex_id for vertex_id, owned_group in self.placement_group_by_vertex.items() if owned_group is group
             }
             if owners - set(selected):
                 raise PlacementError(
@@ -293,9 +289,7 @@ class PlacementStrategy(ABC):
             vertex_id: node_id for vertex_id, node_id in plan.node_by_vertex.items() if vertex_id in requested
         }
         plan.placement_group_by_vertex = {
-            vertex_id: group
-            for vertex_id, group in plan.placement_group_by_vertex.items()
-            if vertex_id in requested
+            vertex_id: group for vertex_id, group in plan.placement_group_by_vertex.items() if vertex_id in requested
         }
         plan.bundle_by_vertex = {
             vertex_id: bundle for vertex_id, bundle in plan.bundle_by_vertex.items() if vertex_id in requested
