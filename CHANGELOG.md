@@ -39,8 +39,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   backpressure, checkpoints, redacted configuration, failure details, and
   cancellation and local operator rescaling, backed by a detached head-node
   actor and last-good snapshots.
-- Native Ray Dashboard integration with Flink-style operator and checkpoint
-  views, retained-state handling, and job controls.
+- A standalone Klein Dashboard that packages its MUI/React Flow frontend inside
+  `ray-klein`, with Flink-style operator and checkpoint views, retained-state
+  handling, job controls, and configurable links to the native Ray Dashboard.
 - Transactional local operator rescaling with aligned topology fences, exact
   route rollback before commit, generation fencing, and a post-commit durable
   stabilization checkpoint.

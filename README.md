@@ -141,8 +141,14 @@ For continuous execution, see the
 [Kafka walkthrough](docs/getting-started.md#submit-a-dataflow) and the complete
 [connector catalog](docs/connectors/index.md).
 
-Klein jobs appear directly in Ray Dashboard under `/#/klein`. A local Ray
-Dashboard uses `http://127.0.0.1:8265/#/klein` by default.
+Start the self-contained Klein Dashboard on port 8266. Its React application is
+packaged with `ray-klein`; Ray-owned navigation opens the native Dashboard on
+port 8265:
+
+```bash
+ray-klein dashboard --open \
+  --ray-dashboard-url http://127.0.0.1:8265
+```
 
 ## Documentation
 
@@ -157,7 +163,7 @@ Dashboard uses `http://127.0.0.1:8265/#/klein` by default.
 | [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
 | [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
 | [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
-| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the native Ray Dashboard integration. |
+| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the standalone Klein Dashboard. |
 | [Troubleshooting](docs/troubleshooting.md) | Installation, planning, connector, watermark, checkpoint, backpressure, and CLI failures. |
 
 Build the documentation locally with:

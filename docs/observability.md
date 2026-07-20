@@ -22,6 +22,7 @@ ray-klein list
 ray-klein status klein-orders-0123abcd
 ray-klein attach klein-orders-0123abcd
 ray-klein stop klein-orders-0123abcd
+ray-klein dashboard --open
 ```
 
 Omit the namespace when exactly one job is running, or when you want the CLI
@@ -62,23 +63,34 @@ checkpointing.
 
 ## Use the Klein Dashboard
 
-Open the cluster's Ray Dashboard and select **Klein**, or navigate directly to
-`/#/klein`. A local Ray Dashboard uses
-`http://127.0.0.1:8265/#/klein` by default. During Ray Dashboard frontend
-development, use the configured development server (commonly port `3000` or a
-local proxy such as `3001`) with the same hash route.
+Start the standalone Klein Dashboard from a process connected to the Ray
+cluster:
 
-Klein is part of the native Ray Dashboard layout; there is no separate Klein
-web server, theme, or port. The page polls published job snapshots and renders
-the operator DAG. Like Flink's JobGraph, node color mixes idle (blue), busy
-(red), and backpressured (black) time. The graph uses the maximum busy and
-backpressure percentage across an operator's subtasks so one hot or skewed
-subtask is not hidden by the operator average; the exact values remain printed
-in each node and in the operator table for accessibility.
+```bash
+ray-klein dashboard --open \
+  --ray-dashboard-url http://127.0.0.1:8265
+```
 
-The page also shows each operator's live parallelism and rates. Operator
-rescaling remains available through the stable Python state API instead of a
-separate unauthenticated web endpoint:
+Klein listens on `127.0.0.1:8266` by default. The exact MUI/React Flow Klein UI
+is bundled in the `ray-klein` wheel, so serving it doesn't require a Ray source
+checkout, Node.js, port 3001, or changes to Ray Dashboard. Klein data and control
+requests stay on 8266. Overview, Jobs, Serve, Cluster, Actors, Metrics, Logs,
+and actor-detail links leave the gateway for the configured native Ray
+Dashboard. Set `RAY_KLEIN_RAY_DASHBOARD_URL`, or pass
+`--ray-dashboard-url`, when it uses a browser-visible proxy URL.
+
+Frontend contributors can run the source in `frontend/` and temporarily point
+8266 at it with `--frontend-url`; production installations use the packaged UI.
+
+The page polls published job snapshots and renders the operator DAG. Like
+Flink's JobGraph, node color mixes idle (blue), busy (red), and backpressured
+(black) time. Selecting a node or operator row opens a right-side drawer with
+subtask metrics. Separate views expose checkpoint history, per-operator state
+size, barrier alignment and latency, and redacted configuration.
+
+The page also shows each operator's live parallelism and rates and exposes
+guarded local rescaling. The same operation remains available through the
+stable Python state API:
 
 ```python
 result = ray.klein.rescale_operator(job_id, operator_id, parallelism=4)
@@ -132,8 +144,10 @@ back to a consistent global checkpoint recovery instead of restoring one task
 from stale state. If the coordinator is rebuilt during this window, Klein
 re-requests the stabilization checkpoint automatically.
 
-Expose the Ray Dashboard through the cluster's normal authenticated operations
-proxy. Do not start a second unauthenticated Dashboard listener for Klein.
+The standalone Dashboard has no built-in authentication. Its default listener
+is loopback-only, and a non-loopback listener requires
+`--allow-unauthenticated`. Expose both Klein and Ray through the cluster's
+authenticated operations proxy.
 
 ## Configure operational logs
 
