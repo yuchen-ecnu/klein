@@ -77,7 +77,7 @@ class ServeOptions:
         "serve.client.http-connect-timeout",
         5,
         int,
-        description="HTTP connection timeout in seconds.",
+        description="HTTP connection and pool-acquisition timeout in seconds.",
     )
     HTTP_LIMIT_PER_HOST = ConfigOption(
         "serve.client.http-limit-per-host",

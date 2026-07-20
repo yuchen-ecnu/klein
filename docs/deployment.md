@@ -30,7 +30,7 @@ ray[data]>=2.56.1,<2.57
 
 Connector-specific native dependencies also belong in the worker image. For
 example, RocketMQ requires a compatible `librocketmq`; RocksDB uses
-`rocksdict`; Serve needs `ray[serve]`, `aiohttp`, and `orjson`.
+`rocksdict`; Serve needs `ray[serve]`, `httpx`, and `orjson`.
 
 Build the image or runtime environment before submission. Do not install
 dependencies dynamically inside a UDF: that makes worker startup
