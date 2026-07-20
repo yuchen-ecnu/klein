@@ -930,16 +930,15 @@ class JobMaster:
         operation_id: str,
         timeout: float,
     ) -> None:
-        for handle in handles:
-            try:
-                klein.get(
-                    handle.commit_topology_reconfiguration(operation_id),
-                    timeout=timeout,
-                )
-            except Exception:
-                # The route is already active. A lost actor is rebuilt from the
-                # new ExecutionGraph; a lost response is safe to retry later.
-                logger.warning("Failed to confirm a committed task topology", exc_info=True)
+        if handles:
+            # Commit is actor-idempotent through StreamTask tombstones.  Do not
+            # hide an uncertain acknowledgement: leaving one actor's topology
+            # transaction open would reject every later rescale on that actor.
+            # The caller fences recovery and escalates this post-commit failure.
+            klein.get(
+                [handle.commit_topology_reconfiguration(operation_id) for handle in handles],
+                timeout=timeout,
+            )
 
     def _rollback_live_task_topologies(
         self,

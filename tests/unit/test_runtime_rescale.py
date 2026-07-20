@@ -1108,3 +1108,13 @@ def test_source_forced_checkpoint_is_emitted_at_the_next_idle_boundary() -> None
     task._generate_barrier.assert_called_once_with(force=True)
     task._state.metrics.barriers_out.inc.assert_called_once_with()
     assert task._forced_checkpoint_requested.is_set() is False
+
+
+def test_source_rescale_resume_retry_accepts_a_completed_operation() -> None:
+    task = object.__new__(SourceStreamTask)
+    task._rescale_tombstones = ["resize-1"]
+    task._rescale_operation_id = None
+    task._source_rescale_resume = threading.Event()
+
+    assert task.resume_rescale("resize-1") is True
+    assert task._source_rescale_resume.is_set() is False

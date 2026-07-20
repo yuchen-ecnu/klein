@@ -230,6 +230,26 @@ def test_terminator_does_not_forget_an_actor_that_survives_every_kill() -> None:
     assert removed[0].status == ExecutionVertexStatus.RUNNING
 
 
+def test_whole_job_terminator_reports_actors_that_survive_every_kill() -> None:
+    _logical, graph = _graphs(2)
+    _mark_target_running(graph)
+
+    with (
+        patch.object(
+            task_terminator.klein,
+            "get_actor_status",
+            return_value=task_terminator.StreamTaskStatus.ALIVE,
+        ),
+        patch.object(task_terminator, "_kill_actor_with_retry", return_value=False),
+        pytest.raises(RuntimeError, match="failed to stop job actor"),
+    ):
+        task_terminator._force_kill_survivors(graph)
+
+    for vertex in graph.job_vertex(2).execution_vertices.values():
+        assert vertex.stream_task is not None
+        assert vertex.status == ExecutionVertexStatus.RUNNING
+
+
 def test_terminator_retries_a_dead_named_actor_until_it_no_longer_exists() -> None:
     with (
         patch.object(
@@ -243,6 +263,25 @@ def test_terminator_retries_a_dead_named_actor_until_it_no_longer_exists() -> No
         assert task_terminator._kill_actor_with_retry("retired", "job") is True
 
     assert kill_by_name.call_count == 2
+
+
+def test_live_topology_commit_failure_is_not_hidden() -> None:
+    handles = [MagicMock(), MagicMock()]
+    references = [object(), object()]
+    for handle, reference in zip(handles, references, strict=True):
+        handle.commit_topology_reconfiguration.return_value = reference
+
+    with (
+        patch.object(
+            job_master_module.klein,
+            "get",
+            side_effect=RuntimeError("commit acknowledgement lost"),
+        ) as get,
+        pytest.raises(RuntimeError, match="acknowledgement lost"),
+    ):
+        JobMaster._commit_live_task_topologies(handles, "resize-1", 7)
+
+    get.assert_called_once_with(references, timeout=7)
 
 
 def test_job_master_prewarms_only_added_actors_before_the_rescale_barrier() -> None:

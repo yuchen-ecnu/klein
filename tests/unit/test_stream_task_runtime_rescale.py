@@ -43,8 +43,28 @@ def _descriptor(
     )
 
 
-def _runtime(descriptor: SimpleNamespace, name: str):
-    state = SimpleNamespace(name=name)
+def _runtime(descriptor: SimpleNamespace, name: str, *, seed: int = 0):
+    state = SimpleNamespace(
+        name=name,
+        operator=SimpleNamespace(
+            records_in=seed + 1,
+            records_out=seed + 2,
+            bytes_in=seed + 3,
+            bytes_out=seed + 4,
+            processing_duration_ns=seed + 5,
+        ),
+        output=SimpleNamespace(
+            backpressure_duration_ns=seed + 6,
+            backpressure_events=seed + 7,
+        ),
+        metrics=SimpleNamespace(
+            barriers_in=SimpleNamespace(value=seed + 8),
+            barriers_out=SimpleNamespace(value=seed + 9),
+            checkpoint_barrier_latency_ms=SimpleNamespace(last=seed + 12),
+        ),
+        inbox=SimpleNamespace(qsize=lambda: seed + 10),
+        checkpoint_strategy=SimpleNamespace(last_alignment_duration_ms=seed + 11),
+    )
     return stream_task_module._TaskRuntime(
         descriptor=descriptor,
         context=SimpleNamespace(name=name),
@@ -132,6 +152,42 @@ async def test_prepare_keeps_pending_runtime_invisible_until_commit() -> None:
     task._close_runtime.assert_awaited_once_with(old_runtime, discard_backend=True)
     assert await task.commit_runtime_rescale("resize-1") is True
     task._close_runtime.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_runtime_commit_keeps_retained_actor_progress_monotonic() -> None:
+    operator = _operator(stateful=False)
+    old_descriptor = _descriptor(operator, parallelism=2)
+    old_descriptor.input_buffer_size = 20
+    new_descriptor = _descriptor(operator, parallelism=3)
+    new_descriptor.input_buffer_size = 30
+    task, _old_runtime = _paused_target(old_descriptor)
+    pending_runtime = _runtime(new_descriptor, "pending", seed=100)
+    task._build_runtime = AsyncMock(return_value=pending_runtime)
+    task._start_runtime_components = Mock()
+    task._close_runtime = AsyncMock()
+    task._last_checkpoint_state_size_bytes = 0
+    task._last_checkpoint_id = None
+
+    before = task.progress_counts()
+    assert await task.prepare_runtime_rescale("resize-1", new_descriptor) is True
+    assert await task.commit_runtime_rescale("resize-1") is True
+    after = task.progress_counts()
+
+    assert after.rows_in == before.rows_in + pending_runtime.state.operator.records_in
+    assert after.rows_out == before.rows_out + pending_runtime.state.operator.records_out
+    assert after.bytes_in == before.bytes_in + pending_runtime.state.operator.bytes_in
+    assert after.bytes_out == before.bytes_out + pending_runtime.state.operator.bytes_out
+    assert after.busy_ns == before.busy_ns + pending_runtime.state.operator.processing_duration_ns
+    assert after.backpressure_ns == before.backpressure_ns + pending_runtime.state.output.backpressure_duration_ns
+    assert after.backpressure_events == before.backpressure_events + pending_runtime.state.output.backpressure_events
+    assert after.barriers_in == before.barriers_in + int(pending_runtime.state.metrics.barriers_in.value)
+    assert after.barriers_out == before.barriers_out + int(pending_runtime.state.metrics.barriers_out.value)
+    assert after.queued == 110
+    assert after.capacity == 30
+
+    assert await task.commit_runtime_rescale("resize-1") is True
+    assert task.progress_counts() == after
 
 
 @pytest.mark.asyncio

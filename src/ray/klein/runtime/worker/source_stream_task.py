@@ -107,6 +107,10 @@ class SourceStreamTask(StreamTask):
         return True
 
     def resume_rescale(self, operation_id: str) -> bool:
+        if operation_id in self._rescale_tombstones:
+            # The first response may have been lost after the source thread was
+            # already released. Match the base task's idempotent RPC contract.
+            return True
         if self._rescale_operation_id != operation_id:
             return False
         self._source_rescale_requested.clear()

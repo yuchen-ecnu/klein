@@ -109,6 +109,14 @@ Existing job-wide PlacementGroup bundles are not resized: added actors use
 Ray's native placement, and bundles made surplus by a scale-in remain reserved
 until the job ends.
 
+"Retained" refers to the Ray actor identity, not to the Python operator object.
+A retained actor calls the operator's `build`/`open` lifecycle for a pending
+runtime while its old runtime is still open, then closes the old object after
+commit. Locally rescalable operators must therefore tolerate a short overlap of
+two instances in one actor process; operators that acquire process-exclusive
+ports, leases, devices, or singleton resources should not use local rescaling
+until they provide an overlap-safe lifecycle.
+
 The normal scale path does not restart the job. After commit, the checkpoint
 coordinator asks the source to emit an ordinary checkpoint at its next record
 or idle boundary; this stabilizes the new topology without stopping the source.

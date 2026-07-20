@@ -215,6 +215,35 @@ class _RuntimeRescaleTransaction:
     pending: _TaskRuntime
 
 
+@dataclass(slots=True)
+class _CumulativeProgress:
+    """Counters retained when one actor swaps to a freshly built runtime."""
+
+    rows_in: int = 0
+    rows_out: int = 0
+    bytes_in: int = 0
+    bytes_out: int = 0
+    busy_ns: int = 0
+    backpressure_ns: int = 0
+    backpressure_events: int = 0
+    barriers_in: int = 0
+    barriers_out: int = 0
+
+    def add_runtime(self, runtime: _TaskRuntime) -> None:
+        operator = runtime.state.operator
+        output = runtime.state.output
+        self.rows_in += operator.records_in
+        self.rows_out += operator.records_out
+        self.bytes_in += operator.bytes_in
+        self.bytes_out += operator.bytes_out
+        self.busy_ns += operator.processing_duration_ns
+        if output is not None:
+            self.backpressure_ns += output.backpressure_duration_ns
+            self.backpressure_events += output.backpressure_events
+        self.barriers_in += int(runtime.state.metrics.barriers_in.value)
+        self.barriers_out += int(runtime.state.metrics.barriers_out.value)
+
+
 class StreamTask(AsyncWorker):
     """Async Ray actor that runs one operator of the execution graph."""
 
@@ -240,6 +269,7 @@ class StreamTask(AsyncWorker):
         self._runtime_rescale_outcomes: dict[str, bool] = {}
         self._runtime_rescale_lock_obj: asyncio.Lock | None = None
         self._retired_runtimes: list[_TaskRuntime] = []
+        self._cumulative_progress = _CumulativeProgress()
         self._last_checkpoint_id: int | None = None
         self._last_checkpoint_state_size_bytes = 0
         self._rescale_operation_id: str | None = None
@@ -1197,6 +1227,7 @@ class StreamTask(AsyncWorker):
         # unreachable. Starting them cannot expose the pending runtime; the five
         # pointer assignments in _install_runtime are the actor-local commit point.
         self._start_runtime_components(transaction.pending)
+        self._progress_offset().add_runtime(transaction.previous)
         self._install_runtime(transaction.pending)
         self._runtime_rescale_transaction = None
         self._remember_runtime_rescale_outcome(operation_id, committed=True)
@@ -1579,23 +1610,35 @@ class StreamTask(AsyncWorker):
 
         if self._state is None:
             return SubtaskCounts()
+        cumulative = self._progress_offset()
         return SubtaskCounts(
-            rows_in=self._state.operator.records_in,
-            rows_out=self._state.operator.records_out,
-            bytes_in=self._state.operator.bytes_in,
-            bytes_out=self._state.operator.bytes_out,
+            rows_in=cumulative.rows_in + self._state.operator.records_in,
+            rows_out=cumulative.rows_out + self._state.operator.records_out,
+            bytes_in=cumulative.bytes_in + self._state.operator.bytes_in,
+            bytes_out=cumulative.bytes_out + self._state.operator.bytes_out,
             queued=self._state.inbox.qsize(),
             capacity=self._descriptor.input_buffer_size,
-            busy_ns=self._state.operator.processing_duration_ns,
-            backpressure_ns=(0 if self._state.output is None else self._state.output.backpressure_duration_ns),
-            backpressure_events=(0 if self._state.output is None else self._state.output.backpressure_events),
-            barriers_in=int(self._state.metrics.barriers_in.value),
-            barriers_out=int(self._state.metrics.barriers_out.value),
+            busy_ns=cumulative.busy_ns + self._state.operator.processing_duration_ns,
+            backpressure_ns=cumulative.backpressure_ns
+            + (0 if self._state.output is None else self._state.output.backpressure_duration_ns),
+            backpressure_events=cumulative.backpressure_events
+            + (0 if self._state.output is None else self._state.output.backpressure_events),
+            barriers_in=cumulative.barriers_in + int(self._state.metrics.barriers_in.value),
+            barriers_out=cumulative.barriers_out + int(self._state.metrics.barriers_out.value),
             checkpoint_alignment_ms=self._state.checkpoint_strategy.last_alignment_duration_ms,
             checkpoint_barrier_latency_ms=self._state.metrics.checkpoint_barrier_latency_ms.last,
             checkpoint_state_size_bytes=self._last_checkpoint_state_size_bytes,
             last_checkpoint_id=self._last_checkpoint_id,
         )
+
+    def _progress_offset(self) -> _CumulativeProgress:
+        # A few compatibility/unit-test constructors predate this field and
+        # bypass __init__; laziness also keeps restored actor objects safe.
+        cumulative = getattr(self, "_cumulative_progress", None)
+        if cumulative is None:
+            cumulative = _CumulativeProgress()
+            self._cumulative_progress = cumulative
+        return cumulative
 
     # --- recovery: replay buffered records to a rebuilt downstream ---
 
