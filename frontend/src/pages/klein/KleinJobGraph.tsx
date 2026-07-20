@@ -19,6 +19,7 @@ import {
 import { StatusChip } from "../../components/StatusChip";
 import { KleinOperator } from "../../type/klein";
 import { formatByteRate, formatCount, formatRate } from "./KleinFormatUtils";
+import { getOperatorNodeColors } from "./KleinJobGraphColors";
 
 type KleinJobGraphProps = {
   operators: KleinOperator[];
@@ -71,6 +72,7 @@ const {
 const NODE_WIDTH = 244;
 const NODE_HEIGHT = 124;
 const RANK_SEPARATION = 72;
+const NODE_TEXT_COLOR = "#111820";
 
 const nodeTypes: XYFlow.NodeTypes = {
   kleinOperator: OperatorNode,
@@ -193,6 +195,9 @@ export const KleinJobGraph = ({
         <MiniMap
           maskColor="rgba(239, 244, 248, 0.72)"
           nodeColor={(node) => nodeColor(node as OperatorFlowNode)}
+          nodeStrokeColor={(node) =>
+            nodeStrokeColor(node as OperatorFlowNode)
+          }
           nodeStrokeWidth={3}
           pannable
           position="bottom-right"
@@ -216,34 +221,48 @@ export const KleinJobGraph = ({
 // eslint-disable-next-line prefer-arrow/prefer-arrow-functions
 function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
   const { operator, role } = data;
-  const backpressure = operator.backpressure_percent ?? 0;
+  const nodeColors = getOperatorNodeColors(operator);
+  const busy = nodeColors.busyPercent;
+  const backpressure = nodeColors.backpressurePercent;
   const queuePercent =
     operator.capacity > 0
       ? Math.min(100, (operator.queued / operator.capacity) * 100)
       : 0;
   const pressureColor =
-    backpressure >= 50 || queuePercent >= 90
-      ? "#D9363E"
-      : backpressure > 0 || queuePercent >= 60
-      ? "#D97706"
-      : "#2F80C9";
+    backpressure >= queuePercent && backpressure > 0
+      ? "#C28A21"
+      : queuePercent >= 90
+      ? "#CF5D57"
+      : queuePercent >= 60
+      ? "#D09A38"
+      : "#729BC5";
 
   return (
     <Paper
-      aria-label={`Select operator ${operator.name}`}
+      aria-label={`Select operator ${operator.name}, ${busy.toFixed(
+        1,
+      )}% busy, ${backpressure.toFixed(1)}% backpressured`}
+      data-backpressure-percent={backpressure}
+      data-busy-percent={busy}
       data-testid={`klein-operator-${operator.op_id}`}
-      elevation={selected ? 7 : 2}
+      elevation={0}
       sx={{
-        backgroundColor: "#FFFFFF",
-        border: selected ? "2px solid #1976D2" : "1px solid #BEC9D4",
+        backgroundColor: nodeColors.background,
+        border: `1px solid ${nodeColors.border}`,
         borderRadius: 0.75,
+        boxShadow: selected
+          ? "0 8px 18px rgba(15, 23, 42, 0.16)"
+          : "0 2px 7px rgba(15, 23, 42, 0.12)",
+        color: NODE_TEXT_COLOR,
         height: NODE_HEIGHT,
+        outline: selected ? "3px solid rgba(71, 85, 105, 0.2)" : "none",
+        outlineOffset: 2,
         overflow: "hidden",
-        transition: "border-color 120ms ease, box-shadow 120ms ease",
+        transition:
+          "background-color 160ms ease, border-color 120ms ease, box-shadow 120ms ease, outline-color 120ms ease",
         width: NODE_WIDTH,
         "&:hover": {
-          borderColor: "#1976D2",
-          boxShadow: "0 6px 16px rgba(23, 73, 115, 0.2)",
+          boxShadow: "0 7px 16px rgba(15, 23, 42, 0.16)",
         },
       }}
     >
@@ -251,7 +270,7 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         isConnectable={false}
         position={Position.Left}
         style={{
-          background: "#7C91A6",
+          background: nodeColors.border,
           border: "2px solid #FFFFFF",
           height: 9,
           left: -5,
@@ -262,8 +281,8 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
       <Box
         sx={{
           alignItems: "center",
-          backgroundColor: selected ? "#EAF4FF" : "#F2F5F8",
-          borderBottom: "1px solid #D8E0E8",
+          backgroundColor: "transparent",
+          borderBottom: "1px solid rgba(17, 24, 32, 0.14)",
           display: "flex",
           height: 38,
           paddingX: 1.25,
@@ -272,7 +291,7 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         <Box
           sx={{
             alignItems: "center",
-            color: "#315B7D",
+            color: NODE_TEXT_COLOR,
             display: "flex",
             fontSize: 17,
             marginRight: 1,
@@ -288,20 +307,29 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         >
           {operator.name}
         </Typography>
-        <StatusChip type="kleinOperator" status={operator.status} />
+        <StatusChip
+          style={{
+            backgroundColor: "rgba(255, 255, 255, 0.72)",
+            borderColor: "rgba(17, 24, 32, 0.42)",
+            color: NODE_TEXT_COLOR,
+          }}
+          type="kleinOperator"
+          status={operator.status}
+        />
       </Box>
       <Box sx={{ padding: 1.1, paddingBottom: 0.65 }}>
         <Stack direction="row" justifyContent="space-between">
-          <Typography color="text.secondary" variant="caption">
+          <Typography variant="caption">
             {role.toUpperCase()} · P{operator.parallelism}
           </Typography>
-          <Typography color="text.secondary" variant="caption">
+          <Typography variant="caption">
             ID {operator.op_id}
           </Typography>
         </Stack>
-        <Stack direction="row" spacing={2} sx={{ marginTop: 0.55 }}>
+        <Stack direction="row" spacing={1.1} sx={{ marginTop: 0.55 }}>
           <Metric label="IN" value={formatCount(operator.rows_in)} />
           <Metric label="OUT" value={formatCount(operator.rows_out)} />
+          <Metric label="BUSY" value={`${busy.toFixed(1)}%`} />
           <Metric label="BACKPRESSURE" value={`${backpressure.toFixed(1)}%`} />
         </Stack>
         <Stack
@@ -311,14 +339,15 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
           sx={{ marginTop: 0.45 }}
         >
           <Typography
-            color="text.secondary"
             title="Estimated logical payload output rate"
             variant="caption"
           >
             {formatByteRate(operator.bytes_out_per_second)} out
           </Typography>
           <Typography
-            sx={{ color: queuePercent >= 90 ? "error.main" : "text.secondary" }}
+            sx={{
+              fontWeight: queuePercent >= 90 ? 700 : 400,
+            }}
             variant="caption"
           >
             Queue {operator.queued}/{operator.capacity || "∞"}
@@ -340,7 +369,7 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         isConnectable={false}
         position={Position.Right}
         style={{
-          background: "#7C91A6",
+          background: nodeColors.border,
           border: "2px solid #FFFFFF",
           height: 9,
           right: -5,
@@ -407,7 +436,6 @@ const RoleIcon = ({ role }: { role: OperatorRole }) => {
 const Metric = ({ label, value }: { label: string; value: string }) => (
   <Box sx={{ minWidth: 0 }}>
     <Typography
-      color="text.secondary"
       display="block"
       sx={{ fontSize: 9, letterSpacing: 0.25 }}
     >
@@ -529,17 +557,11 @@ const createFlowElements = (
 };
 
 const nodeColor = (node: OperatorFlowNode) => {
-  const operator = node.data.operator;
-  if ((operator.backpressure_percent ?? 0) >= 50) {
-    return "#D9363E";
-  }
-  if (node.data.role === "stateful") {
-    return "#7C4DFF";
-  }
-  if (operator.status.toLowerCase() === "running") {
-    return "#2F80C9";
-  }
-  return "#8796A5";
+  return getOperatorNodeColors(node.data.operator).background;
+};
+
+const nodeStrokeColor = (node: OperatorFlowNode) => {
+  return getOperatorNodeColors(node.data.operator).border;
 };
 
 const getPolylineMidpoint = (points: EdgePoint[]) => {
