@@ -1,0 +1,373 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Observe Klein for Ray jobs with structured logs, metrics, checkpoints, CLI "
+"attach, and a cluster state API."
+msgstr "使用结构化日志、指标、检查点、CLI 连接和集群状态 API 观测 Klein for Ray 作业。"
+
+msgid "Observe Klein jobs"
+msgstr "观测 Klein 作业"
+
+msgid ""
+"Klein uses Ray's existing observability stack. Worker and actor logs remain "
+"Ray logs, runtime metrics use `ray.util.metrics`, and a lightweight detached "
+"actor on the head node provides JSON-safe job discovery. Each `JobManager` "
+"remains the source of truth for current state."
+msgstr "Klein 使用 Ray 现有的可观测性体系。worker 和 actor 日志仍是 Ray 日志，运行时指标使用 `ray.util.metrics`，head 节点上的轻量分离 actor 提供 JSON 安全的作业发现。每个 `JobManager` 仍是当前状态的事实来源。"
+
+msgid "Query and control jobs"
+msgstr "查询和控制作业"
+
+msgid "Use the CLI to discover or attach to jobs from another process:"
+msgstr "使用 CLI 从另一个进程发现或连接作业："
+
+msgid ""
+"Omit the namespace when exactly one job is running, or when you want the CLI "
+"to present an interactive picker. Use `ray-klein stop --force <namespace>` "
+"in non-interactive automation; without `--force`, `stop` asks for "
+"confirmation. `ray-klein cancel` is an equivalent spelling that matches the "
+"Python API. Use `list --all` to include retained terminal jobs, and add `--"
+"json` to `list` or `status` when another program will consume the result."
+msgstr "当只有一个作业正在运行，或希望 CLI 显示交互式选择器时，可以省略命名空间。非交互式自动化请使用 `ray-klein stop --force <namespace>`；不带 `--force` 时，`stop` 会请求确认。`ray-klein cancel` 是与 Python API 对应的等价写法。使用 `list --all` 包含保留的终止作业；当其他程序需要消费结果时，请为 `list` 或 `status` 添加 `--json`。"
+
+msgid "Operations integrations can consume the stable Python state API:"
+msgstr "运维集成可以使用稳定的 Python 状态 API："
+
+msgid ""
+"Snapshots include job and operator status, task metrics, checkpoint history, "
+"configuration with credential-like values redacted, and a `dashboard_stale` "
+"marker when the last good cached snapshot is returned. Terminal history is "
+"in memory and is distinct from durable checkpoints."
+msgstr "快照包含作业和算子状态、任务指标、检查点历史、已遮蔽类似凭据值的配置；返回最近一次良好缓存快照时，还包含 `dashboard_stale` 标记。终止作业历史保存在内存中，与持久检查点不同。"
+
+msgid "Configure publication and retention with:"
+msgstr "使用以下配置控制发布和保留："
+
+msgid ""
+"Disabling state publication doesn't disable Ray logs, Ray metrics, or "
+"checkpointing."
+msgstr "禁用状态发布不会禁用 Ray 日志、Ray 指标或检查点。"
+
+msgid "Use the Klein Dashboard"
+msgstr "使用 Klein Dashboard"
+
+msgid ""
+"Start the bundled web Dashboard from a machine that can connect to the Ray "
+"cluster:"
+msgstr "从能够连接 Ray 集群的机器启动内置 Web Dashboard："
+
+msgid ""
+"It listens on `127.0.0.1:8266` by default. The page polls the published job "
+"snapshots and renders the operator DAG. Like Flink's JobGraph, node color "
+"mixes idle (blue), busy (red), and backpressured (black) time. The graph "
+"uses the maximum busy and backpressure percentage across an operator's "
+"subtasks so one hot or skewed subtask is not hidden by the operator average; "
+"the exact values remain printed in each node and in the operator table for "
+"accessibility."
+msgstr "默认监听 `127.0.0.1:8266`。页面会轮询已发布的作业快照并渲染算子 DAG。与 Flink 的 JobGraph 类似，节点颜色混合空闲（蓝色）、忙碌（红色）和反压（黑色）时间。图中使用一个算子所有子任务的最大忙碌和反压百分比，以免算子平均值掩盖单个热点或倾斜子任务；为便于访问，每个节点和算子表中仍会显示精确数值。"
+
+msgid ""
+"The page also shows each operator's live parallelism and rates, and lets you "
+"apply a new positive parallelism to one running operator. A stale or "
+"terminal job is read-only, and unsupported controls show the runtime-"
+"provided reason. The change is barrier-aligned, preserves overlapping actor "
+"identities, moves managed state by key group, and requests a stabilization "
+"checkpoint after commit. It does not restart unrelated regions of the job."
+msgstr "页面还会显示每个算子的实时并行度和速率，并允许为某个运行中算子应用新的正并行度。过期或已终止的作业是只读的，不支持的控制会显示运行时提供的原因。变更与屏障对齐，保留重叠 actor 身份，按键组迁移托管状态，并在提交后请求稳定检查点。它不会重启作业中无关的区域。"
+
+msgid ""
+"See [Autoscaling and live operator rescaling](operator-rescaling.md) for the "
+"batch/streaming distinction, prerequisites, Dashboard and Python procedures, "
+"state migration, rollback boundary, recovery fence, and current limitations."
+msgstr "有关批处理/流处理区别、前置条件、Dashboard 和 Python 操作流程、状态迁移、回滚边界、恢复围栏和当前限制，请参阅[自动扩缩与在线算子扩缩容](operator-rescaling.md)。"
+
+msgid ""
+"Use `--host` and `--port` to change the listener. Binding to a non-loopback "
+"address exposes an unauthenticated control endpoint and is refused unless "
+"you explicitly pass `--allow-unauthenticated`. Put such a listener behind an "
+"authenticated reverse proxy, or access the default listener through an SSH "
+"tunnel instead. A reverse proxy should rewrite `Host` to the configured "
+"listener host; the server rejects untrusted host names to prevent DNS-"
+"rebinding control requests."
+msgstr "使用 `--host` 和 `--port` 更改监听地址。绑定到非回环地址会暴露未经认证的控制端点；除非显式传入 `--allow-unauthenticated`，否则会被拒绝。请将此监听器放在带认证的反向代理后，或通过 SSH 隧道访问默认监听器。反向代理应把 `Host` 重写为配置的监听主机；服务器会拒绝不受信任的主机名，以防 DNS 重绑定控制请求。"
+
+msgid ""
+"The standalone wheel does not patch Ray Dashboard backend or React files. "
+"The bundled Klein Dashboard is a small, independent HTTP page over the "
+"stable state API. Embedding the same controls inside Ray's native Dashboard "
+"still requires an upstream Ray integration; Klein deliberately avoids Ray's "
+"private dashboard implementation."
+msgstr "独立 wheel 不会修改 Ray Dashboard 后端或 React 文件。内置 Klein Dashboard 是基于稳定状态 API 的小型独立 HTTP 页面。若要将相同控制嵌入 Ray 原生 Dashboard，仍需要上游 Ray 集成；Klein 有意避开 Ray 的私有仪表板实现。"
+
+msgid "Configure operational logs"
+msgstr "配置运维日志"
+
+msgid ""
+"Klein emits operational events through Python's standard `logging` package. "
+"When the application doesn't install a Klein-specific handler, messages "
+"follow the normal Ray driver, worker, and actor logging pipeline. Call "
+"`configure_logging()` when the process needs a dedicated text or JSON stream:"
+msgstr "Klein 通过 Python 标准 `logging` 包发出运维事件。当应用未安装 Klein 专用 handler 时，消息会沿用常规 Ray driver、worker 和 actor 日志流水线。进程需要独立的文本或 JSON 流时，请调用 `configure_logging()`："
+
+msgid "The equivalent environment settings are:"
+msgstr "等价的环境设置如下："
+
+msgid ""
+"Set `RAY_KLEIN_LOGGING_CONFIG` to a YAML `dictConfig` file to replace the "
+"bundled handler configuration. Klein doesn't replace the root logger or "
+"write directly into Ray's private session directory."
+msgstr "设置 `RAY_KLEIN_LOGGING_CONFIG` 可使用 YAML `dictConfig` 文件替换内置 handler 配置。Klein 不会替换根 logger，也不会直接写入 Ray 私有 session 目录。"
+
+msgid ""
+"JSON events contain a timestamp, level, component, event name, message, "
+"process and thread identity, plus available context such as `job_id`, "
+"`operator_id`, `task_id`, `subtask_index`, and `checkpoint_id`. Stable event "
+"names use dotted verbs, for example `job.status.changed`, `checkpoint."
+"completed`, and `failover.global.started`. Structured fields whose names "
+"look like passwords, tokens, credentials, secrets, or API keys are redacted."
+msgstr "JSON 事件包含时间戳、级别、组件、事件名称、消息、进程和线程身份，以及可用的上下文，例如 `job_id`、`operator_id`、`task_id`、`subtask_index` 和 `checkpoint_id`。稳定事件名称使用点分动词，例如 `job.status.changed`、`checkpoint.completed` 和 `failover.global.started`。名称类似密码、令牌、凭据、密钥或 API key 的结构化字段会被遮蔽。"
+
+msgid "Keep logs and data separate"
+msgstr "分离日志与数据"
+
+msgid ""
+"Operational logs go to stderr. Stdout is reserved for an explicit user-"
+"facing boundary: terminal progress rendering or a console data sink. This "
+"makes data safe to pipe without mixing it with task lifecycle messages."
+msgstr "运维日志写入 stderr。Stdout 保留给显式的用户边界：终端进度渲染或控制台数据 Sink。这样可安全地通过管道传输数据，而不会混入任务生命周期消息。"
+
+msgid "`ConsoleSinkFunction` writes one JSON Lines object per record:"
+msgstr "`ConsoleSinkFunction` 为每条记录写入一个 JSON Lines 对象："
+
+msgid ""
+"Don't use `print()` in an operator for diagnostics. Create a module logger "
+"with `get_logger(__name__)` inside Klein itself, or use the application's "
+"standard Python logger in user code. Avoid logging whole records, state "
+"snapshots, connector command buffers, and configuration mappings."
+msgstr "不要在算子中使用 `print()` 进行诊断。在 Klein 内部使用 `get_logger(__name__)` 创建模块 logger；用户代码则使用应用的标准 Python logger。避免记录完整记录、状态快照、连接器命令缓冲区和配置映射。"
+
+msgid "Query metrics"
+msgstr "查询指标"
+
+msgid ""
+"Klein publishes native `ray.util.metrics` metrics in three stable scopes:"
+msgstr "Klein 在三个稳定作用域中发布原生 `ray.util.metrics` 指标："
+
+msgid "Scope"
+msgstr "作用域"
+
+msgid "Prefix"
+msgstr "前缀"
+
+msgid "Labels"
+msgstr "标签"
+
+msgid "Job"
+msgstr "作业"
+
+msgid "`ray_klein_job_`"
+msgstr "`ray_klein_job_`"
+
+msgid "`job_id`, `job_name`"
+msgstr "`job_id`, `job_name`"
+
+msgid "Task"
+msgstr "任务"
+
+msgid "`ray_klein_task_`"
+msgstr "`ray_klein_task_`"
+
+msgid "job labels plus `task_id`, `task_name`, `subtask_index`"
+msgstr "作业标签以及 `task_id`、`task_name`、`subtask_index`"
+
+msgid "Operator"
+msgstr "算子"
+
+msgid "`ray_klein_operator_`"
+msgstr "`ray_klein_operator_`"
+
+msgid "task labels plus `operator_id`, `operator_name`"
+msgstr "任务标签以及 `operator_id`、`operator_name`"
+
+msgid ""
+"Labels identify bounded runtime topology; record values, keys, exception "
+"text, URLs, checkpoint paths, and Object IDs are never labels. Counter "
+"definitions do not include `_total` because Ray's Prometheus exporter adds "
+"that suffix."
+msgstr "标签用于标识有界的运行时拓扑；记录值、键、异常文本、URL、检查点路径和 Object ID 绝不会成为标签。计数器定义不包含 `_total`，因为 Ray 的 Prometheus exporter 会添加该后缀。"
+
+msgid "The main built-in metrics are:"
+msgstr "主要内置指标如下："
+
+msgid "Area"
+msgstr "领域"
+
+msgid "Metrics"
+msgstr "指标"
+
+msgid "Throughput"
+msgstr "吞吐量"
+
+msgid ""
+"`records_in`, `records_out`, `filter_records_in`, `filter_records_dropped`"
+msgstr "`records_in`, `records_out`, `filter_records_in`, `filter_records_dropped`"
+
+msgid "Execution"
+msgstr "执行"
+
+msgid ""
+"`processing_duration_ms`, `input_buffer_records`, `input_buffer_bytes`, "
+"`input_buffer_utilization`, `input_buffer_byte_utilization`, "
+"`emit_queue_batches`, `transport_requests`, `transport_batch_rows`, "
+"`transport_batch_bytes`, `transport_send_duration_ms`, "
+"`transport_inflight_requests`, `backpressure_events`, "
+"`backpressure_duration_ms`"
+msgstr "`processing_duration_ms`, `input_buffer_records`, `input_buffer_bytes`, `input_buffer_utilization`, `input_buffer_byte_utilization`, `emit_queue_batches`, `transport_requests`, `transport_batch_rows`, `transport_batch_bytes`, `transport_send_duration_ms`, `transport_inflight_requests`, `backpressure_events`, `backpressure_duration_ms`"
+
+msgid "Event time"
+msgstr "事件时间"
+
+msgid ""
+"`current_input_watermark_ms`, `current_output_watermark_ms`, "
+"`watermark_lag_ms`, `idle_inputs`, `late_records_dropped`, `timers_fired`"
+msgstr "`current_input_watermark_ms`, `current_output_watermark_ms`, `watermark_lag_ms`, `idle_inputs`, `late_records_dropped`, `timers_fired`"
+
+msgid "Checkpoints"
+msgstr "检查点"
+
+msgid ""
+"`barriers_in`, `barriers_out`, `checkpoint_alignment_duration_ms`, "
+"`checkpoint_barrier_latency_ms`, `checkpoints_triggered`, "
+"`checkpoints_completed`, `checkpoints_failed`, `checkpoints_in_progress`, "
+"`checkpoint_duration_ms`, `checkpoint_persist_duration_ms`, "
+"`sink_transactions_pending`, `sink_transactions_committed`, "
+"`sink_transaction_commit_failures`, `sink_transaction_commit_duration_ms`"
+msgstr "`barriers_in`, `barriers_out`, `checkpoint_alignment_duration_ms`, `checkpoint_barrier_latency_ms`, `checkpoints_triggered`, `checkpoints_completed`, `checkpoints_failed`, `checkpoints_in_progress`, `checkpoint_duration_ms`, `checkpoint_persist_duration_ms`, `sink_transactions_pending`, `sink_transactions_committed`, `sink_transaction_commit_failures`, `sink_transaction_commit_duration_ms`"
+
+msgid "State"
+msgstr "状态"
+
+msgid ""
+"`managed_state_size_bytes`, `state_snapshot_duration_ms`, "
+"`state_restore_duration_ms`, `ttl_entries_cleaned`, `replay_buffer_records`, "
+"`replay_buffer_bytes`, `state_object_store_writes`, "
+"`state_object_store_restores`, `state_durable_restore_fallbacks`"
+msgstr "`managed_state_size_bytes`, `state_snapshot_duration_ms`, `state_restore_duration_ms`, `ttl_entries_cleaned`, `replay_buffer_records`, `replay_buffer_bytes`, `state_object_store_writes`, `state_object_store_restores`, `state_durable_restore_fallbacks`"
+
+msgid "Connectors"
+msgstr "连接器"
+
+msgid ""
+"`redis_flush_duration_ms`, `redis_flush_batch_records`, "
+"`redis_lookup_duration_ms`, `redis_failures`, `kafka_poll_duration_ms`, "
+"`kafka_poll_batch_records`, `kafka_assigned_partitions`, "
+"`kafka_consumer_lag_records`, `kafka_commits`, `kafka_commit_duration_ms`, "
+"`kafka_errors`, `rocketmq_received_records`, "
+"`rocketmq_acknowledged_records`, `rocketmq_pending_records`, "
+"`rocketmq_errors`, `serve_request_duration_ms`, `serve_request_failures`"
+msgstr "`redis_flush_duration_ms`, `redis_flush_batch_records`, `redis_lookup_duration_ms`, `redis_failures`, `kafka_poll_duration_ms`, `kafka_poll_batch_records`, `kafka_assigned_partitions`, `kafka_consumer_lag_records`, `kafka_commits`, `kafka_commit_duration_ms`, `kafka_errors`, `rocketmq_received_records`, `rocketmq_acknowledged_records`, `rocketmq_pending_records`, `rocketmq_errors`, `serve_request_duration_ms`, `serve_request_failures`"
+
+msgid ""
+"Latencies and batch sizes are histograms rather than last-value gauges. For "
+"example, a Prometheus query for operator p95 processing latency is:"
+msgstr "延迟和批次大小使用直方图，而不是最新值 gauge。例如，查询算子 p95 处理延迟的 Prometheus 语句为："
+
+msgid "Rows per second can be queried with:"
+msgstr "每秒行数可以通过以下语句查询："
+
+msgid ""
+"Custom application metrics remain available from `runtime_context."
+"metric_group`. Give custom metrics a unit-bearing name and description, "
+"reuse the same type and label set for a name, and use histograms for "
+"distributions:"
+msgstr "自定义应用指标仍可从 `runtime_context.metric_group` 获取。请为自定义指标提供包含单位的名称和说明；同一名称应复用相同的类型和标签集，分布数据应使用直方图："
+
+msgid ""
+"Use Ray's Prometheus and Grafana integration for retention, alerting, and "
+"cross-job dashboards. Klein snapshots derive short-interval row rates, busy "
+"percentage, and backpressure percentage from monotonic task counters without "
+"a Prometheus dependency."
+msgstr "使用 Ray 的 Prometheus 和 Grafana 集成实现保留、告警和跨作业仪表板。Klein 快照可根据单调任务计数器计算短时间窗口内的行速率、忙碌百分比和反压百分比，不依赖 Prometheus。"
+
+msgid ""
+"For symptom-oriented interpretation, see [Performance tuning](performance-"
+"tuning.md) and [Troubleshooting](troubleshooting.md)."
+msgstr "按症状理解指标的方法，请参阅[性能调优](performance-tuning.md)和[故障排除](troubleshooting.md)。"
+
+msgid "State publication architecture"
+msgstr "状态发布架构"
+
+msgid "The standalone integration uses only a small Ray actor surface:"
+msgstr "独立集成只使用很小的 Ray actor 接口面："
+
+msgid ""
+"A streaming `JobClient` registers its `JobManager` with one detached, zero-"
+"CPU state actor on the Ray head node."
+msgstr "流处理 `JobClient` 会把自己的 `JobManager` 注册到 Ray head 节点上一个分离、零 CPU 的状态 actor。"
+
+msgid ""
+"The state actor refreshes immutable snapshots concurrently and keeps the "
+"last good snapshot for temporary actor outages and terminal history."
+msgstr "状态 actor 会并发刷新不可变快照，并保留最近一次良好快照，以应对临时 actor 中断和终止作业历史。"
+
+msgid ""
+"`list_job_snapshots`, `get_job_snapshot`, `rescale_operator`, and "
+"`cancel_job` expose a stable client API for CLIs, dashboards, and automation."
+msgstr "`list_job_snapshots`、`get_job_snapshot`、`rescale_operator` 和 `cancel_job` 为 CLI、仪表板和自动化提供稳定客户端 API。"
+
+msgid ""
+"The bundled HTTP page is one adapter over this API. An eventual native Ray "
+"Dashboard contribution can reuse the same boundary without moving scheduling "
+"state into the dashboard process."
+msgstr "内置 HTTP 页面是该 API 上的一个适配器。未来的原生 Ray Dashboard 贡献可以复用同一边界，无需将调度状态移入仪表板进程。"
+
+msgid "\"Retained\" refers to the Ray actor identity, not to the Python operator object. A retained actor calls the operator's `build`/`open` lifecycle for a pending runtime while its old runtime is still open, then closes the old object in a supervised background cleanup after commit. Plain functions and Klein's framework operators support this handoff. Callable or lifecycle classes are rejected by default because constructors or `open()` may acquire exclusive external resources. Such a class may set `supports_concurrent_rescale = True` only when two task-local instances can safely overlap during rollback-preserving handoff."
+msgstr "“保留”指的是 Ray Actor 的身份，而不是 Python 算子对象。保留的 Actor 会在旧运行时仍处于打开状态时，为待生效运行时调用算子的 `build`/`open` 生命周期；提交后，再通过受监督的后台清理关闭旧对象。普通函数和 Klein 框架算子支持这种切换。可调用类或生命周期类默认会被拒绝，因为其构造函数或 `open()` 可能获取独占外部资源。只有当两个任务本地实例能够在保留回滚能力的切换期间安全重叠时，此类才能设置 `supports_concurrent_rescale = True`。"
+
+msgid "A stale or terminal job is read-only. Rescaling changes only the physical delta: subtasks whose indexes exist at both parallelisms retain their actor identities. On a scale-out, Klein creates the added actors and waits for them to answer a ping before it interrupts the data path. It then asks every direct upstream task to insert an ordered local barrier on the incident edge and pause at that cut. The target aligns those barriers, snapshots managed state, and fences its direct downstream tasks before Klein swaps routing and resumes the region. Unrelated actors stay alive; there is no whole-job restart or global source stop."
+msgstr "过期或已终止的作业只能读取。扩缩容只改变物理差量：索引在新旧并行度中都存在的子任务会保留其 Actor 身份。扩容时，Klein 创建新增 Actor，并等待它们响应 ping 后才中断数据路径。随后，它要求每个直接上游任务在相连边上插入有序的局部屏障，并在该切面暂停。目标算子对齐这些屏障、快照托管状态并隔离其直接下游任务，然后 Klein 才切换路由并恢复该区域。无关 Actor 会继续存活；不会重启整个作业，也不会全局停止数据源。"
+
+msgid "Added actors remain fenced while the local cut is formed. At the cut, retained actors prepare their new runtime descriptors and managed state transactionally, and added actors prepare their initial runtime and assigned state. The old runtime remains available until topology commit, so a pre-commit failure can roll back without changing the retained actor identities. On a scale-in, Klein does not create replacements: the removed actors stay fenced and available for rollback until commit, and only those removed actors are stopped afterward. With placement groups enabled, each physical actor owns an independently releasable single-bundle group. Scale-out reserves the added groups before the barrier, and scale-in releases the retired groups only after their actors stop. Retained actors and their reservations never move. This elastic layout trades job-wide gang scheduling and FORWARD-affinity bundle grouping for true incremental resource allocation and release. It accepts only `PACK` and `SPREAD`; `STRICT_PACK` and `STRICT_SPREAD` are rejected because separate actor groups cannot preserve a cross-actor strict-placement guarantee."
+msgstr "形成局部切面期间，新增 Actor 始终处于隔离状态。在切面处，保留的 Actor 以事务方式准备新的运行时描述符和托管状态，新增 Actor 则准备初始运行时及分配给它们的状态。拓扑提交前旧运行时一直可用，因此提交前失败可以回滚，而不改变保留 Actor 的身份。缩容时 Klein 不创建替代 Actor：被移除的 Actor 在提交前保持隔离并可用于回滚，提交后才只停止这些 Actor。启用放置组后，每个物理 Actor 拥有一个可独立释放的单资源包组。扩容在屏障前预留新增组；缩容则在退役组的 Actor 停止后才释放这些组。保留的 Actor 及其预留资源始终不移动。这种弹性布局以作业级成组调度和 FORWARD 亲和资源包分组为代价，换取真正的增量资源分配与释放。它只接受 `PACK` 和 `SPREAD`；独立 Actor 组无法维持跨 Actor 的严格放置保证，因此会拒绝 `STRICT_PACK` 和 `STRICT_SPREAD`。"
+
+msgid "Frontend contributors can run the source in `frontend/` and temporarily point 8266 at it with `--frontend-url`; production installations use the packaged UI."
+msgstr "前端贡献者可以运行 `frontend/` 中的源码，并通过 `--frontend-url` 临时让 8266 端口指向该前端；生产安装使用已打包的 UI。"
+
+msgid "If a source is itself a direct upstream of the target, that source task pauses cooperatively at a record boundary while the local cut is installed. Sources elsewhere in the graph keep running. Source operators cannot yet be the rescale target, and transactional or collecting sinks are also unsupported. Multiple source operators and parallel source subtasks are supported because the local cut pauses the target's direct upstream tasks rather than globally stopping every source. Unsupported API requests are rejected with the runtime-provided reason."
+msgstr "如果某个数据源本身就是目标的直接上游，则在安装局部切面时，该源任务会在记录边界协作式暂停。图中其他位置的数据源继续运行。源算子目前不能作为扩缩容目标，事务型 Sink 和收集型 Sink 也不受支持。系统支持多个源算子和并行源子任务，因为局部切面暂停的是目标的直接上游任务，而不是全局停止所有数据源。不受支持的 API 请求会被拒绝，并返回运行时提供的原因。"
+
+msgid "Klein listens on `127.0.0.1:8266` by default. The exact MUI/React Flow Klein UI is bundled in the `ray-klein` wheel, so serving it doesn't require a Ray source checkout, Node.js, port 3001, or changes to Ray Dashboard. Klein data and control requests stay on 8266. Overview, Jobs, Serve, Cluster, Actors, Metrics, Logs, and actor-detail links leave the gateway for the configured native Ray Dashboard. Set `RAY_KLEIN_RAY_DASHBOARD_URL`, or pass `--ray-dashboard-url`, when it uses a browser-visible proxy URL."
+msgstr "Klein 默认监听 `127.0.0.1:8266`。完整的 MUI/React Flow Klein UI 已打包进 `ray-klein` wheel，因此提供该 UI 无需检出 Ray 源码、安装 Node.js、开放 3001 端口或修改 Ray Dashboard。Klein 的数据与控制请求都留在 8266 端口。Overview、Jobs、Serve、Cluster、Actors、Metrics、Logs 和 Actor 详情链接会离开该网关，转到已配置的原生 Ray Dashboard。如果该 Dashboard 使用浏览器可见的代理 URL，请设置 `RAY_KLEIN_RAY_DASHBOARD_URL` 或传入 `--ray-dashboard-url`。"
+
+msgid "Start the standalone Klein Dashboard from a process connected to the Ray cluster:"
+msgstr "从已连接 Ray 集群的进程启动独立 Klein Dashboard："
+
+msgid "The normal scale path does not restart the job. Before the committed topology is released, the checkpoint coordinator arms every physical source in the target operator's physical `CheckpointDomain` set for one shared stabilization epoch. A checkpoint domain is a weakly connected component of physical execution edges, so independent FORWARD lanes and disconnected branches do not needlessly coordinate. Each selected source emits the same checkpoint ID at its next record or idle boundary. Barrier ordering forms the consistent cut, so sources keep producing while metadata becomes durable. Every task temporarily backpressures only a physical input channel whose barrier arrived early; other inputs keep draining until their matching barriers arrive, then the task snapshots and forwards the barrier once. Blocked records remain charged to the bounded inbox rather than moving to an unbounded side buffer; the finite set of in-flight control barriers has reserved admission so data traffic cannot starve alignment. The component's source offsets and operator shards are persisted atomically. Domains outside the target set do not join or wait for this epoch. The recovery fence is removed only after durability and source-state release. If any task fails after the local commit but before then, Klein deliberately falls back to a consistent global checkpoint recovery instead of restoring one task from stale state. If the coordinator is rebuilt during this window, Klein reclaims the old epoch and re-requests stabilization automatically."
+msgstr "正常扩缩容路径不会重启作业。在释放已提交的拓扑前，检查点协调器会为目标算子的物理 `CheckpointDomain` 集合中的每个物理数据源启用同一个共享稳定化轮次。检查点域是物理执行边构成的弱连通分量，因此独立的 FORWARD 通道和不相连的分支无需进行多余协调。每个选中的数据源会在下一条记录或空闲边界发出相同的检查点 ID。屏障顺序形成一致性切面，因此数据源可以在元数据持久化期间继续生成数据。每个任务只会临时反压屏障提前到达的物理输入通道；其他输入继续排空，直到对应屏障到达，随后任务只执行一次快照并转发屏障。被阻塞的记录仍计入有界收件箱，而不会移入无界侧缓冲区；数量有限的在途控制屏障拥有预留准入能力，因此数据流量无法饿死对齐过程。该分量的数据源偏移量和算子分片会以原子方式持久化。目标集合之外的检查点域不会加入或等待此轮次。只有在持久化完成并释放源状态后，恢复隔离才会解除。如果任何任务在局部提交之后、解除前失败，Klein 会有意回退到一致的全局检查点恢复，而不是从陈旧状态恢复单个任务。如果协调器在此窗口内重建，Klein 会自动接管旧轮次并重新请求稳定化。"
+
+msgid "The page also shows each operator's live parallelism and rates and exposes guarded local rescaling. Select an operator, enter the target parallelism in its details drawer, and confirm the change. When rescaling is unavailable, the disabled control shows the runtime-provided reason. The same operation remains available through the stable Python state API:"
+msgstr "页面还会显示每个算子的实时并行度和速率，并提供带保护的局部扩缩容功能。选择一个算子，在其详情抽屉中输入目标并行度，然后确认变更。无法扩缩容时，禁用的控件会显示运行时给出的原因。同一操作也可通过稳定的 Python 状态 API 使用："
+
+msgid "The page polls published job snapshots and renders the operator DAG. Like Flink's JobGraph, the whole node and its border continuously blend using the hottest subtask. Klein uses light cool-blue and warm-coral surfaces for idle and busy nodes, then blends toward amber for backpressure so dense metric text stays readable. Selecting a node or operator row opens a right-side drawer with subtask metrics. Separate views expose checkpoint history, per-operator state size, barrier alignment and latency, and redacted configuration."
+msgstr "页面会轮询已发布的作业快照并渲染算子 DAG。与 Flink 的 JobGraph 类似，整个节点及其边框会根据最繁忙的子任务持续混合颜色。Klein 使用浅冷蓝和暖珊瑚色分别表示空闲与繁忙节点，并在发生反压时逐渐混合为琥珀色，使密集的指标文本仍然清晰可读。选择节点或算子行会打开右侧抽屉，显示子任务指标。独立视图还会展示检查点历史、各算子的状态大小、屏障对齐与延迟，以及经过脱敏的配置。"
+
+msgid "The standalone Dashboard has no built-in authentication. Its default listener is loopback-only, and a non-loopback listener requires `--allow-unauthenticated`. Expose both Klein and Ray through the cluster's authenticated operations proxy."
+msgstr "独立 Dashboard 不内置身份认证。它默认只监听回环地址；监听非回环地址必须使用 `--allow-unauthenticated`。请通过集群已认证的运维代理同时对外提供 Klein 和 Ray。"

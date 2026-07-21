@@ -119,7 +119,12 @@ class ExecutionGraph:
 
     @cached_property
     def checkpoint_domains(self) -> tuple[CheckpointDomain, ...]:
-        """Physical weak components used as independent checkpoint scopes."""
+        """Physical weakly connected components used for checkpoint coordination.
+
+        Direction is deliberately ignored: two subtasks belong to the same
+        checkpoint domain whenever an execution edge connects them in either
+        direction.  Isolated physical vertices form singleton domains.
+        """
 
         adjacency: dict[ExecutionVertexId, list[ExecutionVertexId]] = {
             vertex.id: [] for vertex in self.execution_vertices
@@ -152,13 +157,17 @@ class ExecutionGraph:
         return {vertex_id: domain for domain in self.checkpoint_domains for vertex_id in domain.vertex_ids}
 
     def checkpoint_domain(self, vertex_id: ExecutionVertexId) -> CheckpointDomain:
+        """Return the checkpoint domain containing ``vertex_id`` or raise ``KeyError``."""
+
         return self._checkpoint_domain_by_vertex[vertex_id]
 
     def find_checkpoint_domain(self, vertex_id: ExecutionVertexId) -> CheckpointDomain | None:
+        """Return the checkpoint domain containing ``vertex_id``, if present."""
+
         return self._checkpoint_domain_by_vertex.get(vertex_id)
 
     def checkpoint_domains_for_job_vertex(self, job_vertex_id: int) -> tuple[CheckpointDomain, ...]:
-        """Domains intersecting one logical operator's physical subtasks."""
+        """Return domains intersecting one logical operator's physical subtasks."""
 
         job_vertex = self.job_vertex(job_vertex_id)
         domains: dict[str, CheckpointDomain] = {}

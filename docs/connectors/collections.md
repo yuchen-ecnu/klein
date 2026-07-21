@@ -20,14 +20,16 @@ queue or a replacement for a production data connector.
 | `ray.klein.from_ray_dataset(dataset)` | Existing Ray `Dataset` | Batch | Dataset schema | Ray Data retry semantics |
 
 `from_items` has both a native collection source and a Ray Data lowering, so
-automatic mode selects batch. If you explicitly force streaming, its values
-must be mappings because the native `SourceContext.collect()` contract accepts
-mapping records.
+automatic mode selects batch under the default UDF exception policy. Setting
+`udf.ignore-exception=true` or explicitly forcing streaming selects the native
+runtime, where values must be mappings because the native
+`SourceContext.collect()` contract accepts mapping records.
 
 ## Create a bounded collection
 
 ```python
 import ray
+import ray.klein
 
 stream = ray.klein.from_items([
     {"id": 1, "status": "new"},

@@ -1,0 +1,447 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Install Klein for Ray from source, select optional integrations, and keep"
+" every Ray worker on a compatible environment."
+msgstr "从源码安装 Klein for Ray、选择可选集成，并确保每个 Ray worker 使用兼容的运行环境。"
+
+msgid "Install Klein for Ray"
+msgstr "安装 Klein for Ray"
+
+msgid ""
+"Klein is currently alpha software. This guide installs it from a source "
+"checkout or from an artifact that you build from that checkout; it does "
+"not assume that a `ray-klein` distribution is available from PyPI."
+msgstr "Klein 目前是 Alpha 软件。本指南介绍如何从源码 checkout 或由该 checkout 构建的制品进行安装；不假定 PyPI 上已有可用的 `ray-klein` 发行包。"
+
+msgid "Supported environment"
+msgstr "支持的环境"
+
+msgid "Component"
+msgstr "组件"
+
+msgid "Supported range"
+msgstr "支持范围"
+
+msgid "Notes"
+msgstr "说明"
+
+msgid "Python"
+msgstr "Python"
+
+msgid "3.10, 3.11, or 3.12"
+msgstr "3.10、3.11 或 3.12"
+
+msgid "Use the same minor version on the driver and workers."
+msgstr "driver 和 worker 应使用相同的次版本。"
+
+msgid "Ray"
+msgstr "Ray"
+
+msgid "`ray[data]>=2.56.1,<2.57`"
+msgstr "`ray[data]>=2.56.1,<2.57`"
+
+msgid ""
+"Klein pins one Ray minor because some Ray Data extension points are "
+"Developer APIs."
+msgstr "Klein 固定使用一个 Ray 次版本，因为部分 Ray Data 扩展点属于 Developer API。"
+
+msgid "Operating system"
+msgstr "操作系统"
+
+msgid "Linux or macOS"
+msgstr "Linux 或 macOS"
+
+msgid ""
+"These are the platforms declared by the package metadata. Other platforms"
+" are not part of the current support target."
+msgstr "这些是包元数据声明的平台。其他平台不属于当前支持目标。"
+
+msgid "Project maturity"
+msgstr "项目成熟度"
+
+msgid "Alpha"
+msgstr "Alpha"
+
+msgid "Public APIs and checkpoint formats can still change before 1.0."
+msgstr "公共 API 和 checkpoint 格式在 1.0 之前仍可能发生变化。"
+
+msgid ""
+"The base installation also constrains NumPy to `<3`, pandas to `<3`, "
+"protobuf to `<7`, and SQLGlot to `>=30.12,<31`. Let the package resolver "
+"install these dependencies instead of overriding them independently. Read"
+" [Compatibility](compatibility.md) before changing Python, Ray, protobuf,"
+" or checkpoint-producing Klein versions."
+msgstr "基础安装还将 NumPy 限制为 `<3`、pandas 限制为 `<3`、protobuf 限制为 `<7`，并将 SQLGlot 限制为 `>=30.12,<31`。请让包解析器安装这些依赖，不要单独覆盖其版本。在更改 Python、Ray、protobuf 或生成 checkpoint 的 Klein 版本前，请阅读[兼容性](compatibility.md)。"
+
+msgid ""
+"Use an isolated environment so another Ray application cannot silently "
+"widen the supported Ray range:"
+msgstr "请使用隔离环境，避免其他 Ray 应用悄然放宽受支持的 Ray 版本范围："
+
+msgid "Regular installation from a checkout"
+msgstr "从 checkout 常规安装"
+
+msgid ""
+"Clone the repository, then perform a non-editable installation for "
+"ordinary use:"
+msgstr "克隆仓库，然后为常规使用执行非 editable 安装："
+
+msgid ""
+"This builds and installs the current checkout plus the base dependencies,"
+" including `ray[data]`. The installed code does not change when the "
+"checkout is edited; reinstall it to pick up a new revision."
+msgstr "这会构建并安装当前 checkout 及包括 `ray[data]` 在内的基础依赖。编辑 checkout 不会改变已安装的代码；如需使用新修订，请重新安装。"
+
+msgid ""
+"If your organization builds a wheel from a reviewed checkout, install "
+"that same wheel on the driver and workers:"
+msgstr "如果组织从已审核的 checkout 构建 wheel，请在 driver 和 worker 上安装同一个 wheel："
+
+msgid ""
+"Klein contributes the `ray.klein` namespace. It does not replace Ray's "
+"`ray/__init__.py`; both the compatible Ray package and Klein must be "
+"installed in the same environment."
+msgstr "Klein 提供 `ray.klein` 命名空间，但不会替换 Ray 的 `ray/__init__.py`；兼容的 Ray 包和 Klein 必须安装在同一环境中。"
+
+msgid "Editable source installation"
+msgstr "Editable 源码安装"
+
+msgid "Use an editable installation when experimenting with the source tree:"
+msgstr "试验源码树时，请使用 editable 安装："
+
+msgid ""
+"Python code changes are then visible without reinstalling. Re-run the "
+"install after changing `pyproject.toml`, switching to a revision with "
+"different dependencies, or selecting another optional extra."
+msgstr "此后无需重新安装即可看到 Python 代码变更。修改 `pyproject.toml`、切换到依赖不同的修订或选择其他可选 extra 后，请重新执行安装。"
+
+msgid "Contributor installation"
+msgstr "贡献者安装"
+
+msgid ""
+"The `dev` extra includes every integration, the documentation and test "
+"dependencies, pre-commit, and Ruff:"
+msgstr "`dev` extra 包含所有集成、文档与测试依赖、pre-commit 和 Ruff："
+
+msgid "Run the normal contributor checks with:"
+msgstr "使用以下命令运行常规贡献者检查："
+
+msgid ""
+"Integration tests start a managed local Ray cluster, while external-"
+"service tests are opt-in. See [Testing](testing.md) for the test tiers "
+"and commands."
+msgstr "集成测试会启动一个受管理的本地 Ray 集群，外部服务测试则需主动启用。测试分层和命令请参阅[测试](testing.md)。"
+
+msgid "Optional extras"
+msgstr "可选 extras"
+
+msgid ""
+"Install only the integrations used by the application. Extras can be "
+"combined, for example `python -m pip install -e \".[kafka,rocksdb]\"` in "
+"an editable checkout."
+msgstr "只安装应用使用的集成。Extras 可以组合使用，例如在 editable checkout 中运行 `python -m pip install -e \".[kafka,rocksdb]\"`。"
+
+msgid "Extra"
+msgstr "Extra"
+
+msgid "Installed dependencies"
+msgstr "安装的依赖"
+
+msgid "Use it for"
+msgstr "用途"
+
+msgid "`kafka`"
+msgstr "`kafka`"
+
+msgid "`confluent-kafka>=2.3,<3`"
+msgstr "`confluent-kafka>=2.3,<3`"
+
+msgid "Bounded or continuous Kafka input and Kafka output."
+msgstr "有界或连续 Kafka 输入，以及 Kafka 输出。"
+
+msgid "`iceberg`"
+msgstr "`iceberg`"
+
+msgid "`pyiceberg>=0.11.1,<0.12`"
+msgstr "`pyiceberg>=0.11.1,<0.12`"
+
+msgid ""
+"Iceberg catalog access and batch or checkpointed append output. Catalog-"
+"specific dependencies may still be required."
+msgstr "Iceberg catalog 访问，以及批处理或基于 checkpoint 的追加输出。可能仍需安装特定 catalog 的依赖。"
+
+msgid "`rocketmq`"
+msgstr "`rocketmq`"
+
+msgid "`rocketmq-client-python>=2,<3`"
+msgstr "`rocketmq-client-python>=2,<3`"
+
+msgid ""
+"Continuous RocketMQ input. A compatible native `librocketmq` is also "
+"required on every executing worker."
+msgstr "连续 RocketMQ 输入。每个执行任务的 worker 还需要兼容的原生 `librocketmq`。"
+
+msgid "`redis`"
+msgstr "`redis`"
+
+msgid "`redis>=5,<7`"
+msgstr "`redis>=5,<7`"
+
+msgid "Redis lookup, filtering, and output."
+msgstr "Redis 查找、过滤和输出。"
+
+msgid "`rocksdb`"
+msgstr "`rocksdb`"
+
+msgid "`rocksdict>=0.3.29,<0.4`"
+msgstr "`rocksdict>=0.3.29,<0.4`"
+
+msgid "The node-local RocksDB managed-state backend."
+msgstr "节点本地的 RocksDB 托管状态后端。"
+
+msgid "`serve`"
+msgstr "`serve`"
+
+msgid "`aiohttp>=3.13.3`, `orjson>=3.9`, and compatible `ray[serve]`"
+msgstr "`aiohttp>=3.13.3`、`orjson>=3.9` 和兼容的 `ray[serve]`"
+
+msgid "Ray Serve execution regions and the embedded proxy client."
+msgstr "Ray Serve 执行区域和嵌入式代理客户端。"
+
+msgid "`all`"
+msgstr "`all`"
+
+msgid "All runtime integrations above"
+msgstr "上述所有运行时集成"
+
+msgid ""
+"An integration-development environment; it does not include test or "
+"documentation tools."
+msgstr "集成开发环境；不包含测试或文档工具。"
+
+msgid "`test`"
+msgstr "`test`"
+
+msgid "pytest, build/audit tools, testcontainers, and test-only Iceberg support"
+msgstr "pytest、构建/审计工具、testcontainers，以及仅供测试使用的 Iceberg 支持"
+
+msgid "Running the repository test suites."
+msgstr "运行仓库测试套件。"
+
+msgid "`docs`"
+msgstr "`docs`"
+
+msgid "Sphinx, MyST, the PyData theme, copybutton, and sphinx-design"
+msgstr "Sphinx、MyST、PyData 主题、copybutton 和 sphinx-design"
+
+msgid "Building this documentation."
+msgstr "构建本文档。"
+
+msgid "`dev`"
+msgstr "`dev`"
+
+msgid "`all`, `docs`, `test`, pre-commit, and Ruff"
+msgstr "`all`、`docs`、`test`、pre-commit 和 Ruff"
+
+msgid "Full contributor setup."
+msgstr "完整的贡献者环境。"
+
+msgid ""
+"The [connector catalog](connectors/index.md) gives each connector's "
+"execution modes, data shape, configuration, and delivery guarantee. A "
+"connector may also need a broker, database driver, filesystem credential "
+"provider, or native library that cannot be supplied by a Python extra."
+msgstr "[连接器目录](connectors/index.md)列出了每个连接器的执行模式、数据形态、配置和交付保证。连接器还可能需要 Python extra 无法提供的 broker、数据库驱动、文件系统凭据提供程序或原生库。"
+
+msgid "Keep the cluster environment consistent"
+msgstr "保持集群环境一致"
+
+msgid ""
+"Installing Klein only on the submission machine is insufficient. Every "
+"Ray worker that can run a Klein source, operator, sink, or user function "
+"needs:"
+msgstr "只在提交机器上安装 Klein 并不足够。每个可能运行 Klein source、operator、sink 或用户函数的 Ray worker 都需要："
+
+msgid "the same Klein artifact and compatible Ray version;"
+msgstr "相同的 Klein 制品和兼容的 Ray 版本；"
+
+msgid "the extras imported by that graph;"
+msgstr "该计算图导入的 extras；"
+
+msgid "application modules and user-function dependencies;"
+msgstr "应用模块和用户函数依赖；"
+
+msgid "native libraries such as `librocketmq`; and"
+msgstr "`librocketmq` 等原生库；以及"
+
+msgid "compatible credentials and filesystem drivers for external services."
+msgstr "外部服务所需的兼容凭据和文件系统驱动。"
+
+msgid ""
+"Prefer one immutable container image or one versioned wheel set across "
+"the Ray head and workers. A Ray runtime environment is also suitable when"
+" it installs the same immutable artifacts on every eligible node. Do not "
+"install packages from inside a user function: different worker startup "
+"times and dependency resolution can make deployment nondeterministic."
+msgstr "Ray head 和 worker 应优先使用同一个不可变容器镜像或同一套带版本的 wheel。如果 Ray runtime environment 会在每个符合条件的节点上安装相同的不可变制品，也可以使用它。不要在用户函数内部安装包：不同的 worker 启动时间和依赖解析可能使部署变得不确定。"
+
+msgid ""
+"If imports succeed on the driver but fail remotely, compare the "
+"interpreter, `ray-klein`, Ray, and extra versions inside the failing "
+"worker image. See [Deploy Klein jobs](deployment.md) for Ray Jobs, "
+"containers, and KubeRay guidance."
+msgstr "如果在 driver 上导入成功、远程却失败，请比较故障 worker 镜像中的解释器、`ray-klein`、Ray 和 extra 版本。有关 Ray Jobs、容器和 KubeRay 的说明，请参阅[部署 Klein 作业](deployment.md)。"
+
+msgid "Verify the installation"
+msgstr "验证安装"
+
+msgid "Check the selected interpreter and installed distribution metadata:"
+msgstr "检查所选解释器和已安装发行包的元数据："
+
+msgid "From a source checkout, run the bounded smoke test as well:"
+msgstr "从源码 checkout 安装时，还请运行有界 smoke test："
+
+msgid ""
+"The import and version checks do not start a Ray cluster. The example "
+"starts or reuses the runtime needed by its bounded Ray Data execution."
+msgstr "导入和版本检查不会启动 Ray 集群。该示例会启动或复用其有界 Ray Data 执行所需的运行时。"
+
+msgid "Upgrade or change extras"
+msgstr "升级或更改 extras"
+
+msgid ""
+"Review [Upgrade Klein jobs](upgrading.md) and "
+"[Compatibility](compatibility.md) before upgrading an application that "
+"must restore checkpoints. Then update the checkout and reinstall the "
+"required extras:"
+msgstr "升级必须恢复 checkpoint 的应用前，请先查看[升级 Klein 作业](upgrading.md)和[兼容性](compatibility.md)。然后更新 checkout 并重新安装所需 extras："
+
+msgid "For an editable contributor environment, re-run:"
+msgstr "对于 editable 贡献者环境，请重新运行："
+
+msgid ""
+"Do not upgrade Ray past the declared `<2.57` bound independently. For a "
+"production cluster, build a new immutable environment, rehearse "
+"checkpoint restore against production-shaped state, and follow the "
+"cutover procedure in [Deploy Klein jobs](deployment.md#upgrade-"
+"procedure)."
+msgstr "不要单独将 Ray 升级到声明的 `<2.57` 上界之外。对于生产集群，请构建新的不可变环境，使用与生产形态相同的状态演练 checkpoint 恢复，并遵循[部署 Klein 作业](deployment.md#upgrade-procedure)中的切换流程。"
+
+msgid "Uninstall"
+msgstr "卸载"
+
+msgid "Remove Klein with the interpreter that owns the installation:"
+msgstr "使用拥有该安装的解释器移除 Klein："
+
+msgid ""
+"Pip does not automatically remove dependencies that were installed "
+"through Klein's extras. Review them before uninstalling anything shared "
+"with another application. An editable uninstall removes the environment "
+"link but does not delete the source checkout. Do not manually delete the "
+"surrounding `ray` package: Ray is a separate distribution."
+msgstr "Pip 不会自动移除通过 Klein extras 安装的依赖。卸载与其他应用共享的任何内容前，请先核查这些依赖。卸载 editable 安装只会移除环境链接，不会删除源码 checkout。不要手动删除外围的 `ray` 包：Ray 是独立的发行包。"
+
+msgid "Troubleshoot installation"
+msgstr "排查安装问题"
+
+msgid "Symptom"
+msgstr "现象"
+
+msgid "Check and fix"
+msgstr "检查与修复"
+
+msgid "Pip rejects the Python version"
+msgstr "Pip 拒绝当前 Python 版本"
+
+msgid ""
+"Run `python --version`. Create a Python 3.10–3.12 environment and invoke "
+"pip as `python -m pip`."
+msgstr "运行 `python --version`。创建 Python 3.10–3.12 环境，并以 `python -m pip` 调用 pip。"
+
+msgid "The resolver reports a Ray conflict"
+msgstr "解析器报告 Ray 冲突"
+
+msgid ""
+"Another package requires a Ray version outside `>=2.56.1,<2.57`. Use a "
+"separate environment rather than widening Klein's bound without "
+"compatibility testing."
+msgstr "另一个包要求使用 `>=2.56.1,<2.57` 之外的 Ray 版本。请使用独立环境，不要在未经兼容性测试的情况下放宽 Klein 的版本约束。"
+
+msgid "`ModuleNotFoundError: ray.klein`"
+msgstr "`ModuleNotFoundError: ray.klein`"
+
+msgid ""
+"Confirm `python -m pip show ray-klein` uses the same interpreter as the "
+"application. Merely placing the checkout beside an installed Ray package "
+"is not an installation."
+msgstr "确认 `python -m pip show ray-klein` 与应用使用同一个解释器。仅将 checkout 放在已安装的 Ray 包旁边并不等于完成安装。"
+
+msgid "`ray-klein: command not found`"
+msgstr "`ray-klein: command not found`"
+
+msgid ""
+"Activate the environment and confirm its `bin` directory is on `PATH`. "
+"Reinstall the project to create the console entry point."
+msgstr "激活环境并确认其 `bin` 目录位于 `PATH` 中。重新安装项目以创建控制台入口点。"
+
+msgid "A connector module is missing"
+msgstr "缺少连接器模块"
+
+msgid ""
+"Install its named extra on the driver and every eligible worker, then "
+"restart or redeploy those processes."
+msgstr "在 driver 和每个符合条件的 worker 上安装对应名称的 extra，然后重启或重新部署这些进程。"
+
+msgid "RocketMQ loads in Python but cannot load its client library"
+msgstr "Python 能加载 RocketMQ，但无法加载其客户端库"
+
+msgid ""
+"Install a compatible native `librocketmq` in the worker image and make it"
+" available to the platform dynamic linker."
+msgstr "在 worker 镜像中安装兼容的原生 `librocketmq`，并确保平台动态链接器可以找到它。"
+
+msgid "The driver imports a dependency but a Ray task cannot"
+msgstr "driver 能导入依赖，但 Ray task 无法导入"
+
+msgid ""
+"The cluster environments differ. Deploy the same wheel/image and extras "
+"to all nodes; a local driver virtual environment is not propagated "
+"automatically."
+msgstr "集群环境不一致。请将相同的 wheel/镜像和 extras 部署到所有节点；本地 driver 虚拟环境不会自动传播。"
+
+msgid "`python -m pip check` reports protobuf or SQLGlot conflicts"
+msgstr "`python -m pip check` 报告 protobuf 或 SQLGlot 冲突"
+
+msgid ""
+"Keep the bounds declared by `pyproject.toml`, or isolate Klein from the "
+"application requiring the incompatible version."
+msgstr "请遵守 `pyproject.toml` 声明的版本范围，或将 Klein 与需要不兼容版本的应用隔离。"
+
+msgid "Installation succeeds but the CLI cannot connect"
+msgstr "安装成功，但 CLI 无法连接"
+
+msgid ""
+"This is a cluster connection issue, not an import issue. Start or select "
+"a Ray cluster and see [CLI reference](cli-reference.md#connect-to-the-"
+"ray-cluster) and [Troubleshooting](troubleshooting.md)."
+msgstr "这是集群连接问题，而不是导入问题。请启动或选择 Ray 集群，并参阅 [CLI 参考](cli-reference.md#connect-to-the-ray-cluster)和[故障排查](troubleshooting.md)。"

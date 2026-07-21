@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -48,17 +48,27 @@ class WatermarkController:
         self._operator = None
         self._executor = None
         self._flush_input: Callable[[], None] | None = None
+        self._flush_input_async: Callable[[], Awaitable[None]] | None = None
 
     @property
     def active(self) -> bool:
         return self._mode is not WatermarkMode.DISABLED
 
-    def bind(self, task_output, operator, executor, emit_pipeline, flush_input: Callable[[], None]) -> None:
+    def bind(
+        self,
+        task_output,
+        operator,
+        executor,
+        emit_pipeline,
+        flush_input: Callable[[], None],
+        flush_input_async: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self._task_output = task_output
         self._operator = operator
         self._executor = executor
         self._emit = emit_pipeline
         self._flush_input = flush_input
+        self._flush_input_async = flush_input_async
 
     def forwarded_sequence_for(self, sender_vertex_id: object) -> int:
         if sender_vertex_id is None:
@@ -116,7 +126,11 @@ class WatermarkController:
 
     async def _do_advance(self, pending: dict[object, int]) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(self._executor, self._flush_processing_boundary)
+        if self._flush_input_async is None:
+            await loop.run_in_executor(self._executor, self._flush_processing_boundary)
+        else:
+            await self._flush_input_async()
+            await loop.run_in_executor(self._executor, self._flush_output_boundary)
         if self._mode is WatermarkMode.PIPELINED:
             if self._emit is None:
                 raise RuntimeError("pipelined watermark controller is not bound to an emit pipeline")
@@ -132,6 +146,10 @@ class WatermarkController:
         # envelope that still lives here would lose it on a single-task restart.
         if self._flush_input is not None:
             self._flush_input()
+        self._flush_output_boundary()
+
+    def _flush_output_boundary(self) -> None:
+        """Flush output after all input at the durability boundary was processed."""
         if self._task_output is not None:
             self._task_output.flush(force=True)
         elif self._operator is not None:

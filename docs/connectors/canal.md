@@ -31,6 +31,7 @@ client protocol are not supported by this format.
 
 ```python
 import ray
+import ray.klein
 
 orders = ray.klein.read_kafka(
     "canal-orders",

@@ -1,0 +1,425 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Klein for Ray operator support matrix for batch and streaming execution, "
+"ordering, state, and changelog behavior."
+msgstr "Klein for Ray 算子支持矩阵，涵盖批处理与流处理执行、顺序、状态和 changelog 行为。"
+
+msgid "Operator compatibility and execution semantics"
+msgstr "算子兼容性与执行语义"
+
+msgid ""
+"Use this page before combining operators in one graph. `auto` selects "
+"streaming when a source is unbounded, any graph vertex lacks a batch "
+"lowering, or `udf.ignore-exception=true`; only a fully batch-lowerable, "
+"bounded graph with that policy disabled selects batch. Selection happens "
+"for the whole job, not independently for each branch."
+msgstr ""
+"在同一计算图中组合算子前，请先查阅本页。存在无界数据源、任一计算图顶点缺少批处理下沉实现，或设置 "
+"`udf.ignore-exception=true` 时，`auto` 会选择原生流处理；只有计算图有界、可完全下沉为批处理，且该策略已禁用时，才会选择批处理。该选择作用于整个作业，而不是各分支独立选择。"
+
+msgid ""
+"`Yes` below means Klein provides a native implementation for that "
+"execution mode. `Ray Data` means the behavior, partitioning, retries, and"
+" schema rules are owned by the installed compatible Ray Data version."
+msgstr ""
+"下表中的 `Yes` 表示 Klein 为该执行模式提供原生实现。`Ray Data` 表示其行为、分区、重试和 schema 规则由已安装的兼容"
+" Ray Data 版本负责。"
+
+msgid "Sources and adapters"
+msgstr "源与适配器"
+
+msgid "API"
+msgstr "API"
+
+msgid "Batch"
+msgstr "批处理"
+
+msgid "Streaming"
+msgstr "流处理"
+
+msgid "Notes"
+msgstr "说明"
+
+msgid "Dynamic `ray.klein.read_*` Ray Data factory"
+msgstr "动态 `ray.klein.read_*` Ray Data 工厂"
+
+msgid "Yes"
+msgstr "是"
+
+msgid "No"
+msgstr "否"
+
+msgid ""
+"The selected public Ray Data factory defines its arguments and result "
+"schema."
+msgstr "所选公共 Ray Data 工厂定义其参数和结果 schema。"
+
+msgid "`from_ray_dataset()`"
+msgstr "`from_ray_dataset()`"
+
+msgid ""
+"Keeps the existing Dataset lazy; it is not converted to an unbounded "
+"source."
+msgstr "保持现有 Dataset 的惰性；不会将其转换为无界源。"
+
+msgid "`from_items()` / `from_values()`"
+msgstr "`from_items()` / `from_values()`"
+
+msgid ""
+"Bounded by default; a finite native streaming source is used when the "
+"graph selects streaming."
+msgstr "默认为有界；当图选择流处理时，使用有限的原生流式源。"
+
+msgid "`read_kafka(trigger=\"once\")`"
+msgstr "`read_kafka(trigger=\"once\")`"
+
+msgid "Delegates to Ray Data."
+msgstr "委托给 Ray Data。"
+
+msgid "`read_kafka(trigger=\"continuous\")`"
+msgstr "`read_kafka(trigger=\"continuous\")`"
+
+msgid "Checkpoint-aware native source."
+msgstr "感知检查点的原生源。"
+
+msgid "`read_canal()`"
+msgstr "`read_canal()`"
+
+msgid "Continuous Kafka input decoded to changelog rows."
+msgstr "将连续 Kafka 输入解码为 changelog 行。"
+
+msgid "`read_rocketmq()`"
+msgstr "`read_rocketmq()`"
+
+msgid "Broker-managed consumer progress; not checkpoint-aligned."
+msgstr "由 broker 管理消费进度；不与检查点对齐。"
+
+msgid "`ray.klein.source()`"
+msgstr "`ray.klein.source()`"
+
+msgid "No by default"
+msgstr "默认不支持"
+
+msgid ""
+"A custom source needs an explicit batch lowering to run in batch; the "
+"public helper currently builds native sources."
+msgstr "自定义源需要显式的批处理 lowering 才能以批处理运行；公共辅助函数当前构建原生源。"
+
+msgid "`stream.data.with_column(name, expr)`"
+msgstr "`stream.data.with_column(name, expr)`"
+
+msgid "Ray Data"
+msgstr "Ray Data"
+
+msgid ""
+"Streaming evaluates Ray expressions per record; `download()` uses bounded"
+" ordered async I/O."
+msgstr "流处理会逐记录求值 Ray 表达式；`download()` 使用有界、保持顺序的异步 I/O。"
+
+msgid "`stream.data.filter(expr=expr)`"
+msgstr "`stream.data.filter(expr=expr)`"
+
+msgid "Supports Ray Data expression predicates in both modes."
+msgstr "两种模式都支持 Ray Data 表达式谓词。"
+
+msgid "Other `stream.data.*`"
+msgstr "其他 `stream.data.*`"
+
+msgid "Other Dataset transforms and terminal consumers remain batch-only."
+msgstr "其他 Dataset 转换和终端消费操作仍仅支持批处理。"
+
+msgid "DataStream transformations"
+msgstr "DataStream 转换"
+
+msgid "Partitioning, state, and ordering"
+msgstr "分区、状态与顺序"
+
+msgid "`map()`"
+msgstr "`map()`"
+
+msgid ""
+"One output per input unless the UDF error policy drops the record. "
+"Preserves per-input order within a subtask."
+msgstr "除非 UDF 错误策略丢弃记录，否则每个输入产生一个输出。保留子任务内每个输入的顺序。"
+
+msgid "`flat_map()`"
+msgstr "`flat_map()`"
+
+msgid ""
+"Zero or more outputs per input. Outputs yielded for one input remain "
+"ordered."
+msgstr "每个输入产生零个或多个输出。一个输入产生的输出保持有序。"
+
+msgid "`filter()`"
+msgstr "`filter()`"
+
+msgid "Preserves retained-record order within a subtask."
+msgstr "保留子任务内未被过滤记录的顺序。"
+
+msgid "`map_batches()`"
+msgstr "`map_batches()`"
+
+msgid ""
+"Uses the requested batch format; streaming batches are bounded by "
+"size/timeout."
+msgstr "使用请求的批次格式；流式批次受大小/超时限制。"
+
+msgid "`map_reduce()`"
+msgstr "`map_reduce()`"
+
+msgid "Composite adaptive-shuffle → batch-process → keyed-reduce pipeline."
+msgstr "自适应 shuffle → 批处理 → 键控 reduce 的组合流水线。"
+
+msgid "`union()`"
+msgstr "`union()`"
+
+msgid "Does not define a total order across inputs."
+msgstr "不定义各输入之间的全序。"
+
+msgid "`assign_timestamps_and_watermarks()`"
+msgstr "`assign_timestamps_and_watermarks()`"
+
+msgid "Adds ordered event-time control messages."
+msgstr "添加有序的事件时间控制消息。"
+
+msgid "`key_by()` / `group_by()`"
+msgstr "`key_by()` / `group_by()`"
+
+msgid "Hashes stable serialized keys into key groups and returns `KeyedStream`."
+msgstr "将稳定序列化键哈希到 key group，并返回 `KeyedStream`。"
+
+msgid "`KeyedStream.process()`"
+msgstr "`KeyedStream.process()`"
+
+msgid "Managed keyed state and processing/event-time timers."
+msgstr "托管键控状态以及处理时间/事件时间定时器。"
+
+msgid "`KeyedStream.window().reduce()`"
+msgstr "`KeyedStream.window().reduce()`"
+
+msgid "Tumbling, sliding, or session event-time windows."
+msgstr "滚动、滑动或会话事件时间窗口。"
+
+msgid "`join()` / `interval_join()`"
+msgstr "`join()` / `interval_join()`"
+
+msgid "Two-input keyed event-time interval join with managed state."
+msgstr "带托管状态的双输入键控事件时间区间联接。"
+
+msgid "`DataStream.sql()` / `ray.klein.sql()`"
+msgstr "`DataStream.sql()` / `ray.klein.sql()`"
+
+msgid "Subset"
+msgstr "部分支持"
+
+msgid ""
+"See [SQL support](sql.md#how-does-sql-execute) for the two planner "
+"feature sets."
+msgstr "两个规划器的功能集合请参阅 [SQL 支持](sql.md#how-does-sql-execute)。"
+
+msgid ""
+"Stateful operators require non-negative integer millisecond timestamps. A"
+" timestamp selector alone does not advance event time: a source or "
+"`WatermarkStrategy` must emit watermarks. Late windows and interval-join "
+"rows whose cleanup time is already behind the current watermark are "
+"dropped and counted by `late_records_dropped`."
+msgstr ""
+"有状态算子要求时间戳为非负整数毫秒值。仅有时间戳选择器不会推进事件时间：源或 `WatermarkStrategy` "
+"必须发出水位线。若迟到窗口或区间联接行的清理时间已经落后于当前水位线，它们会被丢弃并计入 `late_records_dropped`。"
+
+msgid "Partitioning methods"
+msgstr "分区方法"
+
+msgid ""
+"`broadcast()`, `rescale()`, `round_robin()`, `adaptive_shuffle()`, and "
+"`partition_by()` configure the next edge in the native streaming graph. "
+"They do not control Ray Data partitions in batch mode. For batch "
+"repartitioning and sorting, use the matching `stream.data` Dataset "
+"method."
+msgstr ""
+"`broadcast()`、`rescale()`、`round_robin()`、`adaptive_shuffle()` 和 "
+"`partition_by()` 配置原生流式图中的下一条边。它们不会控制批处理模式下的 Ray Data 分区。批处理重新分区和排序请使用对应的"
+" `stream.data` Dataset 方法。"
+
+msgid "Method"
+msgstr "方法"
+
+msgid "Native streaming behavior"
+msgstr "原生流处理行为"
+
+msgid "Typical use"
+msgstr "典型用途"
+
+msgid "`broadcast()`"
+msgstr "`broadcast()`"
+
+msgid "Sends every record to every downstream subtask."
+msgstr "将每条记录发送到每个下游子任务。"
+
+msgid "Small reference/config streams."
+msgstr "小型引用流或配置流。"
+
+msgid "`round_robin()`"
+msgstr "`round_robin()`"
+
+msgid "Cycles records across all downstream subtasks."
+msgstr "在所有下游子任务间轮询发送记录。"
+
+msgid "Even distribution without key affinity."
+msgstr "不需要键亲和性的均匀分布。"
+
+msgid "`rescale()`"
+msgstr "`rescale()`"
+
+msgid "Connects each upstream subtask to a subset of downstream subtasks."
+msgstr "将每个上游子任务连接到下游子任务的一个子集。"
+
+msgid "Localized scale changes with less fan-out."
+msgstr "以更小 fan-out 进行局部扩缩容。"
+
+msgid "`adaptive_shuffle()`"
+msgstr "`adaptive_shuffle()`"
+
+msgid "Reroutes around downstream write timeouts."
+msgstr "绕过发生下游写入超时的目标重新路由。"
+
+msgid "Uneven or temporarily busy workers."
+msgstr "负载不均或暂时繁忙的 worker。"
+
+msgid "`partition_by(callable)`"
+msgstr "`partition_by(callable)`"
+
+msgid "Routes by the callable's selected target/key contract."
+msgstr "按 callable 选择的目标/键契约进行路由。"
+
+msgid "Application-specific placement."
+msgstr "应用特定的放置方式。"
+
+msgid "`key_by(callable)`"
+msgstr "`key_by(callable)`"
+
+msgid "Stable key-group partitioning."
+msgstr "稳定的 key-group 分区。"
+
+msgid "Managed keyed state, windows, and joins."
+msgstr "托管键控状态、窗口与联接。"
+
+msgid ""
+"Partitioning methods mutate the edge used by the next operator. Apply "
+"them immediately before the operation whose input placement they should "
+"control."
+msgstr "分区方法会改变下一算子使用的边。请紧接在需要控制输入放置的操作之前应用它们。"
+
+msgid "Terminal operations and sinks"
+msgstr "终端操作与 sink"
+
+msgid "Delivery behavior"
+msgstr "交付行为"
+
+msgid "`show()`, `take()`, `take_all()`, `schema()`"
+msgstr "`show()`、`take()`、`take_all()`、`schema()`"
+
+msgid "Lazy diagnostic terminals; `take()` drains after reaching its limit."
+msgstr "惰性的诊断终端操作；`take()` 达到数量上限后会排空。"
+
+msgid "`write_json/csv/parquet()`"
+msgstr "`write_json/csv/parquet()`"
+
+msgid "Streaming output is checkpoint-transactional."
+msgstr "流式输出具有 checkpoint-transactional 语义。"
+
+msgid "`write_iceberg()`"
+msgstr "`write_iceberg()`"
+
+msgid "Append"
+msgstr "追加"
+
+msgid ""
+"Streaming appends are checkpoint-transactional; overwrite and upsert "
+"remain batch-only."
+msgstr "流式追加具有 checkpoint-transactional 语义；overwrite 和 upsert 仍仅支持批处理。"
+
+msgid "`write_text()`"
+msgstr "`write_text()`"
+
+msgid "Native checkpoint-transactional text sink."
+msgstr "原生 checkpoint-transactional 文本 sink。"
+
+msgid "`write_kafka()`"
+msgstr "`write_kafka()`"
+
+msgid "Native streaming output is at-least-once."
+msgstr "原生流式输出为 at-least-once。"
+
+msgid "`write_sql()`"
+msgstr "`write_sql()`"
+
+msgid "Native streaming DB-API output is at-least-once."
+msgstr "原生流式 DB-API 输出为 at-least-once。"
+
+msgid "`write_redis()`"
+msgstr "`write_redis()`"
+
+msgid ""
+"Native streaming sink; replacement commands are retry-safe but the end-"
+"to-end job remains at-least-once."
+msgstr "原生流式 sink；替换命令可安全重试，但端到端作业仍为 at-least-once。"
+
+msgid "`write(SinkFunction, ...)`"
+msgstr "`write(SinkFunction, ...)`"
+
+msgid "Semantics are defined by the custom sink."
+msgstr "语义由自定义 sink 定义。"
+
+msgid "`write(TwoPhaseCommitSinkFunction, ...)`"
+msgstr "`write(TwoPhaseCommitSinkFunction, ...)`"
+
+msgid "Prepared output is published only after durable checkpoint metadata."
+msgstr "仅在检查点元数据持久化后发布已准备的输出。"
+
+msgid ""
+"See [Delivery and consistency guarantees](delivery-semantics.md) before "
+"mixing a source and sink, and [Performance tuning](performance-tuning.md)"
+" before changing concurrency or buffer sizes."
+msgstr ""
+"组合源与 sink 前请参阅 [交付与一致性保证](delivery-semantics.md)，更改并发度或缓冲区大小前请参阅 [性能调优"
+"](performance-tuning.md)。"
+
+msgid "Changelog compatibility"
+msgstr "Changelog 兼容性"
+
+msgid ""
+"Ordinary mappings are append-only `INSERT` rows. Continuous SQL and Canal"
+" JSON can produce `ChangelogRow` values with insert, update-before, "
+"update-after, and delete kinds. A sink or Table factory must declare and "
+"validate the row kinds it accepts. Filesystem, Redis, Kafka, SQL, and "
+"arbitrary custom sinks do not automatically materialize retractions into "
+"an up-to-date table; choose an upsert/retraction-aware sink when "
+"consuming updating queries."
+msgstr ""
+"普通映射是仅追加的 `INSERT` 行。连续 SQL 和 Canal JSON 可以生成带 insert、update-before"
+"、update-after 和 delete 类型的 `ChangelogRow` 值。sink 或 Table "
+"工厂必须声明并验证其接受的行类型。文件系统、Redis、Kafka、SQL 和任意自定义 sink "
+"不会自动将撤回物化为最新表；消费更新查询时，请选择感知 upsert/撤回的 sink。"

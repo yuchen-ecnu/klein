@@ -25,7 +25,11 @@ class JobHandle(ABC):
 
     @abstractmethod
     def get(self) -> Any:
-        """Block until finished, then return the collected result."""
+        """Block and return the result of one result-producing terminal.
+
+        Use :meth:`wait` for jobs containing side-effect terminals or multiple
+        sinks. A collecting ``take``/``take_all`` terminal must execute alone.
+        """
 
     @property
     @abstractmethod

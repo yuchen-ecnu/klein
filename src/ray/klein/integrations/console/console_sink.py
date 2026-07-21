@@ -7,6 +7,11 @@ from ray.klein.integrations.console.console_output import flush_console_output, 
 
 
 class ConsoleSinkFunction(SinkFunction):
+    # Actor-preserving rescale may open a pending task-local sink before the
+    # fenced runtime is closed. Console sinks own no exclusive external
+    # resource, so that overlap is safe.
+    supports_concurrent_rescale = True
+
     def __init__(self, limit: int = -1) -> None:
         self._limit = limit
         self._current_seq = 0

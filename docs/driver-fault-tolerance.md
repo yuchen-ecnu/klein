@@ -17,9 +17,16 @@ Record the namespace returned by `handle.namespace`, or configure a stable one:
 
 ```python
 import ray
+import ray.klein
 
 ray.klein.configure({"job.namespace": "orders-production"})
-handle = pipeline.execute("orders")
+events = ray.klein.read_kafka(
+    "orders",
+    bootstrap_servers="kafka.internal:9092",
+    trigger="continuous",
+)
+events.show()
+handle = ray.klein.execute("orders")
 print(handle.namespace)
 ```
 

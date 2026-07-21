@@ -279,3 +279,30 @@ def test_checkpoint_gate_reconfigures_physical_inputs_after_scale_out() -> None:
     assert pump._observe_coordinated_barrier(InboxEnvelope(barrier, second)) is False
     assert pump._observe_coordinated_barrier(InboxEnvelope(barrier, added)) is True
     assert pump._checkpoint_expected_inputs == Counter((first, second, added))
+
+
+def test_checkpoint_gate_does_not_count_a_retired_topology_epoch() -> None:
+    sender = ExecutionVertexId(1, 0)
+    previous = (
+        DeliveryChannel(sender, "source", 0, 0, "epoch-1"),
+        DeliveryChannel(sender, "source", 1, 0, "epoch-1"),
+    )
+    replacement = (
+        DeliveryChannel(sender, "source", 0, 0, "epoch-2"),
+        DeliveryChannel(sender, "source", 1, 0, "epoch-2"),
+    )
+    pump = InboxPump(
+        Mock(),
+        SimpleNamespace(),
+        AsyncMock(),
+        AsyncMock(),
+        input_vertex_ids=(sender, sender),
+        input_channels=previous,
+    )
+    pump.reconfigure_checkpoint_inputs((sender, sender), replacement)
+    barrier = Barrier(7, sender, coordinated=True)
+
+    assert pump.announce_coordinated_barrier(barrier, sender, previous[0]) is False
+    assert pump._observe_coordinated_barrier(InboxEnvelope(barrier, sender, delivery_channel=previous[0])) is False
+    assert pump._observe_coordinated_barrier(InboxEnvelope(barrier, sender, delivery_channel=replacement[1])) is False
+    assert pump._observe_coordinated_barrier(InboxEnvelope(barrier, sender, delivery_channel=replacement[0])) is True

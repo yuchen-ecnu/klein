@@ -79,6 +79,12 @@ class SQLRegularJoinOperator(ManagedStateOperator):
         if record.block is None:
             return
         is_left = record.input_tag == 0
+        key_fields = self._left_keys if is_left else self._right_keys
+        if any(record.block[field] is None for field in key_fields):
+            # SQL equality is UNKNOWN for every NULL join key. Do not retain
+            # such rows, otherwise two NULL keys would share a key group and
+            # incorrectly match each other in a regular inner join.
+            return
         own = context.state(self._left_state if is_left else self._right_state)
         other = context.state(self._right_state if is_left else self._left_state)
         row = dict(record.block)

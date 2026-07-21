@@ -48,6 +48,15 @@ Checkpoint barriers align source positions, managed keyed state, timers,
 operator watermarks, and prepared sink committables. A restored stateful
 operator therefore sees the state that belongs to the restored input position.
 
+Klein derives checkpoint domains from weakly connected components of the
+physical execution graph. One source threshold allocates a shared epoch for
+all live sources in that domain; disconnected components progress
+independently. Operators align that epoch by direct physical input and hold
+post-barrier data and control messages on each arrived input until the cut is
+complete. This avoids multiplying sink transactions by source parallelism and
+prevents a multi-source sink state from being committed with only one source
+position advanced.
+
 The replay buffer retains emitted native-streaming batches until downstream
 progress acknowledges them. It improves single-task recovery and prevents an
 upstream task from forgetting data that a failed downstream task had not made
@@ -60,6 +69,7 @@ transaction semantics.
 | Sink | Streaming guarantee | Duplicate/loss guidance |
 |---|---|---|
 | Filesystem | Checkpoint-transactional visibility | Final part publication is idempotent. Readers must ignore `.klein-staging`. |
+| Iceberg append | Checkpoint-transactional visibility | Parallel writers in one domain epoch are coalesced into one append/snapshot; a stable transaction ID makes coordinator retries idempotent while that snapshot is retained. |
 | `TwoPhaseCommitSinkFunction` | Checkpoint-transactional when correctly implemented | `transaction_id` commit and abort operations must be idempotent across retries. |
 | Kafka | At-least-once | Klein waits for delivery acknowledgements but does not use Kafka transactions. Use a stable key/version or downstream deduplication. |
 | SQL | At-least-once | Use an idempotent statement, unique key, or database-native upsert. |
@@ -82,4 +92,3 @@ For every test, record the accepted loss and duplicate envelope, how a duplicate
 is detected, and which identifier makes the external effect idempotent. See
 [Restore and rescale a job](checkpoint-recovery.md) for the recovery procedure
 and [Observe Klein jobs](observability.md) for the relevant metrics.
-

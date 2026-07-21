@@ -21,6 +21,9 @@ broadcast, key, and adaptive strategies do not express the required topology.
    AdaptivePartitioner
    SimplePartitioner
    WorkerPoolDispatcher
+   ChannelPattern
+   ChannelTopology
+   PartitionerSpec
 
 A custom ``Partitioner`` passed to ``DataStream.partition_by`` must produce an
 immutable ``PartitionerSpec`` through ``to_spec()``. The spec, rather than a

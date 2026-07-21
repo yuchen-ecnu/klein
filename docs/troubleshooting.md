@@ -13,10 +13,12 @@ failures are often consequences of the first error.
 
 ```python
 import ray
+import ray.klein
 
 print(ray.__version__)
 print(ray.klein.__version__)
-print(ray.klein.current_context().config.to_dict())
+print(ray.klein.get_config().to_dict())
+# After registering the graph's terminal operations:
 print(ray.klein.explain("diagnostic-plan"))
 ```
 
@@ -32,6 +34,7 @@ machine:
 
 ```bash
 python -m pip install "ray-klein[kafka]"
+python -m pip install "ray-klein[iceberg]"
 python -m pip install "ray-klein[redis]"
 python -m pip install "ray-klein[rocksdb]"
 python -m pip install "ray-klein[rocketmq]"
@@ -47,7 +50,7 @@ remote worker.
 Check the installed Ray API before building the graph:
 
 ```python
-if not ray.klein.current_context().data.available("read_parquet"):
+if "read_parquet" not in dir(ray.klein):
     raise RuntimeError("read_parquet is unavailable in this Ray version")
 ```
 
@@ -64,17 +67,18 @@ Set `execution.runtime.mode=streaming` only when every node supports native
 streaming; changing the mode cannot give a Ray Data-only operation a streaming
 implementation.
 
-### A bounded custom source selects the wrong mode
+### A bounded custom source does not run in batch
 
 Source boundedness does not prove that a custom `SourceFunction` has a Ray Data
-lowering. Explicitly select streaming for a bounded native source. Use a Ray
-Data factory or `from_ray_dataset()` when batch execution is required.
+lowering. `auto` selects streaming when that lowering is absent. Use a Ray Data
+factory or `from_ray_dataset()` when batch execution is required; forcing
+`batch` cannot add a missing lowering.
 
-### Streams from different contexts cannot be combined
+### Streams from different pipelines cannot be combined
 
-Every graph belongs to one `KleinContext`. Rebuild all branches from the same
-context; do not join or union process-global streams with streams built by an
-isolated context.
+Every graph belongs to one internal pipeline. Rebuild all branches from the
+same module-level construction scope; do not join or union those streams with
+streams built by an explicitly isolated advanced context.
 
 ### SQL fails during planning
 

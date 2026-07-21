@@ -1,0 +1,534 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Known limitations, unsupported combinations, and non-goals for the "
+"current Klein for Ray alpha release."
+msgstr "当前 Klein for Ray alpha 版本的已知限制、不受支持的组合和非目标。"
+
+msgid "Known limitations and non-goals"
+msgstr "已知限制和非目标"
+
+msgid ""
+"Klein for Ray is alpha software. This page collects the boundaries that "
+"are otherwise easy to miss in feature-specific guides. Treat an item as "
+"unsupported unless the documentation for the installed release explicitly"
+" says otherwise. An unsupported combination can fail during planning, "
+"fail when workers start, or run with weaker recovery semantics than the "
+"application expects."
+msgstr ""
+"Klein for Ray 是 alpha "
+"软件。本页汇总在特定功能指南中容易忽略的边界。除非所安装版本的文档明确说明支持，否则请将相应项目视为不受支持。不受支持的组合可能在规划期间失败、在"
+" worker 启动时失败，或以弱于应用预期的恢复语义运行。"
+
+msgid ""
+"The [operator compatibility matrix](operator-compatibility.md) is the "
+"concise batch/streaming reference. This page explains the broader product"
+" and operational boundaries."
+msgstr "[算子兼容性矩阵](operator-compatibility.md)是简明的批处理/流处理参考。本页说明更广泛的产品和运维边界。"
+
+msgid "Platform and compatibility"
+msgstr "平台和兼容性"
+
+msgid "Area"
+msgstr "领域"
+
+msgid "Current boundary"
+msgstr "当前边界"
+
+msgid "Consequence"
+msgstr "影响"
+
+msgid "Project status"
+msgstr "项目状态"
+
+msgid "Independent alpha project, not maintained or endorsed by Ray"
+msgstr "独立的 alpha 项目，不由 Ray 维护，也未获得 Ray 背书"
+
+msgid ""
+"Public APIs, checkpoint formats, and behavior can change before 1.0. Pin "
+"an exact Klein release."
+msgstr "公共 API、检查点格式和行为在 1.0 之前可能发生变化。请固定准确的 Klein 版本。"
+
+msgid "Python"
+msgstr "Python"
+
+msgid "CPython 3.10 through 3.12"
+msgstr "CPython 3.10 至 3.12"
+
+msgid "Other Python implementations and versions are not in the tested matrix."
+msgstr "其他 Python 实现和版本不在测试矩阵中。"
+
+msgid "Ray"
+msgstr "Ray"
+
+msgid "`ray[data]>=2.56.1,<2.57`"
+msgstr "`ray[data]>=2.56.1,<2.57`"
+
+msgid ""
+"Klein deliberately pins one Ray minor because some Ray Data extension "
+"points can change between minors."
+msgstr "Klein 有意固定一个 Ray 次版本，因为部分 Ray Data 扩展点可能在次版本之间发生变化。"
+
+msgid "Operating systems"
+msgstr "操作系统"
+
+msgid "Linux and macOS are declared by the package"
+msgstr "软件包声明支持 Linux 和 macOS"
+
+msgid "Native Windows is not part of the release contract."
+msgstr "原生 Windows 不属于发布契约。"
+
+msgid "Language API"
+msgstr "语言 API"
+
+msgid "Python only"
+msgstr "仅支持 Python"
+
+msgid "There is no Java, Scala, SQL Gateway, or REST job-submission API."
+msgstr "没有 Java、Scala、SQL Gateway 或 REST 作业提交 API。"
+
+msgid "Distribution"
+msgstr "分发"
+
+msgid "Source checkout and Python wheel"
+msgstr "源码检出和 Python wheel"
+
+msgid ""
+"Klein does not provide a standalone cluster distribution, container "
+"image, Helm chart, or Kubernetes operator. It runs in an existing Ray "
+"environment."
+msgstr "Klein 不提供独立集群发行版、容器镜像、Helm chart 或 Kubernetes operator。它在现有 Ray 环境中运行。"
+
+msgid ""
+"Review [Compatibility](compatibility.md) before changing Python or Ray, "
+"and follow [Upgrading](upgrading.md) before changing any component that "
+"must read an existing checkpoint."
+msgstr ""
+"更改 Python 或 Ray "
+"前请审查[兼容性](compatibility.md)；更改任何必须读取现有检查点的组件前，请遵循[升级](upgrading.md)。"
+
+msgid "Execution model"
+msgstr "执行模型"
+
+msgid ""
+"One submitted graph uses one execution mode. Klein does not split a graph"
+" into independent batch and streaming regions."
+msgstr "一个已提交的图只使用一种执行模式。Klein 不会将一个图拆分为独立的批处理区域和流处理区域。"
+
+msgid ""
+"`auto` selects native streaming when any source is unbounded, any graph "
+"vertex has no batch lowering, or `udf.ignore-exception=true`; only a "
+"fully batch-lowerable, bounded graph with that policy disabled is lowered"
+" to Ray Data."
+msgstr ""
+"任一数据源无界、任一计算图顶点没有批处理下沉实现，或设置 `udf.ignore-exception=true` 时，`auto` "
+"会选择原生流处理；只有计算图有界、可完全下沉为批处理，且该策略已禁用时，才会下沉到 Ray Data。"
+
+msgid ""
+"A bounded custom `SourceFunction` has no public batch lowering by "
+"default, so `auto` selects streaming. Use a Ray Data source when batch "
+"execution is required."
+msgstr ""
+"默认情况下，有界自定义 `SourceFunction` 没有公开的批处理下沉实现，因此 `auto` 会选择流处理。需要批处理执行时，请使用 "
+"Ray Data 数据源。"
+
+msgid ""
+"Most arbitrary `stream.data` Dataset operations are batch-only. Streaming"
+" currently supports the explicitly documented Ray expression forms and "
+"native `DataStream` operators."
+msgstr ""
+"大多数任意 `stream.data` Dataset 操作仅支持批处理。流处理当前支持明确记录的 Ray 表达式形式和原生 "
+"`DataStream` 算子。"
+
+msgid ""
+"Native streaming is record-oriented with ordered micro-batches. It is not"
+" a replacement for Ray Data's batch optimizer, block formats, or "
+"autoscaling actor-pool policy."
+msgstr "原生流处理以记录为中心，并使用有序微批。它不能替代 Ray Data 的批处理优化器、块格式或自动扩缩 actor 池策略。"
+
+msgid ""
+"A graph must have at least one sink before `execute()`. The deprecated "
+"interactive mode is retained only for compatibility and is not a "
+"production materialization protocol."
+msgstr "调用 `execute()` 前，图必须至少有一个 Sink。已弃用的交互模式仅为兼容性而保留，并非生产物化协议。"
+
+msgid ""
+"See [Key concepts](key-concepts.md), [Ray Data interoperability](ray-"
+"data-interop.md), and [Operator compatibility](operator-compatibility.md)"
+" for the selection and lowering rules."
+msgstr ""
+"有关选择和下沉规则，请参阅[关键概念](key-concepts.md)、[Ray Data 互操作性](ray-data-"
+"interop.md)和[算子兼容性](operator-compatibility.md)。"
+
+msgid "SQL and dynamic tables"
+msgstr "SQL 和动态表"
+
+msgid ""
+"Klein SQL is deliberately smaller than Flink SQL or a general-purpose "
+"database. The batch and streaming planners also support different "
+"subsets."
+msgstr "Klein SQL 有意比 Flink SQL 或通用数据库更精简。批处理和流处理规划器支持的子集也不同。"
+
+msgid ""
+"Streaming supports one `SELECT` query block; common table expressions and"
+" `UNION ALL` are batch-only."
+msgstr "流处理支持一个 `SELECT` 查询块；公共表表达式和 `UNION ALL` 仅支持批处理。"
+
+msgid ""
+"Streaming joins are regular inner equality joins. Outer, cross, temporal,"
+" interval-SQL, and non-equality joins are not implemented."
+msgstr "流式连接仅支持常规内部等值连接。尚未实现外连接、交叉连接、时态连接、区间 SQL 连接和非等值连接。"
+
+msgid ""
+"`HAVING`, `SELECT DISTINCT`, recursive common table expressions, SQL "
+"window syntax, computed columns, watermarks in DDL, partitions, and "
+"catalog-qualified names are not implemented."
+msgstr ""
+"尚未实现 `HAVING`、`SELECT DISTINCT`、递归公共表表达式、SQL 窗口语法、计算列、DDL 中的水位线、分区以及带 "
+"catalog 限定符的名称。"
+
+msgid ""
+"Streaming `ORDER BY` requires `LIMIT` and becomes a continuously "
+"maintained Top-N. A global Top-N is a single keyed partition."
+msgstr "流式 `ORDER BY` 要求同时使用 `LIMIT`，并转化为持续维护的 Top-N。全局 Top-N 是单个键控分区。"
+
+msgid ""
+"Regular joins, non-windowed aggregations, and Top-N can grow without "
+"bound unless state TTL is configured. TTL can make later results "
+"incomplete."
+msgstr "除非配置状态 TTL，否则常规连接、非窗口聚合和 Top-N 可能无限增长。TTL 可能使后续结果不完整。"
+
+msgid ""
+"Updating queries emit changelog rows. Ordinary append sinks do not "
+"automatically materialize update-before, update-after, or delete records."
+msgstr ""
+"更新查询会发出 changelog 行。普通追加 Sink 不会自动物化 update-before、update-after 或 delete "
+"记录。"
+
+msgid ""
+"SQLGlot parses the query, but Klein owns validation and execution. "
+"Installing another SQLGlot version or a database engine does not add SQL "
+"features."
+msgstr "SQLGlot 负责解析查询，但验证和执行由 Klein 负责。安装其他 SQLGlot 版本或数据库引擎不会增加 SQL 功能。"
+
+msgid ""
+"The authoritative query matrix and expression rules are in [SQL and Table"
+" APIs](sql.md#how-does-sql-execute)."
+msgstr "权威的查询矩阵和表达式规则见 [SQL 和 Table API](sql.md#how-does-sql-execute)。"
+
+msgid "State, checkpoints, and recovery"
+msgstr "状态、检查点和恢复"
+
+msgid ""
+"Klein checkpoints provide a consistent recovery boundary for supported "
+"native streaming sources, managed state, timers, and prepared "
+"transactional sink output. They do not make every external effect exactly"
+" once."
+msgstr ""
+"Klein 检查点为受支持的原生流式数据源、托管状态、定时器和已预备的事务型 Sink "
+"输出提供一致的恢复边界。它们不会让每个外部副作用都变为精确一次。"
+
+msgid "Boundary"
+msgstr "边界"
+
+msgid "Current behavior"
+msgstr "当前行为"
+
+msgid "General delivery"
+msgstr "一般交付保证"
+
+msgid ""
+"At least once. Non-transactional sinks can observe duplicates after "
+"replay."
+msgstr "至少一次。重放后，非事务型 Sink 可能观察到重复项。"
+
+msgid "State backends"
+msgstr "状态后端"
+
+msgid ""
+"In-memory and optional local RocksDB working state. Durable recovery "
+"still requires checkpoint storage."
+msgstr "内存和可选的本地 RocksDB 工作状态。持久恢复仍需要检查点存储。"
+
+msgid "Durable checkpoint stores"
+msgstr "持久检查点存储"
+
+msgid ""
+"Local/file, Amazon S3-compatible, and Google Cloud Storage URIs through "
+"the documented filesystem adapter."
+msgstr "通过文档所述的文件系统适配器支持本地/file、Amazon S3 兼容和 Google Cloud Storage URI。"
+
+msgid "Savepoints"
+msgstr "Savepoint"
+
+msgid ""
+"`execution.savepoint.path` can restore a recorded completed checkpoint, "
+"but there is no command that creates a separately managed Flink-style "
+"savepoint."
+msgstr ""
+"`execution.savepoint.path` 可以恢复已记录的已完成检查点，但没有用于创建单独管理的 Flink 风格 savepoint"
+" 的命令。"
+
+msgid "JobManager loss"
+msgstr "JobManager 丢失"
+
+msgid ""
+"Losing the JobManager currently requires resubmitting the same job "
+"definition from a durable completed checkpoint."
+msgstr "JobManager 丢失后，当前需要从持久的已完成检查点重新提交相同的作业定义。"
+
+msgid "Whole-cluster loss"
+msgstr "整个集群丢失"
+
+msgid ""
+"Recovery is a new submission; Klein does not recreate a Ray cluster or "
+"resubmit the application."
+msgstr "恢复需要重新提交；Klein 不会重新创建 Ray 集群或重新提交应用。"
+
+msgid "State schema migration"
+msgstr "状态模式迁移"
+
+msgid "No automatic migration framework is promised for alpha checkpoints."
+msgstr "不承诺为 alpha 检查点提供自动迁移框架。"
+
+msgid "Serialization"
+msgstr "序列化"
+
+msgid ""
+"Python objects, functions, keys, and state must be serializable and "
+"should be treated as trusted data."
+msgstr "Python 对象、函数、键和状态必须可序列化，并且应视为受信任数据。"
+
+msgid "Maximum parallelism"
+msgstr "最大并行度"
+
+msgid ""
+"`state.keyed.max-parallelism` fixes the key-group space and cannot change"
+" when an existing checkpoint must remain restorable."
+msgstr "`state.keyed.max-parallelism` 固定键组空间；当现有检查点必须保持可恢复时，不能更改该值。"
+
+msgid ""
+"Checkpoint metadata only covers components in its checkpoint domain. "
+"Broker acknowledgements, database commits, remote API calls, and "
+"arbitrary UDF side effects remain external consistency boundaries. Read "
+"[Delivery semantics](delivery-semantics.md), [Checkpoint storage"
+"](checkpoint-storage.md), and [Restore and rescale](checkpoint-"
+"recovery.md) together before defining an RPO or RTO."
+msgstr ""
+"检查点元数据只覆盖其检查点域中的组件。broker 确认、数据库提交、远程 API 调用和任意 UDF 副作用仍属于外部一致性边界。定义 RPO "
+"或 RTO 前，请结合阅读[交付语义](delivery-semantics.md)、[检查点存储](checkpoint-"
+"storage.md)和[恢复与扩缩](checkpoint-recovery.md)。"
+
+msgid "Scaling and scheduling"
+msgstr "扩缩和调度"
+
+msgid ""
+"Klein separates Ray Data worker autoscaling, native streaming operator "
+"parallelism, and Ray cluster node autoscaling."
+msgstr "Klein 将 Ray Data worker 自动扩缩、原生流处理算子并行度和 Ray 集群节点自动扩缩区分开来。"
+
+msgid ""
+"There is no built-in metric-driven controller for streaming operator "
+"parallelism. The Dashboard and state API perform explicit changes."
+msgstr "没有用于流处理算子并行度的内置指标驱动控制器。Dashboard 和状态 API 执行显式变更。"
+
+msgid ""
+"Live local rescaling does not support source operators, collecting sinks,"
+" or transactional sinks."
+msgstr "在线局部扩缩不支持数据源算子、收集型 Sink 或事务型 Sink。"
+
+msgid ""
+"Only one live operator rescale can run at a time, and another change must"
+" wait for the stabilization checkpoint."
+msgstr "一次只能执行一个在线算子扩缩；下一次变更必须等待稳定检查点。"
+
+msgid ""
+"Scale-out actors added after initial placement use native Ray placement. "
+"Existing placement-group bundles are not resized, and scale-in does not "
+"guarantee that Ray can release a node."
+msgstr "初始放置后新增的扩容 actor 使用原生 Ray 放置。现有放置组 bundle 不会调整大小，缩容也不保证 Ray 能释放节点。"
+
+msgid ""
+"Operator chaining changes the physical scaling unit. A transform chained "
+"to an unsupported source cannot be resized independently."
+msgstr "算子链会改变物理扩缩单元。与不受支持的数据源链接的转换无法独立调整大小。"
+
+msgid ""
+"Hot keys, single global aggregations, external rate limits, and serial "
+"sinks do not become parallel merely because another operator is enlarged."
+msgstr "热点键、单一全局聚合、外部速率限制和串行 Sink 不会仅因为扩大另一个算子就变为并行。"
+
+msgid ""
+"Ray's cluster autoscaler can satisfy resource demand but does not decide "
+"Klein operator parallelism."
+msgstr "Ray 集群自动扩缩器可以满足资源需求，但不会决定 Klein 算子并行度。"
+
+msgid ""
+"See [Autoscaling and live operator rescaling](operator-rescaling.md) for "
+"the admission rules, rollback boundary, and stabilization fence."
+msgstr "有关准入规则、回滚边界和稳定栅栏，请参阅[自动扩缩与在线算子扩缩](operator-rescaling.md)。"
+
+msgid "Connector guarantees"
+msgstr "连接器保证"
+
+msgid "Connector behavior is not uniform:"
+msgstr "连接器行为并不统一："
+
+msgid ""
+"Streaming Kafka output is at least once and does not use Kafka "
+"transactions."
+msgstr "流式 Kafka 输出为至少一次，不使用 Kafka 事务。"
+
+msgid ""
+"RocketMQ progress is owned by its consumer group and can advance ahead of"
+" a durable Klein checkpoint. A full rollback can therefore lose "
+"acknowledged messages relative to that checkpoint."
+msgstr "RocketMQ 进度由其消费者组管理，可能领先于持久 Klein 检查点。因此，相对于该检查点，完全回滚可能丢失已确认的消息。"
+
+msgid ""
+"Streaming Iceberg supports append only. Overwrite and upsert remain "
+"batch-only."
+msgstr "流式 Iceberg 仅支持追加。覆盖和 upsert 仍仅支持批处理。"
+
+msgid ""
+"Filesystem and Iceberg append output is checkpoint-transactional, but "
+"readers and catalog retention still need to follow their documented "
+"commit protocol."
+msgstr "文件系统和 Iceberg 追加输出具有检查点事务性，但读取方和 catalog 保留仍需遵循各自记录的提交协议。"
+
+msgid ""
+"SQL, Redis, console, and ordinary custom sinks are not globally "
+"transactional."
+msgstr "SQL、Redis、控制台和普通自定义 Sink 不具备全局事务性。"
+
+msgid ""
+"A custom `SourceFunction` or `SinkFunction` defines part of the recovery "
+"contract. Klein cannot infer whether its external side effects are "
+"idempotent."
+msgstr "自定义 `SourceFunction` 或 `SinkFunction` 定义恢复契约的一部分。Klein 无法推断其外部副作用是否幂等。"
+
+msgid ""
+"Optional connector libraries and native dependencies must be present on "
+"every worker that may execute the connector."
+msgstr "每个可能执行连接器的 worker 都必须安装可选连接器库和原生依赖。"
+
+msgid ""
+"Use the [connector capability matrix](connectors/index.md#capability-"
+"matrix) and the connector's own delivery section before combining a "
+"source and sink."
+msgstr ""
+"组合数据源与 Sink 前，请查阅[连接器能力矩阵](connectors/index.md#capability-"
+"matrix)以及连接器自身的交付章节。"
+
+msgid "Operations and security"
+msgstr "运维和安全"
+
+msgid ""
+"The bundled Dashboard has no authentication or TLS. It binds to loopback "
+"by default and refuses a non-loopback listener unless the operator "
+"explicitly accepts the risk."
+msgstr "内置 Dashboard 没有身份验证或 TLS。它默认绑定回环地址；除非运维方明确接受风险，否则会拒绝监听非回环地址。"
+
+msgid ""
+"The Dashboard control endpoint can rescale supported operators. The CLI "
+"and Python state API can also cancel jobs. Protect every control path "
+"with the Ray and network boundary documented in the security guide."
+msgstr ""
+"Dashboard 控制端点可以对受支持的算子进行扩缩容。CLI 和 Python 状态 API 还可以取消作业。请使用安全指南中说明的 Ray "
+"与网络边界保护每条控制路径。"
+
+msgid ""
+"The detached state actor keeps a bounded in-memory job history. It is not"
+" an audit log, durable metric store, or source of checkpoint truth."
+msgstr "分离的状态 actor 保留有界的内存作业历史。它不是审计日志、持久指标存储或检查点事实来源。"
+
+msgid ""
+"Klein relies on Ray and the deployment platform for cluster "
+"authentication, network isolation, process isolation, secret delivery, "
+"and multi-tenant policy."
+msgstr "Klein 依赖 Ray 和部署平台提供集群身份验证、网络隔离、进程隔离、密钥交付和多租户策略。"
+
+msgid ""
+"User-defined functions execute arbitrary Python with the worker process's"
+" identity and credentials. Klein does not sandbox them."
+msgstr "用户定义函数以 worker 进程的身份和凭据执行任意 Python。Klein 不会对其进行沙箱隔离。"
+
+msgid ""
+"Checkpoint and application artifacts must come from a trusted source. "
+"Loading Python-serialized state from an untrusted location is unsafe."
+msgstr "检查点和应用构件必须来自受信任来源。从不受信任的位置加载 Python 序列化状态是不安全的。"
+
+msgid ""
+"Configuration redaction is defense in depth, not a secret store. Do not "
+"put credentials in logs, record values, metric labels, job names, or "
+"operator names."
+msgstr "配置脱敏属于纵深防御，并非密钥存储。不要将凭据放入日志、记录值、指标标签、作业名或算子名。"
+
+msgid ""
+"Read [Security and trust boundaries](security.md) before exposing any Ray"
+" or Klein endpoint."
+msgstr "暴露任何 Ray 或 Klein 端点前，请阅读[安全和信任边界](security.md)。"
+
+msgid "Explicit non-goals"
+msgstr "明确的非目标"
+
+msgid "The current standalone project does not aim to:"
+msgstr "当前独立项目并不旨在："
+
+msgid ""
+"replace Ray Core, Ray Data, Ray Jobs, Ray Serve, KubeRay, or the Ray "
+"autoscaler;"
+msgstr "替代 Ray Core、Ray Data、Ray Jobs、Ray Serve、KubeRay 或 Ray 自动扩缩器；"
+
+msgid ""
+"reproduce every Flink API, connector, SQL feature, deployment target, or "
+"exactly-once protocol;"
+msgstr "复现每个 Flink API、连接器、SQL 功能、部署目标或精确一次协议；"
+
+msgid "provide a public multi-tenant control plane or hosted service;"
+msgstr "提供公共多租户控制平面或托管服务；"
+
+msgid "infer external-system correctness from a Python connector implementation;"
+msgstr "根据 Python 连接器实现推断外部系统正确性；"
+
+msgid "guarantee checkpoint compatibility across arbitrary alpha revisions; or"
+msgstr "保证任意 alpha 修订版之间的检查点兼容性；或"
+
+msgid ""
+"make internal modules under `ray.klein._internal` or `ray.klein.runtime` "
+"stable application APIs."
+msgstr "将 `ray.klein._internal` 或 `ray.klein.runtime` 下的内部模块变为稳定的应用 API。"
+
+msgid ""
+"If an application depends on a missing capability, open an issue before "
+"building around an internal module. Include the execution mode, recovery "
+"requirement, connector pair, state size, and expected compatibility "
+"window."
+msgstr "如果应用依赖缺失的能力，请在围绕内部模块构建之前提交 issue。请包含执行模式、恢复要求、连接器组合、状态大小和预期兼容窗口。"
+
+#~ msgid ""
+#~ "The Dashboard control endpoint can "
+#~ "cancel jobs and rescale supported "
+#~ "operators. Put it behind an "
+#~ "authenticated proxy if it is exposed "
+#~ "at all."
+#~ msgstr "Dashboard 控制端点可以取消作业并扩缩受支持的算子。如果需要暴露该端点，请将其置于经过身份验证的代理之后。"

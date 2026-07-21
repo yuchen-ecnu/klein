@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from functools import singledispatch
 from typing import Any
 
@@ -91,18 +91,26 @@ def _translate_negation(expression: exp.Neg, aliases: tuple[str, ...], *, predic
 def _translate_not(expression: exp.Not, aliases: tuple[str, ...], *, predicate: bool) -> Expr | None:
     if isinstance(expression.this, exp.In):
         return _translate_in(expression.this, aliases, predicate=predicate, negate=True)
-    operand = _translate(expression.this, aliases, predicate=predicate)
-    return None if operand is None else ~operand
+    # A Ray block whose boolean column is entirely NULL has Arrow's physical
+    # ``null`` type. Arrow has no invert kernel for that type, so native
+    # lowering can fail based only on block boundaries. The row evaluator
+    # implements SQL three-valued NOT without depending on inferred block type.
+    return None
 
 
 @_translate.register
 def _translate_and(expression: exp.And, aliases: tuple[str, ...], *, predicate: bool) -> Expr | None:
-    return _translate_pair(expression, aliases, predicate, lambda left, right: left & right)
+    del expression, aliases, predicate
+    # ``and_kleene`` rejects an all-NULL Arrow operand even though SQL defines
+    # the result. Always use the row fallback so partitioning cannot change
+    # NULL semantics or make an otherwise valid query fail.
+    return None
 
 
 @_translate.register
 def _translate_or(expression: exp.Or, aliases: tuple[str, ...], *, predicate: bool) -> Expr | None:
-    return _translate_pair(expression, aliases, predicate, lambda left, right: left | right)
+    del expression, aliases, predicate
+    return None
 
 
 @_translate.register
@@ -162,17 +170,6 @@ def _translate_logarithm(expression: exp.Log, aliases: tuple[str, ...], *, predi
 def _translate_function(expression: exp.Anonymous, aliases: tuple[str, ...], *, predicate: bool) -> Expr | None:
     del predicate
     return _translate_anonymous(expression, aliases)
-
-
-def _translate_pair(
-    expression: exp.Binary,
-    aliases: tuple[str, ...],
-    predicate: bool,
-    operation: Callable[[Expr, Expr], Expr],
-) -> Expr | None:
-    left = _translate(expression.this, aliases, predicate=predicate)
-    right = _translate(expression.expression, aliases, predicate=predicate)
-    return None if left is None or right is None else operation(left, right)
 
 
 def _translate_in(

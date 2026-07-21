@@ -22,8 +22,10 @@ python -m pip install "ray-klein[serve]"
 
 ## Mark a Serve region
 
-Transform methods that accept `ray_serve_enabled` can be marked in the original
-workflow:
+Mark synchronous `map_batches` transforms in the original workflow. The current
+Serve runtime accepts only NumPy/default batch format; other transform kinds,
+async or generator callables, and pandas/Arrow batches are rejected while the
+logical graph is built:
 
 ```python
 served = (
@@ -37,10 +39,10 @@ ray.klein.execute("served-inference").wait()
 
 All marked nodes in a job must form exactly one connected linear chain. A
 branch or merge inside the marked region, or two disconnected marked regions,
-is rejected during graph construction. External fan-in or fan-out is rewired
-to the single proxy boundary. Functions, constructor arguments, and returned
-values must remain serializable and compatible with the selected operator's
-batch contract.
+is rejected during graph construction. External inputs may only enter the
+chain's head, and external outputs may only leave its tail; tail fan-out is
+supported. Functions, constructor arguments, and returned values must remain
+serializable and compatible with the selected operator's batch contract.
 
 In a streaming graph the proxy is an ordinary transform operator, but the
 remote HTTP service does not participate in Klein's checkpoint protocol.
@@ -86,8 +88,8 @@ serve:
 | `serve.client.batch-timeout` | `5` | Proxy batch timeout in seconds. |
 | `serve.client.batch-size` | `2` | Proxy request batch size. |
 | `serve.client.max-attempts` | `30` | Maximum HTTP request attempts. |
-| `serve.client.slow-request-warning` | `600` | Seconds before one slow-request warning. |
-| `serve.client.http-timeout` | `300` | Total HTTP timeout in seconds. |
+| `serve.client.slow-request-warning` | `60` | Seconds before one slow-request warning. |
+| `serve.client.http-timeout` | `300` | Total logical request timeout across retries and backoff, in seconds. |
 | `serve.client.http-connect-timeout` | `5` | HTTP connect timeout in seconds. |
 | `serve.client.http-limit-per-host` | `1000` | Per-host connection limit. |
 | `serve.client.http-connection-limit` | `1000` | Total connection limit. |
@@ -102,8 +104,10 @@ accepted configuration sources and precedence.
 ## Requests, retries, and operations
 
 The proxy JSON-encodes NumPy batches, chooses among configured endpoints, and
-reuses one request ID across retries. Connection errors, timeouts, HTTP 429,
-and HTTP 499 are retryable; most other 4xx responses stop retrying. Because a
+reuses one request ID across retries. Connection errors, timeouts, HTTP 408,
+429, 502, 503, and 504 are retryable; other HTTP failures stop retrying. The
+configured HTTP timeout is one total budget for the logical call, including
+all attempts and backoff. Because a
 remote deployment can finish a request before the client observes a failure,
 functions should be deterministic and free of non-idempotent side effects.
 

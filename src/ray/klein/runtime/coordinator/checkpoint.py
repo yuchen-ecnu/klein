@@ -33,6 +33,8 @@ class Checkpoint:
     completed_at_ms: int | None = None
     status: CheckpointStatus = CheckpointStatus.CREATED
     _acknowledged_by: set[ExecutionVertexId] = field(default_factory=set, repr=False)
+    _started_sources: set[ExecutionVertexId] = field(default_factory=set, repr=False)
+    _eof_sources: set[ExecutionVertexId] = field(default_factory=set, repr=False)
     operator_metrics: dict[ExecutionVertexId, dict[str, int | float]] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
@@ -77,6 +79,24 @@ class Checkpoint:
         if self.required_acknowledgements > 0 and self.acknowledgements >= self.required_acknowledgements:
             self.mark_notifying()
         return self.status == CheckpointStatus.NOTIFYING
+
+    def mark_source_started(self, source: ExecutionVertexId, *, is_eof: bool = False) -> bool:
+        """Record that one domain source emitted this epoch's barrier."""
+
+        if source not in self.trigger_sources:
+            return False
+        self._started_sources.add(source)
+        if is_eof:
+            self._eof_sources.add(source)
+        return True
+
+    @property
+    def started_sources(self) -> frozenset[ExecutionVertexId]:
+        return frozenset(self._started_sources)
+
+    @property
+    def eof_sources(self) -> frozenset[ExecutionVertexId]:
+        return frozenset(self._eof_sources)
 
     def record_operator_metrics(
         self,

@@ -141,6 +141,11 @@ class EdgeOutput:
         finally:
             self._batcher = None
 
+    def abort_delivery(self) -> None:
+        """Make force-teardown sends return without flushing downstream."""
+
+        self._sender.abort_delivery()
+
     def take_pending_commands(self) -> list[EdgeCommand]:
         """Transfer executor-owned commands after the executor becomes idle."""
         commands = self._pending

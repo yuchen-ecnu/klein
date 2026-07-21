@@ -1,0 +1,656 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Complete ray-klein CLI reference for job discovery, status, attachment, "
+"cancellation, and the local operations Dashboard."
+msgstr "完整的 ray-klein CLI 参考，涵盖作业发现、状态、附加、取消和本地运维 Dashboard。"
+
+msgid "CLI reference"
+msgstr "CLI 参考"
+
+msgid ""
+"The `ray-klein` console command discovers and controls Klein streaming "
+"jobs in an existing Ray cluster. It is installed with the base package."
+msgstr "`ray-klein` 控制台命令用于发现和控制现有 Ray 集群中的 Klein 流作业。它随基础包一同安装。"
+
+msgid "Command"
+msgstr "命令"
+
+msgid "Purpose"
+msgstr "用途"
+
+msgid "Machine-readable output"
+msgstr "机器可读输出"
+
+msgid "`dashboard`"
+msgstr "`dashboard`"
+
+msgid "Serve the bundled local operations Dashboard."
+msgstr "启动随附的本地运维 Dashboard。"
+
+msgid "No"
+msgstr "否"
+
+msgid "`list`"
+msgstr "`list`"
+
+msgid "List current jobs, optionally including retained terminal jobs."
+msgstr "列出当前作业，可选择包含保留的终态作业。"
+
+msgid "`--json`"
+msgstr "`--json`"
+
+msgid "`status`"
+msgstr "`status`"
+
+msgid "Show one current or retained job snapshot."
+msgstr "显示一个当前或保留的作业快照。"
+
+msgid "`attach`"
+msgstr "`attach`"
+
+msgid "Render live progress until the job terminates or the user detaches."
+msgstr "渲染实时进度，直至作业终止或用户解除附加。"
+
+msgid "`cancel`"
+msgstr "`cancel`"
+
+msgid "Request cooperative cancellation."
+msgstr "请求协作式取消。"
+
+msgid "`stop`"
+msgstr "`stop`"
+
+msgid "Compatibility alias for `cancel`."
+msgstr "`cancel` 的兼容别名。"
+
+msgid ""
+"Use `ray-klein COMMAND --help` to inspect the installed version. The "
+"command names and defaults below describe the current `0.1.0.dev0` source"
+" tree."
+msgstr "使用 `ray-klein COMMAND --help` 检查已安装版本。以下命令名称和默认值描述当前的 `0.1.0.dev0` 源码树。"
+
+msgid "Connect to the Ray cluster"
+msgstr "连接到 Ray 集群"
+
+msgid ""
+"Every operational subcommand initializes Ray with "
+"`ray.init(address=\"auto\")`; the CLI does not start a new cluster when "
+"none is available. `--help` and `--version` do not connect. Set "
+"`RAY_ADDRESS` before invoking an operational command to select a remote "
+"cluster:"
+msgstr "每个运维子命令都会通过 `ray.init(address=\"auto\")` 初始化 Ray；没有可用集群时，CLI 不会启动新集群。`--help` 和 `--version` 不会建立连接。调用运维命令前设置 `RAY_ADDRESS`，以选择远程集群："
+
+msgid ""
+"Use the address scheme and authentication expected by that Ray "
+"deployment; `ray://` addresses require Ray Client support in the "
+"environment. A connection failure is reported without an application "
+"traceback and exits with status `1`. Operational commands use the "
+"authority of the connected Ray client, so verify the cluster before "
+"issuing a control command."
+msgstr "请使用该 Ray 部署所要求的地址方案和身份验证；`ray://` 地址要求环境支持 Ray Client。连接失败时会在不显示应用 traceback 的情况下报告错误，并以状态码 `1` 退出。运维命令使用已连接 Ray 客户端的权限，因此发出控制命令前请确认目标集群。"
+
+msgid "Job names, namespaces, and job IDs"
+msgstr "作业名称、命名空间和作业 ID"
+
+msgid "These identifiers serve different purposes:"
+msgstr "这些标识符的用途不同："
+
+msgid "**Job name** is the human-readable name passed to `execute()`."
+msgstr "**作业名称**是传给 `execute()` 的人类可读名称。"
+
+msgid ""
+"**Namespace** is the per-job Ray namespace containing the named "
+"`JobManager`. It is returned by `JobHandle.namespace` and is the "
+"positional identifier accepted by every CLI job command."
+msgstr "**命名空间**是每个作业独有、包含具名 `JobManager` 的 Ray 命名空间。它由 `JobHandle.namespace` 返回，也是每个 CLI 作业命令接受的位置标识符。"
+
+msgid ""
+"**Job ID** is the identifier used by the published Python state API and "
+"the Dashboard. In the current runtime it normally matches the namespace, "
+"but automation must not substitute one field for the other."
+msgstr "**作业 ID** 是已发布的 Python 状态 API 和 Dashboard 使用的标识符。在当前运行时中，它通常与命名空间相同，但自动化程序不得将这两个字段相互替代。"
+
+msgid ""
+"When `job.namespace` is empty, Klein generates a namespace of the form "
+"`klein-<sanitized-job-name>-<eight-hex-characters>`. Copy the exact "
+"`namespace` from `ray-klein list --json`; do not reconstruct it from the "
+"job name. See the [configuration reference](configuration-reference.md"
+"#job-lifecycle) before choosing a stable explicit namespace."
+msgstr "当 `job.namespace` 为空时，Klein 会生成形如 `klein-<sanitized-job-name>-<eight-hex-characters>` 的命名空间。请从 `ray-klein list --json` 复制准确的 `namespace`，不要根据作业名称重新构造。选择稳定的显式命名空间前，请参阅[配置参考](configuration-reference.md#job-lifecycle)。"
+
+msgid "When a positional `NAMESPACE` is omitted:"
+msgstr "省略位置参数 `NAMESPACE` 时："
+
+msgid "no matching job produces an operational error;"
+msgstr "没有匹配作业时会产生运维错误；"
+
+msgid "exactly one matching job is selected automatically; and"
+msgstr "只有一个匹配作业时会自动选择它；"
+
+msgid "multiple matching jobs open a numbered picker on interactive stdin."
+msgstr "有多个匹配作业时会在交互式 stdin 上打开编号选择器。"
+
+msgid ""
+"Multiple jobs with non-interactive stdin produce usage exit code `2`. "
+"Pass the namespace explicitly in scripts."
+msgstr "存在多个作业且 stdin 非交互时，会产生用法退出码 `2`。请在脚本中显式传递命名空间。"
+
+msgid ""
+"Serve the independent Klein web Dashboard and its operator-control "
+"endpoint:"
+msgstr "启动独立的 Klein Web Dashboard 及其算子控制端点："
+
+msgid "Option"
+msgstr "选项"
+
+msgid "Default"
+msgstr "默认值"
+
+msgid "Meaning"
+msgstr "含义"
+
+msgid "`--host TEXT`"
+msgstr "`--host TEXT`"
+
+msgid "`127.0.0.1`"
+msgstr "`127.0.0.1`"
+
+msgid ""
+"Listener address. `localhost`, IPv4 loopback, and IPv6 loopback are "
+"treated as local."
+msgstr "监听地址。`localhost`、IPv4 回环地址和 IPv6 回环地址均视为本地地址。"
+
+msgid "`--port INTEGER`"
+msgstr "`--port INTEGER`"
+
+msgid "`8266`"
+msgstr "`8266`"
+
+msgid "Listener port in the inclusive range 1–65535."
+msgstr "监听端口，取值范围为 1–65535（含端点）。"
+
+msgid "`--open`"
+msgstr "`--open`"
+
+msgid "Off"
+msgstr "关闭"
+
+msgid "Ask the default browser to open the displayed URL."
+msgstr "请求默认浏览器打开显示的 URL。"
+
+msgid "`--allow-unauthenticated`"
+msgstr "`--allow-unauthenticated`"
+
+msgid ""
+"Permit a non-loopback listener even though the control endpoint has no "
+"authentication."
+msgstr "即使控制端点没有身份验证，也允许使用非回环监听地址。"
+
+msgid ""
+"The command runs in the foreground until Ctrl+C, then closes the server "
+"and returns successfully. Binding a non-loopback host is refused with "
+"exit code `1` unless `--allow-unauthenticated` is explicit. That flag "
+"only disables the safety check; it does not add authentication or "
+"encryption."
+msgstr "该命令在前台运行直至按下 Ctrl+C，随后关闭服务器并成功返回。除非显式指定 `--allow-unauthenticated`，否则绑定非回环主机会被拒绝并以状态码 `1` 退出。该标志只会禁用安全检查，不会增加身份验证或加密。"
+
+msgid ""
+"Prefer the default loopback listener through an SSH tunnel. If a non-"
+"loopback listener is unavoidable, place it behind an authenticated, "
+"encrypted reverse proxy and restrict network access. See "
+"[Security](security.md#dashboard-and-control-apis) and "
+"[Observability](observability.md#use-the-klein-dashboard)."
+msgstr "优先通过 SSH 隧道访问默认回环监听器。如果无法避免使用非回环监听器，请将其置于经过身份验证和加密的反向代理之后，并限制网络访问。请参阅[安全](security.md#dashboard-and-control-apis)和[可观测性](observability.md#use-the-klein-dashboard)。"
+
+msgid ""
+"List jobs discovered through the cluster state actor and named-actor "
+"fallback:"
+msgstr "列出通过集群状态 actor 和具名 actor 回退机制发现的作业："
+
+msgid "`--all`"
+msgstr "`--all`"
+
+msgid ""
+"Include `FINISHED`, `FAILED`, `CANCELLED`, unreachable, and other non-"
+"running retained entries."
+msgstr "包含 `FINISHED`、`FAILED`、`CANCELLED`、不可达以及其他非运行状态的保留条目。"
+
+msgid "Emit the normalized JSON array described below."
+msgstr "输出下文所述的规范化 JSON 数组。"
+
+msgid ""
+"Without `--all`, only non-terminal lifecycle states are shown: `CREATED`,"
+" `SUBMITTING`, `DEPLOYING`, `INITIALIZING`, and `RUNNING`. Results are "
+"sorted by namespace. An empty result is successful: text mode prints `No "
+"running Klein jobs found.` and JSON mode prints `[]`."
+msgstr "不指定 `--all` 时，只显示非终态生命周期状态：`CREATED`、`SUBMITTING`、`DEPLOYING`、`INITIALIZING` 和 `RUNNING`。结果按命名空间排序。空结果仍视为成功：文本模式输出 `No running Klein jobs found.`，JSON 模式输出 `[]`。"
+
+msgid "Examples:"
+msgstr "示例："
+
+msgid "Show the current or retained snapshot for one job:"
+msgstr "显示一个作业的当前快照或保留快照："
+
+msgid "Argument or option"
+msgstr "参数或选项"
+
+msgid "`NAMESPACE`"
+msgstr "`NAMESPACE`"
+
+msgid "Automatic selection"
+msgstr "自动选择"
+
+msgid ""
+"Exact Ray namespace from `JobHandle.namespace` or `list --json`. Terminal"
+" retained jobs are eligible."
+msgstr "来自 `JobHandle.namespace` 或 `list --json` 的准确 Ray 命名空间。保留的终态作业也可选择。"
+
+msgid "Emit the complete JSON-safe snapshot instead of the terminal summary."
+msgstr "输出完整的 JSON-safe 快照，而不是终端摘要。"
+
+msgid ""
+"Text output includes job state, aggregate rows and restarts, operator "
+"parallelism and backpressure, checkpoint counts and latest path, and a "
+"failure summary when present. If the live `JobManager` is unavailable but"
+" a cached snapshot exists, the command prints a stale-data warning."
+msgstr "文本输出包含作业状态、聚合行数和重启次数、算子并行度和反压、checkpoint 数量与最新路径，以及存在故障时的故障摘要。如果实时 `JobManager` 不可用但存在缓存快照，命令会输出数据过期警告。"
+
+msgid ""
+"`status` returning exit code `0` means the query succeeded; it does "
+"**not** mean the job is healthy. A snapshot whose `status` is `FAILED` is"
+" still a successful CLI query. Automation must inspect the JSON status "
+"field."
+msgstr "`status` 返回退出码 `0` 表示查询成功，**不**表示作业健康。即使快照中的 `status` 为 `FAILED`，CLI 查询仍然成功。自动化程序必须检查 JSON 状态字段。"
+
+msgid "Attach a terminal progress view to a running job:"
+msgstr "将终端进度视图附加到运行中的作业："
+
+msgid ""
+"`attach` always requires interactive stdout. If the namespace is omitted "
+"and more than one running job exists, it also requires interactive stdin "
+"for the picker. Redirected output or a pipe is rejected with usage exit "
+"code `2`; use `status --json` for non-interactive monitoring."
+msgstr "`attach` 始终要求 stdout 为交互式终端。如果省略命名空间且存在多个运行中的作业，选择器还要求交互式 stdin。重定向输出或管道会被拒绝并返回用法退出码 `2`；非交互式监控请使用 `status --json`。"
+
+msgid ""
+"Ctrl+C detaches and leaves the job running. Reaching `FINISHED` or "
+"`CANCELLED` prints a final summary and returns successfully. Reaching "
+"`FAILED`, attaching to an already terminal job, or losing progress "
+"updates produces exit code `1`. Use `cancel` or `stop` when the intent is"
+" to terminate the job."
+msgstr "按 Ctrl+C 会解除附加并让作业继续运行。作业进入 `FINISHED` 或 `CANCELLED` 时会输出最终摘要并成功返回。作业进入 `FAILED`、尝试附加到已处于终态的作业，或丢失进度更新时，会返回退出码 `1`。若要终止作业，请使用 `cancel` 或 `stop`。"
+
+msgid "`cancel` and `stop`"
+msgstr "`cancel` 和 `stop`"
+
+msgid ""
+"`stop` is a visible compatibility alias for `cancel`; their arguments and"
+" behavior are identical:"
+msgstr "`stop` 是 `cancel` 的可见兼容别名；两者的参数和行为完全相同："
+
+msgid "Automatic running-job selection"
+msgstr "自动选择运行中的作业"
+
+msgid "Exact Ray namespace of the job to cancel."
+msgstr "要取消的作业的准确 Ray 命名空间。"
+
+msgid "`--force`, `-f`, `--yes`"
+msgstr "`--force`、`-f`、`--yes`"
+
+msgid "Skip the confirmation prompt. These are equivalent spellings."
+msgstr "跳过确认提示。这些写法等价。"
+
+msgid "`--timeout INTEGER`"
+msgstr "`--timeout INTEGER`"
+
+msgid "`60` seconds"
+msgstr "`60` 秒"
+
+msgid "Positive cancellation time budget passed to the `JobManager`."
+msgstr "传给 `JobManager` 的正数取消时间预算。"
+
+msgid ""
+"Cancellation is cooperative. `--force` means “do not prompt”; it does not"
+" kill actors more aggressively or bypass checkpoint and shutdown logic. "
+"The command is idempotent for a retained terminal job and returns success"
+" after reporting its existing state. It exits with `1` if the "
+"`JobManager` cannot be reached, raises an error, times out, or does not "
+"acknowledge cancellation."
+msgstr "取消是协作式的。`--force` 表示“不提示确认”；它不会更强硬地终止 actor，也不会绕过 checkpoint 和关闭逻辑。该命令对保留的终态作业是幂等的，报告其现有状态后会成功返回。如果无法访问 `JobManager`、发生错误、超时或未确认取消，则以 `1` 退出。"
+
+msgid "For unattended use, always provide all control inputs:"
+msgstr "无人值守使用时，请始终提供所有控制输入："
+
+msgid "Terminal requirements"
+msgstr "终端要求"
+
+msgid "Invocation"
+msgstr "调用方式"
+
+msgid "Interactive stdin"
+msgstr "交互式 stdin"
+
+msgid "Interactive stdout"
+msgstr "交互式 stdout"
+
+msgid "`list`, including `--json`"
+msgstr "`list`，包括 `--json`"
+
+msgid "`status NAMESPACE --json`"
+msgstr "`status NAMESPACE --json`"
+
+msgid "`status` with multiple jobs"
+msgstr "存在多个作业时的 `status`"
+
+msgid "Yes, for the picker"
+msgstr "是，供选择器使用"
+
+msgid "`attach NAMESPACE`"
+msgstr "`attach NAMESPACE`"
+
+msgid "Yes"
+msgstr "是"
+
+msgid "`attach` with multiple jobs"
+msgstr "存在多个作业时的 `attach`"
+
+msgid "`cancel NAMESPACE --force` or `stop NAMESPACE --force`"
+msgstr "`cancel NAMESPACE --force` 或 `stop NAMESPACE --force`"
+
+msgid "`cancel`/`stop` without `--force`"
+msgstr "不带 `--force` 的 `cancel`/`stop`"
+
+msgid "Yes, for confirmation and possibly selection"
+msgstr "是，用于确认，也可能用于选择"
+
+msgid "No; it remains in the foreground until stopped"
+msgstr "否；它会留在前台，直到被停止"
+
+msgid "JSON output contract"
+msgstr "JSON 输出契约"
+
+msgid ""
+"Both JSON modes write pretty-printed, JSON-safe values to stdout. Retain "
+"stderr separately for connection diagnostics and stale-data or security "
+"warnings. Consumers must accept additional object keys in future "
+"compatible versions and must not depend on key ordering."
+msgstr "两种 JSON 模式都会将美化格式的 JSON-safe 值写入 stdout。请单独保留 stderr，以收集连接诊断、数据过期警告或安全警告。消费者必须接受未来兼容版本新增的对象键，且不得依赖键顺序。"
+
+msgid "`list --json`"
+msgstr "`list --json`"
+
+msgid ""
+"The top-level value is an array sorted by `namespace`. Every current "
+"element has these fields:"
+msgstr "顶层值是按 `namespace` 排序的数组。当前每个元素都包含以下字段："
+
+msgid "Field"
+msgstr "字段"
+
+msgid "Type"
+msgstr "类型"
+
+msgid "`namespace`"
+msgstr "`namespace`"
+
+msgid "string"
+msgstr "字符串"
+
+msgid "Exact CLI identifier and Ray namespace."
+msgstr "准确的 CLI 标识符和 Ray 命名空间。"
+
+msgid "`job_name`"
+msgstr "`job_name`"
+
+msgid "Display name; actor fallback may derive it from the namespace."
+msgstr "显示名称；actor 回退机制可能从命名空间推导该值。"
+
+msgid "`job_state`"
+msgstr "`job_state`"
+
+msgid ""
+"Lifecycle state, `UNKNOWN`, or `UNREACHABLE`. Scripts should tolerate new"
+" states."
+msgstr "生命周期状态、`UNKNOWN` 或 `UNREACHABLE`。脚本应容忍新增状态。"
+
+msgid "`actor_state`"
+msgstr "`actor_state`"
+
+msgid "Discovery source/health marker such as `PUBLISHED`, `STALE`, or `ALIVE`."
+msgstr "发现来源/健康标记，例如 `PUBLISHED`、`STALE` 或 `ALIVE`。"
+
+msgid "`dashboard_stale`"
+msgstr "`dashboard_stale`"
+
+msgid "boolean"
+msgstr "布尔值"
+
+msgid "`true` when published metadata came from the last good cached snapshot."
+msgstr "当已发布元数据来自最后一个有效缓存快照时为 `true`。"
+
+msgid "Example:"
+msgstr "示例："
+
+msgid "`status --json`"
+msgstr "`status --json`"
+
+msgid ""
+"The value is the complete state snapshot returned by the publication API,"
+" or a direct `JobManager` snapshot when publication is unavailable. "
+"Current top-level fields are:"
+msgstr "该值是发布 API 返回的完整状态快照；发布不可用时，则是直接获取的 `JobManager` 快照。当前顶层字段如下："
+
+msgid "`job_id`, `job_name`, `namespace`"
+msgstr "`job_id`、`job_name`、`namespace`"
+
+msgid "string or null where applicable"
+msgstr "字符串，适用时也可为 null"
+
+msgid "Published identity, display name, and CLI namespace."
+msgstr "发布标识、显示名称和 CLI 命名空间。"
+
+msgid ""
+"`CREATED`, `SUBMITTING`, `DEPLOYING`, `INITIALIZING`, `RUNNING`, "
+"`FINISHED`, `CANCELLED`, or `FAILED`."
+msgstr "`CREATED`、`SUBMITTING`、`DEPLOYING`、`INITIALIZING`、`RUNNING`、`FINISHED`、`CANCELLED` 或 `FAILED`。"
+
+msgid ""
+"`created_at_ms`, `started_at_ms`, `ended_at_ms`, `updated_at_ms`, "
+"`duration_ms`"
+msgstr "`created_at_ms`、`started_at_ms`、`ended_at_ms`、`updated_at_ms`、`duration_ms`"
+
+msgid "integer or null"
+msgstr "整数或 null"
+
+msgid "Unix-epoch timestamps and elapsed duration in milliseconds."
+msgstr "以毫秒表示的 Unix epoch 时间戳和已用时长。"
+
+msgid "`status_history`"
+msgstr "`status_history`"
+
+msgid "array"
+msgstr "数组"
+
+msgid "Status transitions with status, previous status, and timestamp."
+msgstr "状态转换记录，包含状态、上一状态和时间戳。"
+
+msgid "`operators`"
+msgstr "`operators`"
+
+msgid ""
+"Operator topology, subtask state, resources, counters, rates, "
+"backpressure, and rescale eligibility."
+msgstr "算子拓扑、subtask 状态、资源、计数器、速率、反压和 rescale 资格。"
+
+msgid "`edges`"
+msgstr "`edges`"
+
+msgid "Objects with source and target operator IDs."
+msgstr "包含源算子 ID 和目标算子 ID 的对象。"
+
+msgid "`overview`"
+msgstr "`overview`"
+
+msgid "object"
+msgstr "对象"
+
+msgid "Aggregate operator/task counts, rows/bytes, and restart-window data."
+msgstr "聚合算子/task 数量、行数/字节数和重启窗口数据。"
+
+msgid "`checkpoints`"
+msgstr "`checkpoints`"
+
+msgid "Summary, history, latest durable path, and recovery/rescale state."
+msgstr "摘要、历史、最新持久路径以及恢复/rescale 状态。"
+
+msgid "`rescale_operations`"
+msgstr "`rescale_operations`"
+
+msgid "Current and retained operator-rescale operation records."
+msgstr "当前和保留的算子 rescale 操作记录。"
+
+msgid "`configuration`"
+msgstr "`configuration`"
+
+msgid "Effective configuration with credential-like values redacted."
+msgstr "有效配置，其中类似凭据的值已脱敏。"
+
+msgid "`failure`"
+msgstr "`failure`"
+
+msgid "string or null"
+msgstr "字符串或 null"
+
+msgid "Failure detail for a failed job."
+msgstr "失败作业的故障详情。"
+
+msgid "boolean, when published"
+msgstr "发布时为布尔值"
+
+msgid "Whether the state actor returned its last good cached value."
+msgstr "状态 actor 是否返回了最后一个有效缓存值。"
+
+msgid "`dashboard_error`"
+msgstr "`dashboard_error`"
+
+msgid "string, when stale"
+msgstr "过期时为字符串"
+
+msgid "Reason the live snapshot could not be refreshed."
+msgstr "无法刷新实时快照的原因。"
+
+msgid ""
+"Nested snapshot objects can gain fields. Treat absent optional fields and"
+" JSON `null` as distinct from zero or an empty collection. Terminal "
+"history is kept in state-actor memory and is not a durable audit log; "
+"checkpoint storage has a separate lifecycle. The [observability API "
+"reference](api/observability.rst) documents the equivalent Python "
+"interface."
+msgstr "嵌套快照对象可能新增字段。应区分缺失的可选字段、JSON `null`、零值和空集合。终态历史保存在状态 actor 内存中，并非持久审计日志；checkpoint 存储拥有独立生命周期。[可观测性 API 参考](api/observability.rst)记录了等效的 Python 接口。"
+
+msgid "Exit statuses"
+msgstr "退出状态"
+
+msgid "Exit status"
+msgstr "退出状态"
+
+msgid "`0`"
+msgstr "`0`"
+
+msgid ""
+"The command completed its requested CLI action. This includes an empty "
+"`list`, a successful status query for a failed job, an already terminal "
+"cancellation target, Ctrl+C detachment from `attach`, and normal "
+"Dashboard shutdown."
+msgstr "命令完成了请求的 CLI 操作。包括空 `list`、成功查询失败作业的状态、取消目标已处于终态、按 Ctrl+C 从 `attach` 解除附加，以及正常关闭 Dashboard。"
+
+msgid "`1`"
+msgstr "`1`"
+
+msgid ""
+"Operational failure or refused action: cluster connection/query failure, "
+"unknown `JobManager`, unsafe Dashboard binding, failed attachment, or "
+"unacknowledged cancellation."
+msgstr "运维失败或操作被拒绝：集群连接/查询失败、未知的 `JobManager`、不安全的 Dashboard 绑定、附加失败或取消未得到确认。"
+
+msgid "`2`"
+msgstr "`2`"
+
+msgid ""
+"Command-line usage error: invalid/missing argument or option, a required "
+"non-interactive namespace, or `attach` without terminal stdout."
+msgstr "命令行用法错误：参数或选项无效/缺失、非交互模式下缺少必需的命名空间，或在 stdout 不是终端时使用 `attach`。"
+
+msgid ""
+"Do not use the exit status of `list` or `status` as the job-health "
+"signal. Parse the JSON `job_state` or `status` field instead."
+msgstr "不要将 `list` 或 `status` 的退出状态用作作业健康信号；应解析 JSON 中的 `job_state` 或 `status` 字段。"
+
+msgid "Automation examples"
+msgstr "自动化示例"
+
+msgid "Select a running job by name and preserve its namespace:"
+msgstr "按名称选择运行中的作业并保留其命名空间："
+
+msgid "Cancel it without a TTY:"
+msgstr "在没有 TTY 的情况下取消作业："
+
+msgid ""
+"If a richer or in-process contract is preferable, initialize Ray "
+"explicitly and use `ray.klein.list_job_snapshots()`, "
+"`get_job_snapshot()`, or `cancel_job()`. Note that those functions "
+"address published job IDs, while the CLI addresses namespaces."
+msgstr "如果更适合使用功能更丰富或进程内的契约，请显式初始化 Ray，并使用 `ray.klein.list_job_snapshots()`、`get_job_snapshot()` 或 `cancel_job()`。请注意，这些函数按已发布的作业 ID 定位，而 CLI 按命名空间定位。"
+
+msgid "Security guidance"
+msgstr "安全指南"
+
+msgid ""
+"Treat Ray cluster access as privileged: the CLI can inspect and cancel "
+"jobs reachable by that client."
+msgstr "将 Ray 集群访问视为特权操作：CLI 可以检查并取消该客户端能够访问的作业。"
+
+msgid ""
+"Never expose `dashboard --allow-unauthenticated` directly to an untrusted"
+" network. The endpoint can initiate operator rescaling."
+msgstr "切勿将 `dashboard --allow-unauthenticated` 直接暴露给不受信任的网络。该端点可以发起算子 rescale。"
+
+msgid ""
+"Protect Ray credentials, tokens, tunnels, and proxy configuration outside"
+" command history and source control."
+msgstr "保护 Ray 凭据、令牌、隧道和代理配置，避免其出现在命令历史和源代码管理中。"
+
+msgid ""
+"Snapshot configuration redacts credential-like field names, but failure "
+"details and application-provided names remain operationally sensitive."
+msgstr "快照配置会对类似凭据的字段名进行脱敏，但故障详情和应用提供的名称仍属于运维敏感信息。"
+
+msgid ""
+"Prefer `list --json`, `status --json`, and explicit namespaces over "
+"terminal scraping or interactive selection in automation."
+msgstr "自动化场景应优先使用 `list --json`、`status --json` 和显式命名空间，不要抓取终端文本或依赖交互式选择。"
+
+msgid ""
+"For symptoms and recovery steps, see [Troubleshooting](troubleshooting.md"
+"#jobs-and-cli)."
+msgstr "有关症状和恢复步骤，请参阅[故障排查](troubleshooting.md#jobs-and-cli)。"

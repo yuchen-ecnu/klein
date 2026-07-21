@@ -162,6 +162,168 @@ async def test_fatal_error_propagates():
 
 
 @pytest.mark.asyncio
+async def test_fatal_error_cancels_queued_computes_and_unblocks_barrier():
+    fatal = asyncio.Event()
+    release_failure = asyncio.Event()
+    never = asyncio.Event()
+    pending_started = {index: asyncio.Event() for index in (1, 2)}
+    cancelled = []
+
+    async def boom():
+        await release_failure.wait()
+        raise RuntimeError("compute failed")
+
+    async def pending(index):
+        try:
+            pending_started[index].set()
+            await never.wait()
+            return [_rec(index)]
+        finally:
+            cancelled.append(index)
+
+    runner = AsyncOrderedRunner(
+        capacity=3,
+        on_result=lambda recs: _noop(),
+        on_fatal=lambda error: fatal.set(),
+        task_name="t",
+    )
+    runner.start()
+    await runner.submit_compute(boom())
+    await runner.submit_compute(pending(1))
+    await runner.submit_compute(pending(2))
+
+    # A task cancelled before its first event-loop step never enters the
+    # coroutine body, so its ``finally`` block cannot observe cancellation.
+    # Synchronize explicitly to test cancellation of genuinely in-flight work
+    # instead of relying on version-dependent asyncio scheduling order.
+    await asyncio.wait_for(
+        asyncio.gather(*(started.wait() for started in pending_started.values())),
+        timeout=1,
+    )
+
+    release_failure.set()
+    await asyncio.wait_for(fatal.wait(), timeout=1)
+    with pytest.raises(RuntimeError, match=r"runner.*failed"):
+        await asyncio.wait_for(runner.barrier(), timeout=1)
+    await runner.shutdown(timeout=1)
+
+    assert sorted(cancelled) == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_waits_for_queued_compute_cancellation_cleanup():
+    fatal = asyncio.Event()
+    release_failure = asyncio.Event()
+    pending_started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    cleanup_release = asyncio.Event()
+
+    async def boom():
+        await release_failure.wait()
+        raise RuntimeError("compute failed")
+
+    async def pending():
+        try:
+            pending_started.set()
+            await asyncio.Event().wait()
+            return []
+        finally:
+            cleanup_started.set()
+            await cleanup_release.wait()
+
+    runner = AsyncOrderedRunner(
+        capacity=2,
+        on_result=lambda recs: _noop(),
+        on_fatal=lambda error: fatal.set(),
+        task_name="t",
+    )
+    runner.start()
+    await runner.submit_compute(boom())
+    await runner.submit_compute(pending())
+    await asyncio.wait_for(pending_started.wait(), timeout=1)
+
+    release_failure.set()
+    await asyncio.wait_for(fatal.wait(), timeout=1)
+    shutdown = asyncio.create_task(runner.shutdown(timeout=1))
+    try:
+        await asyncio.wait_for(cleanup_started.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert not shutdown.done()
+    finally:
+        cleanup_release.set()
+
+    await asyncio.wait_for(shutdown, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_fatal_error_releases_blocked_submitter():
+    fatal = asyncio.Event()
+    release_failure = asyncio.Event()
+
+    async def boom():
+        await release_failure.wait()
+        raise RuntimeError("compute failed")
+
+    async def never_started():
+        await asyncio.Event().wait()
+        return []
+
+    runner = AsyncOrderedRunner(
+        capacity=1,
+        on_result=lambda recs: _noop(),
+        on_fatal=lambda error: fatal.set(),
+        task_name="t",
+    )
+    runner.start()
+    await runner.submit_compute(boom())
+    blocked_submit = asyncio.create_task(runner.submit_compute(never_started()))
+    await asyncio.sleep(0)
+    assert not blocked_submit.done()
+
+    release_failure.set()
+    await asyncio.wait_for(fatal.wait(), timeout=1)
+    with pytest.raises(RuntimeError, match=r"runner.*failed"):
+        await asyncio.wait_for(blocked_submit, timeout=1)
+    assert runner._slots._value == 1
+    await runner.shutdown(timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_slot_waiter_cleanup_releases_slot_and_coroutine():
+    cleanup_entered = asyncio.Event()
+    runner = AsyncOrderedRunner(
+        capacity=1,
+        on_result=lambda recs: _noop(),
+        on_fatal=lambda error: None,
+        task_name="t",
+    )
+    runner.start()
+    settle_waiters = runner._settle_waiters
+    call_count = 0
+
+    async def pause_first_cleanup(*waiters):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            cleanup_entered.set()
+            await asyncio.Event().wait()
+        await settle_waiters(*waiters)
+
+    runner._settle_waiters = pause_first_cleanup
+    coroutine = _wait_forever()
+    submitter = asyncio.create_task(runner.submit_compute(coroutine))
+    await asyncio.wait_for(cleanup_entered.wait(), timeout=1)
+    submitter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await submitter
+
+    assert coroutine.cr_frame is None
+    await asyncio.wait_for(runner.submit_compute(_return_empty()), timeout=1)
+    await asyncio.wait_for(runner.barrier(), timeout=1)
+    await runner.shutdown(timeout=1)
+
+
+@pytest.mark.asyncio
 async def test_shutdown_drains_pending():
     """shutdown() emits everything already queued before returning."""
     emitted = []
@@ -183,6 +345,69 @@ async def test_shutdown_drains_pending():
     assert [r.block["v"] for r in emitted] == [0, 1, 2, 3]
 
 
+@pytest.mark.asyncio
+async def test_shutdown_timeout_remains_bounded_when_compute_swallows_cancellation():
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    release = asyncio.Event()
+    emitted = []
+
+    async def stubborn_compute():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            await release.wait()
+        return []
+
+    runner = AsyncOrderedRunner(
+        capacity=1,
+        on_result=lambda recs: _append(emitted, recs),
+        on_fatal=lambda error: None,
+        task_name="t",
+    )
+    runner.start()
+    await runner.submit_compute(stubborn_compute())
+    await asyncio.wait_for(started.wait(), timeout=1)
+    blocked_submit = asyncio.create_task(runner.submit_compute(_wait_forever()))
+    await asyncio.sleep(0)
+    assert not blocked_submit.done()
+
+    try:
+        await asyncio.wait_for(runner.shutdown(timeout=0.01), timeout=0.2)
+        await asyncio.wait_for(cancelled.wait(), timeout=1)
+        with pytest.raises(RuntimeError, match="shutting down"):
+            await asyncio.wait_for(blocked_submit, timeout=0.2)
+    finally:
+        release.set()
+        if runner._consumer is not None:
+            await asyncio.wait_for(asyncio.gather(runner._consumer, return_exceptions=True), timeout=1)
+    assert emitted == []
+
+
+@pytest.mark.asyncio
+async def test_shutdown_called_by_consumer_still_stops_consumer():
+    shutdown_returned = asyncio.Event()
+    runner = AsyncOrderedRunner(
+        capacity=1,
+        on_result=lambda recs: _noop(),
+        on_fatal=lambda error: None,
+        task_name="t",
+    )
+    runner.start()
+
+    async def shutdown_from_control():
+        await runner.shutdown(timeout=1)
+        shutdown_returned.set()
+
+    await runner.submit_control(shutdown_from_control)
+    await asyncio.wait_for(shutdown_returned.wait(), timeout=1)
+    assert runner._consumer is not None
+    await asyncio.wait_for(runner._consumer, timeout=1)
+    assert runner._consumer.done()
+
+
 # --- helpers (on_result must be async) ---
 
 
@@ -197,3 +422,12 @@ async def _append_tagged(sink, recs):
 
 async def _noop():
     return None
+
+
+async def _wait_forever():
+    await asyncio.Event().wait()
+    return []
+
+
+async def _return_empty():
+    return []

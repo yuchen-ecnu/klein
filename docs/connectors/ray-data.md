@@ -24,11 +24,12 @@ Check availability before relying on an API that differs across Ray versions:
 
 ```python
 import ray
+import ray.klein
 
-if not ray.klein.current_context().data.available("read_parquet"):
+if "read_parquet" not in dir(ray.klein):
     raise RuntimeError("This Ray version does not expose read_parquet")
 
-if not stream.data.available("map_batches"):
+if "map_batches" not in stream.data.available:
     raise RuntimeError("This Ray version does not expose Dataset.map_batches")
 ```
 
@@ -38,16 +39,15 @@ are not compatibility guarantees.
 
 ## Read data
 
-Call a public Ray Data factory directly from `ray.klein`, through the current
-context, or through `source`:
+Call a public Ray Data factory directly from `ray.klein` or through `source`:
 
 ```python
 import ray
+import ray.klein
 
 parquet = ray.klein.read_parquet("s3://warehouse/events/")
 
-context = ray.klein.current_context()
-json_rows = context.data.read_json("s3://warehouse/events-json/")
+json_rows = ray.klein.read_json("s3://warehouse/events-json/")
 
 csv_rows = ray.klein.source(
     "read_csv",
@@ -95,8 +95,10 @@ writers supported by the installed Ray version:
 
 ```python
 stream.data.write_parquet("s3://warehouse/output/")
+ray.klein.execute("write-output").wait()
 
-count_sink = stream.data.consume(lambda dataset: dataset.count())
+stream.data.consume(lambda dataset: dataset.count())
+count = ray.klein.execute("count-records").get()
 ```
 
 Unlike `transform`, `consume` may return any value accepted by the underlying

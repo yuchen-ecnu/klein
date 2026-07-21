@@ -12,7 +12,10 @@ Sink API
 
    SinkFunction
    SinkCommittable
+   StreamSink
    TwoPhaseCommitSinkFunction
+
+.. autoclass:: StreamSink
 
 .. autoclass:: SinkFunction
    :members:

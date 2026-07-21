@@ -13,6 +13,19 @@ to Klein operators with managed keyed state, checkpoints, key groups, and
 changelog output. SQLGlot is the parser, not an execution engine, and Klein
 does not embed DuckDB.
 
+## Choose a SQL entry point
+
+| Entry point | Use it for | Catalog lifetime |
+|---|---|---|
+| `ray.klein.sql(query, tables=...)` | A one-off query with explicit or caller-scope bindings. | One query |
+| `stream.sql(query)` | A query rooted at one stream, bound as `self` by default. | The stream context's persistent session |
+| `ray.klein.execute_sql(statement)` | `SELECT`, Table DDL, and `INSERT INTO`. | The current pipeline's persistent session |
+
+Use `ray.klein.execute_sql()` for a catalog workflow. The top-level
+`ray.klein.sql()` creates a fresh session for its one query, so it does not see
+tables previously created through `execute_sql()`. It does inherit scalar
+functions registered on the current context.
+
 ## Query DataStreams from Python
 
 The top-level `sql` function discovers named `DataStream` variables in
@@ -20,8 +33,7 @@ the caller's Python scope:
 
 ```python
 import ray
-
-ray.klein.reset_context().enable_interactive_mode()
+import ray.klein
 
 orders = ray.klein.from_items([{"customer_id": 1, "amount": 10}])
 customers = ray.klein.from_items([{"customer_id": 1, "name": "Ada"}])
@@ -32,26 +44,78 @@ result = ray.klein.sql("""
     JOIN customers AS c USING (customer_id)
     GROUP BY c.name
 """)
-print(result.data.take_all())
+result.data.take_all()
+rows = ray.klein.execute("customer-totals").get()
+print(rows)
 ```
 
 Explicit bindings are preferable in library code:
 
 ```python
-result = ctx.sql(
+result = ray.klein.sql(
     "SELECT * FROM orders WHERE amount >= 10",
     tables={"orders": orders},
 )
 ```
 
-`SQLSession` keeps named views without materializing them, and a stream can use
-the conventional `self` relation:
+For reusable catalog state, `ray.klein.execute_sql()` keeps temporary tables in
+the current pipeline session. A stream can use the conventional `self`
+relation:
 
 ```python
-ctx.sql_session.create_temp_view("orders", orders)
-counted = ctx.sql_session.sql("SELECT COUNT(*) AS count FROM orders")
 filtered = orders.sql("SELECT * FROM self WHERE amount > 10")
 ```
+
+## Register Python scalar functions
+
+Klein SQL scalar functions use ordinary Python values and do not expose a Ray
+Data expression contract. Register a function, then call it from SQL with an
+unquoted, case-insensitive name:
+
+```python
+def normalize_prompt(value, prefix):
+    if value is None:
+        return None
+    return prefix + value.strip().lower()
+
+ray.klein.register_scalar_function("normalize_prompt", normalize_prompt)
+prepared = ray.klein.sql(
+    "SELECT id, NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
+    tables={"inputs": inputs},
+)
+```
+
+For an explicitly isolated `KleinContext`, register through
+`context.sql_session.register_scalar_function()` instead.
+
+For a one-off `ray.klein.sql()` query, pass query-local bindings. They override
+same-named session functions without changing the session:
+
+```python
+prepared = ray.klein.sql(
+    "SELECT NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
+    tables={"inputs": inputs},
+    functions={"normalize_prompt": normalize_prompt},
+)
+```
+
+Arguments are evaluated with SQL semantics and passed as Python scalars. SQL
+`NULL` is passed as `None`; the function decides whether to propagate or replace
+it. Functions work in projections, predicates, grouping expressions, and
+built-in aggregate inputs. Registration validates the name and callable;
+query planning validates call arity and rejects unknown functions before workers
+run. Built-in SQL/Klein function names cannot be replaced.
+
+The function and its closure are serialized with the query graph. Install its
+dependencies on every worker and treat it as trusted application code. Scalar
+functions are synchronous, share the enclosing SQL operator's resources, and
+run row by row. For model initialization, GPU allocation, vectorized inference,
+external-service concurrency, or explicit batching, use `map_batches()` (or an
+async `map`) before SQL and query the produced columns. Aggregate UDFs are not
+supported. In streaming changelog or recoverable queries, functions must also
+be deterministic and side-effect-free: the same arguments must always produce
+the same result so retractions remain correct, and retries may invoke a function
+more than once. Materialize nondeterministic or external results before SQL.
 
 ## Run a continuous query
 
@@ -60,22 +124,23 @@ model. An ordinary mapping is an `INSERT` row. Updating queries emit
 `ChangelogRow` values whose `row_kind` is `+I`, `-U`, `+U`, or `-D`.
 
 ```python
-from ray.klein import Configuration, KleinContext
+import ray
+import ray.klein
 
-ctx = KleinContext(Configuration("execution.runtime.mode=streaming"))
-orders = ctx.from_items([
+ray.klein.configure("execution.runtime.mode=streaming")
+orders = ray.klein.from_items([
     {"name": "Ada", "amount": 10},
     {"name": "Ada", "amount": 15},
 ])
 
-changes = ctx.sql("""
+changes = ray.klein.sql("""
     SELECT name, SUM(amount) AS total
     FROM orders
     GROUP BY name
 """, tables={"orders": orders})
 
-ctx.enable_interactive_mode()
-for row in changes.take_all():
+changes.take_all()
+for row in ray.klein.execute("streaming-sql").get():
     print(row.row_kind.value, dict(row))
 ```
 
@@ -103,9 +168,15 @@ Store checkpoint cache, so recovery and key-group rescaling use the same path
 as native stateful operators.
 
 Flink does not allow an arbitrary global sort over an unbounded table. Klein
-therefore rejects streaming `ORDER BY` without an ascending time attribute.
-`ORDER BY ... LIMIT n` is planned as a continuously maintained Top-N table and
-emits insert/delete changes when rows enter or leave the result.
+therefore rejects streaming `ORDER BY` unless it is paired with `LIMIT`;
+time-attribute ordering is not implemented yet. `ORDER BY ... LIMIT n` is
+planned as a continuously maintained Top-N table and emits insert/delete
+changes when rows enter or leave the result.
+
+Regular joins, non-windowed aggregates, and Top-N are stateful. Without a TTL,
+their state can grow for the lifetime of an unbounded input. A global Top-N is
+also a single keyed partition, so increasing unrelated operator parallelism
+does not remove that bottleneck.
 
 ## Define connectors with Flink-style Table DDL
 
@@ -114,7 +185,7 @@ Catalog tables follow Flink Table DDL: the schema is logical metadata and the
 not open files, create Kafka consumers, or launch Ray tasks.
 
 ```python
-ctx.execute_sql("""
+ray.klein.execute_sql("""
     CREATE TEMPORARY TABLE input_events (
         event_id BIGINT NOT NULL,
         payload STRING
@@ -128,7 +199,7 @@ ctx.execute_sql("""
     )
 """)
 
-ctx.execute_sql("""
+ray.klein.execute_sql("""
     CREATE TABLE output_rows (
         event_id BIGINT,
         payload STRING
@@ -139,11 +210,11 @@ ctx.execute_sql("""
     )
 """)
 
-sink = ctx.execute_sql("""
+ray.klein.execute_sql("""
     INSERT INTO output_rows
     SELECT event_id, payload FROM input_events
 """)
-ctx.execute("table-insert").wait()
+ray.klein.execute("table-insert").wait()
 ```
 
 In streaming mode, the filesystem sink is checkpoint-transactional. Part files
@@ -201,16 +272,26 @@ SQL text -> SQLGlot AST -> Klein continuous plan -> keyed Ray actors
          -> managed state/checkpoints -> changelog stream
 ```
 
-The planner supports `SELECT`, common table expressions (CTEs), scalar expressions, `WHERE`,
-equi-joins and cross joins, `GROUP BY` with `COUNT`, `SUM`, `MIN`, `MAX`, and
-`AVG`, `ORDER BY` output columns, `LIMIT`, and `UNION ALL`. It intentionally
-rejects unsupported forms such as recursive CTEs, non-equality joins, `HAVING`,
-and `SELECT DISTINCT` instead of silently changing semantics. Streaming mode
-currently supports a single `SELECT` query block, projections, predicates,
-regular inner equality joins, grouped `COUNT`/`SUM`/`MIN`/`MAX`/`AVG`, and
-Top-N. CTEs, `UNION ALL`, outer joins, time-attribute ordering, and SQL window
-syntax continue to use batch mode or fail during planning. All inputs must
-belong to the same `KleinContext`.
+The two planners intentionally have different feature sets:
+
+| Query form | Batch | Streaming |
+|---|---|---|
+| Projection, supported scalar expressions, registered scalar UDFs, and `WHERE` | Yes | Yes |
+| Inner equality join | Yes | Yes |
+| Left, right, or full outer equality join | Yes | No |
+| `CROSS JOIN` | Yes | No |
+| `GROUP BY` with `COUNT`, `SUM`, `MIN`, `MAX`, or `AVG` | Yes | Yes |
+| `ORDER BY` | Output columns | Only with `LIMIT` as Top-N |
+| `LIMIT` without `ORDER BY` | Yes | No |
+| Non-recursive CTE | Yes | No |
+| `UNION ALL` | Yes | No |
+| `HAVING`, `SELECT DISTINCT`, or non-equality join | No | No |
+| SQL window syntax and time-attribute DDL | No | No |
+
+Join `ON` conditions are conjunctions of equality predicates between qualified
+left and right columns; `USING` is also supported. Unsupported forms raise
+`SQLQueryError` instead of silently changing semantics. All inputs must belong
+to the same Klein pipeline.
 
 Bounded SQL translates compatible SQLGlot nodes to native Ray 2.56 expression
 ASTs before falling back to Klein's row evaluator. This covers columns,
@@ -239,3 +320,14 @@ Data definition language (DDL) and data manipulation language (DML) support `CRE
 `INSERT INTO ... SELECT`. Catalog-qualified names, computed columns,
 watermarks, partitions, and `INSERT` target-column lists are reserved for
 later planner iterations.
+
+## Distinguish queries from the database sink
+
+`DataStream.write_sql()` writes rows through a Python DB-API connection; it is
+not a `connector='sql'` Table factory. In batch mode it delegates to Ray Data.
+In streaming mode each sink subtask owns a connection and flushes buffered
+`executemany` calls when 128 rows accumulate, at checkpoints, and at close. Its
+delivery guarantee is at-least-once, so use idempotent statements, a unique
+key, or a database-native upsert. See
+[Delivery semantics](delivery-semantics.md) before using it in a recoverable
+pipeline.

@@ -17,6 +17,11 @@ In-place recovery automatically uses the current job's latest completed
 checkpoint. A new submission needs the explicit URI of one completed `chk-N`
 directory in `execution.savepoint.path`.
 
+This guide uses *rescale* for changing concurrency while rebuilding a graph
+from a checkpoint. To change one operator inside a running job, use the
+barrier-aligned procedure in
+[Autoscaling and live operator rescaling](operator-rescaling.md).
+
 ## Prepare before failure
 
 Use shared durable storage and retain more than one checkpoint while operating
@@ -24,8 +29,9 @@ an important job:
 
 ```python
 import ray
+import ray.klein
 
-ray.klein.reset_context({
+ray.klein.configure({
     "execution.runtime.mode": "streaming",
     "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
     "execution.checkpointing.num-retained": 3,
@@ -71,9 +77,10 @@ Recreate the same logical graph and pass the complete checkpoint-directory URI:
 
 ```python
 import ray
+import ray.klein
 
 ray.init(address="auto")
-ctx = ray.klein.reset_context({
+ray.klein.configure({
     "execution.runtime.mode": "streaming",
     "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
     "execution.savepoint.path": (
@@ -83,8 +90,9 @@ ctx = ray.klein.reset_context({
     "state.keyed.max-parallelism": 32768,
 })
 
-# Build the same sources, transforms, operator names, and sinks here.
-handle = ctx.execute("orders-restored")
+# Build the same sources, transforms, operator names, and terminal sinks here.
+build_pipeline()
+handle = ray.klein.execute("orders-restored")
 print(handle.namespace)
 handle.wait()
 ```
@@ -99,7 +107,7 @@ When resubmitting on the same cluster, stop the old job first. A stable
 while its old detached actors still exist can address the wrong job. After a
 whole-cluster loss the old actors no longer exist.
 
-## Change parallelism safely
+## Change parallelism during restore
 
 Managed keyed state is partitioned into a fixed key-group space. You may change
 the concurrency of keyed operators during restore when all of these remain

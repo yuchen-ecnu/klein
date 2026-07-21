@@ -17,3 +17,20 @@ Ray Data adapter API
    :members:
 
 .. autoclass:: RayDataAPIError
+
+Advanced discovery contracts
+----------------------------
+
+The following functions support adapters that need to inspect the public API
+of the installed compatible Ray version. Ordinary graph code should prefer
+``name in ctx.data.available`` and ``name in stream.data.available``.
+
+.. autosummary::
+   :nosignatures:
+
+   public_dataset_factories
+   public_dataset_methods
+   has_public_dataset_factory
+   has_public_dataset_method
+   classify_dataset_method
+   RayDataCall

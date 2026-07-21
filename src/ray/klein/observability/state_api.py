@@ -71,6 +71,34 @@ def rescale_operator(
     )
 
 
+def submit_operator_rescale(
+    job_id: str,
+    operator_id: int,
+    parallelism: int,
+    *,
+    timeout: float = 10,
+) -> dict[str, Any] | None:
+    """Submit an operator rescale and return its admission record.
+
+    An ``ACCEPTED`` result continues in the JobManager after this function
+    returns.  Its current and terminal state is available through
+    :func:`get_job_snapshot` in ``rescale_operations`` and the matching
+    operator's ``rescale_operation`` field.
+    """
+
+    _validate_rescale_request(job_id, operator_id, parallelism, timeout)
+    actor = get_state_actor()
+    if actor is None:
+        return None
+    return cast(
+        dict[str, Any] | None,
+        ray.get(
+            actor.submit_operator_rescale.remote(job_id, operator_id, parallelism, timeout),
+            timeout=timeout + _CONTROL_RESPONSE_GRACE_SECONDS,
+        ),
+    )
+
+
 def _validate_rescale_request(
     job_id: str,
     operator_id: int,

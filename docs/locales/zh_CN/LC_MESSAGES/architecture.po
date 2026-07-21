@@ -1,0 +1,424 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Understand the Klein for Ray architecture, planning pipeline, streaming "
+"data plane, checkpoint protocol, and extension boundaries."
+msgstr "了解 Klein for Ray 的架构、规划管道、流式数据平面、检查点协议和扩展边界。"
+
+msgid "Architecture"
+msgstr "架构"
+
+msgid ""
+"Klein separates the user-facing dataflow from the engine that executes "
+"it. A `DataStream`, SQL statement, or Table program first creates a lazy "
+"logical graph. Only a terminal operation asks `JobClient` to select a "
+"runtime and turn that graph into work on Ray."
+msgstr ""
+"Klein 将面向用户的数据流与执行它的引擎分离。`DataStream`、SQL 语句或 Table "
+"程序首先创建惰性逻辑图。只有终结操作才会要求 `JobClient` 选择运行时，并将该图转化为 Ray 上的工作。"
+
+msgid "This separation keeps three concerns independent:"
+msgstr "这种分离使三个关注点彼此独立："
+
+msgid "the **API and logical plan** describe what the application wants;"
+msgstr "**API 和逻辑计划**描述应用想要完成什么；"
+
+msgid "the **control plane** plans, deploys, checkpoints, and recovers a job; and"
+msgstr "**控制平面**负责规划、部署、建立检查点和恢复作业；"
+
+msgid ""
+"the **data plane** moves ordered records and control messages through "
+"parallel operators."
+msgstr "**数据平面**负责让有序记录和控制消息通过并行算子。"
+
+msgid "System overview"
+msgstr "系统概览"
+
+msgid ""
+"![Klein and Ray component ownership map](_static/architecture-"
+"overview.png)"
+msgstr "![Klein 与 Ray 组件归属图](_static/architecture-overview.png)"
+
+msgid "Klein and Ray component ownership map"
+msgstr "Klein 与 Ray 组件归属图"
+
+msgid "The diagram groups components by ownership:"
+msgstr "此图按归属对组件进行分组："
+
+msgid ""
+"The public API creates operator and edge specifications; it does not "
+"start Ray work immediately."
+msgstr "公共 API 创建算子和边的规格，但不会立即启动 Ray 工作。"
+
+msgid ""
+"Klein's planning and control components validate the graph, select a "
+"runtime, deploy work, and coordinate checkpoints."
+msgstr "Klein 的规划与控制组件负责验证图、选择运行时、部署工作以及协调检查点。"
+
+msgid "The streaming data plane owns long-lived stream tasks and managed state."
+msgstr "流式数据平面拥有长生命周期的流任务和托管状态。"
+
+msgid ""
+"Ray provides bounded execution, actors, object sharing, and the storage "
+"boundary used by checkpoints."
+msgstr "Ray 提供有界执行、actor、对象共享以及检查点所用的存储边界。"
+
+msgid "Plan once, choose one runtime"
+msgstr "规划一次，选择一个运行时"
+
+msgid ""
+"`KleinContext.execute()` hands its registered terminal sinks to "
+"`JobClient`. `JobClient` walks upstream from those terminals to create "
+"one immutable `LogicalGraph`, applies an optional Ray Serve rewrite and "
+"resource plan, and then selects a backend."
+msgstr ""
+"`KleinContext.execute()` 将已注册的终结 sink 交给 `JobClient`。`JobClient` "
+"从这些终结节点向上游遍历，创建一个不可变的 `LogicalGraph`，应用可选的 Ray Serve 重写和资源计划，然后选择后端。"
+
+msgid "![Runtime selection from one logical graph](_static/runtime-selection.png)"
+msgstr "![从一个逻辑图选择运行时](_static/runtime-selection.png)"
+
+msgid "Runtime selection from one logical graph"
+msgstr "从一个逻辑图选择运行时"
+
+msgid ""
+"In `auto` mode, an unbounded source, an operation without a Ray Data "
+"lowering, or `udf.ignore-exception=true` selects streaming execution. "
+"Otherwise the graph uses the batch compiler. An explicit "
+"`execution.runtime.mode` overrides this choice, but the selected backend "
+"must support every operation in the graph."
+msgstr ""
+"在 `auto` 模式下，存在无界数据源、某项操作没有 Ray Data 下沉实现，或设置 "
+"`udf.ignore-exception=true`，都会选择原生流处理执行。否则，计算图使用批处理编译器。显式设置 "
+"`execution.runtime.mode` 可覆盖该选择，但所选后端必须支持计算图中的每项操作。"
+
+msgid "The logical and physical plans have different jobs:"
+msgstr "逻辑计划和物理计划各自承担不同职责："
+
+msgid "Plan"
+msgstr "计划"
+
+msgid "Contains"
+msgstr "包含内容"
+
+msgid "Stability"
+msgstr "稳定性"
+
+msgid "`LogicalGraph`"
+msgstr "`LogicalGraph`"
+
+msgid ""
+"Operator specifications, logical edges, partitioner specifications, "
+"boundedness, resources, and stable names."
+msgstr "算子规格、逻辑边、分区器规格、有界性、资源和稳定名称。"
+
+msgid "Immutable after construction; optimizer rules return a new graph."
+msgstr "构造后不可变；优化器规则返回一个新图。"
+
+msgid "`ExecutionGraph`"
+msgstr "`ExecutionGraph`"
+
+msgid ""
+"Parallel `ExecutionVertex` subtasks, physical channels, barrier-alignment"
+" counts, and placement affinity groups."
+msgstr "并行 `ExecutionVertex` 子任务、物理通道、屏障对齐计数和放置亲和组。"
+
+msgid ""
+"Topology is fixed after expansion; runtime status is owned by the "
+"scheduler."
+msgstr "展开后拓扑固定；运行时状态由调度器拥有。"
+
+msgid "Streaming control plane"
+msgstr "流式控制平面"
+
+msgid ""
+"Every streaming job receives its own Ray namespace. The namespace "
+"prevents named actors for sibling jobs from resolving to one another and "
+"is also the identifier used by CLI attachment and dashboard publication."
+msgstr ""
+"每个流式作业都会获得自己的 Ray 命名空间。该命名空间可防止同级作业的具名 actor 相互解析，也是 CLI 附加和 Dashboard "
+"发布所使用的标识符。"
+
+msgid "Component"
+msgstr "组件"
+
+msgid "Responsibility"
+msgstr "职责"
+
+msgid "`JobClient`"
+msgstr "`JobClient`"
+
+msgid ""
+"Creates the logical graph, selects the runtime, initializes Ray only when"
+" streaming needs it, and returns a job handle."
+msgstr "创建逻辑图、选择运行时、仅在流式执行需要时初始化 Ray，并返回作业句柄。"
+
+msgid "`JobManager`"
+msgstr "`JobManager`"
+
+msgid ""
+"Detached per-job Ray actor; supervises status and failover, serializes "
+"execution-graph mutations, and keeps the job alive when the submitting "
+"driver exits."
+msgstr "每个作业独立的 detached Ray actor；监控状态和故障转移，串行化执行图变更，并在提交作业的 driver 退出后维持作业运行。"
+
+msgid "`JobMaster`"
+msgstr "`JobMaster`"
+
+msgid ""
+"Single owner of scheduling state; creates workers, deploys descriptors, "
+"manages placement, and coordinates task or global recovery."
+msgstr "调度状态的唯一所有者；创建 worker、部署描述符、管理放置，并协调任务恢复或全局恢复。"
+
+msgid "`CheckpointCoordinator`"
+msgstr "`CheckpointCoordinator`"
+
+msgid ""
+"Aligns checkpoint registrations, publishes durable metadata, commits "
+"prepared sinks, notifies checkpoint-aware sources, and exposes checkpoint"
+" state."
+msgstr "对齐检查点注册、发布持久元数据、提交已准备的 sink、通知检查点感知源，并公开检查点状态。"
+
+msgid "`StreamTask`"
+msgstr "`StreamTask`"
+
+msgid ""
+"Ray actor for one physical operator subtask. A `SourceStreamTask` "
+"additionally owns source polling, source progress, and barrier "
+"generation."
+msgstr "一个物理算子子任务对应的 Ray actor。`SourceStreamTask` 还拥有源轮询、源进度和屏障生成。"
+
+msgid ""
+"The control plane is deliberately small. It sends deployment, status, "
+"checkpoint, and recovery commands; it does not proxy every data record."
+msgstr "控制平面有意保持精简。它发送部署、状态、检查点和恢复命令，但不会代理每条数据记录。"
+
+msgid "Ordered streaming data plane"
+msgstr "有序流式数据平面"
+
+msgid ""
+"Workers communicate directly. Each output edge owns partitioning, "
+"batching, transport, replay tracking, and backpressure. Data and control "
+"share the same ordered channel, so a watermark or checkpoint barrier "
+"cannot pass records that were emitted before it."
+msgstr ""
+"worker "
+"直接通信。每条输出边都负责分区、批处理、传输、重放跟踪和背压。数据与控制消息共享同一有序通道，因此水位线或检查点屏障无法越过先于它发出的记录。"
+
+msgid ""
+"![Ordered streaming data plane and backpressure](_static/streaming-data-"
+"plane.png)"
+msgstr "![有序流式数据平面与背压](_static/streaming-data-plane.png)"
+
+msgid "Ordered streaming data plane and backpressure"
+msgstr "有序流式数据平面与背压"
+
+msgid ""
+"Inside a task, a weighted inbox bounds both rows and bytes. An input "
+"accumulator restores logical batches, the operator runs on a single-"
+"worker executor, and an emit pipeline preserves output order. Async "
+"operators may run multiple calls concurrently, but `AsyncOrderedRunner` "
+"releases their results in input order. When a target inbox is full, the "
+"sender waits or probes another eligible target according to the "
+"partitioner; those waits are the backpressure mechanism."
+msgstr ""
+"在任务内部，加权 inbox 同时限制行数和字节数。输入累加器恢复逻辑批次，算子在单 worker "
+"执行器上运行，发射管道则保持输出顺序。异步算子可以并发运行多个调用，但 `AsyncOrderedRunner` 会按输入顺序释放结果。当目标 "
+"inbox 已满时，发送方会等待，或根据分区器探测另一个符合条件的目标；这些等待构成背压机制。"
+
+msgid "Partitioners define channel topology:"
+msgstr "分区器定义通道拓扑："
+
+msgid ""
+"**forward** keeps subtask index-to-index routing and can drive co-"
+"location;"
+msgstr "**forward** 保持子任务索引到相同索引的路由，并可促成协同放置；"
+
+msgid ""
+"**key** maps stable key groups to the task that owns their contiguous "
+"range;"
+msgstr "**key** 将稳定键组映射到拥有其连续范围的任务；"
+
+msgid ""
+"**round-robin, rescale, and adaptive** distribute work among eligible "
+"tasks;"
+msgstr "**round-robin、rescale 和 adaptive** 在符合条件的任务之间分配工作；"
+
+msgid "**broadcast** sends a record to every target; and"
+msgstr "**broadcast** 将一条记录发送到每个目标；"
+
+msgid ""
+"**worker-pool dispatch** can retry admission across an ordered target "
+"ring."
+msgstr "**worker-pool dispatch** 可以在有序目标环上重试接纳。"
+
+msgid "Checkpoint and recovery architecture"
+msgstr "检查点与恢复架构"
+
+msgid ""
+"A checkpoint is an ordered protocol across the data plane, state "
+"backends, external sinks, and durable storage. The completion marker is "
+"published last, so recovery never treats a partially written directory as"
+" complete."
+msgstr "检查点是一套横跨数据平面、状态后端、外部 sink 和持久存储的有序协议。完成标记最后发布，因此恢复过程绝不会将仅写入部分内容的目录视为已完成。"
+
+msgid ""
+"![Checkpoint lifecycle from source position to commit](_static"
+"/checkpoint-lifecycle.png)"
+msgstr "![从源位置到提交的检查点生命周期](_static/checkpoint-lifecycle.png)"
+
+msgid "Checkpoint lifecycle from source position to commit"
+msgstr "从源位置到提交的检查点生命周期"
+
+msgid ""
+"Managed state can use an in-memory or RocksDB task-local backend. "
+"Snapshots are split by key group so a restored operator can change "
+"parallelism without changing key ownership semantics. Large immutable "
+"snapshots may remain in the Ray Object Store as a hot cache; the "
+"coordinator also persists verified state objects and metadata to the "
+"configured filesystem or object store."
+msgstr ""
+"托管状态可以使用内存或 RocksDB "
+"任务本地后端。快照按键组拆分，使恢复后的算子可以在不改变键归属语义的情况下调整并行度。大型不可变快照可以保留在 Ray Object Store "
+"中作为热缓存；协调器还会将已验证的状态对象和元数据持久化到已配置的文件系统或对象存储。"
+
+msgid "Recovery is tiered:"
+msgstr "恢复分为多个层级："
+
+msgid ""
+"A single failed task can be recreated and replay unacknowledged upstream "
+"batches when the affected topology is recoverable."
+msgstr "当受影响的拓扑可恢复时，可以重建单个故障任务，并重放尚未确认的上游批次。"
+
+msgid ""
+"A rebuilt checkpoint coordinator is reopened from the live execution "
+"graph."
+msgstr "重建的检查点协调器会从活动执行图重新打开。"
+
+msgid ""
+"An unrecoverable task failure triggers a global stop and reschedule from "
+"the latest completed checkpoint, subject to the restart suppression "
+"policy."
+msgstr "无法恢复的任务故障会触发全局停止，并根据重启抑制策略从最新完成的检查点重新调度。"
+
+msgid ""
+"After whole-cluster loss, an application resubmits the same logical graph"
+" with `execution.savepoint.path` pointing at one completed checkpoint."
+msgstr "整个集群丢失后，应用可重新提交相同的逻辑图，并让 `execution.savepoint.path` 指向一个已完成的检查点。"
+
+msgid ""
+"This protocol provides consistent managed state and source progress. The "
+"end-to-end job contract remains at-least-once unless the selected sink "
+"provides checkpoint-transactional visibility or an idempotent external "
+"effect. See [Delivery and consistency guarantees](delivery-semantics.md) "
+"and [Restore and rescale a job](checkpoint-recovery.md)."
+msgstr ""
+"此协议提供一致的托管状态和源进度。除非所选 sink 提供检查点事务可见性或幂等外部效果，否则端到端作业契约仍为至少一次。请参阅[交付与一致性保证"
+"](delivery-semantics.md)和[恢复作业并调整其并行度](checkpoint-recovery.md)。"
+
+msgid "Extension boundaries"
+msgstr "扩展边界"
+
+msgid "Add behavior at the narrowest public boundary that owns it:"
+msgstr "请在拥有相应行为的最窄公共边界上添加该行为："
+
+msgid "Extension"
+msgstr "扩展"
+
+msgid "Public boundary"
+msgstr "公共边界"
+
+msgid "Avoid coupling to"
+msgstr "避免耦合到"
+
+msgid "Source"
+msgstr "源"
+
+msgid "`SourceFunction` and `SourceContext`"
+msgstr "`SourceFunction` 和 `SourceContext`"
+
+msgid "scheduler, execution vertices, or actor handles"
+msgstr "调度器、执行顶点或 actor 句柄"
+
+msgid "Transformation"
+msgstr "转换"
+
+msgid "`DataStream` operation or public function contract"
+msgstr "`DataStream` 操作或公共函数契约"
+
+msgid "transport, inbox, or checkpoint coordinator internals"
+msgstr "传输、inbox 或检查点协调器内部实现"
+
+msgid "Sink"
+msgstr "Sink"
+
+msgid "`SinkFunction` or `TwoPhaseCommitSinkFunction`"
+msgstr "`SinkFunction` 或 `TwoPhaseCommitSinkFunction`"
+
+msgid "checkpoint metadata layout"
+msgstr "检查点元数据布局"
+
+msgid "Partitioning"
+msgstr "分区"
+
+msgid "public stream partitioning operation"
+msgstr "公共流分区操作"
+
+msgid "target actor discovery"
+msgstr "目标 actor 发现"
+
+msgid "State"
+msgstr "状态"
+
+msgid "state descriptors and keyed process functions"
+msgstr "状态描述符和键控处理函数"
+
+msgid "backend serialization internals"
+msgstr "后端序列化内部实现"
+
+msgid "Connector"
+msgstr "连接器"
+
+msgid "`integrations` package using API/config contracts"
+msgstr "使用 API/配置契约的 `integrations` 包"
+
+msgid "unrelated runtime packages"
+msgstr "无关的运行时包"
+
+msgid "Observability"
+msgstr "可观测性"
+
+msgid "metric groups, lineage, job snapshots, and state API"
+msgstr "指标组、血缘、作业快照和状态 API"
+
+msgid "mutating the execution graph"
+msgstr "修改执行图"
+
+msgid ""
+"The source layout and dependency rules are documented in [Package "
+"structure](package-structure.md). `_internal` and `runtime` are "
+"implementation packages rather than application compatibility promises."
+msgstr ""
+"源代码布局和依赖规则记录在[包结构](package-structure.md)中。`_internal` 和 `runtime` "
+"是实现包，并不构成面向应用的兼容性承诺。"

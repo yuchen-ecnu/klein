@@ -338,27 +338,22 @@ class TestServeRequestPath(unittest.TestCase):
         # `* 2` is element-wise on the decoded column, not list repetition.
         np.testing.assert_array_equal(decoded["input_ids"] * 2, np.array([2, 4, 6]))
 
-    def test_backoff_capped_at_single_digit_seconds(self):
+    def test_backoff_honors_runtime_cap(self):
         from unittest.mock import AsyncMock
 
         from ray.klein.runtime.serve import EmbeddedProxyClient
 
         client = EmbeddedProxyClient.__new__(EmbeddedProxyClient)
-        client.retry_backoff_max = 100.0  # config tries to exceed the hard cap
-        # The constructor clamps to 9.0; emulate that clamp expectation here by
-        # re-applying it the way __init__ does.
-        client.retry_backoff_max = min(client.retry_backoff_max, 9.0)
-
-        captured = []
-
-        async def fake_sleep(delay):
-            captured.append(delay)
-
-        with patch("ray.klein.runtime.serve_client.asyncio.sleep", AsyncMock(side_effect=fake_sleep)):
+        client.retry_backoff_max = 10.0
+        sleep = AsyncMock()
+        with (
+            patch("ray.klein.runtime.serve_client.random.uniform", return_value=10.0) as uniform,
+            patch("ray.klein.runtime.serve_client.asyncio.sleep", sleep),
+        ):
             asyncio.run(client._backoff(attempt=50))
 
-        self.assertTrue(captured)
-        self.assertLessEqual(captured[0], 9.0)
+        uniform.assert_called_once_with(0, 10.0)
+        sleep.assert_awaited_once_with(10.0)
 
 
 class TestServeDeployment(unittest.TestCase):

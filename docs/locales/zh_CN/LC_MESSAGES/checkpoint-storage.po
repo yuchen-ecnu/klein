@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Persist Klein for Ray checkpoints to local filesystems, S3-compatible "
+"storage, or Google Cloud Storage."
+msgstr "将 Klein for Ray 检查点持久化到本地文件系统、兼容 S3 的存储或 Google Cloud Storage。"
+
+msgid "Durable checkpoint storage"
+msgstr "持久检查点存储"
+
+msgid ""
+"Klein keeps mutation-heavy keyed state in task-local RocksDB, optionally "
+"caches large immutable barrier snapshots in Ray's Object Store, and persists "
+"completed checkpoints to a durable filesystem or object store. Ray object "
+"spilling is a capacity mechanism; it is not a replacement for checkpoints."
+msgstr "Klein 将频繁变更的键控状态保存在任务本地 RocksDB 中，可选择在 Ray Object Store 中缓存大型不可变屏障快照，并将完成的检查点持久化到持久文件系统或对象存储。Ray 对象溢写是一种容量机制，不能替代检查点。"
+
+msgid "Configure checkpoint storage"
+msgstr "配置检查点存储"
+
+msgid ""
+"`execution.checkpointing.dir` accepts a local path, `file://` URI, or any "
+"checkpoint filesystem supported by PyArrow. Klein explicitly supports S3 and "
+"Google Cloud Storage, including S3-compatible stores through `execution."
+"checkpointing.storage-options`."
+msgstr "`execution.checkpointing.dir` 接受本地路径、`file://` URI 或 PyArrow 支持的任何检查点文件系统。Klein 明确支持 S3 和 Google Cloud Storage，也可通过 `execution.checkpointing.storage-options` 支持兼容 S3 的存储。"
+
+msgid ""
+"PyArrow's normal credential chain is used when explicit storage options are "
+"absent. Prefer workload identity, instance roles, or environment-managed "
+"credentials instead of embedding secrets in application configuration."
+msgstr "未显式提供存储选项时，将使用 PyArrow 的常规凭据链。请优先使用工作负载身份、实例角色或环境管理的凭据，不要把密钥嵌入应用配置。"
+
+msgid "How are checkpoints organized?"
+msgstr "检查点如何组织？"
+
+msgid "Every job has an isolated directory below the configured root:"
+msgstr "每个作业在配置的根目录下都有独立目录："
+
+msgid ""
+"`chk-N/` is durable metadata revision `N`. A revision contains the latest "
+"completed state known when it was published; source barrier IDs remain part "
+"of that metadata and are not reused as directory identifiers."
+msgstr "`chk-N/` 是持久元数据修订版 `N`。一个修订版包含发布时已知的最新完成状态；数据源屏障 ID 仍是该元数据的一部分，不会复用为目录标识符。"
+
+msgid ""
+"`shared/` contains content-addressed state reusable by multiple checkpoints."
+msgstr "`shared/` 包含可由多个检查点复用的内容寻址状态。"
+
+msgid ""
+"`taskowned/` contains state whose lifecycle is owned by a task rather than "
+"ordinary checkpoint retention."
+msgstr "`taskowned/` 包含生命周期由任务所有，而不是由常规检查点保留策略管理的状态。"
+
+msgid "`chk-N/_metadata` is the only checkpoint completion marker."
+msgstr "`chk-N/_metadata` 是唯一的检查点完成标记。"
+
+msgid ""
+"`_latest` accelerates lookup but is not authoritative. Recovery falls back "
+"to scanning readable `chk-N/_metadata` objects when the pointer is stale, "
+"missing, or corrupt."
+msgstr "`_latest` 可加速查找，但不是权威信息。若该指针已过期、缺失或损坏，恢复会回退为扫描可读的 `chk-N/_metadata` 对象。"
+
+msgid ""
+"Job and operator identifiers are percent-encoded as individual path "
+"components so user-provided names cannot escape the checkpoint root."
+msgstr "作业和算子标识符会分别作为路径组件进行百分号编码，因此用户提供的名称无法逃逸检查点根目录。"
+
+msgid "How does Klein publish and recover a checkpoint?"
+msgstr "Klein 如何发布和恢复检查点？"
+
+msgid ""
+"Klein writes immutable state objects first and publishes `_metadata` last. A "
+"failure before that final write leaves an incomplete directory that recovery "
+"ignores. On local filesystems metadata publication uses a temporary file and "
+"an atomic rename. On S3/GCS it uses one final object PUT; Klein does not "
+"emulate a rename because object-store rename is a copy-and-delete operation."
+msgstr "Klein 先写入不可变状态对象，最后发布 `_metadata`。最终写入前发生故障会留下不完整目录，恢复时会忽略它。在本地文件系统上，元数据发布使用临时文件和原子重命名；在 S3/GCS 上则使用一次最终对象 PUT。Klein 不模拟重命名，因为对象存储的重命名实际是复制后删除。"
+
+msgid ""
+"Checkpoint metadata also carries prepared two-phase sink committables. The "
+"coordinator publishes those transactions only after `_metadata` is durable "
+"and replays an idempotent commit after recovery when publication was "
+"interrupted. Checkpoint-aware source offsets are notified after sink "
+"publication, preserving the end-to-end ordering between input progress and "
+"output visibility."
+msgstr "检查点元数据还携带已准备的两阶段 Sink 可提交项。协调器仅在 `_metadata` 持久化后发布这些事务；若发布被中断，恢复后会重放幂等提交。具备检查点感知能力的数据源偏移量在 Sink 发布后才会收到通知，从而维持输入进度与输出可见性之间的端到端顺序。"
+
+msgid ""
+"State entries carry their serialized size and SHA-256 checksum. Recovery "
+"checks both before deserializing a value. Retention deletes only old `chk-N/"
+"` directories and leaves `shared/` and `taskowned/` intact for their "
+"separate lifecycles. Checkpoint metadata has one current schema version; "
+"incompatible pre-revision metadata is rejected explicitly instead of being "
+"guessed or silently upgraded during recovery."
+msgstr "状态条目包含序列化大小和 SHA-256 校验和，恢复会在反序列化值之前校验两者。保留策略只删除旧的 `chk-N/` 目录，`shared/` 和 `taskowned/` 按各自生命周期保留。检查点元数据只有一个当前模式版本；不兼容的旧修订元数据会被明确拒绝，不会在恢复时猜测或静默升级。"
+
+msgid ""
+"The layout follows Flink's filesystem checkpoint storage conventions: "
+"[checkpoint storage](https://nightlies.apache.org/flink/flink-docs-stable/"
+"docs/ops/state/checkpoints/) and [`_metadata` completion marker](https://"
+"nightlies.apache.org/flink/flink-docs-stable/api/java/org/apache/flink/"
+"runtime/state/filesystem/AbstractFsCheckpointStorageAccess.html)."
+msgstr "此布局遵循 Flink 的文件系统检查点存储约定：[检查点存储](https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/state/checkpoints/)和 [`_metadata` 完成标记](https://nightlies.apache.org/flink/flink-docs-stable/api/java/org/apache/flink/runtime/state/filesystem/AbstractFsCheckpointStorageAccess.html)。"
+
+msgid ""
+"See [Restore and rescale a job](checkpoint-recovery.md) for checkpoint "
+"selection, `execution.savepoint.path`, compatibility checks, resubmission, "
+"and post-restore validation."
+msgstr "有关检查点选择、`execution.savepoint.path`、兼容性检查、重新提交和恢复后验证，请参阅[恢复作业并调整并行度](checkpoint-recovery.md)。"

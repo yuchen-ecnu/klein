@@ -15,14 +15,14 @@ Klein resolves each option from three sources:
 
 | Priority | Source | Example |
 | --- | --- | --- |
-| 1 (highest) | Explicit context or `Configuration` value | `{"execution.runtime.mode": "streaming"}` |
+| 1 (highest) | Explicit pipeline or `Configuration` value | `{"execution.runtime.mode": "streaming"}` |
 | 2 | Captured `RAY_KLEIN_*` environment value | `RAY_KLEIN_EXECUTION_RUNTIME_MODE=streaming` |
 | 3 | Typed option default | `execution.runtime.mode=auto` |
 
 Klein captures matching environment values when it creates a `Configuration`,
-so later environment changes don't alter that configuration. Configure a
-context before calling `execute()`; submission gives the running job its
-configuration snapshot.
+so later environment changes don't alter that configuration. Call
+`ray.klein.configure()` before building the graph; submission gives the running
+job its configuration snapshot.
 
 For every supported key, type, default, constraint, and direct runtime
 environment variable, see the [complete configuration reference](configuration-reference.md).
@@ -33,9 +33,10 @@ Choose the input form that matches how your application receives configuration:
 
 ```python
 import ray
+import ray.klein
 
 # Set options from a mapping.
-ray.klein.reset_context({
+ray.klein.configure({
     "execution.runtime.mode": "streaming",
     "state.backend.type": "rocksdb",
 })
@@ -45,10 +46,6 @@ ray.klein.configure(
     "execution.checkpointing.timeout=300; "
     "pipeline.operator-chaining.enabled=false"
 )
-
-# Inspect and update the process-global context.
-ctx = ray.klein.current_context()
-ctx.config.set("state.ttl.cleanup.batch-size", 256)
 ```
 
 Use a JSON object string when values contain dictionaries or lists:
@@ -96,9 +93,12 @@ Unquoted numeric values in mappings or `key=value` input are seconds;
 environment-variable durations are strings and therefore need a unit. Enum
 names and values are case-insensitive.
 
-## Isolate a context
+## Advanced: isolate a context
 
-For isolated pipelines, construct `KleinContext(configuration)` directly and use its graph-building methods. Application code normally uses the process-global module API so source construction matches `ray.data`.
+Most application code should use the module-level API shown above. For the
+advanced case where one process must build mutually isolated pipelines,
+construct `KleinContext(configuration)` directly and use its graph-building
+methods.
 
 ```python
 from ray.klein import KleinContext
@@ -131,26 +131,33 @@ their own metadata beside Klein settings. Klein doesn't validate or act on
 unknown keys. Use the [configuration reference](configuration-reference.md) to
 distinguish active Klein options from application-defined values.
 
-## Inspect configuration
+## Inspect configuration before submission
 
-Read a typed effective value with its `ConfigOption`:
+Build a `Configuration`, inspect or update it with typed options, and then
+install its values before constructing the graph:
 
 ```python
+import ray
+import ray.klein
+
+from ray.klein import Configuration
 from ray.klein.config.execution_options import ExecutionOptions
 
-config = ray.klein.current_context().config
+config = Configuration({"execution.runtime.mode": "streaming"})
 mode = config.get(ExecutionOptions.MODE)
 print(mode.value)
+ray.klein.configure(config)
 ```
 
 `to_dict()` returns only explicit values. It deliberately doesn't expand
 captured environment values or typed defaults:
 
 ```python
-ray.klein.reset_context({"state.backend.type": "memory"})
-assert ray.klein.current_context().config.to_dict() == {
+config = Configuration({"state.backend.type": "memory"})
+assert config.to_dict() == {
     "state.backend.type": "memory",
 }
+ray.klein.configure(config)
 ```
 
 `unset(key)` removes the explicit value. The next typed `get()` then reveals a

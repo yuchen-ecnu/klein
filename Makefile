@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-.PHONY: audit benchmark build clean coverage docs external format integration integration-connectors integration-runtime \
+.PHONY: audit benchmark build clean coverage docs docs-check-i18n docs-en docs-gettext docs-zh external format integration integration-connectors integration-runtime \
 	integration-sql integration-state lint test unit unit-connectors unit-core unit-runtime unit-sql unit-state
 
 format:
@@ -64,7 +64,24 @@ audit:
 	python scripts/check_dependency_licenses.py
 
 docs:
-	sphinx-build -W --keep-going -b html docs docs/_build/html
+	rm -rf docs/_build/html
+	$(MAKE) docs-gettext
+	$(MAKE) docs-check-i18n
+	$(MAKE) docs-en
+	$(MAKE) docs-zh
+
+docs-check-i18n:
+	python scripts/check_doc_translations.py docs/_build/gettext docs/locales/zh_CN/LC_MESSAGES
+
+docs-en:
+	KLEIN_DOCS_LANGUAGE=en sphinx-build -W --keep-going -b html docs docs/_build/html
+
+docs-zh:
+	KLEIN_DOCS_LANGUAGE=zh_CN sphinx-build -W --keep-going -b html docs docs/_build/html/zh_CN
+
+docs-gettext:
+	rm -rf docs/_build/gettext
+	KLEIN_DOCS_LANGUAGE=en sphinx-build -W --keep-going -b gettext docs docs/_build/gettext
 
 build:
 	python -m build

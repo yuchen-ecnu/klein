@@ -20,6 +20,7 @@ version:
 
 ```python
 import ray
+import ray.klein
 
 events = ray.klein.read_parquet(
     "s3://warehouse/events/",

@@ -10,6 +10,10 @@ from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
 from ray.klein.config.configuration import Configuration
 from ray.klein.observability.metrics.metric_group import JobMetricGroup
+from ray.klein.runtime.backend.batch_only_sink import BatchOnlySink
+from ray.klein.runtime.backend.batch_only_source import BatchOnlySource
+from ray.klein.runtime.backend.batch_only_transform import BatchOnlyTransform
+from ray.klein.runtime.backend.collection_source import CollectionSource
 from ray.klein.runtime.context.runtime_context import TaskRuntimeContext
 from ray.klein.runtime.operator.chained_source_operator import ChainedSourceOperator
 from ray.klein.runtime.operator.map_operator import MapOperator
@@ -129,3 +133,78 @@ def test_chained_source_owns_exactly_one_source_function_lifecycle() -> None:
     assert root._function is source
     assert chained._function is None
     assert (source.open_count, source.run_count, source.cancel_count, source.close_count) == (1, 1, 1, 1)
+
+
+class _CollectionContext:
+    def __init__(self) -> None:
+        self.values = []
+
+    def collect(self, value) -> None:
+        self.values.append(value)
+
+
+def test_collection_source_materializes_and_emits_its_values_only_once() -> None:
+    values = [{"id": 1}, {"id": 2}]
+    source = CollectionSource(iter(values))
+    values.append({"id": 3})
+    context = _CollectionContext()
+
+    source.run(context)
+    source.run(context)
+
+    assert context.values == [{"id": 1}, {"id": 2}]
+    assert source.snapshot_state(99) == 2
+
+
+def test_collection_source_restore_replays_suffix_and_cancel_completes() -> None:
+    source = CollectionSource([{"id": 1}, {"id": 2}, {"id": 3}])
+    suffix = _CollectionContext()
+    source.restore_state(1)
+    source.run(suffix)
+    assert suffix.values == [{"id": 2}, {"id": 3}]
+
+    replay = _CollectionContext()
+    source.restore_state(2)
+    source.run(replay)
+    assert replay.values == [{"id": 3}]
+
+    source.restore_state(100)
+    assert source.snapshot_state(1) == 3
+    source.restore_state(0)
+    source.cancel()
+    cancelled = _CollectionContext()
+    source.run(cancelled)
+    assert cancelled.values == []
+
+
+@pytest.mark.parametrize("state", [False, True, -1, 1.0, "1", None])
+def test_collection_source_rejects_invalid_restore_state(state) -> None:
+    source = CollectionSource([{"id": 1}])
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        source.restore_state(state)
+
+
+def test_batch_only_backend_sentinels_reject_streaming_construction() -> None:
+    with pytest.raises(NotImplementedError, match=r"'read_sql' is available in batch mode only"):
+        BatchOnlySource("read_sql")
+    with pytest.raises(NotImplementedError, match="consumers are available in batch mode only"):
+        BatchOnlySink()
+    with pytest.raises(NotImplementedError, match=r"native map\(\), filter\(\), or flat_map\(\)"):
+        BatchOnlyTransform()({"id": 1})
+
+
+def test_batch_only_backend_unreachable_methods_fail_defensively() -> None:
+    source = object.__new__(BatchOnlySource)
+    with pytest.raises(AssertionError, match="cannot run"):
+        source.run(_CollectionContext())
+    with pytest.raises(AssertionError, match="cannot run"):
+        source.cancel()
+    assert source.snapshot_state(7) is None
+    assert source.restore_state({"offset": 1}) is None
+
+    sink = object.__new__(BatchOnlySink)
+    with pytest.raises(AssertionError, match="cannot run"):
+        sink.write({"id": 1})
+    with pytest.raises(AssertionError, match="cannot run"):
+        sink.flush()

@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Keep Klein streaming jobs alive across Ray driver failure and understand the "
+"Compiled Graph trade-off."
+msgstr "让 Klein 流处理作业在 Ray driver 故障后继续运行，并了解 Compiled Graph 的取舍。"
+
+msgid "Survive driver failure"
+msgstr "应对 driver 故障"
+
+msgid ""
+"Klein streaming jobs do not fate-share with the submitting driver. Every job "
+"uses a named, detached `JobManager` Ray actor with unlimited actor restarts "
+"and task retries. The JobManager owns the coordinator and stream tasks, so "
+"exiting or crashing the client process does not cancel the server-side "
+"dataflow."
+msgstr "Klein 流处理作业不会与提交作业的 driver 同生共死。每个作业都使用一个具名、分离的 `JobManager` Ray actor，并允许无限次 actor 重启和任务重试。JobManager 拥有协调器和流任务，因此客户端进程退出或崩溃不会取消服务端数据流。"
+
+msgid ""
+"Record the namespace returned by `handle.namespace`, or configure a stable "
+"one:"
+msgstr "记录 `handle.namespace` 返回的命名空间，或配置一个稳定的命名空间："
+
+msgid ""
+"Another driver can connect to the same Ray cluster and use `ray-klein "
+"attach`, `ray-klein status`, or the public state snapshot API. Explicit "
+"cancellation is required for unbounded jobs; detached actors intentionally "
+"outlive clients."
+msgstr "另一个 driver 可以连接到同一 Ray 集群，并使用 `ray-klein attach`、`ray-klein status` 或公共状态快照 API。无界作业必须显式取消；分离 actor 按设计会比客户端存活更久。"
+
+msgid "Failure boundaries"
+msgstr "故障边界"
+
+msgid ""
+"Driver survival is not cluster durability. Loss of the Ray head/GCS process "
+"or the entire cluster requires a new submission restored from a durable "
+"checkpoint URI. Store checkpoints in S3-compatible or Google Cloud Storage "
+"for that case. The Ray Object Store accelerates live recovery, but it is "
+"never the durable boundary."
+msgstr "driver 存活并不等同于集群持久性。Ray head/GCS 进程或整个集群丢失后，必须基于持久检查点 URI 重新提交作业并恢复。针对这种情况，请将检查点存储在兼容 S3 的存储或 Google Cloud Storage 中。Ray Object Store 可加速在线恢复，但绝不是持久性边界。"
+
+msgid ""
+"The JobManager actor can restart after its process fails, but Python actor "
+"constructor state alone cannot reconstruct a submitted graph. Worker and "
+"coordinator failures are recovered in place from checkpoints; recovery after "
+"loss of the JobManager process currently requires resubmission with the same "
+"job definition and `execution.savepoint.path`. This limitation is part of "
+"the alpha compatibility contract."
+msgstr "JobManager actor 的进程故障后可以重启，但仅靠 Python actor 构造器状态无法重建已提交的图。worker 和协调器故障可以基于检查点原地恢复；当前若 JobManager 进程丢失，则需要使用相同的作业定义和 `execution.savepoint.path` 重新提交。此限制属于 alpha 兼容性约定的一部分。"
+
+msgid ""
+"Follow [Restore and rescale a job](checkpoint-recovery.md) for the complete "
+"resubmission procedure and checkpoint-compatibility checks."
+msgstr "完整的重新提交流程和检查点兼容性检查，请参阅[恢复作业并调整并行度](checkpoint-recovery.md)。"
+
+msgid "Why Klein does not require Ray Compiled Graph"
+msgstr "Klein 为什么不要求使用 Ray Compiled Graph"
+
+msgid ""
+"[Ray Compiled Graph](https://docs.ray.io/en/latest/ray-core/compiled-graph/"
+"ray-compiled-graph.html) optimizes repeated execution of a static actor DAG. "
+"Klein's unbounded runtime has dynamic barriers, watermarks, backpressure, "
+"rescaling, and actor replacement. Compiled Graph does not replace detached "
+"actor ownership or durable checkpoints, and making it mandatory would "
+"constrain those recovery paths. Klein therefore keeps it as a future opt-in "
+"data-plane optimization, not a control-plane availability mechanism."
+msgstr "[Ray Compiled Graph](https://docs.ray.io/en/latest/ray-core/compiled-graph/ray-compiled-graph.html) 可优化静态 actor DAG 的重复执行。Klein 的无界运行时包含动态屏障、水位线、反压、扩缩容和 actor 替换。Compiled Graph 无法替代分离 actor 的所有权或持久检查点；若将其设为必需，还会限制这些恢复路径。因此 Klein 将其保留为未来可选的数据平面优化，而不是控制平面的可用性机制。"

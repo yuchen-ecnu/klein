@@ -7,7 +7,7 @@ import pytest
 from sqlglot import parse_one
 
 from ray.klein import KleinContext, SQLQueryError, SQLSession, TableFactory, sql
-from ray.klein._internal.sql.execution import _build_aggregate_plan, _shuffle_partitions
+from ray.klein._internal.sql.execution import _apply_order_and_limit, _build_aggregate_plan, _shuffle_partitions
 from ray.klein._internal.sql.kafka_table_factory import KafkaTableFactory
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
@@ -70,6 +70,27 @@ def test_top_level_sql_discovers_dataframe_variables() -> None:
     assert result.input_streams == [orders]
 
 
+def test_top_level_sql_inherits_context_scalar_functions(monkeypatch) -> None:
+    context = KleinContext()
+    rows = context.data.source(lambda: FakeDataset())
+    captured = []
+
+    def score(value):
+        return value * 2
+
+    def fake_sql_transform(primary, query, table_names, *others, **options):
+        captured.append(options["functions"])
+        return primary
+
+    monkeypatch.setattr("ray.klein.api.sql_session.sql_transform", fake_sql_transform)
+    context.sql_session.register_scalar_function("score", score)
+
+    result = sql("SELECT SCORE(value) FROM rows", tables={"rows": rows}, context=context)
+    dataset = FakeDataset()
+    assert logical_function_of(result).to_batch([dataset]) is dataset
+    assert captured[0]["score"] is score
+
+
 def test_context_discovery_ignores_streams_from_other_contexts() -> None:
     context = KleinContext()
     other_context = KleinContext()
@@ -113,6 +134,111 @@ def test_session_temp_views_are_persistent_and_replaceable() -> None:
     assert session.sql("SELECT * FROM items").input_streams == [second]
     session.drop_temp_view("items")
     assert session.temp_views == ()
+
+
+def test_session_scalar_function_registry_is_case_insensitive() -> None:
+    session = SQLSession(KleinContext())
+
+    def first(value):
+        return value
+
+    def second(value):
+        return value * 2
+
+    session.register_scalar_function("score", first)
+    assert session.scalar_functions == ("score",)
+    with pytest.raises(SQLQueryError, match="already registered"):
+        session.register_scalar_function("SCORE", second)
+
+    session.register_scalar_function("SCORE", second, replace=True)
+    session.drop_scalar_function("ScOrE")
+    assert session.scalar_functions == ()
+    with pytest.raises(SQLQueryError, match="Unknown SQL scalar function"):
+        session.drop_scalar_function("score")
+
+
+@pytest.mark.parametrize("name", ["", "bad-name", "ABS", "DOWNLOAD"])
+def test_session_rejects_invalid_or_reserved_scalar_function_names(name: str) -> None:
+    with pytest.raises(SQLQueryError):
+        SQLSession(KleinContext()).register_scalar_function(name, lambda value: value)
+
+
+def test_session_validates_scalar_function_bindings_at_planning_time() -> None:
+    context = KleinContext()
+    rows = context.data.source(lambda: FakeDataset())
+    session = SQLSession(context)
+
+    with pytest.raises(SQLQueryError, match="Unknown SQL scalar function"):
+        session.sql("SELECT missing(value) FROM rows", tables={"rows": rows})
+    with pytest.raises(SQLQueryError, match=r"Invalid call.*missing a required argument"):
+        session.sql(
+            "SELECT score(value) FROM rows",
+            tables={"rows": rows},
+            functions={"score": lambda value, factor: value * factor},
+        )
+    with pytest.raises(TypeError, match="must be callable"):
+        session.sql(
+            "SELECT score(value) FROM rows",
+            tables={"rows": rows},
+            functions={"score": 1},
+        )
+
+
+def test_session_rejects_async_scalar_functions_at_planning_time() -> None:
+    context = KleinContext()
+    rows = context.data.source(lambda: FakeDataset())
+    session = SQLSession(context)
+
+    async def async_score(value):
+        return value
+
+    async def async_score_generator(value):
+        yield value
+
+    class AsyncScore:
+        async def __call__(self, value):
+            return value
+
+    with pytest.raises(TypeError, match="must be synchronous"):
+        session.register_scalar_function("score", async_score)
+    with pytest.raises(TypeError, match="must be synchronous"):
+        session.register_scalar_function("score", async_score_generator)
+    with pytest.raises(TypeError, match="must be synchronous"):
+        session.sql(
+            "SELECT score(value) FROM rows",
+            tables={"rows": rows},
+            functions={"score": AsyncScore()},
+        )
+
+
+def test_query_local_scalar_function_overrides_are_snapshotted(monkeypatch) -> None:
+    context = KleinContext()
+    rows = context.data.source(lambda: FakeDataset())
+    session = SQLSession(context)
+    captured = []
+
+    def registered(value):
+        return value
+
+    def override(value):
+        return value * 2
+
+    def fake_sql_transform(primary, query, table_names, *others, **options):
+        captured.append(options["functions"])
+        return primary
+
+    monkeypatch.setattr("ray.klein.api.sql_session.sql_transform", fake_sql_transform)
+    session.register_scalar_function("score", registered)
+    result = session.sql(
+        "SELECT SCORE(value) AS score FROM rows",
+        tables={"rows": rows},
+        functions={"SCORE": override},
+    )
+    session.register_scalar_function("score", lambda value: value * 3, replace=True)
+
+    dataset = FakeDataset()
+    assert logical_function_of(result).to_batch([dataset]) is dataset
+    assert captured[0]["score"] is override
 
 
 def test_session_only_compiles_views_referenced_by_the_query() -> None:
@@ -224,6 +350,14 @@ def test_sql_shuffle_width_uses_cluster_capacity_for_lazy_datasets(monkeypatch) 
 
     assert _shuffle_partitions(_LazyDataset()) == 4
     assert _shuffle_partitions(_LazyDataset(), known_blocks=(3,)) == 3
+
+
+@pytest.mark.parametrize("literal", ["1.5", "'2'", "-1"])
+def test_batch_limit_rejects_non_integer_literals(literal: str) -> None:
+    statement = parse_one(f"SELECT * FROM rows LIMIT {literal}")
+
+    with pytest.raises(SQLQueryError, match="non-negative integer literal"):
+        _apply_order_and_limit(statement, FakeDataset())
 
 
 def test_flink_style_create_and_drop_table() -> None:

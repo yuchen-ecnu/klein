@@ -10,6 +10,7 @@ import pytest
 from ray.klein.observability.metrics.metric_group import TaskMetricGroup
 from ray.klein.observability.metrics.task_metrics import TaskMetrics
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
+from ray.klein.runtime.message import DeliveryChannel
 from ray.klein.runtime.worker import stream_task as stream_task_module
 from ray.klein.runtime.worker.stream_task import StreamTask
 
@@ -32,6 +33,8 @@ def _descriptor(
     *,
     parallelism: int,
     restore_operation_id: str | None = None,
+    input_vertex_ids: tuple[ExecutionVertexId, ...] = (),
+    input_channels: tuple[DeliveryChannel, ...] | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         vertex_id=ExecutionVertexId(2, 0),
@@ -42,6 +45,8 @@ def _descriptor(
         operator=operator,
         parallelism=parallelism,
         restore_operation_id=restore_operation_id,
+        input_vertex_ids=input_vertex_ids,
+        input_channels=input_channels,
     )
 
 
@@ -333,6 +338,31 @@ async def test_prepare_accepts_an_equivalent_operator_deserialized_by_ray() -> N
     task._build_runtime = AsyncMock(return_value=_runtime(new_descriptor, "pending"))
 
     assert await task.prepare_runtime_rescale("resize-1", new_descriptor) is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_retry_rejects_changed_inbound_topology_epoch() -> None:
+    sender = ExecutionVertexId(1, 0)
+    operator = _operator(stateful=False)
+    old_descriptor = _descriptor(operator, parallelism=2)
+    pending = _descriptor(
+        operator,
+        parallelism=3,
+        input_vertex_ids=(sender,),
+        input_channels=(DeliveryChannel(sender, "source (1)", 0, 0, "epoch-1"),),
+    )
+    conflicting_retry = _descriptor(
+        _operator(stateful=False),
+        parallelism=3,
+        input_vertex_ids=(sender,),
+        input_channels=(DeliveryChannel(sender, "source (1)", 0, 0, "epoch-2"),),
+    )
+    task, _old_runtime = _paused_target(old_descriptor)
+    task._build_runtime = AsyncMock(return_value=_runtime(pending, "pending"))
+
+    assert await task.prepare_runtime_rescale("resize-1", pending) is True
+    with pytest.raises(ValueError, match="different descriptor"):
+        await task.prepare_runtime_rescale("resize-1", conflicting_retry)
 
 
 @pytest.mark.asyncio

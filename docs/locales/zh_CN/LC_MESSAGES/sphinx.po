@@ -1,0 +1,125 @@
+# SPDX-License-Identifier: Apache-2.0
+# Simplified Chinese theme translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: 2026-07-20 00:00+0800\n"
+"Last-Translator: Klein for Ray Authors\n"
+"Language-Team: Simplified Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Skip to main content"
+msgstr "跳到主要内容"
+
+msgid "Search"
+msgstr "搜索"
+
+msgid "Error"
+msgstr "错误"
+
+msgid "Please activate JavaScript to enable the search functionality."
+msgstr "请启用 JavaScript 以使用搜索功能。"
+
+msgid "Breadcrumbs"
+msgstr "面包屑导航"
+
+msgid "Breadcrumb"
+msgstr "面包屑导航"
+
+msgid "Home"
+msgstr "首页"
+
+#, python-format
+msgid "© <a href=\"%(path)s\">Copyright</a> %(copyright)s."
+msgstr "© <a href=\"%(path)s\">版权所有</a> %(copyright)s。"
+
+#, python-format
+msgid "© Copyright %(copyright)s."
+msgstr "© 版权所有 %(copyright)s。"
+
+#, python-format
+msgid "Edit on %(provider)s"
+msgstr "在 %(provider)s 上编辑"
+
+msgid "Edit"
+msgstr "编辑"
+
+msgid "GitHub"
+msgstr "GitHub"
+
+msgid "GitLab"
+msgstr "GitLab"
+
+msgid "Bitbucket"
+msgstr "Bitbucket"
+
+msgid "Twitter"
+msgstr "Twitter"
+
+msgid "Indices"
+msgstr "索引"
+
+msgid "General Index"
+msgstr "总索引"
+
+msgid "Global Module Index"
+msgstr "全局模块索引"
+
+msgid "Python Module Index"
+msgstr "Python 模块索引"
+
+#, python-format
+msgid "Last updated on %(last_updated)s."
+msgstr "最后更新于 %(last_updated)s。"
+
+msgid "Site Navigation"
+msgstr "站点导航"
+
+msgid "On this page"
+msgstr "本页内容"
+
+msgid "Section Navigation"
+msgstr "章节导航"
+
+msgid "Show Source"
+msgstr "显示源代码"
+
+#, python-format
+msgid ""
+"Created using <a href=\"https://www.sphinx-doc.org/\">Sphinx</a> "
+"%(sphinx_version)s."
+msgstr ""
+"使用 <a href=\"https://www.sphinx-doc.org/\">Sphinx</a> "
+"%(sphinx_version)s 构建。"
+
+msgid "light/dark"
+msgstr "亮色/暗色"
+
+#, python-format
+msgid ""
+"Built with the <a href=\"https://pydata-sphinx-"
+"theme.readthedocs.io/en/stable/index.html\">PyData Sphinx Theme</a> "
+"%(theme_version)s."
+msgstr ""
+"使用 <a href=\"https://pydata-sphinx-"
+"theme.readthedocs.io/en/stable/index.html\">PyData Sphinx Theme</a> "
+"%(theme_version)s 构建。"
+
+msgid "previous page"
+msgstr "上一页"
+
+msgid "previous"
+msgstr "上一页"
+
+msgid "next page"
+msgstr "下一页"
+
+msgid "next"
+msgstr "下一页"

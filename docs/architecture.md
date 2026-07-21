@@ -36,16 +36,17 @@ The diagram groups components by ownership:
 
 ## Plan once, choose one runtime
 
-`KleinContext.execute()` hands its sink roots to `JobClient`. `JobClient`
-walks upstream from those sinks to create one immutable `LogicalGraph`, applies
-an optional Ray Serve rewrite and resource plan, and then selects a backend.
+`KleinContext.execute()` hands its registered terminal sinks to `JobClient`.
+`JobClient` walks upstream from those terminals to create one immutable
+`LogicalGraph`, applies an optional Ray Serve rewrite and resource plan, and
+then selects a backend.
 
 ![Runtime selection from one logical graph](_static/runtime-selection.png)
 
-In `auto` mode, an unbounded source or an operation without a Ray Data
-lowering selects streaming execution. Otherwise the graph uses the batch
-compiler. An explicit `execution.runtime.mode` overrides this choice, but the
-selected backend must support every operation in the graph.
+In `auto` mode, an unbounded source, an operation without a Ray Data lowering,
+or `udf.ignore-exception=true` selects streaming execution. Otherwise the graph
+uses the batch compiler. An explicit `execution.runtime.mode` overrides this
+choice, but the selected backend must support every operation in the graph.
 
 The logical and physical plans have different jobs:
 

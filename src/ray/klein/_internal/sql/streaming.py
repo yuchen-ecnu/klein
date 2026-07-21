@@ -10,17 +10,23 @@ from typing import TYPE_CHECKING, Any
 from sqlglot import exp
 
 from ray.klein._internal.duration import parse_duration
+from ray.klein._internal.frozen_mapping import FrozenMapping
 from ray.klein._internal.sql.execution import (
     _FilterRow,
     _has_aggregates,
     _join_keys,
     _join_type,
+    _parse_limit_literal,
     _ProjectRow,
 )
 from ray.klein._internal.sql.expression import evaluate_expression
 from ray.klein._internal.sql.ray_data_expression import (
     is_ray_data_only_expression,
     to_ray_data_expression,
+)
+from ray.klein._internal.sql.scalar_function_registry import (
+    ScalarFunction,
+    contains_scalar_function,
 )
 from ray.klein._internal.sql.validation import validate_read_query
 from ray.klein._internal.streaming_expression import (
@@ -57,8 +63,12 @@ class _QualifyChangelogRow:
 
 
 class _ProjectChangelogRow:
-    def __init__(self, projections: Sequence[exp.Expression]) -> None:
-        self._project = _ProjectRow(projections)
+    def __init__(
+        self,
+        projections: Sequence[exp.Expression],
+        functions: Mapping[str, ScalarFunction] | None = None,
+    ) -> None:
+        self._project = _ProjectRow(projections, functions)
 
     def __call__(self, row: Mapping[str, Any]) -> ChangelogRow:
         return ChangelogRow(self._project(dict(row)), row_kind=row_kind_of(row))
@@ -71,16 +81,18 @@ class _RayProjectChangelogRow:
         self,
         projections: Sequence[exp.Expression],
         aliases: Sequence[str],
+        functions: Mapping[str, ScalarFunction],
         runtime_context,
     ) -> None:
         self._projections = tuple(projections)
+        self._functions = FrozenMapping(functions)
         self._evaluators = _compile_ray_evaluators(self._projections, aliases, runtime_context)
         if any(evaluator.is_async for evaluator in self._evaluators.values()):
             raise TypeError("DownloadExpr requires _AsyncRayProjectChangelogRow")
 
     def __call__(self, row: Mapping[str, Any]) -> ChangelogRow:
         values = {index: evaluator.evaluate(row) for index, evaluator in self._evaluators.items()}
-        return _render_projection(self._projections, row, values)
+        return _render_projection(self._projections, row, values, self._functions)
 
 
 class _AsyncRayProjectChangelogRow:
@@ -90,9 +102,11 @@ class _AsyncRayProjectChangelogRow:
         self,
         projections: Sequence[exp.Expression],
         aliases: Sequence[str],
+        functions: Mapping[str, ScalarFunction],
         runtime_context,
     ) -> None:
         self._projections = tuple(projections)
+        self._functions = FrozenMapping(functions)
         self._evaluators = _compile_ray_evaluators(self._projections, aliases, runtime_context)
 
     async def __call__(self, row: Mapping[str, Any]) -> ChangelogRow:
@@ -103,7 +117,7 @@ class _AsyncRayProjectChangelogRow:
         for index, evaluator in self._evaluators.items():
             if evaluator.is_async:
                 values[index] = await evaluator.evaluate_async(row)
-        return _render_projection(self._projections, row, values)
+        return _render_projection(self._projections, row, values, self._functions)
 
 
 class _AddStreamingExpressions:
@@ -113,9 +127,11 @@ class _AddStreamingExpressions:
         self,
         expressions: Sequence[tuple[str, exp.Expression]],
         aliases: Sequence[str],
+        functions: Mapping[str, ScalarFunction],
         runtime_context,
     ) -> None:
         self._expressions = tuple(expressions)
+        self._functions = FrozenMapping(functions)
         projections = tuple(expression for _, expression in self._expressions)
         self._evaluators = _compile_ray_evaluators(projections, aliases, runtime_context)
         if any(evaluator.is_async for evaluator in self._evaluators.values()):
@@ -125,7 +141,11 @@ class _AddStreamingExpressions:
         result = dict(row)
         for index, (name, expression) in enumerate(self._expressions):
             evaluator = self._evaluators.get(index)
-            result[name] = evaluator.evaluate(row) if evaluator is not None else evaluate_expression(expression, row)
+            result[name] = (
+                evaluator.evaluate(row)
+                if evaluator is not None
+                else evaluate_expression(expression, row, self._functions)
+            )
         return ChangelogRow(result, row_kind=row_kind_of(row))
 
 
@@ -136,9 +156,11 @@ class _AsyncAddStreamingExpressions:
         self,
         expressions: Sequence[tuple[str, exp.Expression]],
         aliases: Sequence[str],
+        functions: Mapping[str, ScalarFunction],
         runtime_context,
     ) -> None:
         self._expressions = tuple(expressions)
+        self._functions = FrozenMapping(functions)
         projections = tuple(expression for _, expression in self._expressions)
         self._evaluators = _compile_ray_evaluators(projections, aliases, runtime_context)
 
@@ -147,7 +169,7 @@ class _AsyncAddStreamingExpressions:
         for index, (name, expression) in enumerate(self._expressions):
             evaluator = self._evaluators.get(index)
             if evaluator is None:
-                result[name] = evaluate_expression(expression, row)
+                result[name] = evaluate_expression(expression, row, self._functions)
             elif not evaluator.is_async:
                 result[name] = evaluator.evaluate(row)
         for index, (name, _expression) in enumerate(self._expressions):
@@ -179,6 +201,7 @@ def _render_projection(
     projections: Sequence[exp.Expression],
     row: Mapping[str, Any],
     ray_values: Mapping[int, Any],
+    functions: Mapping[str, ScalarFunction],
 ) -> ChangelogRow:
     result: dict[str, Any] = {}
     for index, projection in enumerate(projections):
@@ -192,7 +215,9 @@ def _render_projection(
         name = projection.alias_or_name or projection.sql()
         if name in result:
             raise SQLQueryError(f"Duplicate SQL output column {name!r}; add an explicit alias")
-        result[name] = ray_values[index] if index in ray_values else evaluate_expression(value_expression, row)
+        result[name] = (
+            ray_values[index] if index in ray_values else evaluate_expression(value_expression, row, functions)
+        )
     return ChangelogRow(result, row_kind=row_kind_of(row))
 
 
@@ -209,6 +234,7 @@ def build_streaming_query(
     query: str,
     bindings: Mapping[str, DataStream],
     *,
+    functions: Mapping[str, ScalarFunction],
     num_cpus: float,
 ) -> DataStream:
     """Build a continuous query using Klein operators and managed state."""
@@ -227,6 +253,7 @@ def build_streaming_query(
             scalar,
             statement.expressions,
             (),
+            functions=functions,
             num_cpus=num_cpus,
         )
 
@@ -249,7 +276,13 @@ def build_streaming_query(
 
     where = statement.args.get("where")
     if where is not None:
-        stream = _apply_streaming_filter(stream, where.this, aliases, num_cpus=num_cpus)
+        stream = _apply_streaming_filter(
+            stream,
+            where.this,
+            aliases,
+            functions=functions,
+            num_cpus=num_cpus,
+        )
 
     if _has_aggregates(statement):
         stream = _apply_streaming_aggregate(
@@ -257,6 +290,7 @@ def build_streaming_query(
             statement,
             ttl_hints,
             aliases,
+            functions=functions,
             num_cpus=num_cpus,
         )
     else:
@@ -264,6 +298,7 @@ def build_streaming_query(
             stream,
             statement.expressions,
             aliases,
+            functions=functions,
             num_cpus=num_cpus,
         )
     if statement.args.get("order") is not None:
@@ -276,12 +311,13 @@ def _apply_streaming_filter(
     expression: exp.Expression,
     aliases: Sequence[str],
     *,
+    functions: Mapping[str, ScalarFunction],
     num_cpus: float,
 ) -> DataStream:
     if not is_ray_data_only_expression(expression):
         return stream.filter(
             _FilterRow,
-            fn_constructor_args=[expression],
+            fn_constructor_args=[expression, functions],
             num_cpus=num_cpus,
             name="SQLFilter",
         )
@@ -301,20 +337,21 @@ def _apply_streaming_projection(
     projections: Sequence[exp.Expression],
     aliases: Sequence[str],
     *,
+    functions: Mapping[str, ScalarFunction],
     num_cpus: float,
 ) -> DataStream:
     ray_expressions = [expression for expression in projections if is_ray_data_only_expression(expression)]
     if not ray_expressions:
         return stream.map(
             _ProjectChangelogRow,
-            fn_constructor_args=[projections],
+            fn_constructor_args=[projections, functions],
             num_cpus=num_cpus,
             name="SQLProject",
         )
     requires_async = _expressions_require_download(ray_expressions, aliases)
     return stream.map(
         _AsyncRayProjectChangelogRow if requires_async else _RayProjectChangelogRow,
-        fn_constructor_args=[projections, aliases],
+        fn_constructor_args=[projections, aliases, functions],
         num_cpus=num_cpus,
         async_buffer_size=DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE if requires_async else None,
         name="SQLProject",
@@ -391,6 +428,7 @@ def _apply_streaming_aggregate(
     ttl_hints: Mapping[str, timedelta],
     aliases: Sequence[str],
     *,
+    functions: Mapping[str, ScalarFunction],
     num_cpus: float,
 ) -> DataStream:
     group = select.args.get("group")
@@ -406,7 +444,8 @@ def _apply_streaming_aggregate(
         and not isinstance(value.this, exp.Star)
     )
     requires_precompute = any(
-        is_ray_data_only_expression(expression) for expression in (*original_groups, *aggregate_arguments)
+        is_ray_data_only_expression(expression) or contains_scalar_function(expression, functions)
+        for expression in (*original_groups, *aggregate_arguments)
     )
     if requires_precompute:
         computed, group_expressions, rewritten_projections = _streaming_aggregate_expression_plan(
@@ -417,6 +456,7 @@ def _apply_streaming_aggregate(
             stream,
             computed,
             aliases,
+            functions=functions,
             num_cpus=num_cpus,
         )
     else:
@@ -482,6 +522,7 @@ def _add_streaming_expressions(
     expressions: Sequence[tuple[str, exp.Expression]],
     aliases: Sequence[str],
     *,
+    functions: Mapping[str, ScalarFunction],
     num_cpus: float,
 ) -> DataStream:
     requires_async = _expressions_require_download(
@@ -490,7 +531,7 @@ def _add_streaming_expressions(
     )
     return stream.map(
         _AsyncAddStreamingExpressions if requires_async else _AddStreamingExpressions,
-        fn_constructor_args=[expressions, aliases],
+        fn_constructor_args=[expressions, aliases, functions],
         num_cpus=num_cpus,
         async_buffer_size=DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE if requires_async else None,
         name="SQLAggregateInputs",
@@ -541,8 +582,7 @@ def _state_ttl_hints(select: exp.Select) -> dict[str, timedelta]:
 
 def _apply_streaming_top_n(stream: DataStream, select: exp.Select, *, num_cpus: float) -> DataStream:
     order = select.args["order"]
-    limit_expression = select.args["limit"].expression
-    limit = int(limit_expression.this)
+    limit = _parse_limit_literal(select.args["limit"].expression)
     stream.partition_by(KeyPartitioner(key_selector=global_top_n_key))
     result = DataStream(
         stream,
@@ -568,8 +608,6 @@ def _validate_streaming_select(select: exp.Select) -> None:
             "Klein SQL time-attribute DDL is not implemented yet"
         )
     if order is not None:
-        expression = limit.expression
-        if not isinstance(expression, exp.Literal) or expression.is_string or int(expression.this) < 0:
-            raise SQLQueryError("LIMIT must be a non-negative integer literal")
+        _parse_limit_literal(limit.expression)
     elif limit is not None:
         raise SQLQueryError("Streaming LIMIT without ORDER BY is not supported")

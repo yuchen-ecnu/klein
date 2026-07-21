@@ -17,6 +17,7 @@ import ray.klein as klein
 from ray.klein._internal.deadline import Deadline
 from ray.klein._internal.logging import get_logger, log_event
 from ray.klein.api.stream_task_status import StreamTaskStatus
+from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.runtime.actor import KleinActorHandle
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
@@ -350,6 +351,12 @@ class RecoveryManager:
                 reason=self._force_global_recovery_reason,
             )
             return False
+        if not self._replay_buffer_enabled():
+            # Without upstream replay, rebuilding only one task can silently
+            # drop records that crossed the last durable checkpoint but had
+            # not reached that task. Healthy jobs need no action; any unhealthy
+            # task must be restored with the whole graph from one checkpoint.
+            return self._all_nonterminal_tasks_running()
         if self._operator_rescale_recovery_fenced():
             # Between local-topology commit and its first complete checkpoint,
             # rebuilding even an adjacent task from the previous checkpoint can
@@ -364,6 +371,12 @@ class RecoveryManager:
         for vertex in self._execution_graph.execution_vertices:
             vertex.restore_operation_id = None
         return None
+
+    def _replay_buffer_enabled(self) -> bool:
+        vertices = self._execution_graph.execution_vertices
+        if not vertices:
+            return True
+        return vertices[0].config.get(PipelineOptions.REPLAY_BUFFER_ENABLED)
 
     def _operator_rescale_recovery_fenced(self) -> bool:
         coordinator = self._coordinator_provider()

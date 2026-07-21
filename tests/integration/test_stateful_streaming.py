@@ -16,6 +16,7 @@ from ray.klein.config.state_options import StateOptions
 from ray.klein.runtime.coordinator import checkpoint_io
 from ray.klein.state.object_store_snapshot_cache import ObjectStoreSnapshotCache
 from ray.klein.state.value_state_descriptor import ValueStateDescriptor
+from tests.support.terminal import execute_terminal
 
 
 @pytest.fixture(autouse=True)
@@ -31,9 +32,7 @@ def debug_mode(monkeypatch) -> None:
 def _context() -> KleinContext:
     config = Configuration()
     config.set(StateOptions.BACKEND, "memory")
-    context = KleinContext(config)
-    context.enable_interactive_mode()
-    return context
+    return KleinContext(config)
 
 
 class _ReplayCollectionSource(SourceFunction):
@@ -89,8 +88,7 @@ def test_keyed_process_public_api_uses_default_memory_backend():
 
     config = Configuration()
     context = KleinContext(config)
-    context.enable_interactive_mode()
-    result = (
+    sink = (
         context.from_values(
             {"key": "a", "value": 1},
             {"key": "a", "value": 2},
@@ -100,6 +98,7 @@ def test_keyed_process_public_api_uses_default_memory_backend():
         .process(running_total)
         .take_all()
     )
+    result = execute_terminal(sink, job_name="keyed-process-default-backend")
 
     assert result == [
         {"key": "a", "total": 1},
@@ -128,12 +127,13 @@ def test_window_public_api():
             }
         )
     )
-    assert windowed.take_all() == [{"key": "a", "value": 3, "ts": 200}]
+    result = execute_terminal(windowed.take_all(), job_name="tumbling-window")
+    assert result == [{"key": "a", "value": 3, "ts": 200}]
 
 
 def test_watermark_strategy_drives_multiple_event_time_windows():
     context = _context()
-    result = (
+    sink = (
         context.from_values(
             {"key": "a", "value": 1, "ts": 100},
             {"key": "a", "value": 2, "ts": 1200},
@@ -147,6 +147,7 @@ def test_watermark_strategy_drives_multiple_event_time_windows():
         .reduce(lambda left, right: right)
         .take_all()
     )
+    result = execute_terminal(sink, job_name="watermark-windows")
 
     assert result == [
         {"key": "a", "value": 1, "ts": 100},
@@ -161,7 +162,7 @@ def test_interval_join_public_api_handles_either_input_arrival_order():
         {"key": "a", "right": 10, "ts": 105},
         {"key": "a", "right": 100, "ts": 200},
     )
-    result = left.join(
+    sink = left.join(
         right,
         left_key=lambda row: row["key"],
         right_key=lambda row: row["key"],
@@ -174,6 +175,7 @@ def test_interval_join_public_api_handles_either_input_arrival_order():
             "total": left_row["left"] + right_row["right"],
         },
     ).take_all()
+    result = execute_terminal(sink, job_name="interval-join")
 
     assert result == [{"key": "a", "total": 11}]
 
@@ -184,9 +186,8 @@ def test_terminal_checkpoint_contains_durable_managed_state(tmp_path: Path):
     config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
     config.set(CheckpointOptions.PERSISTENCE_INTERVAL, 1)
     context = KleinContext(config)
-    context.enable_interactive_mode()
 
-    result = (
+    sink = (
         context.from_values(
             {"key": "a", "value": 1, "ts": 100},
             {"key": "a", "value": 2, "ts": 200},
@@ -205,6 +206,7 @@ def test_terminal_checkpoint_contains_durable_managed_state(tmp_path: Path):
         )
         .take_all()
     )
+    result = execute_terminal(sink, job_name="durable-managed-state")
 
     job_id = next(tmp_path.iterdir()).name
     checkpoint = checkpoint_io.latest_checkpoint(
@@ -234,8 +236,7 @@ def test_durable_keyed_state_restores_after_parallelism_rescale(tmp_path: Path):
     first_config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
     first_config.set(CheckpointOptions.PERSISTENCE_INTERVAL, 1)
     first_context = KleinContext(first_config)
-    first_context.enable_interactive_mode()
-    first_result = (
+    first_sink = (
         first_context.source(
             _ReplayCollectionSource,
             fn_constructor_args=[rows],
@@ -244,6 +245,7 @@ def test_durable_keyed_state_restores_after_parallelism_rescale(tmp_path: Path):
         .process(running_total, concurrency=2)
         .take_all()
     )
+    first_result = execute_terminal(first_sink, job_name="rescale-before-restore")
     assert {item["key"]: item["total"] for item in first_result} == {row["key"]: 1 for row in rows}
 
     first_job_id = next(tmp_path.iterdir()).name
@@ -266,8 +268,7 @@ def test_durable_keyed_state_restores_after_parallelism_rescale(tmp_path: Path):
     second_config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
     second_config.set(CheckpointOptions.RESTORE_PATH, checkpoint)
     second_context = KleinContext(second_config)
-    second_context.enable_interactive_mode()
-    second_result = (
+    second_sink = (
         second_context.source(
             _ReplayCollectionSource,
             fn_constructor_args=[rows],
@@ -276,5 +277,6 @@ def test_durable_keyed_state_restores_after_parallelism_rescale(tmp_path: Path):
         .process(running_total, concurrency=3)
         .take_all()
     )
+    second_result = execute_terminal(second_sink, job_name="rescale-after-restore")
 
     assert {item["key"]: item["total"] for item in second_result} == {row["key"]: 2 for row in rows}

@@ -162,6 +162,20 @@ class FailoverSupervisor:
                     RestartStatus.FAILED,
                     f"restart timed out after {_RESTART_ATTEMPT_TIMEOUT}s",
                 )
+            except Exception as error:
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "failover.global.attempt_failed",
+                    "Global restart raised an exception and will be retried: %s",
+                    error,
+                    exc_info=True,
+                    reason=str(error),
+                )
+                result = RestartResult(
+                    RestartStatus.FAILED,
+                    f"{type(error).__name__}: {error}",
+                )
             if result.status == RestartStatus.SUCCESS:
                 log_event(
                     logger,

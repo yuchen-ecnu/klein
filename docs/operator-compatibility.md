@@ -8,9 +8,10 @@ myst:
 # Operator compatibility and execution semantics
 
 Use this page before combining operators in one graph. `auto` selects streaming
-when a source is unbounded or a sink lacks a Ray Data lowering; it otherwise
-selects batch. Selection happens for the whole job, not independently for each
-branch.
+when a source is unbounded, any graph vertex lacks a batch lowering, or
+`udf.ignore-exception=true`; only a fully batch-lowerable, bounded graph with
+that policy disabled selects batch. Selection happens for the whole job, not
+independently for each branch.
 
 `Yes` below means Klein provides a native implementation for that execution
 mode. `Ray Data` means the behavior, partitioning, retries, and schema rules are
@@ -27,7 +28,7 @@ owned by the installed compatible Ray Data version.
 | `read_kafka(trigger="continuous")` | No | Yes | Checkpoint-aware native source. |
 | `read_canal()` | No | Yes | Continuous Kafka input decoded to changelog rows. |
 | `read_rocketmq()` | No | Yes | Broker-managed consumer progress; not checkpoint-aligned. |
-| `KleinContext.source()` | No by default | Yes | A custom source needs an explicit batch lowering to run in batch; the public helper currently builds native sources. |
+| `ray.klein.source()` | No by default | Yes | A custom source needs an explicit batch lowering to run in batch; the public helper currently builds native sources. |
 | `stream.data.with_column(name, expr)` | Ray Data | Yes | Streaming evaluates Ray expressions per record; `download()` uses bounded ordered async I/O. |
 | `stream.data.filter(expr=expr)` | Ray Data | Yes | Supports Ray Data expression predicates in both modes. |
 | Other `stream.data.*` | Ray Data | No | Other Dataset transforms and terminal consumers remain batch-only. |
@@ -78,8 +79,9 @@ immediately before the operation whose input placement they should control.
 
 | API | Batch | Streaming | Delivery behavior |
 |---|---:|---:|---|
-| `show()`, `take()`, `take_all()`, `schema()` | Yes | Yes | Interactive/diagnostic boundaries; `take()` drains after reaching its limit. |
+| `show()`, `take()`, `take_all()`, `schema()` | Yes | Yes | Lazy diagnostic terminals; `take()` drains after reaching its limit. |
 | `write_json/csv/parquet()` | Ray Data | Yes | Streaming output is checkpoint-transactional. |
+| `write_iceberg()` | Ray Data | Append | Streaming appends are checkpoint-transactional; overwrite and upsert remain batch-only. |
 | `write_text()` | No | Yes | Native checkpoint-transactional text sink. |
 | `write_kafka()` | Ray Data | Yes | Native streaming output is at-least-once. |
 | `write_sql()` | Ray Data | Yes | Native streaming DB-API output is at-least-once. |

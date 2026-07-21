@@ -8,7 +8,7 @@ myst:
 (klein-getting-started)=
 # Get started with Klein for Ray
 
-This guide creates a bounded `DataStream`, runs it interactively, and shows how to submit a long-running pipeline.
+This guide creates a bounded `DataStream`, executes it explicitly, and shows how to submit a long-running pipeline.
 
 ## Install Klein
 
@@ -21,23 +21,23 @@ python -m pip install --upgrade pip
 python -m pip install "ray-klein==0.1.0a1"
 ```
 
-Kafka, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install
+Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install
 only the extra required by the application, for example `ray-klein[kafka]`,
-`ray-klein[rocketmq]`, `ray-klein[redis]`, `ray-klein[rocksdb]`, or
-`ray-klein[serve]`. Use `ray-klein[all]` for an integration development
-environment. RocketMQ also requires the native
+`ray-klein[iceberg]`, `ray-klein[rocketmq]`, `ray-klein[redis]`,
+`ray-klein[rocksdb]`, or `ray-klein[serve]`. Use `ray-klein[all]` for an
+integration development environment. RocketMQ also requires the native
 `librocketmq` runtime on every worker.
 
 ## Run a bounded pipeline
 
-Interactive mode runs a bounded graph when you call a terminal operation such as `take_all()`:
+A terminal operation such as `take_all()` registers a sink. Call
+`execute("job-name")` to run every registered sink in the bounded graph:
 
 ```python
 import ray
+import ray.klein
 
-ray.klein.reset_context().enable_interactive_mode()
-
-rows = (
+stream = (
     ray.klein.from_items(
         [
             {"name": "Ada", "amount": 4},
@@ -45,19 +45,21 @@ rows = (
         ]
     )
     .map(lambda row: {**row, "amount": row["amount"] * 2})
-    .take_all()
 )
+stream.take_all()
+rows = ray.klein.execute("quick-start").get()
 
 print(rows)
 ```
 
-The terminal operation returns these rows:
+The completed job handle returns these rows:
 
 ```text
 [{'name': 'Ada', 'amount': 8}, {'name': 'Grace', 'amount': 14}]
 ```
 
-Klein creates a lazy graph until the terminal operation runs it. The bounded source selects batch execution, and Klein lowers the graph to Ray Data.
+Klein creates a lazy graph through the registered terminal sinks. `execute()`
+selects batch execution for the bounded source and lowers the graph to Ray Data.
 
 ## Read data with Ray Data
 
@@ -65,8 +67,7 @@ Source construction follows `ray.data`. Call a reader directly from `ray.klein`,
 
 ```python
 import ray
-
-ray.klein.reset_context().enable_interactive_mode()
+import ray.klein
 
 events = ray.klein.read_parquet("s3://<bucket>/events/")
 
@@ -75,22 +76,24 @@ filtered = events.filter(lambda row: row["status"] == "ready")
 
 # Use the installed Ray Data Dataset implementation.
 shuffled = filtered.data.random_shuffle(seed=7)
-rows = shuffled.data.take(10)
+shuffled.data.take(10)
+rows = ray.klein.execute("inspect-events").get()
 ```
 
 Klein forwards reader and Dataset arguments to the installed Ray version. See [Ray Data interoperability](ray-data-interop.md) for the execution boundary and advanced adapters, or the [connector catalog](connectors/index.md) to choose an input or output and review all of its options.
 
 ## Submit a dataflow
 
-Outside interactive mode, attach one or more sinks and submit the current graph:
+Register one or more terminal sinks, then submit them together:
 
 ```python
 import ray
-
-ray.klein.reset_context()
+import ray.klein
 
 events = ray.klein.from_items([{"id": 1}, {"id": 2}, {"id": 3}])
-events.map(lambda row: {"id": row["id"] * 2}).show()
+doubled = events.map(lambda row: {"id": row["id"] * 2})
+doubled.show()
+doubled.filter(lambda row: row["id"] >= 4).show()
 
 print(ray.klein.explain("doubled-events"))
 job = ray.klein.execute("doubled-events")
@@ -117,6 +120,7 @@ events.write_kafka(
     value_serializer="json",
     concurrency=4,
 )
+job = ray.klein.execute("processed-events")
 ```
 
 The Kafka source emits the same raw byte schema as `ray.data.read_kafka`. It
@@ -134,8 +138,9 @@ Use a mapping, a `key=value` string, typed options, or `RAY_KLEIN_*` environment
 
 ```python
 import ray
+import ray.klein
 
-ray.klein.reset_context(
+ray.klein.configure(
     {
         "execution.checkpointing.dir": "s3://<bucket>/klein-checkpoints",
         "state.backend.type": "rocksdb",

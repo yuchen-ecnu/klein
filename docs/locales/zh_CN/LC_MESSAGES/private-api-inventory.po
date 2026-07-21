@@ -1,0 +1,75 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Inventory Klein for Ray dependencies on Ray private APIs and Developer APIs."
+msgstr "梳理 Klein for Ray 对 Ray 私有 API 和 Developer API 的依赖。"
+
+msgid "Ray private-API inventory"
+msgstr "Ray 私有 API 清单"
+
+msgid ""
+"The shipped `ray.klein` package has no direct imports from `ray._private`, "
+"`ray.data._internal`, or `ray.air`. Bounded representations, batched column "
+"validation and ragged arrays are implemented locally."
+msgstr "发布的 `ray.klein` 包不直接从 `ray._private`、`ray.data._internal` 或 `ray.air` 导入。有限数据表示、分批列校验和不规则数组均在本地实现。"
+
+msgid ""
+"The project still uses several Ray Data extension classes whose stability is "
+"DeveloperAPI rather than PublicAPI, including datasource and datasink base "
+"classes. That is why the initial release intentionally supports only the Ray "
+"2.56 minor line. Widening the range requires unit, integration, and clean-"
+"wheel tests against the proposed Ray version."
+msgstr "项目仍使用若干稳定性级别为 DeveloperAPI 而非 PublicAPI 的 Ray Data 扩展类，包括 datasource 和 datasink 基类。这正是首个版本有意仅支持 Ray 2.56 次版本系列的原因。扩展范围前，必须在拟支持的 Ray 版本上运行单元测试、集成测试和干净 wheel 测试。"
+
+msgid ""
+"CI rejects direct private imports. Code that requires a private Ray API is "
+"not accepted into the package."
+msgstr "CI 会拒绝直接导入私有 API。需要 Ray 私有 API 的代码不会被纳入该包。"
+
+msgid "CI rejects unlisted private imports and private imports outside `_compat`. Widening the Ray version range requires verifying every symbol above and adding minimum/maximum-version clean-wheel tests. The preferred migration is always to delete an inventory item when Ray exposes a public replacement."
+msgstr "CI 会拒绝未列入清单的私有导入，以及 `_compat` 之外的私有导入。扩大 Ray 版本范围时，必须验证上述每个符号，并增加最低和最高版本的干净 wheel 测试。当 Ray 提供公共替代项时，首选迁移方式始终是删除对应的清单条目。"
+
+msgid "Ray Data 2.56 does not expose public equivalents for evaluating one expression against an externally supplied Arrow block or for applying its datasource filesystem retry wrapper. `ray.klein._compat.ray_data_expression` therefore adapts these symbols:"
+msgstr "Ray Data 2.56 尚未提供公共等价 API，无法针对外部传入的 Arrow 块求值单个表达式，也无法应用其数据源文件系统重试包装器。因此，`ray.klein._compat.ray_data_expression` 会适配以下符号："
+
+msgid "The adapter owns task-context construction, class-UDF initialization, single-block evaluation, URI resolution, and retry setup. Callers use only the stable Klein adapter surface."
+msgstr "该适配器负责构造任务上下文、初始化类 UDF、执行单块求值、解析 URI 和设置重试。调用方只使用稳定的 Klein 适配器接口。"
+
+msgid "The shipped `ray.klein` package isolates every private Ray dependency in `ray.klein._compat`. Normal API, runtime, state, connector, and SQL modules may not import private Ray symbols. CI scans the real package tree and compares the imports against this exact inventory, so a missing source directory cannot silently turn the guard green."
+msgstr "发布的 `ray.klein` 包将所有 Ray 私有依赖隔离在 `ray.klein._compat` 中。普通 API、运行时、状态、连接器和 SQL 模块不得导入 Ray 私有符号。CI 会扫描真实的包目录树，并将导入与这份精确清单比较，因此源目录缺失时不可能悄悄让门禁通过。"
+
+msgid "`ray.data._internal.execution.interfaces.task_context.TaskContext`;"
+msgstr "`ray.data._internal.execution.interfaces.task_context.TaskContext`；"
+
+msgid "`ray.data._internal.planner.plan_expression.expression_evaluator.eval_expr`;"
+msgstr "`ray.data._internal.planner.plan_expression.expression_evaluator.eval_expr`；"
+
+msgid "`ray.data._internal.planner.plan_expression.expression_visitors._CallableClassUDFCollector`;"
+msgstr "`ray.data._internal.planner.plan_expression.expression_visitors._CallableClassUDFCollector`；"
+
+msgid "`ray.data._internal.util.RetryingPyFileSystem`;"
+msgstr "`ray.data._internal.util.RetryingPyFileSystem`；"
+
+msgid "`ray.data.datasource.path_util._resolve_paths_and_filesystem`;"
+msgstr "`ray.data.datasource.path_util._resolve_paths_and_filesystem`；"
+
+msgid "`ray.data.datasource.path_util._validate_and_wrap_filesystem`."
+msgstr "`ray.data.datasource.path_util._validate_and_wrap_filesystem`。"

@@ -17,6 +17,7 @@ from unittest import mock
 from ray.klein.api.stream_task_status import StreamTaskStatus
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.job_manager_options import JobManagerOptions
+from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
@@ -179,6 +180,14 @@ class TryRecoverTasksTest(unittest.TestCase):
         s = self._scheduler(vs, {"a": StreamTaskStatus.DEAD})
         with mock.patch.object(js_mod.klein, "get_actor_status", side_effect=self._status_map):
             self.assertTrue(s.try_recover_tasks())
+
+    def test_disabled_replay_buffer_escalates_an_unhealthy_task_to_global_recovery(self):
+        vertex = _FakeVertex("a", ExecutionVertexStatus.RUNNING, _FakeStreamTask())
+        vertex.config.set(PipelineOptions.REPLAY_BUFFER_ENABLED, False)
+        s = self._scheduler([vertex], {"a": StreamTaskStatus.DEAD})
+
+        with mock.patch.object(js_mod.klein, "get_actor_status", side_effect=self._status_map):
+            self.assertFalse(s.try_recover_tasks())
 
     def test_alive_not_running_rebootstraps(self):
         tasks = [_FakeStreamTask(running=False, setup_ok=True)]

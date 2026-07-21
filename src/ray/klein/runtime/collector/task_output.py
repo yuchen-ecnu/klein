@@ -117,6 +117,16 @@ class TaskOutput(Collector):
         if first_error is not None:
             raise first_error.with_traceback(first_error.__traceback__)
 
+    def abort_delivery(self) -> None:
+        """Fence every live or staged output edge before a force kill."""
+
+        edges = list(self._edges)
+        if self._edge_swap is not None:
+            edges.extend(self._edge_swap.previous_edges)
+            edges.extend(self._edge_swap.replacement_edges)
+        for edge in dict.fromkeys(edges):
+            edge.abort_delivery()
+
     @property
     def records_out(self) -> int:
         return self._records_out

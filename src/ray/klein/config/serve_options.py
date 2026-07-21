@@ -63,7 +63,7 @@ class ServeOptions:
     )
     CLIENT_SLOW_REQUEST_WARNING = ConfigOption(
         "serve.client.slow-request-warning",
-        600,
+        60,
         int,
         description="Elapsed seconds before logging a slow-request warning.",
     )
@@ -71,7 +71,7 @@ class ServeOptions:
         "serve.client.http-timeout",
         300,
         int,
-        description="Total HTTP request timeout in seconds.",
+        description="Total logical proxy-call timeout across retries and backoff, in seconds.",
     )
     HTTP_CONNECT_TIMEOUT = ConfigOption(
         "serve.client.http-connect-timeout",

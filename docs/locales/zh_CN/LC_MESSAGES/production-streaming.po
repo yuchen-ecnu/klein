@@ -1,0 +1,162 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Build, run, observe, stop, and restore a production-shaped Kafka streaming "
+"pipeline with Klein for Ray."
+msgstr "使用 Klein for Ray 构建、运行、观测、停止并恢复接近生产形态的 Kafka 流处理流水线。"
+
+msgid "Production streaming walkthrough"
+msgstr "生产流处理实战"
+
+msgid ""
+"This tutorial builds a continuous Kafka pipeline with event-time windows, "
+"managed state, durable checkpoints, and checkpoint-transactional JSON "
+"output. It is production-shaped but deliberately small enough to adapt."
+msgstr "本教程构建一条连续 Kafka 流水线，包含事件时间窗口、托管状态、持久检查点和检查点事务性 JSON 输出。它具备生产形态，同时有意保持足够小巧，便于改造。"
+
+msgid "Prerequisites"
+msgstr "前置条件"
+
+msgid "a Ray cluster reachable from the submission environment;"
+msgstr "提交环境可以访问的 Ray 集群；"
+
+msgid "Kafka brokers and an `orders` topic;"
+msgstr "Kafka broker 和一个 `orders` topic；"
+
+msgid "shared object storage reachable by every Ray worker;"
+msgstr "每个 Ray worker 都能访问的共享对象存储；"
+
+msgid "`ray-klein[kafka]` installed on the driver and workers;"
+msgstr "driver 和 worker 上均已安装 `ray-klein[kafka]`；"
+
+msgid ""
+"credentials supplied through workload identity or the platform, not source "
+"code."
+msgstr "凭据通过工作负载身份或平台提供，而不是写入源码。"
+
+msgid "Input values are UTF-8 JSON objects:"
+msgstr "输入值是 UTF-8 JSON 对象："
+
+msgid "Build the pipeline"
+msgstr "构建流水线"
+
+msgid ""
+"Save this as `orders_pipeline.py` and replace the broker and storage URIs:"
+msgstr "将以下内容保存为 `orders_pipeline.py`，并替换 broker 和存储 URI："
+
+msgid ""
+"The window emits after the watermark passes the five-minute window end plus "
+"30 seconds of allowed lateness. A one-minute idle timeout prevents an empty "
+"Kafka partition from blocking every window. `state_ttl` is a safety bound, "
+"not the normal window cleanup mechanism."
+msgstr "当水位线超过五分钟窗口结束时间再加 30 秒允许迟到时间后，窗口会发出结果。一分钟空闲超时可避免空 Kafka 分区阻塞所有窗口。`state_ttl` 是安全上限，不是常规窗口清理机制。"
+
+msgid "Inspect before submission"
+msgstr "提交前检查"
+
+msgid "Run the file from an environment attached to the target cluster:"
+msgstr "从已连接目标集群的环境运行此文件："
+
+msgid "Review the printed plan for:"
+msgstr "检查输出的计划是否包含："
+
+msgid "four Kafka source subtasks and useful Kafka partitions;"
+msgstr "四个 Kafka 数据源子任务和有效的 Kafka 分区；"
+
+msgid "a key partition before `FiveMinuteCustomerTotal`;"
+msgstr "`FiveMinuteCustomerTotal` 前的键分区；"
+
+msgid "the expected stateful window operator and four sink subtasks;"
+msgstr "预期的有状态窗口算子和四个 Sink 子任务；"
+
+msgid "no accidental Ray Data-only node in the streaming graph;"
+msgstr "流处理图中没有意外出现仅支持 Ray Data 的节点；"
+
+msgid "CPU/GPU requests the cluster can schedule."
+msgstr "集群能够调度的 CPU/GPU 请求。"
+
+msgid ""
+"The process blocks in `handle.wait()`. A production Ray Job submission may "
+"exit after recording `handle.namespace`; the detached job continues."
+msgstr "进程会阻塞在 `handle.wait()`。生产 Ray Job 提交可以在记录 `handle.namespace` 后退出；分离作业会继续运行。"
+
+msgid "Observe and stop"
+msgstr "观测与停止"
+
+msgid "From another process with access to the same cluster:"
+msgstr "从另一个能够访问同一集群的进程执行："
+
+msgid ""
+"Watch source lag, watermark lag, late records, state size, backpressure, and "
+"checkpoint completion. Final JSON parts appear only after the checkpoint "
+"that contains their committables is durable. Hidden `.klein-staging` objects "
+"are not completed output."
+msgstr "监控数据源延迟、水位线延迟、迟到记录、状态大小、反压和检查点完成情况。只有包含其可提交项的检查点持久化后，最终 JSON 分片才会出现。隐藏的 `.klein-staging` 对象不是已完成输出。"
+
+msgid ""
+"Ctrl+C in `attach` only detaches. `stop` requests cancellation and does not "
+"create a special savepoint. Before a planned stop, record a recent completed "
+"checkpoint URI if the job must be restored."
+msgstr "在 `attach` 中按 Ctrl+C 只会断开连接。`stop` 请求取消，不会创建特殊 savepoint。计划停止前，如果作业必须恢复，请记录一个近期已完成的检查点 URI。"
+
+msgid "Restore after cluster loss"
+msgstr "集群丢失后恢复"
+
+msgid "Find the latest completed directory, for example:"
+msgstr "找到最新完成的目录，例如："
+
+msgid "Add it to the same graph configuration before `execute()`:"
+msgstr "在 `execute()` 前将它添加到相同图的配置中："
+
+msgid ""
+"Keep the graph, operator names, state descriptors, serializers, and `state."
+"keyed.max-parallelism` compatible. Follow [Restore and rescale a job]"
+"(checkpoint-recovery.md) for a full checklist."
+msgstr "保持图、算子名称、状态描述符、序列化器和 `state.keyed.max-parallelism` 兼容。完整清单请参阅[恢复作业并调整并行度](checkpoint-recovery.md)。"
+
+msgid "Adapt the example"
+msgstr "改造示例"
+
+msgid ""
+"Replace JSON output with Kafka or SQL only after designing idempotency for "
+"their at-least-once streaming effects."
+msgstr "只有在为 Kafka 或 SQL 的至少一次流处理副作用设计好幂等性后，才用它们替换 JSON 输出。"
+
+msgid ""
+"Increase concurrency only after measuring source partitions, CPU, state "
+"distribution, sink capacity, and checkpoint duration."
+msgstr "请先测量数据源分区、CPU、状态分布、Sink 容量和检查点耗时，再提高并发度。"
+
+msgid ""
+"Use a `KeyedProcessFunction` instead of a window when the job needs custom "
+"state and timers."
+msgstr "当作业需要自定义状态和定时器时，请使用 `KeyedProcessFunction` 代替窗口。"
+
+msgid ""
+"Use Canal JSON input when Kafka values contain MySQL change events and the "
+"downstream sink understands changelog row kinds."
+msgstr "当 Kafka 值包含 MySQL 变更事件，且下游 Sink 能理解 changelog 行类型时，请使用 Canal JSON 输入。"
+
+msgid ""
+"See [Delivery guarantees](delivery-semantics.md), [Performance tuning]"
+"(performance-tuning.md), and [Troubleshooting](troubleshooting.md) before "
+"production rollout."
+msgstr "投入生产前，请参阅[交付保证](delivery-semantics.md)、[性能调优](performance-tuning.md)和[故障排除](troubleshooting.md)。"

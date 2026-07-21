@@ -30,21 +30,11 @@ Function lifecycle
 Metrics
 -------
 
-.. currentmodule:: ray.klein.observability.metrics
+Register a metric once during worker initialization: use
+``open(runtime_context)`` for a lifecycle source or sink, or request the
+``runtime_context`` constructor keyword in a callable transform class. Update
+the returned handle while processing records. Re-registering one name with a
+different kind, description, boundary set, or label set raises ``ValueError``.
 
-.. autoclass:: MetricGroup
-   :members: counter, gauge, histogram, add_group, all_labels, name, metric_identifier
-
-.. autoclass:: Counter
-   :members:
-
-.. autoclass:: Gauge
-   :members:
-
-.. autoclass:: Histogram
-   :members:
-
-Register a metric once in ``open(runtime_context)`` and update the returned
-handle while processing records. Re-registering one name with a different
-kind, description, boundary set, or label set raises ``ValueError``.
-
+See :doc:`metrics` for ``MetricGroup``, metric handles, specifications, and
+the runtime-owned metric scopes.

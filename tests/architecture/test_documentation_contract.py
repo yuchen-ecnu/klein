@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import ast
+from contextlib import suppress
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -9,12 +10,17 @@ DOCS_ROOT = PROJECT_ROOT / "docs"
 
 def _export_names(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
-        if any(isinstance(target, ast.Name) and target.id == "_EXPORTS" for target in node.targets):
-            return set(ast.literal_eval(node.value))
-    return set()
+        target_names = {target.id for target in node.targets if isinstance(target, ast.Name)}
+        if "_EXPORTS" in target_names:
+            names.update(ast.literal_eval(node.value))
+        elif "__all__" in target_names:
+            with suppress(TypeError, ValueError):
+                names.update(ast.literal_eval(node.value))
+    return names
 
 
 def _api_reference_text() -> str:
@@ -24,6 +30,31 @@ def _api_reference_text() -> str:
 def test_top_level_exports_are_accounted_for_in_api_reference() -> None:
     missing = sorted(name for name in _export_names(PACKAGE_ROOT / "__init__.py") if name not in _api_reference_text())
     assert not missing, f"Top-level exports missing from API reference: {missing}"
+
+
+def test_public_domain_package_exports_are_accounted_for() -> None:
+    package_initializers = [
+        PACKAGE_ROOT / "api" / "__init__.py",
+        PACKAGE_ROOT / "api" / "ray_data" / "__init__.py",
+        PACKAGE_ROOT / "config" / "__init__.py",
+        PACKAGE_ROOT / "formats" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "console" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "filesystem" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "iceberg" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "kafka" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "redis" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "rocketmq" / "__init__.py",
+        PACKAGE_ROOT / "integrations" / "sql" / "__init__.py",
+        PACKAGE_ROOT / "observability" / "metrics" / "__init__.py",
+        PACKAGE_ROOT / "state" / "__init__.py",
+    ]
+    reference = _api_reference_text()
+    missing = {
+        str(path.relative_to(PACKAGE_ROOT)): sorted(name for name in _export_names(path) if name not in reference)
+        for path in package_initializers
+    }
+    missing = {path: names for path, names in missing.items() if names}
+    assert not missing, f"Public package exports missing from API reference: {missing}"
 
 
 def test_datastream_reference_lists_every_public_member() -> None:
@@ -78,6 +109,27 @@ def test_documented_cli_covers_operations_commands() -> None:
     assert "ray-klein stop" in observability
     assert "ray-klein cancel" in observability
     assert "ray-klein dashboard" in observability
+
+
+def test_feature_guides_have_dedicated_navigation() -> None:
+    index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
+    assert ":caption: Features" in index
+    feature_tree = index.split(":caption: Features", maxsplit=1)[1].split("```", maxsplit=1)[0]
+    featured_guides = {
+        "features",
+        "ray-data-interop",
+        "ray-native-state",
+        "event-time",
+        "sql",
+        "delivery-semantics",
+        "operator-rescaling",
+        "driver-fault-tolerance",
+    }
+    missing = sorted(guide for guide in featured_guides if guide not in feature_tree)
+    assert not missing, f"Feature guides missing from dedicated navigation: {missing}"
+
+    features = (DOCS_ROOT / "features.md").read_text(encoding="utf-8")
+    assert "`udf.ignore-exception=true`" in features
 
 
 def test_restore_guide_uses_the_canonical_option() -> None:

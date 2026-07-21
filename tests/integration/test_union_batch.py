@@ -2,13 +2,12 @@
 import pytest
 
 from tests.support.assertions import assert_rows_equal
+from tests.support.terminal import execute_terminal
 
 
 @pytest.fixture()
-def csv_streams(interactive_context, test_data_dir):
-    return tuple(
-        interactive_context.data.read_csv(str(test_data_dir / f"csv_data{index}.csv")) for index in range(1, 4)
-    )
+def csv_streams(context, test_data_dir):
+    return tuple(context.data.read_csv(str(test_data_dir / f"csv_data{index}.csv")) for index in range(1, 4))
 
 
 @pytest.fixture()
@@ -23,7 +22,7 @@ def expected_rows():
 def test_binary_union(csv_streams, expected_rows) -> None:
     first, second, _ = csv_streams
 
-    rows = first.union(second).take_all()
+    rows = execute_terminal(first.union(second).take_all(), job_name="binary-union")
 
     assert_rows_equal(rows, expected_rows[:6], order_sensitive=False)
 
@@ -31,8 +30,8 @@ def test_binary_union(csv_streams, expected_rows) -> None:
 def test_chained_and_variadic_union_are_equivalent(csv_streams, expected_rows) -> None:
     first, second, third = csv_streams
 
-    chained = first.union(second).union(third).take_all()
-    variadic = first.union(second, third).take_all()
+    chained = execute_terminal(first.union(second).union(third).take_all(), job_name="chained-union")
+    variadic = execute_terminal(first.union(second, third).take_all(), job_name="variadic-union")
 
     assert_rows_equal(chained, expected_rows, order_sensitive=False)
     assert_rows_equal(variadic, expected_rows, order_sensitive=False)
@@ -43,6 +42,7 @@ def test_union_composes_with_different_parallelism(csv_streams, expected_rows) -
     mapped = first.map(lambda row: row, concurrency=3)
     filtered = mapped.union(second).filter(lambda row: True, concurrency=2)
 
-    rows = third.union(filtered).flat_map(lambda row: [row], concurrency=1).take_all()
+    sink = third.union(filtered).flat_map(lambda row: [row], concurrency=1).take_all()
+    rows = execute_terminal(sink, job_name="union-parallelism")
 
     assert_rows_equal(rows, expected_rows, order_sensitive=False)

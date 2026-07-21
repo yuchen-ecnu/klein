@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for replay-watermark durability boundaries."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -35,6 +35,23 @@ async def test_watermark_advances_every_pending_sender() -> None:
 
     assert controller.forwarded_sequence_for("left") == 3
     assert controller.forwarded_sequence_for("right") == 9
+
+
+@pytest.mark.asyncio
+async def test_async_watermark_uses_ordered_input_boundary() -> None:
+    operator = MagicMock()
+    flush_input = MagicMock()
+    flush_input_async = AsyncMock()
+    controller = WatermarkController(WatermarkMode.SINK, flush_interval_batches=1)
+    controller.bind(None, operator, None, None, flush_input, flush_input_async)
+
+    assert controller.note_processed("source-1", 7) is True
+    await controller.advance()
+
+    flush_input_async.assert_awaited_once_with()
+    flush_input.assert_not_called()
+    operator.flush.assert_called_once_with()
+    assert controller.forwarded_sequence_for("source-1") == 7
 
 
 @pytest.mark.asyncio

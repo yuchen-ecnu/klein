@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from ray.klein.config.configuration import Configuration
+from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionVertexStatus
 from ray.klein.runtime.job_manager.job_manager import JobManager
@@ -116,7 +117,8 @@ async def test_scale_in_retains_removed_cumulative_counts_but_only_lists_live_su
 @pytest.mark.asyncio
 async def test_job_manager_migrates_the_existing_reporter_after_commit() -> None:
     old_graph = Mock()
-    new_graph = Mock()
+    new_graph = Mock(spec=ExecutionGraph)
+    new_graph.job_vertex.return_value.concurrency = 3
     logical_graph = Mock()
     reporter = Mock()
     reporter.replace_execution_graph = AsyncMock()

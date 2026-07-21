@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 import ray
+import ray.klein
 
 
 def run() -> list[dict]:
-    ray.klein.reset_context().enable_interactive_mode()
     orders = ray.klein.from_items(
         [
             {"customer": "Ada", "amount": 4},
@@ -19,7 +19,9 @@ def run() -> list[dict]:
         """,
         tables={"orders": orders},
     )
-    return sorted(result.take_all(), key=lambda row: row["customer"])
+    result.take_all()
+    rows = ray.klein.execute("sql-batch").get()
+    return sorted(rows, key=lambda row: row["customer"])
 
 
 def main() -> None:

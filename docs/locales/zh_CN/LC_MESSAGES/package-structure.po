@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:53+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Klein for Ray source layout, package ownership rules, public API "
+"boundaries, and architecture checks."
+msgstr "Klein for Ray 的源码布局、包所有权规则、公共 API 边界和架构检查。"
+
+msgid "Package structure"
+msgstr "包结构"
+
+msgid ""
+"Klein for Ray uses a conventional `src` layout. The importable package is"
+" under `src/ray/klein`; tests, examples, and documentation do not live "
+"inside the runtime package."
+msgstr "Klein for Ray 使用常规的 `src` 布局。可导入的包位于 `src/ray/klein`；测试、示例和文档不放在运行时包内。"
+
+msgid "Import public APIs"
+msgstr "导入公共 API"
+
+msgid "Applications should start with the short, stable imports:"
+msgstr "应用应从简短、稳定的导入开始："
+
+msgid ""
+"`StreamSink` remains public for advanced selective execution, but "
+"ordinary applications register terminals and call `ray.klein.execute"
+"(\"job-name\")` without importing it."
+msgstr ""
+"`StreamSink` 仍是面向高级选择性执行的公开类型，但普通应用只需注册终结操作并调用 "
+"`ray.klein.execute(\"job-name\")`，无需导入它。"
+
+msgid ""
+"The package `__init__` modules lazily resolve public names. Internal "
+"modules continue to import from the module that defines a symbol; they do"
+" not import through a convenience re-export. This keeps dependency cycles"
+" visible."
+msgstr "包的 `__init__` 模块会延迟解析公共名称。内部模块仍从定义符号的模块导入，而不通过便捷的重导出导入。这样可让依赖循环保持可见。"
+
+msgid "Follow naming and ownership rules"
+msgstr "遵循命名和所有权规则"
+
+msgid ""
+"A public class is defined in a snake-case module with the corresponding "
+"name: `DataStream` lives in `data_stream.py`, `StateHandle` in "
+"`state_handle.py`, and so on."
+msgstr ""
+"公共类应定义在对应名称的蛇形命名模块中：`DataStream` 位于 `data_stream.py`，`StateHandle` 位于 "
+"`state_handle.py`，依此类推。"
+
+msgid ""
+"A public module normally defines one public class. Small private helper "
+"classes may remain beside the implementation that exclusively owns them."
+msgstr "一个公共模块通常定义一个公共类。仅由某项实现拥有的小型私有辅助类可以留在该实现旁边。"
+
+msgid ""
+"Package `__init__.py` files contain exports and package documentation, "
+"not implementations."
+msgstr "包的 `__init__.py` 文件只包含导出和包文档，不包含实现。"
+
+msgid ""
+"`api` owns user contracts and graph construction. `runtime` implements "
+"those contracts. An integration depends on contracts, configuration, and "
+"source-owned state rather than scheduler internals."
+msgstr "`api` 负责用户约定和图构建，`runtime` 实现这些约定。集成依赖约定、配置和数据源自有状态，而不依赖调度器内部实现。"
+
+#, python-brace-format
+msgid ""
+"`_internal` is not a compatibility promise. New application code must not"
+" import it. Some top-level bridge names currently resolve into "
+"`_internal` for the bundled CLI/runtime; they remain non-application APIs"
+" as described in the {doc}`top-level namespace reference "
+"<api/top_level>`."
+msgstr ""
+"`_internal` 不提供兼容性承诺。新的应用代码不得导入它。当前部分顶层桥接名称会解析到 `_internal`，供内置 "
+"CLI/运行时使用；如 {doc}`顶层命名空间参考 <api/top_level>` 所述，它们仍不是应用 API。"
+
+msgid ""
+"Generic buckets such as `common`, `core`, `utils`, and `entity` are not "
+"architectural layers. A helper moves to the domain that owns it, or into "
+"`_internal` when it is genuinely cross-cutting and private."
+msgstr ""
+"`common`、`core`、`utils` 和 `entity` "
+"等通用桶并不是架构层。辅助代码应移至拥有它的领域；若它确实跨领域且为私有代码，则移至 `_internal`。"
+
+msgid "Check dependency boundaries"
+msgstr "检查依赖边界"
+
+msgid ""
+"Architecture tests enforce package boundaries and the one-public-class "
+"convention in stable packages. Ruff validates imports, exception "
+"handling, and cyclomatic complexity. Full verification also imports the "
+"top-level API, builds the wheel and source distribution, and runs "
+"documentation checks."
+msgstr ""
+"架构测试会在稳定包中强制执行包边界和单公共类约定。Ruff 验证导入、异常处理和圈复杂度。完整验证还会导入顶层 API、构建 wheel "
+"和源码发行包，并运行文档检查。"
+
+msgid ""
+"See [Architecture](architecture.md) for how these packages collaborate "
+"during planning, streaming execution, checkpointing, and recovery."
+msgstr "关于这些包在规划、流处理执行、检查点和恢复期间如何协作，请参阅[架构](architecture.md)。"

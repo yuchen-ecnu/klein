@@ -12,7 +12,8 @@ The examples use public `ray.klein` APIs and run from the project root after you
 
 ## Run the quick start
 
-The quick start creates a bounded pipeline and returns its rows through interactive mode:
+The quick start creates a bounded pipeline, attaches a collection sink, and
+retrieves its rows from the completed job handle:
 
 ```{literalinclude} ../examples/quick_start.py
 :language: python
@@ -48,8 +49,8 @@ python examples/stateful_streaming.py
 ```
 
 This example explicitly selects streaming because managed keyed state has no
-Ray Data batch lowering. The finite collection source reaches end-of-data and
-the interactive terminal operation returns.
+Ray Data batch lowering. The finite collection source reaches end-of-data, the
+job completes, and ``JobHandle.get()`` returns the collected rows.
 
 ## Explore feature examples
 

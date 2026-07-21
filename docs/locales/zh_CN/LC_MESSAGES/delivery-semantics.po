@@ -1,0 +1,323 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Klein for Ray delivery guarantees across sources, checkpoints, state, "
+"replay, and sinks."
+msgstr "Klein for Ray 在源、检查点、状态、重放和 sink 各边界上的交付保证。"
+
+msgid "Delivery and consistency guarantees"
+msgstr "交付与一致性保证"
+
+msgid ""
+"End-to-end delivery is the composition of source progress, operator "
+"state, Klein checkpoints, replay, and sink publication. The weakest "
+"boundary in that chain determines what an application can observe after "
+"failure."
+msgstr "端到端交付由源进度、算子状态、Klein 检查点、重放和 sink 发布共同组成。该链条中最弱的边界决定应用在故障后能观察到什么。"
+
+msgid ""
+"Klein's general progress contract is **at-least-once**. Managed state is "
+"restored consistently with checkpointed source positions, but an "
+"arbitrary external sink may already have accepted output that is replayed"
+" after recovery. Do not describe a job as exactly-once merely because it "
+"enables checkpoints."
+msgstr ""
+"Klein 的一般进度契约是 **at-least-once**。托管状态会与检查点记录的源位置一致地恢复，但任意外部 sink "
+"可能已经接收了恢复后会被重放的输出。不要仅仅因为作业启用了检查点，就将其描述为 exactly-once。"
+
+msgid "Terms"
+msgstr "术语"
+
+msgid "**At-most-once** can lose records but does not deliberately replay them."
+msgstr "**At-most-once** 可能丢失记录，但不会主动重放记录。"
+
+msgid ""
+"**At-least-once** does not lose records inside its stated recovery "
+"boundary, but the same logical record may be processed or published more "
+"than once."
+msgstr "**At-least-once** 在其声明的恢复边界内不会丢失记录，但同一逻辑记录可能被处理或发布多次。"
+
+msgid ""
+"**Checkpoint-transactional visibility** keeps prepared sink output "
+"private until checkpoint metadata is durable and makes commit retry "
+"idempotent."
+msgstr ""
+"**Checkpoint-transactional visibility** 会将已准备的 sink "
+"输出保持为私有，直到检查点元数据持久化，并使提交重试具备幂等性。"
+
+msgid ""
+"**Idempotent effect** means repeating an operation produces the same "
+"external state. It is an application or connector property, not a synonym"
+" for exactly-once processing."
+msgstr ""
+"**Idempotent effect** 表示重复执行某个操作会产生相同的外部状态。它是应用或连接器的属性，不等同于 exactly-once "
+"处理。"
+
+msgid "Source progress"
+msgstr "源进度"
+
+msgid "Source"
+msgstr "源"
+
+msgid "Recovery position"
+msgstr "恢复位置"
+
+msgid "Important boundary"
+msgstr "重要边界"
+
+msgid "Bounded Ray Data readers"
+msgstr "有界 Ray Data reader"
+
+msgid "Ray Data execution/retry state"
+msgstr "Ray Data 执行/重试状态"
+
+msgid "Klein streaming checkpoints do not govern a batch reader."
+msgstr "Klein 流式检查点不管理批处理 reader。"
+
+msgid "Finite collection source"
+msgstr "有限集合源"
+
+msgid "Source cursor in Klein checkpoint"
+msgstr "Klein 检查点中的源游标"
+
+msgid "Restore resumes from the checkpointed next record."
+msgstr "恢复会从检查点记录的下一条记录继续。"
+
+msgid "Continuous Kafka"
+msgstr "连续 Kafka"
+
+msgid "Per-topic/partition next offsets in Klein checkpoint"
+msgstr "Klein 检查点中每个 topic/partition 的下一 offset"
+
+msgid ""
+"Group offsets are committed only after the corresponding Klein checkpoint"
+" is durable."
+msgstr "只有对应的 Klein 检查点持久化后，才提交 group offset。"
+
+msgid "Canal JSON over Kafka"
+msgstr "Kafka 上的 Canal JSON"
+
+msgid "Kafka offsets plus the entire decoded FlatMessage"
+msgstr "Kafka offset 加完整的已解码 FlatMessage"
+
+msgid "A checkpoint cannot split recovery in the middle of one Kafka message."
+msgstr "检查点不能在一条 Kafka 消息中间拆分恢复位置。"
+
+msgid "RocketMQ"
+msgstr "RocketMQ"
+
+msgid "Broker-managed consumer-group progress"
+msgstr "由 broker 管理的 consumer-group 进度"
+
+msgid ""
+"Broker acknowledgement can move ahead of the last durable Klein "
+"checkpoint; a full job rollback may lose those messages."
+msgstr "broker 确认可能领先于最近的持久 Klein 检查点；完整作业回滚可能丢失这些消息。"
+
+msgid "Custom `SourceFunction`"
+msgstr "自定义 `SourceFunction`"
+
+msgid "Opaque value from `snapshot_state()`"
+msgstr "来自 `snapshot_state()` 的不透明值"
+
+msgid ""
+"Correctness depends on capturing the next read position and implementing "
+"idempotent `notify_checkpoint_complete()`."
+msgstr "正确性取决于捕获下一读取位置，并以幂等方式实现 `notify_checkpoint_complete()`。"
+
+msgid ""
+"For a custom source, advance the local next-position state before calling"
+" `SourceContext.collect()`. The checkpoint barrier emitted by that call "
+"can then record the position corresponding to all preceding records."
+msgstr ""
+"对于自定义源，请在调用 `SourceContext.collect()` "
+"前推进本地的下一位置状态。该调用发出的检查点屏障随后便能记录与此前所有记录对应的位置。"
+
+msgid "Stateful operators and replay"
+msgstr "有状态算子与重放"
+
+msgid ""
+"Checkpoint barriers align source positions, managed keyed state, timers, "
+"operator watermarks, and prepared sink committables. A restored stateful "
+"operator therefore sees the state that belongs to the restored input "
+"position."
+msgstr ""
+"检查点屏障会对齐源位置、托管键控状态、定时器、算子水位线和已准备的 sink "
+"committable。因此，恢复后的有状态算子会看到属于恢复输入位置的状态。"
+
+msgid ""
+"Klein derives checkpoint domains from weakly connected components of the "
+"physical execution graph. One source threshold allocates a shared epoch "
+"for all live sources in that domain; disconnected components progress "
+"independently. Operators align that epoch by direct physical input and "
+"hold post-barrier data and control messages on each arrived input until "
+"the cut is complete. This avoids multiplying sink transactions by source "
+"parallelism and prevents a multi-source sink state from being committed "
+"with only one source position advanced."
+msgstr ""
+"Klein 根据物理执行图的弱连通分量推导检查点域。一个源阈值会为该域中的所有活动源分配共享 epoch；断开的分量独立推进。算子按直接物理输入对齐该 epoch，并在每个已收到屏障的输入上暂存屏障后的数据和控制消息，直至一致性切点完成。这样既不会按源并行度成倍增加 sink 事务，也能防止只推进一个源位置就提交多源 sink 状态。"
+
+msgid ""
+"The replay buffer retains emitted native-streaming batches until "
+"downstream progress acknowledges them. It improves single-task recovery "
+"and prevents an upstream task from forgetting data that a failed "
+"downstream task had not made durable. Disabling `pipeline.replay-"
+"buffer.enabled` changes the recovery path to a broader job restart; it "
+"does not upgrade or downgrade an external sink's transaction semantics."
+msgstr ""
+"重放缓冲区会保留已发出的原生流式批次，直到下游进度确认它们。它能改善单任务恢复，并防止上游任务遗忘尚未由故障下游任务持久化的数据。禁用 "
+"`pipeline.replay-buffer.enabled` 会将恢复路径改为更广泛的作业重启；它不会提升或降低外部 sink 的事务语义。"
+
+msgid "Sink behavior"
+msgstr "Sink 行为"
+
+msgid "Sink"
+msgstr "Sink"
+
+msgid "Streaming guarantee"
+msgstr "流处理保证"
+
+msgid "Duplicate/loss guidance"
+msgstr "重复/丢失指南"
+
+msgid "Filesystem"
+msgstr "文件系统"
+
+msgid "Checkpoint-transactional visibility"
+msgstr "Checkpoint-transactional visibility"
+
+msgid ""
+"Final part publication is idempotent. Readers must ignore `.klein-"
+"staging`."
+msgstr "最终分片发布具有幂等性。reader 必须忽略 `.klein-staging`。"
+
+msgid "Iceberg append"
+msgstr "Iceberg 追加"
+
+msgid ""
+"Parallel writers in one domain epoch are coalesced into one "
+"append/snapshot; a stable transaction ID makes coordinator retries "
+"idempotent while that snapshot is retained."
+msgstr "同一域 epoch 内的并行 writer 会合并为一次 append/snapshot；只要该 snapshot 仍被保留，稳定的事务 ID 就能使协调器重试保持幂等。"
+
+msgid "`TwoPhaseCommitSinkFunction`"
+msgstr "`TwoPhaseCommitSinkFunction`"
+
+msgid "Checkpoint-transactional when correctly implemented"
+msgstr "正确实现时为 Checkpoint-transactional"
+
+msgid ""
+"`transaction_id` commit and abort operations must be idempotent across "
+"retries."
+msgstr "`transaction_id` 的提交和中止操作在重试之间必须具备幂等性。"
+
+msgid "Kafka"
+msgstr "Kafka"
+
+msgid "At-least-once"
+msgstr "At-least-once"
+
+msgid ""
+"Klein waits for delivery acknowledgements but does not use Kafka "
+"transactions. Use a stable key/version or downstream deduplication."
+msgstr "Klein 会等待交付确认，但不使用 Kafka 事务。请使用稳定的键/版本或下游去重。"
+
+msgid "SQL"
+msgstr "SQL"
+
+msgid "Use an idempotent statement, unique key, or database-native upsert."
+msgstr "使用幂等语句、唯一键或数据库原生 upsert。"
+
+msgid "Redis"
+msgstr "Redis"
+
+msgid "At-least-once external effect"
+msgstr "At-least-once 外部效果"
+
+msgid ""
+"Built-in replacement operations are idempotent for one key/value state, "
+"but cross-key atomicity is not provided."
+msgstr "内置替换操作对单个键/值状态具有幂等性，但不提供跨键原子性。"
+
+msgid "Console"
+msgstr "Console"
+
+msgid "At-least-once diagnostic output"
+msgstr "At-least-once 诊断输出"
+
+msgid "Duplicate JSON Lines are expected after replay."
+msgstr "重放后预期会出现重复的 JSON Lines。"
+
+msgid "Custom `SinkFunction`"
+msgstr "自定义 `SinkFunction`"
+
+msgid "Connector-defined, normally at-least-once"
+msgstr "由连接器定义，通常为 at-least-once"
+
+msgid "`flush()` is a barrier boundary, not an external transaction by itself."
+msgstr "`flush()` 是屏障边界，其本身不是外部事务。"
+
+msgid "Ray Data writer"
+msgstr "Ray Data writer"
+
+msgid "Ray Data-defined"
+msgstr "Ray Data-defined"
+
+msgid ""
+"Consult the selected Dataset writer; Klein streaming checkpoints are not "
+"involved."
+msgstr "请查阅所选 Dataset writer；Klein 流式检查点不参与其中。"
+
+msgid "Failure-scenario checklist"
+msgstr "故障场景检查清单"
+
+msgid "Before production, test the following with the chosen source/sink pair:"
+msgstr "投入生产前，请使用所选源/sink 组合测试以下场景："
+
+msgid "Kill one transform worker while records are in flight."
+msgstr "在记录仍处于传输途中时终止一个转换 worker。"
+
+msgid ""
+"Kill a sink worker after the external write but before checkpoint "
+"completion."
+msgstr "在完成外部写入之后、检查点完成之前终止一个 sink worker。"
+
+msgid "Restart the coordinator after checkpoint metadata is written."
+msgstr "写入检查点元数据后重启协调器。"
+
+msgid "Stop the submitting driver while the detached job continues."
+msgstr "在分离作业继续运行时停止提交作业的 driver。"
+
+msgid "Recreate the job from a durable checkpoint after losing the whole cluster."
+msgstr "整个集群丢失后，从持久检查点重新创建作业。"
+
+msgid ""
+"For every test, record the accepted loss and duplicate envelope, how a "
+"duplicate is detected, and which identifier makes the external effect "
+"idempotent. See [Restore and rescale a job](checkpoint-recovery.md) for "
+"the recovery procedure and [Observe Klein jobs](observability.md) for the"
+" relevant metrics."
+msgstr ""
+"对于每项测试，请记录可接受的丢失和重复范围、如何检测重复项，以及哪个标识符使外部效果具备幂等性。恢复流程请参阅 [恢复作业与调整作业规模"
+"](checkpoint-recovery.md)，相关指标请参阅 [观测 Klein 作业](observability.md)。"

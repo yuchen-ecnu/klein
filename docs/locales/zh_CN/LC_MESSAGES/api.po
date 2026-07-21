@@ -1,0 +1,2522 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:53+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "Klein for Ray API"
+msgstr "Klein for Ray API"
+
+msgid "Configuration options API"
+msgstr "配置选项 API"
+
+msgid ""
+"For canonical keys, environment-variable names, defaults, constraints, "
+"and runtime scope, see :doc:`../configuration-reference`."
+msgstr "有关规范键、环境变量名称、默认值、约束和运行时作用域，请参阅 :doc:`../configuration-reference`。"
+
+msgid "Execution options"
+msgstr "执行选项"
+
+msgid ""
+":py:obj:`ExecutionOptions "
+"<ray.klein.config.execution_options.ExecutionOptions>`"
+msgstr ""
+":py:obj:`ExecutionOptions "
+"<ray.klein.config.execution_options.ExecutionOptions>`"
+
+msgid "Deployment options"
+msgstr "部署选项"
+
+msgid ""
+":py:obj:`DeploymentOptions "
+"<ray.klein.config.deployment_options.DeploymentOptions>`"
+msgstr ""
+":py:obj:`DeploymentOptions "
+"<ray.klein.config.deployment_options.DeploymentOptions>`"
+
+msgid "Checkpoint trigger options"
+msgstr "检查点触发选项"
+
+msgid ""
+":py:obj:`CheckpointTriggerOptions "
+"<ray.klein.config.checkpoint_trigger_options.CheckpointTriggerOptions>`"
+msgstr ""
+":py:obj:`CheckpointTriggerOptions "
+"<ray.klein.config.checkpoint_trigger_options.CheckpointTriggerOptions>`"
+
+msgid "Independent volume and time thresholds for source checkpoints."
+msgstr "源检查点相互独立的数据量阈值和时间阈值。"
+
+msgid "Checkpoint options"
+msgstr "检查点选项"
+
+msgid ""
+":py:obj:`CheckpointOptions "
+"<ray.klein.config.checkpoint_options.CheckpointOptions>`"
+msgstr ""
+":py:obj:`CheckpointOptions "
+"<ray.klein.config.checkpoint_options.CheckpointOptions>`"
+
+msgid "State options"
+msgstr "状态选项"
+
+msgid ":py:obj:`StateOptions <ray.klein.config.state_options.StateOptions>`"
+msgstr ":py:obj:`StateOptions <ray.klein.config.state_options.StateOptions>`"
+
+msgid "Configuration for managed operator state."
+msgstr "托管算子状态的配置。"
+
+msgid "Table options"
+msgstr "表选项"
+
+msgid ":py:obj:`TableOptions <ray.klein.config.table_options.TableOptions>`"
+msgstr ":py:obj:`TableOptions <ray.klein.config.table_options.TableOptions>`"
+
+msgid "Flink-compatible options used by the streaming SQL runtime."
+msgstr "流式 SQL 运行时使用的 Flink 兼容选项。"
+
+msgid "Event time options"
+msgstr "事件时间选项"
+
+msgid ""
+":py:obj:`EventTimeOptions "
+"<ray.klein.config.event_time_options.EventTimeOptions>`"
+msgstr ""
+":py:obj:`EventTimeOptions "
+"<ray.klein.config.event_time_options.EventTimeOptions>`"
+
+msgid "Configuration for event-time progress and idle-input detection."
+msgstr "事件时间推进和空闲输入检测的配置。"
+
+msgid "Pipeline options"
+msgstr "流水线选项"
+
+msgid ""
+":py:obj:`PipelineOptions "
+"<ray.klein.config.pipeline_options.PipelineOptions>`"
+msgstr ""
+":py:obj:`PipelineOptions "
+"<ray.klein.config.pipeline_options.PipelineOptions>`"
+
+msgid "Restart strategy options"
+msgstr "重启策略选项"
+
+msgid ""
+":py:obj:`RestartStrategyOptions "
+"<ray.klein.config.restart_strategy_options.RestartStrategyOptions>`"
+msgstr ""
+":py:obj:`RestartStrategyOptions "
+"<ray.klein.config.restart_strategy_options.RestartStrategyOptions>`"
+
+msgid "Job manager options"
+msgstr "作业管理器选项"
+
+msgid ""
+":py:obj:`JobManagerOptions "
+"<ray.klein.config.job_manager_options.JobManagerOptions>`"
+msgstr ""
+":py:obj:`JobManagerOptions "
+"<ray.klein.config.job_manager_options.JobManagerOptions>`"
+
+msgid "Observability options"
+msgstr "可观测性选项"
+
+msgid ""
+":py:obj:`ObservabilityOptions "
+"<ray.klein.config.observability_options.ObservabilityOptions>`"
+msgstr ""
+":py:obj:`ObservabilityOptions "
+"<ray.klein.config.observability_options.ObservabilityOptions>`"
+
+msgid "Configuration for Klein's metrics and cluster state publication."
+msgstr "Klein 指标和集群状态发布的配置。"
+
+msgid "UDF options"
+msgstr "UDF 选项"
+
+msgid ":py:obj:`UDFOptions <ray.klein.config.udf_options.UDFOptions>`"
+msgstr ":py:obj:`UDFOptions <ray.klein.config.udf_options.UDFOptions>`"
+
+msgid "Ray Serve options"
+msgstr "Ray Serve 选项"
+
+msgid ":py:obj:`ServeOptions <ray.klein.config.serve_options.ServeOptions>`"
+msgstr ":py:obj:`ServeOptions <ray.klein.config.serve_options.ServeOptions>`"
+
+msgid "Ray Serve deployment and embedded proxy-client settings."
+msgstr "Ray Serve 部署及内嵌代理客户端的设置。"
+
+msgid "Execution enums"
+msgstr "执行枚举"
+
+msgid ":py:obj:`DeploymentMode <ray.klein.config.DeploymentMode>`"
+msgstr ":py:obj:`DeploymentMode <ray.klein.config.DeploymentMode>`"
+
+msgid "Deployment policy for stream tasks."
+msgstr "流任务的部署策略。"
+
+msgid ":py:obj:`RuntimeExecutionMode <ray.klein.config.RuntimeExecutionMode>`"
+msgstr ":py:obj:`RuntimeExecutionMode <ray.klein.config.RuntimeExecutionMode>`"
+
+msgid "Execution mode used by a Klein job."
+msgstr "Klein 作业使用的执行模式。"
+
+msgid ":py:obj:`EnvironmentVariables <ray.klein.config.EnvironmentVariables>`"
+msgstr ":py:obj:`EnvironmentVariables <ray.klein.config.EnvironmentVariables>`"
+
+msgid "Environment-variable names consumed directly by the runtime."
+msgstr "运行时直接读取的环境变量名称。"
+
+msgid ""
+"``ConfigInput`` is the accepted union of ``Configuration``, mappings, "
+"JSON or ``key=value`` strings, and ``None``. See :doc:`../configuration` "
+"for parsing, conversion, precedence, and environment capture."
+msgstr ""
+"``ConfigInput`` 接受 ``Configuration``、映射、JSON、``key=value`` 字符串以及 ``None``"
+" 的联合类型。有关解析、转换、优先级和环境捕获，请参阅 :doc:`../configuration`。"
+
+msgid "Configuration API"
+msgstr "配置 API"
+
+msgid "A typed Klein configuration assembled from code, strings and env vars."
+msgstr "由代码、字符串和环境变量组装而成的 Klein 类型化配置。"
+
+msgid ""
+"Resolution order is explicit values, a captured ``RAY_KLEIN_*`` "
+"environment value, then the :class:`ConfigOption` default. Explicit "
+"values can be supplied as a mapping or as ``key=value`` pairs separated "
+"by commas, semicolons or whitespace. A JSON object string is also "
+"accepted."
+msgstr ""
+"解析顺序依次为显式值、捕获的 ``RAY_KLEIN_*`` 环境变量值，然后是 :class:`ConfigOption` "
+"默认值。显式值可以映射形式提供，也可以用逗号、分号或空白分隔的 ``key=value`` 对提供；同时也接受 JSON 对象字符串。"
+
+msgid "Parameters"
+msgstr "参数"
+
+msgid ""
+":py:obj:`Configuration.get "
+"<ray.klein.config.configuration.Configuration.get>`"
+msgstr ""
+":py:obj:`Configuration.get "
+"<ray.klein.config.configuration.Configuration.get>`"
+
+msgid ""
+":py:obj:`Configuration.get_optional "
+"<ray.klein.config.configuration.Configuration.get_optional>`"
+msgstr ""
+":py:obj:`Configuration.get_optional "
+"<ray.klein.config.configuration.Configuration.get_optional>`"
+
+msgid ""
+":py:obj:`Configuration.set "
+"<ray.klein.config.configuration.Configuration.set>`"
+msgstr ""
+":py:obj:`Configuration.set "
+"<ray.klein.config.configuration.Configuration.set>`"
+
+msgid ""
+":py:obj:`Configuration.update "
+"<ray.klein.config.configuration.Configuration.update>`"
+msgstr ""
+":py:obj:`Configuration.update "
+"<ray.klein.config.configuration.Configuration.update>`"
+
+msgid ""
+":py:obj:`Configuration.unset "
+"<ray.klein.config.configuration.Configuration.unset>`"
+msgstr ""
+":py:obj:`Configuration.unset "
+"<ray.klein.config.configuration.Configuration.unset>`"
+
+msgid ""
+":py:obj:`Configuration.to_dict "
+"<ray.klein.config.configuration.Configuration.to_dict>`"
+msgstr ""
+":py:obj:`Configuration.to_dict "
+"<ray.klein.config.configuration.Configuration.to_dict>`"
+
+msgid ""
+":py:obj:`Configuration.convert_value "
+"<ray.klein.config.configuration.Configuration.convert_value>`"
+msgstr ""
+":py:obj:`Configuration.convert_value "
+"<ray.klein.config.configuration.Configuration.convert_value>`"
+
+msgid "Typed option descriptor"
+msgstr "类型化选项描述符"
+
+msgid "Typed configuration option with a canonical key and environment name."
+msgstr "具有规范键和环境变量名称的类型化配置选项。"
+
+msgid ""
+"See :doc:`../configuration-reference` for the complete option catalog and"
+" :doc:`../configuration` for configuration precedence and conversion "
+"rules."
+msgstr ""
+"完整的选项目录请参阅 :doc:`../configuration-reference`，配置优先级和转换规则请参阅 "
+":doc:`../configuration`。"
+
+msgid "Connector extension classes"
+msgstr "连接器扩展类"
+
+msgid ""
+"Most applications should use module-level ``ray.klein.read_*`` functions "
+"and :class:`~ray.klein.DataStream` writer methods. The classes below are "
+"public extension contracts for direct construction, subclassing, or "
+"lifecycle tests. Install the corresponding optional dependency on the "
+"driver and workers before importing a connector module."
+msgstr ""
+"大多数应用应使用模块级 ``ray.klein.read_*`` 函数和 :class:`~ray.klein.DataStream` "
+"写入器方法。以下类是公共扩展契约，可用于直接构造、子类化或生命周期测试。导入连接器模块之前，请在驱动程序和工作节点上安装相应的可选依赖。"
+
+msgid "Kafka"
+msgstr "Kafka"
+
+msgid "Continuously consume Kafka with deterministic partition ownership."
+msgstr "以确定性的分区所有权持续消费 Kafka。"
+
+msgid ""
+"Records use the same raw-byte schema as ``ray.data.read_kafka``. Each "
+"subtask manually owns a deterministic subset of the discovered topic "
+"partitions, so a source restart can seek to the next offsets captured in "
+"a Klein checkpoint. Kafka group offsets are committed only after the "
+"matching checkpoint becomes durable."
+msgstr ""
+"记录使用与 ``ray.data.read_kafka`` "
+"相同的原始字节模式。每个子任务手动拥有所发现主题分区的一个确定性子集，因此源重启时可以定位到 Klein "
+"检查点中捕获的下一偏移量。只有匹配的检查点持久化后，才会提交 Kafka 消费组偏移量。"
+
+msgid "Ask a running source loop to return without releasing resources."
+msgstr "请求正在运行的源循环返回，但不释放资源。"
+
+msgid ""
+"Implementations should set an event or flag observed by :meth:`run`. "
+"Resource cleanup belongs in ``Function.close`` and is invoked once by the"
+" task lifecycle after the source loop has stopped."
+msgstr ""
+"实现应设置一个由 :meth:`run` 观察的事件或标志。资源清理属于 "
+"``Function.close``，并在源循环停止后由任务生命周期调用一次。"
+
+msgid "Return type"
+msgstr "返回类型"
+
+msgid "Release the consumer after the source loop has stopped."
+msgstr "在源循环停止后释放消费者。"
+
+msgid "Notify the source that a checkpoint is durably complete."
+msgstr "通知源某个检查点已经持久化完成。"
+
+msgid ""
+"Delivery is at least once across coordinator recovery, so implementations"
+" must use ``checkpoint_id`` as an idempotency key."
+msgstr "协调器恢复期间至少会投递一次，因此实现必须将 ``checkpoint_id`` 用作幂等键。"
+
+msgid "Initialize the function before processing starts."
+msgstr "开始处理前初始化函数。"
+
+msgid "Restore state previously returned by :meth:`snapshot_state`."
+msgstr "恢复此前由 :meth:`snapshot_state` 返回的状态。"
+
+msgid ""
+"The main loop for fetching data from DataSource. It will be triggered "
+"with a separate thread."
+msgstr "从 DataSource 获取数据的主循环。它将在独立线程中触发。"
+
+msgid "Return this source subtask's opaque state at ``checkpoint_id``."
+msgstr "返回此源子任务在 ``checkpoint_id`` 处的不透明状态。"
+
+msgid ""
+"The value must be pickleable. Sources should normally capture the "
+"position of the next record to read and advance that position before "
+"calling ``SourceContext.collect`` so a barrier emitted by that call "
+"observes the matching state."
+msgstr ""
+"该值必须可被 pickle。源通常应捕获下一条待读记录的位置，并在调用 ``SourceContext.collect`` "
+"前推进该位置，使该调用发出的屏障能够观察到匹配的状态。"
+
+msgid "Produce streaming records to Kafka and flush them at checkpoints."
+msgstr "向 Kafka 生成流式记录，并在检查点处刷新。"
+
+msgid ""
+"A successful flush means every record before the aligned checkpoint has a"
+" delivery acknowledgement from Kafka. Replaying an unacknowledged input "
+"can produce duplicates, so the sink provides at-least-once rather than "
+"exactly-once delivery."
+msgstr "刷新成功表示对齐检查点之前的每条记录都已收到 Kafka 的交付确认。重放未确认的输入可能产生重复，因此该接收器提供至少一次而非恰好一次交付。"
+
+msgid "Release resources after processing stops."
+msgstr "处理停止后释放资源。"
+
+msgid "Flush buffered records to the external system, if applicable."
+msgstr "如适用，将缓冲记录刷新到外部系统。"
+
+msgid ""
+"Writes the given value to the sink. This function is called for every "
+"record. The function is mutually exclusive with function 'flush'"
+msgstr "将给定值写入 sink。每条记录都会调用此函数；此函数与函数 'flush' 互斥。"
+
+msgid "Apache RocketMQ"
+msgstr "Apache RocketMQ"
+
+msgid "Continuously consume one Apache RocketMQ topic."
+msgstr "持续消费一个 Apache RocketMQ 主题。"
+
+msgid ""
+"``rocketmq-client-python`` exposes a callback-based PushConsumer rather "
+"than a seekable pull consumer. The callback copies the native message "
+"into a bounded Python queue and waits until the source thread has emitted"
+" it downstream before returning ``CONSUME_SUCCESS``. RocketMQ consumer-"
+"group progress is therefore the recovery boundary; the opaque Klein "
+"checkpoint state records only the connector-state version."
+msgstr ""
+"``rocketmq-client-python`` 公开的是基于回调的 "
+"PushConsumer，而不是可定位的拉取消费者。回调会将原生消息复制到有界 Python 队列中，并等待源线程将其发送到下游，然后才返回 "
+"``CONSUME_SUCCESS``。因此，RocketMQ 消费组进度就是恢复边界；不透明的 Klein 检查点状态只记录连接器状态版本。"
+
+msgid "Filesystem"
+msgstr "文件系统"
+
+msgid "Checkpoint-transactional file sink for local and object filesystems."
+msgstr "面向本地文件系统和对象文件系统的检查点事务型文件接收器。"
+
+msgid "Discard writer-local data that has not reached ``prepare_commit``."
+msgstr "丢弃尚未到达 ``prepare_commit`` 的 writer 本地数据。"
+
+msgid "Close the current transaction and return its committable."
+msgstr "关闭当前事务并返回其 committable。"
+
+msgid ""
+"``None`` means the transaction contains no output. The writer must begin "
+"a fresh transaction before accepting the next record."
+msgstr "``None`` 表示事务不包含输出。writer 必须先开始一个新事务，才能接受下一条记录。"
+
+msgid "Apache Iceberg"
+msgstr "Apache Iceberg"
+
+msgid "Checkpoint-transactional append sink for an existing Iceberg table."
+msgstr "面向现有 Iceberg 表的检查点事务型追加接收器。"
+
+msgid "Database API"
+msgstr "数据库 API"
+
+msgid "Write streaming records through a DB-API 2.0 ``executemany`` call."
+msgstr "通过 DB-API 2.0 ``executemany`` 调用写入流式记录。"
+
+msgid ""
+"Full batches and checkpoint flushes are committed independently. A commit"
+" can therefore become visible before its corresponding Klein checkpoint "
+"is durable, so recovery provides at-least-once delivery."
+msgstr "完整批次和检查点刷新会独立提交。因此，一次提交可能在对应的 Klein 检查点持久化之前可见，所以恢复提供至少一次交付。"
+
+msgid "Console"
+msgstr "控制台"
+
+msgid ""
+"See :doc:`../connectors/index` for installation, schemas, complete option"
+" tables, execution-mode support, delivery guarantees, and operational "
+"guidance."
+msgstr "有关安装、模式、完整选项表、执行模式支持、交付保证和运维指南，请参阅 :doc:`../connectors/index`。"
+
+msgid "Pipeline configuration and compatibility API"
+msgstr "管道配置与兼容性 API"
+
+msgid ""
+"Application code should build streams with module-level ``from_*`` and "
+"``read_*`` functions, attach terminal sinks, and call ``execute(\"job-"
+"name\")`` after the complete graph has been registered. ``KleinContext`` "
+"remains for advanced isolation; selective sink roots are documented in "
+"the advanced section of :doc:`../job-lifecycle`."
+msgstr ""
+"应用代码应使用模块级 ``from_*`` 和 ``read_*`` 函数构建流、附加终端接收器，并在完整计算图注册完毕后调用 "
+"``execute(\"job-name\")``。``KleinContext`` 仍用于高级隔离；选择性 sink 根用法见 "
+":doc:`../job-lifecycle` 的高级章节。"
+
+msgid "Advanced configuration and graph owner for one isolated pipeline."
+msgstr "单个隔离管道的高级配置和图所有者。"
+
+msgid ""
+"Ordinary applications use the module-level source, terminal, and "
+":func:`execute` APIs. Direct construction remains available when one "
+"process must build explicitly isolated pipelines."
+msgstr "普通应用使用模块级源、终端和 :func:`execute` API。当一个进程必须构建显式隔离的管道时，仍可直接构造。"
+
+msgid ":py:obj:`KleinContext.config <ray.klein.KleinContext.config>`"
+msgstr ":py:obj:`KleinContext.config <ray.klein.KleinContext.config>`"
+
+msgid "Mutable typed configuration owned by this execution context."
+msgstr "此执行上下文拥有的可变类型化配置。"
+
+msgid ":py:obj:`KleinContext.sinks <ray.klein.KleinContext.sinks>`"
+msgstr ":py:obj:`KleinContext.sinks <ray.klein.KleinContext.sinks>`"
+
+msgid "Terminal streams registered with this context."
+msgstr "向此上下文注册的终端流。"
+
+msgid ":py:obj:`KleinContext.configure <ray.klein.KleinContext.configure>`"
+msgstr ":py:obj:`KleinContext.configure <ray.klein.KleinContext.configure>`"
+
+msgid "Overlay explicit code configuration and return this context."
+msgstr "叠加显式代码配置并返回此上下文。"
+
+msgid ":py:obj:`KleinContext.data <ray.klein.KleinContext.data>`"
+msgstr ":py:obj:`KleinContext.data <ray.klein.KleinContext.data>`"
+
+msgid "Public, version-adaptive bridge to the installed ``ray.data`` API."
+msgstr "面向已安装 ``ray.data`` API 的公共版本适配桥接层。"
+
+msgid ":py:obj:`KleinContext.sql_session <ray.klein.KleinContext.sql_session>`"
+msgstr ":py:obj:`KleinContext.sql_session <ray.klein.KleinContext.sql_session>`"
+
+msgid "Return this context's persistent SQL session and temporary-view catalog."
+msgstr "返回此上下文持久化的 SQL 会话和临时视图目录。"
+
+msgid ":py:obj:`KleinContext.sql <ray.klein.KleinContext.sql>`"
+msgstr ":py:obj:`KleinContext.sql <ray.klein.KleinContext.sql>`"
+
+msgid "Build lazy SQL over DataStreams in this context."
+msgstr "在此上下文中基于 DataStreams 构建惰性 SQL。"
+
+msgid ":py:obj:`KleinContext.execute_sql <ray.klein.KleinContext.execute_sql>`"
+msgstr ":py:obj:`KleinContext.execute_sql <ray.klein.KleinContext.execute_sql>`"
+
+msgid "Execute Flink-style table DDL/DML or build a lazy SQL query."
+msgstr "执行 Flink 风格的表 DDL/DML，或构建惰性 SQL 查询。"
+
+msgid ":py:obj:`KleinContext.from_items <ray.klein.KleinContext.from_items>`"
+msgstr ":py:obj:`KleinContext.from_items <ray.klein.KleinContext.from_items>`"
+
+msgid ""
+"Create a :class:`~klein.api.DataStream` from a list of local Python "
+"objects as Single Column."
+msgstr "从本地 Python 对象列表创建单列 :class:`~klein.api.DataStream`。"
+
+msgid ":py:obj:`KleinContext.from_values <ray.klein.KleinContext.from_values>`"
+msgstr ":py:obj:`KleinContext.from_values <ray.klein.KleinContext.from_values>`"
+
+msgid "Creates a data stream from values with multiple column."
+msgstr "从多列值创建数据流。"
+
+msgid ":py:obj:`KleinContext.source <ray.klein.KleinContext.source>`"
+msgstr ":py:obj:`KleinContext.source <ray.klein.KleinContext.source>`"
+
+msgid "Create an input data stream with a SourceFunction"
+msgstr "使用 SourceFunction 创建输入数据流。"
+
+msgid ":py:obj:`KleinContext.read_kafka <ray.klein.KleinContext.read_kafka>`"
+msgstr ":py:obj:`KleinContext.read_kafka <ray.klein.KleinContext.read_kafka>`"
+
+msgid "Read a bounded Kafka snapshot or an unbounded Kafka stream."
+msgstr "读取有界 Kafka 快照或无界 Kafka 流。"
+
+msgid ":py:obj:`KleinContext.read_canal <ray.klein.KleinContext.read_canal>`"
+msgstr ":py:obj:`KleinContext.read_canal <ray.klein.KleinContext.read_canal>`"
+
+msgid "Read Canal FlatMessage JSON continuously from Kafka."
+msgstr "从 Kafka 持续读取 Canal FlatMessage JSON。"
+
+msgid ""
+":py:obj:`KleinContext.read_rocketmq "
+"<ray.klein.KleinContext.read_rocketmq>`"
+msgstr ""
+":py:obj:`KleinContext.read_rocketmq "
+"<ray.klein.KleinContext.read_rocketmq>`"
+
+msgid "Read an unbounded stream from an Apache RocketMQ topic."
+msgstr "从 Apache RocketMQ 主题读取无界流。"
+
+msgid ":py:obj:`KleinContext.execute <ray.klein.KleinContext.execute>`"
+msgstr ":py:obj:`KleinContext.execute <ray.klein.KleinContext.execute>`"
+
+msgid "Execute pending terminal sinks, or an explicitly selected subset."
+msgstr "执行待处理的终端接收器，或显式选定的子集。"
+
+msgid ":py:obj:`KleinContext.explain <ray.klein.KleinContext.explain>`"
+msgstr ":py:obj:`KleinContext.explain <ray.klein.KleinContext.explain>`"
+
+msgid "Get the execution plan of the data stream"
+msgstr "获取数据流的执行计划。"
+
+msgid ":py:obj:`configure <ray.klein.configure>`"
+msgstr ":py:obj:`configure <ray.klein.configure>`"
+
+msgid "Configure subsequent graph construction and return the effective config."
+msgstr "配置后续图构建，并返回生效的配置。"
+
+msgid ":py:obj:`get_config <ray.klein.get_config>`"
+msgstr ":py:obj:`get_config <ray.klein.get_config>`"
+
+msgid "Return the configuration used by the current module-level pipeline."
+msgstr "返回当前模块级管道使用的配置。"
+
+msgid ":py:obj:`execute <ray.klein.execute>`"
+msgstr ":py:obj:`execute <ray.klein.execute>`"
+
+msgid "Execute terminal operations registered on the module-level pipeline."
+msgstr "执行已注册到模块级管道的终端操作。"
+
+msgid ":py:obj:`explain <ray.klein.explain>`"
+msgstr ":py:obj:`explain <ray.klein.explain>`"
+
+msgid "Explain pending terminals, or explicit roots, without executing them."
+msgstr "解释待处理的终端操作或显式指定的根节点，而不执行它们。"
+
+msgid ":py:obj:`execute_sql <ray.klein.execute_sql>`"
+msgstr ":py:obj:`execute_sql <ray.klein.execute_sql>`"
+
+msgid ":py:obj:`register_scalar_function <ray.klein.register_scalar_function>`"
+msgstr ":py:obj:`register_scalar_function <ray.klein.register_scalar_function>`"
+
+msgid "Register a Python scalar function on the current pipeline SQL session."
+msgstr "在当前管道的 SQL 会话中注册 Python 标量函数。"
+
+msgid ":py:obj:`register_table_factory <ray.klein.register_table_factory>`"
+msgstr ":py:obj:`register_table_factory <ray.klein.register_table_factory>`"
+
+msgid "Register a Table DDL connector on the current pipeline session."
+msgstr "在当前管道会话中注册 Table DDL 连接器。"
+
+msgid ":py:obj:`from_items <ray.klein.from_items>`"
+msgstr ":py:obj:`from_items <ray.klein.from_items>`"
+
+msgid ":py:obj:`from_values <ray.klein.from_values>`"
+msgstr ":py:obj:`from_values <ray.klein.from_values>`"
+
+msgid ":py:obj:`from_ray_dataset <ray.klein.from_ray_dataset>`"
+msgstr ":py:obj:`from_ray_dataset <ray.klein.from_ray_dataset>`"
+
+msgid ":py:obj:`source <ray.klein.source>`"
+msgstr ":py:obj:`source <ray.klein.source>`"
+
+msgid ":py:obj:`dataset_factory <ray.klein.dataset_factory>`"
+msgstr ":py:obj:`dataset_factory <ray.klein.dataset_factory>`"
+
+msgid "Bind an installed ``ray.data`` source function to the current context."
+msgstr "将已安装的 ``ray.data`` 源函数绑定到当前上下文。"
+
+msgid ":py:obj:`read_kafka <ray.klein.read_kafka>`"
+msgstr ":py:obj:`read_kafka <ray.klein.read_kafka>`"
+
+msgid ":py:obj:`read_canal <ray.klein.read_canal>`"
+msgstr ":py:obj:`read_canal <ray.klein.read_canal>`"
+
+msgid ":py:obj:`read_rocketmq <ray.klein.read_rocketmq>`"
+msgstr ":py:obj:`read_rocketmq <ray.klein.read_rocketmq>`"
+
+msgid "Legacy ambient-context helpers"
+msgstr "旧版环境上下文辅助函数"
+
+msgid ""
+"``reset_context`` and ``enable_interactive_mode`` are deprecated. New "
+"code should not depend on terminal operations changing their return type."
+msgstr "``reset_context`` 和 ``enable_interactive_mode`` 已弃用。新代码不应依赖终端操作改变其返回类型。"
+
+msgid ":py:obj:`current_context <ray.klein.current_context>`"
+msgstr ":py:obj:`current_context <ray.klein.current_context>`"
+
+msgid ":py:obj:`install_context <ray.klein.install_context>`"
+msgstr ":py:obj:`install_context <ray.klein.install_context>`"
+
+msgid ":py:obj:`reset_context <ray.klein.reset_context>`"
+msgstr ":py:obj:`reset_context <ray.klein.reset_context>`"
+
+msgid ":py:obj:`KleinContext.current <ray.klein.KleinContext.current>`"
+msgstr ":py:obj:`KleinContext.current <ray.klein.KleinContext.current>`"
+
+msgid ":py:obj:`KleinContext.install <ray.klein.KleinContext.install>`"
+msgstr ":py:obj:`KleinContext.install <ray.klein.KleinContext.install>`"
+
+msgid ":py:obj:`KleinContext.reset <ray.klein.KleinContext.reset>`"
+msgstr ":py:obj:`KleinContext.reset <ray.klein.KleinContext.reset>`"
+
+msgid ""
+":py:obj:`KleinContext.enable_interactive_mode "
+"<ray.klein.KleinContext.enable_interactive_mode>`"
+msgstr ""
+":py:obj:`KleinContext.enable_interactive_mode "
+"<ray.klein.KleinContext.enable_interactive_mode>`"
+
+msgid "Enable interactive mode for the data stream context."
+msgstr "为数据流上下文启用交互模式。"
+
+msgid "DataStream API"
+msgstr "DataStream API"
+
+msgid ""
+"Represents a stream of data which applies a transformation executed by "
+"python."
+msgstr "表示一个通过 Python 执行转换的数据流。"
+
+msgid ""
+":py:obj:`DataStream.changelog_mode "
+"<ray.klein.api.data_stream.DataStream.changelog_mode>`"
+msgstr ""
+":py:obj:`DataStream.changelog_mode "
+"<ray.klein.api.data_stream.DataStream.changelog_mode>`"
+
+msgid "Changes this stream can emit when executed as a dynamic table."
+msgstr "作为动态表执行时，此流可以发出的变更类型。"
+
+msgid ":py:obj:`DataStream.map <ray.klein.api.data_stream.DataStream.map>`"
+msgstr ":py:obj:`DataStream.map <ray.klein.api.data_stream.DataStream.map>`"
+
+msgid "Applies a Map transformation on a :class:`DataStream`."
+msgstr "对 :class:`DataStream` 应用 Map 转换。"
+
+msgid ""
+":py:obj:`DataStream.map_batches "
+"<ray.klein.api.data_stream.DataStream.map_batches>`"
+msgstr ""
+":py:obj:`DataStream.map_batches "
+"<ray.klein.api.data_stream.DataStream.map_batches>`"
+
+msgid "Applies a MapBatches transformation on a :class:`DataStream`."
+msgstr "对 :class:`DataStream` 应用 MapBatches 转换。"
+
+msgid ""
+":py:obj:`DataStream.flat_map "
+"<ray.klein.api.data_stream.DataStream.flat_map>`"
+msgstr ""
+":py:obj:`DataStream.flat_map "
+"<ray.klein.api.data_stream.DataStream.flat_map>`"
+
+msgid "Applies a FlatMap transformation on a :class:`DataStream`."
+msgstr "对 :class:`DataStream` 应用 FlatMap 转换。"
+
+msgid ""
+":py:obj:`DataStream.map_reduce "
+"<ray.klein.api.data_stream.DataStream.map_reduce>`"
+msgstr ""
+":py:obj:`DataStream.map_reduce "
+"<ray.klein.api.data_stream.DataStream.map_reduce>`"
+
+msgid ""
+"Applies three transformations on a :class:`DataStream`: FlatMap-like "
+"preprocessing --Adaptive--> batch processing --KeyBy--> Reduce-like "
+"postprocessing"
+msgstr ""
+"对 :class:`DataStream` 应用三项转换：类似 FlatMap 的预处理 --Adaptive--> 批处理 --KeyBy-->"
+" 类似 Reduce 的后处理。"
+
+msgid ":py:obj:`DataStream.filter <ray.klein.api.data_stream.DataStream.filter>`"
+msgstr ":py:obj:`DataStream.filter <ray.klein.api.data_stream.DataStream.filter>`"
+
+msgid "Applies a Filter transformation on a :class:`DataStream`."
+msgstr "对 :class:`DataStream` 应用 Filter 转换。"
+
+msgid ":py:obj:`DataStream.union <ray.klein.api.data_stream.DataStream.union>`"
+msgstr ":py:obj:`DataStream.union <ray.klein.api.data_stream.DataStream.union>`"
+
+msgid "Apply union transformations to this stream by merging data stream"
+msgstr "通过合并数据流对当前流应用 union 转换。"
+
+msgid ""
+":py:obj:`DataStream.assign_timestamps_and_watermarks "
+"<ray.klein.api.data_stream.DataStream.assign_timestamps_and_watermarks>`"
+msgstr ""
+":py:obj:`DataStream.assign_timestamps_and_watermarks "
+"<ray.klein.api.data_stream.DataStream.assign_timestamps_and_watermarks>`"
+
+msgid "Assign event timestamps and emit ordered Watermark/Idle/Active controls."
+msgstr "分配事件时间戳，并按序发出 Watermark/Idle/Active 控制消息。"
+
+msgid ":py:obj:`DataStream.key_by <ray.klein.api.data_stream.DataStream.key_by>`"
+msgstr ":py:obj:`DataStream.key_by <ray.klein.api.data_stream.DataStream.key_by>`"
+
+msgid "Hash-partition this branch and expose managed keyed operations."
+msgstr "对此分支进行哈希分区，并提供托管键控操作。"
+
+msgid ""
+":py:obj:`DataStream.group_by "
+"<ray.klein.api.data_stream.DataStream.group_by>`"
+msgstr ""
+":py:obj:`DataStream.group_by "
+"<ray.klein.api.data_stream.DataStream.group_by>`"
+
+msgid ""
+"Creates a new :class:`KeyedStream` that uses the provided key to "
+"partition data stream by key."
+msgstr "创建新的 :class:`KeyedStream`，使用给定键对数据流进行分区。"
+
+msgid ":py:obj:`DataStream.join <ray.klein.api.data_stream.DataStream.join>`"
+msgstr ":py:obj:`DataStream.join <ray.klein.api.data_stream.DataStream.join>`"
+
+msgid "Create a keyed event-time interval join over two streaming branches."
+msgstr "在两个流式分支上创建键控事件时间区间联接。"
+
+msgid ""
+":py:obj:`DataStream.interval_join "
+"<ray.klein.api.data_stream.DataStream.interval_join>`"
+msgstr ""
+":py:obj:`DataStream.interval_join "
+"<ray.klein.api.data_stream.DataStream.interval_join>`"
+
+msgid ""
+":py:obj:`DataStream.broadcast "
+"<ray.klein.api.data_stream.DataStream.broadcast>`"
+msgstr ""
+":py:obj:`DataStream.broadcast "
+"<ray.klein.api.data_stream.DataStream.broadcast>`"
+
+msgid ""
+"Sets the partitioning of the :class:`DataStream` so that the output "
+"elements are broadcast to every parallel instance of the next operation."
+msgstr "设置 :class:`DataStream` 的分区方式，使输出元素广播到下一操作的每个并行实例。"
+
+msgid ""
+":py:obj:`DataStream.rescale "
+"<ray.klein.api.data_stream.DataStream.rescale>`"
+msgstr ""
+":py:obj:`DataStream.rescale "
+"<ray.klein.api.data_stream.DataStream.rescale>`"
+
+msgid ""
+"Sets the partitioning of the :class:`DataStream` so that the output "
+"elements are rescaled to parallel instance of the next operation."
+msgstr "设置 :class:`DataStream` 的分区方式，使输出元素重新缩放到下一操作的并行实例。"
+
+msgid ""
+":py:obj:`DataStream.round_robin "
+"<ray.klein.api.data_stream.DataStream.round_robin>`"
+msgstr ""
+":py:obj:`DataStream.round_robin "
+"<ray.klein.api.data_stream.DataStream.round_robin>`"
+
+msgid ""
+"Sets the partitioning of the :class:`DataStream` so that the output "
+"elements are round-robin to parallel instance of the next operation."
+msgstr "设置 :class:`DataStream` 的分区方式，使输出元素以轮询方式发送到下一操作的并行实例。"
+
+msgid ""
+":py:obj:`DataStream.adaptive_shuffle "
+"<ray.klein.api.data_stream.DataStream.adaptive_shuffle>`"
+msgstr ""
+":py:obj:`DataStream.adaptive_shuffle "
+"<ray.klein.api.data_stream.DataStream.adaptive_shuffle>`"
+
+msgid ""
+"Sets the partitioning of the :class:`DataStream` so that the output "
+"elements are adaptive shuffle to parallel instance of the next operation."
+msgstr "设置 :class:`DataStream` 的分区方式，使输出元素自适应混洗到下一操作的并行实例。"
+
+msgid ""
+":py:obj:`DataStream.partition_by "
+"<ray.klein.api.data_stream.DataStream.partition_by>`"
+msgstr ""
+":py:obj:`DataStream.partition_by "
+"<ray.klein.api.data_stream.DataStream.partition_by>`"
+
+msgid ""
+"Sets the partitioning of the :class:`DataStream` so that the elements of "
+"stream are partitioned by specified partition function."
+msgstr "设置 :class:`DataStream` 的分区方式，使流元素按指定分区函数进行分区。"
+
+msgid ":py:obj:`DataStream.data <ray.klein.api.data_stream.DataStream.data>`"
+msgstr ":py:obj:`DataStream.data <ray.klein.api.data_stream.DataStream.data>`"
+
+msgid "Public, version-adaptive bridge to ``ray.data.Dataset`` methods."
+msgstr "面向 ``ray.data.Dataset`` 方法的公共版本适配桥接层。"
+
+msgid ":py:obj:`DataStream.sql <ray.klein.api.data_stream.DataStream.sql>`"
+msgstr ":py:obj:`DataStream.sql <ray.klein.api.data_stream.DataStream.sql>`"
+
+msgid "Build lazy SQL with this bounded stream registered as ``self`` by default."
+msgstr "构建惰性 SQL；默认将此有界流注册为 ``self``。"
+
+msgid ":py:obj:`DataStream.show <ray.klein.api.data_stream.DataStream.show>`"
+msgstr ":py:obj:`DataStream.show <ray.klein.api.data_stream.DataStream.show>`"
+
+msgid "Print up to the given number of rows from the :class:`DataStream`."
+msgstr "最多打印 :class:`DataStream` 中指定数量的行。"
+
+msgid ""
+":py:obj:`DataStream.take_all "
+"<ray.klein.api.data_stream.DataStream.take_all>`"
+msgstr ""
+":py:obj:`DataStream.take_all "
+"<ray.klein.api.data_stream.DataStream.take_all>`"
+
+msgid "Attach a sink that collects all rows from this :class:`DataStream`."
+msgstr "附加一个收集此 :class:`DataStream` 全部行的接收器。"
+
+msgid ":py:obj:`DataStream.take <ray.klein.api.data_stream.DataStream.take>`"
+msgstr ":py:obj:`DataStream.take <ray.klein.api.data_stream.DataStream.take>`"
+
+msgid "Attach a sink that collects up to ``limit`` rows."
+msgstr "附加一个最多收集 ``limit`` 行的接收器。"
+
+msgid ":py:obj:`DataStream.schema <ray.klein.api.data_stream.DataStream.schema>`"
+msgstr ":py:obj:`DataStream.schema <ray.klein.api.data_stream.DataStream.schema>`"
+
+msgid "Return the schema of the datastream."
+msgstr "返回数据流的 schema。"
+
+msgid ""
+":py:obj:`DataStream.write_files "
+"<ray.klein.api.data_stream.DataStream.write_files>`"
+msgstr ""
+":py:obj:`DataStream.write_files "
+"<ray.klein.api.data_stream.DataStream.write_files>`"
+
+msgid "Write a stream to checkpoint-transactional part files."
+msgstr "将流写入受检查点事务保护的分片文件。"
+
+msgid ""
+":py:obj:`DataStream.write_json "
+"<ray.klein.api.data_stream.DataStream.write_json>`"
+msgstr ""
+":py:obj:`DataStream.write_json "
+"<ray.klein.api.data_stream.DataStream.write_json>`"
+
+msgid "Write newline-delimited JSON files in batch or streaming mode."
+msgstr "以批处理或流处理模式写入按行分隔的 JSON 文件。"
+
+msgid ""
+":py:obj:`DataStream.write_csv "
+"<ray.klein.api.data_stream.DataStream.write_csv>`"
+msgstr ""
+":py:obj:`DataStream.write_csv "
+"<ray.klein.api.data_stream.DataStream.write_csv>`"
+
+msgid "Write CSV files in batch or streaming mode."
+msgstr "以批处理或流处理模式写入 CSV 文件。"
+
+msgid ""
+":py:obj:`DataStream.write_parquet "
+"<ray.klein.api.data_stream.DataStream.write_parquet>`"
+msgstr ""
+":py:obj:`DataStream.write_parquet "
+"<ray.klein.api.data_stream.DataStream.write_parquet>`"
+
+msgid "Write Parquet files in batch or streaming mode."
+msgstr "以批处理或流处理模式写入 Parquet 文件。"
+
+msgid ""
+":py:obj:`DataStream.write_iceberg "
+"<ray.klein.api.data_stream.DataStream.write_iceberg>`"
+msgstr ""
+":py:obj:`DataStream.write_iceberg "
+"<ray.klein.api.data_stream.DataStream.write_iceberg>`"
+
+msgid "Write this stream to an existing Iceberg table."
+msgstr "将此流写入现有 Iceberg 表。"
+
+msgid ""
+":py:obj:`DataStream.write_text "
+"<ray.klein.api.data_stream.DataStream.write_text>`"
+msgstr ""
+":py:obj:`DataStream.write_text "
+"<ray.klein.api.data_stream.DataStream.write_text>`"
+
+msgid "Write one-column UTF-8 text files in streaming mode."
+msgstr "以流处理模式写入单列 UTF-8 文本文件。"
+
+msgid ""
+":py:obj:`DataStream.write_sql "
+"<ray.klein.api.data_stream.DataStream.write_sql>`"
+msgstr ""
+":py:obj:`DataStream.write_sql "
+"<ray.klein.api.data_stream.DataStream.write_sql>`"
+
+msgid "Write this stream using a DB-API 2.0 SQL sink."
+msgstr "使用 DB-API 2.0 SQL sink 写入此流。"
+
+msgid ""
+":py:obj:`DataStream.write_kafka "
+"<ray.klein.api.data_stream.DataStream.write_kafka>`"
+msgstr ""
+":py:obj:`DataStream.write_kafka "
+"<ray.klein.api.data_stream.DataStream.write_kafka>`"
+
+msgid "Write records to Kafka in batch or streaming execution."
+msgstr "以批处理或流处理执行方式将记录写入 Kafka。"
+
+msgid ""
+":py:obj:`DataStream.write_redis "
+"<ray.klein.api.data_stream.DataStream.write_redis>`"
+msgstr ""
+":py:obj:`DataStream.write_redis "
+"<ray.klein.api.data_stream.DataStream.write_redis>`"
+
+msgid "Write records to Redis using extracted keys and values."
+msgstr "使用提取出的键和值将记录写入 Redis。"
+
+msgid ":py:obj:`DataStream.write <ray.klein.api.data_stream.DataStream.write>`"
+msgstr ":py:obj:`DataStream.write <ray.klein.api.data_stream.DataStream.write>`"
+
+msgid "Create a StreamSink with the given sink function."
+msgstr "使用给定 sink 函数创建 StreamSink。"
+
+msgid "Event time API"
+msgstr "事件时间 API"
+
+msgid ":py:obj:`WatermarkStrategy <ray.klein.WatermarkStrategy>`"
+msgstr ":py:obj:`WatermarkStrategy <ray.klein.WatermarkStrategy>`"
+
+msgid "Assign event timestamps and generate bounded-out-of-order watermarks."
+msgstr "分配事件时间戳并生成有界乱序水位线。"
+
+msgid ""
+":py:obj:`WatermarkStrategy.for_monotonous_timestamps "
+"<ray.klein.WatermarkStrategy.for_monotonous_timestamps>`"
+msgstr ""
+":py:obj:`WatermarkStrategy.for_monotonous_timestamps "
+"<ray.klein.WatermarkStrategy.for_monotonous_timestamps>`"
+
+msgid ""
+":py:obj:`WatermarkStrategy.for_bounded_out_of_orderness "
+"<ray.klein.WatermarkStrategy.for_bounded_out_of_orderness>`"
+msgstr ""
+":py:obj:`WatermarkStrategy.for_bounded_out_of_orderness "
+"<ray.klein.WatermarkStrategy.for_bounded_out_of_orderness>`"
+
+msgid ""
+":py:obj:`WatermarkStrategy.with_idleness "
+"<ray.klein.WatermarkStrategy.with_idleness>`"
+msgstr ""
+":py:obj:`WatermarkStrategy.with_idleness "
+"<ray.klein.WatermarkStrategy.with_idleness>`"
+
+msgid ""
+":py:obj:`SourceContext.collect "
+"<ray.klein.api.source_context.SourceContext.collect>`"
+msgstr ""
+":py:obj:`SourceContext.collect "
+"<ray.klein.api.source_context.SourceContext.collect>`"
+
+msgid "Emit one record in source order."
+msgstr "按源顺序发出一条记录。"
+
+msgid ""
+":py:obj:`SourceContext.on_idle "
+"<ray.klein.api.source_context.SourceContext.on_idle>`"
+msgstr ""
+":py:obj:`SourceContext.on_idle "
+"<ray.klein.api.source_context.SourceContext.on_idle>`"
+
+msgid "Signal that a source poll produced no data."
+msgstr "通知运行时一次源轮询未产生数据。"
+
+msgid ""
+":py:obj:`SourceContext.emit_watermark "
+"<ray.klein.api.source_context.SourceContext.emit_watermark>`"
+msgstr ""
+":py:obj:`SourceContext.emit_watermark "
+"<ray.klein.api.source_context.SourceContext.emit_watermark>`"
+
+msgid "Emit explicit event-time progress after all preceding source data."
+msgstr "在此前所有源数据之后发出显式事件时间进度。"
+
+msgid ""
+":py:obj:`SourceContext.mark_idle "
+"<ray.klein.api.source_context.SourceContext.mark_idle>`"
+msgstr ""
+":py:obj:`SourceContext.mark_idle "
+"<ray.klein.api.source_context.SourceContext.mark_idle>`"
+
+msgid "Exclude this source input from downstream watermark calculation."
+msgstr "在下游水位线计算中排除此源输入。"
+
+msgid ""
+":py:obj:`SourceContext.mark_active "
+"<ray.klein.api.source_context.SourceContext.mark_active>`"
+msgstr ""
+":py:obj:`SourceContext.mark_active "
+"<ray.klein.api.source_context.SourceContext.mark_active>`"
+
+msgid "Reactivate an idle source input before it emits more data."
+msgstr "在空闲源输入继续发出数据之前将其重新激活。"
+
+msgid "Exceptions and failure handling"
+msgstr "异常与故障处理"
+
+msgid ""
+"Klein validates graph and connector arguments early with standard Python "
+"exceptions. Distributed runtime failures are retained by the job and "
+"surfaced through :class:`~ray.klein.JobHandle`, the CLI, logs, and state "
+"snapshots."
+msgstr ""
+"Klein 会尽早使用标准 Python 异常验证图和连接器参数。分布式运行时故障由作业保留，并通过 "
+":class:`~ray.klein.JobHandle`、CLI、日志和状态快照呈现。"
+
+msgid "Public exception types"
+msgstr "公共异常类型"
+
+msgid "Base exception for Klein for Ray failures."
+msgstr "Klein for Ray 故障的基础异常。"
+
+msgid "Raised when a Klein SQL query or its table bindings are invalid."
+msgstr "Klein SQL 查询或其表绑定无效时引发。"
+
+msgid ""
+"``RayDataAPIError`` is documented with the :doc:`Ray Data adapter "
+"<ray_data>` because it reports dynamic factory and Dataset-method "
+"contract violations."
+msgstr ""
+"``RayDataAPIError`` 与 :doc:`Ray Data 适配器 <ray_data>` 一同记录，因为它报告动态工厂和 "
+"Dataset 方法的契约违规。"
+
+msgid "Raised when a state update loses an optimistic-version race."
+msgstr "状态更新在乐观版本竞争中失败时引发。"
+
+msgid "Common exception families"
+msgstr "常见异常系列"
+
+msgid "``TypeError``"
+msgstr "``TypeError``"
+
+msgid ""
+"An argument or user record has the wrong Python type. Correct the graph, "
+"connector input, state descriptor, or configuration value before "
+"retrying."
+msgstr "参数或用户记录使用了错误的 Python 类型。请先修正图、连接器输入、状态描述符或配置值，再重试。"
+
+msgid "``ValueError``"
+msgstr "``ValueError``"
+
+msgid ""
+"A value is malformed, outside its allowed range, or represents an "
+"unsupported combination. SQL planning uses the more specific "
+":class:`~ray.klein.SQLQueryError`, which is also a ``ValueError``."
+msgstr ""
+"值的格式错误、超出允许范围或表示不受支持的组合。SQL 规划使用更具体的 "
+":class:`~ray.klein.SQLQueryError`，它也是 ``ValueError``。"
+
+msgid "``ModuleNotFoundError``"
+msgstr "``ModuleNotFoundError``"
+
+msgid ""
+"An optional integration is missing. Install the connector extra in the "
+"driver and every eligible worker; do not catch this and continue with a "
+"partially configured graph."
+msgstr "缺少可选集成。请在驱动程序和每个符合条件的工作节点中安装连接器额外依赖；不要捕获该异常后继续运行仅配置了一部分的图。"
+
+msgid "``RayDataAPIError``"
+msgstr "``RayDataAPIError``"
+
+msgid ""
+"A dynamic ``ray.klein.read_*`` or ``stream.data`` operation is "
+"unavailable or used in the wrong adapter category for the installed Ray "
+"version."
+msgstr ""
+"对于已安装的 Ray 版本，动态 ``ray.klein.read_*`` 或 ``stream.data`` "
+"操作不可用，或者被用在错误的适配器类别中。"
+
+msgid "``StateConflictError``"
+msgstr "``StateConflictError``"
+
+msgid ""
+"A managed-state declaration conflicts with an existing state name or "
+"contract. Treat this as an application compatibility error rather than a "
+"transient worker failure."
+msgstr "托管状态声明与现有状态名称或契约冲突。应将其视为应用兼容性错误，而不是暂时的工作节点故障。"
+
+msgid "``KleinError``"
+msgstr "``KleinError``"
+
+msgid ""
+"A submitted job reached a failure boundary. ``LiveJobHandle.wait()`` "
+"raises this with the retained job failure detail. The collection-specific"
+" ``get()`` path does not perform that explicit failed-status check; call "
+"``wait()`` or inspect ``status`` when failure propagation matters."
+msgstr ""
+"已提交的作业到达失败边界。``LiveJobHandle.wait()`` 会抛出此异常，并附带保留的作业失败详情。面向收集的 "
+"``get()`` 路径不会执行该显式失败状态检查；当需要传播失败时，请调用 ``wait()`` 或检查 ``status``。"
+
+msgid "``TimeoutError``"
+msgstr "``TimeoutError``"
+
+msgid ""
+"A client wait, deployment, data-plane drain, or control operation "
+"exceeded its time budget. A control timeout does not prove the remote "
+"operation was rolled back; refresh the job snapshot before retrying."
+msgstr "客户端等待、部署、数据平面排空或控制操作超出时间预算。控制超时并不能证明远程操作已经回滚；重试前请刷新作业快照。"
+
+msgid "``FileNotFoundError`` or ``OSError``"
+msgstr "``FileNotFoundError`` 或 ``OSError``"
+
+msgid ""
+"A checkpoint object, local dependency, filesystem path, or external "
+"resource is unavailable. Verify the URI, credentials, shared visibility, "
+"and checkpoint completion marker before choosing another restore point."
+msgstr "检查点对象、本地依赖、文件系统路径或外部资源不可用。选择其他恢复点之前，请验证 URI、凭据、共享可见性和检查点完成标记。"
+
+msgid "Retry guidance"
+msgstr "重试指南"
+
+msgid ""
+"Do not retry every exception at the driver. Native streaming workers and "
+"the JobManager already apply the configured restart policy to eligible "
+"task failures. Repeated driver submissions can create another job "
+"namespace or duplicate external effects."
+msgstr ""
+"不要在驱动程序中重试每一个异常。原生流处理工作节点和 JobManager "
+"已经对符合条件的任务故障应用配置的重启策略。重复从驱动程序提交可能创建另一个作业命名空间，或造成重复的外部副作用。"
+
+msgid ""
+"Correct ``TypeError``, ``ValueError``, ``SQLQueryError``, "
+"``RayDataAPIError``, and missing-dependency failures in code or "
+"configuration."
+msgstr ""
+"请在代码或配置中修正 "
+"``TypeError``、``ValueError``、``SQLQueryError``、``RayDataAPIError`` "
+"和缺少依赖的故障。"
+
+msgid ""
+"For a live-job ``KleinError``, inspect the retained failure, task status,"
+" and latest completed checkpoint before resubmission."
+msgstr "对于实时作业的 ``KleinError``，请在重新提交前检查保留的故障、任务状态和最新完成的检查点。"
+
+msgid ""
+"After a client-side timeout from cancellation or rescaling, query status "
+"before sending another control request."
+msgstr "取消或伸缩发生客户端侧超时后，请先查询状态，再发送另一控制请求。"
+
+msgid ""
+"Retry an external connector error only when its connector guide defines "
+"the source-position or sink-idempotency boundary."
+msgstr "仅当相应连接器指南定义了源位置或接收器幂等性边界时，才重试外部连接器错误。"
+
+msgid ""
+"See :doc:`../troubleshooting` for symptom-oriented diagnosis and :doc"
+":`../delivery-semantics` for the duplicate/loss consequences of recovery."
+msgstr ""
+"有关面向症状的诊断，请参阅 :doc:`../troubleshooting`；有关恢复造成的重复/丢失后果，请参阅 :doc"
+":`../delivery-semantics`。"
+
+msgid "Message format API"
+msgstr "消息格式 API"
+
+msgid "Canal JSON"
+msgstr "Canal JSON"
+
+msgid "Decode one Canal ``FlatMessage`` JSON value."
+msgstr "解码一个 Canal ``FlatMessage`` JSON 值。"
+
+msgid ""
+"Canal represents row values as strings (or ``null``); this decoder keeps "
+"those values unchanged. UPDATE ``old`` entries contain only the columns "
+"that changed, so they are overlaid on the corresponding full ``data`` row"
+" to reconstruct the before image."
+msgstr ""
+"Canal 将行值表示为字符串（或 ``null``）；该解码器保持这些值不变。UPDATE 的 ``old`` "
+"条目只包含发生变化的列，因此会将它们覆盖到相应的完整 ``data`` 行上，以重建变更前镜像。"
+
+msgid ""
+"The decoder preserves Canal's string-or-null column representation and "
+"returns zero or more :class:`~ray.klein.ChangelogRow` values. See "
+":doc:`../connectors/canal` for the input envelope, metadata columns, DDL "
+"policy, ordering, and checkpoint behavior."
+msgstr ""
+"该解码器保留 Canal 的字符串或 null 列表示，并返回零个或多个 :class:`~ray.klein.ChangelogRow` "
+"值。有关输入信封、元数据列、DDL 策略、顺序和检查点行为，请参阅 :doc:`../connectors/canal`。"
+
+msgid "Job lifecycle API"
+msgstr "作业生命周期 API"
+
+msgid ""
+"``execute()`` returns a :class:`JobHandle`. Bounded jobs may already be "
+"complete when the handle is returned; streaming jobs remain live until "
+"the source finishes, the job fails, or the caller cancels it. Application"
+" code should program against ``JobHandle`` rather than its concrete "
+"implementation."
+msgstr ""
+"``execute()`` 返回 "
+":class:`JobHandle`。返回句柄时，有界作业可能已经完成；流式作业则会一直运行，直到源结束、作业失败或调用方取消作业。应用代码应面向"
+" ``JobHandle`` 编程，而不应依赖其具体实现。"
+
+msgid "The result of :meth:`JobClient.execute` — a job to observe and control."
+msgstr ":meth:`JobClient.execute` 的结果——一个可观测、可控制的作业。"
+
+msgid ""
+"A handle is the *running (or finished) job*, never the builder. The two "
+"concrete forms — :class:`LiveJobHandle` (a submitted streaming job backed"
+" by a JobManager actor) and :class:`CompletedJobHandle` (an already-"
+"finished batch / compile-only run with an in-memory result) — are "
+"siblings, so each only implements what is true for it."
+msgstr ""
+"句柄表示的是 *正在运行（或已经结束）的作业* ，绝不是构建器。两种具体形式—— :class:`LiveJobHandle` （由 "
+"JobManager actor 支持的已提交流式作业）和 :class:`CompletedJobHandle` "
+"（带内存结果、已经完成的批处理或仅编译运行）——互为同级类型，因此各自只实现对自身成立的能力。"
+
+msgid "Cancel the job."
+msgstr "取消作业。"
+
+msgid "Block and return the result of one result-producing terminal."
+msgstr "阻塞并返回单个产生结果的终端操作的结果。"
+
+msgid ""
+"Use :meth:`wait` for jobs containing side-effect terminals or multiple "
+"sinks. A collecting ``take``/``take_all`` terminal must execute alone."
+msgstr ""
+"对于包含副作用终端操作或多个 sink 的作业，请使用 :meth:`wait`。收集型 ``take``/``take_all`` "
+"终端操作必须单独执行。"
+
+msgid "Per-job Ray namespace."
+msgstr "每个作业独立的 Ray 命名空间。"
+
+msgid "Current job status."
+msgstr "当前作业状态。"
+
+msgid "Block until the job reaches a terminal state."
+msgstr "阻塞直到作业进入终止状态。"
+
+msgid "Lifecycle states exposed by a Klein job handle."
+msgstr "Klein 作业句柄公开的生命周期状态。"
+
+msgid "Typical control flow"
+msgstr "典型控制流程"
+
+msgid ""
+"``wait()`` blocks until a terminal state and is the normal choice for "
+"jobs with one or more side-effect sinks. ``get()`` is for one result-"
+"producing terminal; ``take()`` or ``take_all()`` must be executed alone. "
+"``cancel(timeout=...)`` requests a cooperative stop and returns whether "
+"cancellation completed inside the time budget. A live handle's "
+"``namespace`` is the Ray namespace accepted by the ``ray-klein status``, "
+"``attach``, and ``stop`` commands."
+msgstr ""
+"``wait()`` 会阻塞到终止状态，是包含一个或多个副作用 sink 的作业的常规选择。``get()`` 用于单个产生结果的终端操作；"
+"``take()`` 或 ``take_all()`` 必须单独执行。``cancel(timeout=...)`` 请求协作式停止，并返回取消是否在时间预算内完成。"
+"实时句柄的 ``namespace`` 是 ``ray-klein status``、``attach`` 和 ``stop`` 命令接受的 Ray 命名空间。"
+
+msgid "Metrics API"
+msgstr "指标 API"
+
+msgid ""
+"User functions receive a :class:`MetricGroup` through their runtime "
+"context. Lifecycle sources and sinks receive that context in ``open()``; "
+"a callable transform class can request a constructor keyword named "
+"``runtime_context``. Register metrics once during worker initialization "
+"and update the returned task-local handle while processing. Reusing one "
+"name with a different kind, description, histogram boundary set, or label"
+" set raises ``ValueError``."
+msgstr ""
+"用户函数通过运行时上下文接收 :class:`MetricGroup`。生命周期源和 sink 在 ``open()`` 中接收该上下文；可调用转换类可以请求名为 "
+"``runtime_context`` 的构造函数关键字参数。请在 worker 初始化期间只注册一次指标，并在处理期间更新返回的任务本地句柄。若以不同的种类、"
+"描述、直方图边界集合或标签集合复用同一名称，将引发 ``ValueError``。"
+
+msgid "A scope that adds stable labels and a prefix to Ray metrics."
+msgstr "为 Ray 指标添加稳定标签和前缀的作用域。"
+
+msgid "Create a child metric group."
+msgstr "创建子指标组。"
+
+msgid "Return all inherited labels."
+msgstr "返回所有继承的标签。"
+
+msgid "Register a user-defined counter."
+msgstr "注册用户定义的 counter。"
+
+msgid "Register a user-defined gauge."
+msgstr "注册用户定义的 gauge。"
+
+msgid "Register a user-defined histogram."
+msgstr "注册用户定义的 histogram。"
+
+msgid "Return the fully qualified Ray metric name."
+msgstr "返回完全限定的 Ray 指标名称。"
+
+msgid "Return the local group name."
+msgstr "返回本地组名称。"
+
+msgid "Metric metadata exposed by Ray."
+msgstr "Ray 公开的指标元数据。"
+
+msgid "Task-local readable mirror; Ray's metric handle is write-only."
+msgstr "任务本地的可读镜像；Ray 的指标句柄仅支持写入。"
+
+msgid "Reset a data-driven gauge so its last sample is not read as live data."
+msgstr "重置数据驱动的 gauge，避免将其最后一个样本误读为实时数据。"
+
+msgid "Observe elapsed monotonic time and return the duration in milliseconds."
+msgstr "观测经过的单调时间，并返回以毫秒为单位的时长。"
+
+msgid "Context manager for synchronous operations measured in milliseconds."
+msgstr "用于以毫秒计量同步操作的上下文管理器。"
+
+msgid "An enumeration."
+msgstr "一个枚举。"
+
+msgid "The stable contract of one built-in metric."
+msgstr "一个内置指标的稳定契约。"
+
+msgid ""
+"Metric names deliberately omit Prometheus suffixes such as ``_total``. "
+"Ray's exporter adds those suffixes for counters."
+msgstr "指标名称有意省略 ``_total`` 等 Prometheus 后缀。Ray 导出器会为计数器添加这些后缀。"
+
+msgid ""
+"``JobMetricGroup``, ``TaskMetricGroup``, and ``OperatorMetricGroup`` are "
+"runtime-owned scopes. Application code should use the group supplied by "
+"the runtime instead of constructing those classes. ``KleinMetrics`` is "
+"the canonical built-in catalog used by instrumentation and tests."
+msgstr ""
+"``JobMetricGroup``、``TaskMetricGroup`` 和 ``OperatorMetricGroup`` "
+"是运行时拥有的作用域。应用代码应使用运行时提供的组，而不是构造这些类。``KleinMetrics`` 是插桩和测试使用的规范内置目录。"
+
+msgid ""
+"See :doc:`../observability` for prefixes, labels, built-in metric names, "
+"Prometheus queries, cardinality rules, and interpretation."
+msgstr "有关前缀、标签、内置指标名称、Prometheus 查询、基数规则和解读，请参阅 :doc:`../observability`。"
+
+msgid "Observability and control API"
+msgstr "可观测性与控制 API"
+
+msgid ""
+"The state API returns JSON-safe dictionaries intended for automation and "
+"dashboard adapters. Call ``ray.init(address=\"auto\")`` before querying a"
+" remote cluster."
+msgstr ""
+"状态 API 返回适用于自动化和 Dashboard 适配器的 JSON 安全字典。查询远程集群前，请调用 "
+"``ray.init(address=\"auto\")``。"
+
+msgid ":py:obj:`list_job_snapshots <ray.klein.list_job_snapshots>`"
+msgstr ":py:obj:`list_job_snapshots <ray.klein.list_job_snapshots>`"
+
+msgid "Return current and retained Klein job snapshots from this Ray cluster."
+msgstr "返回此 Ray 集群中当前及保留的 Klein 作业快照。"
+
+msgid ":py:obj:`get_job_snapshot <ray.klein.get_job_snapshot>`"
+msgstr ":py:obj:`get_job_snapshot <ray.klein.get_job_snapshot>`"
+
+msgid "Return one job snapshot, or ``None`` when the job is unknown."
+msgstr "返回一个作业快照；作业未知时返回 ``None``。"
+
+msgid ":py:obj:`rescale_operator <ray.klein.rescale_operator>`"
+msgstr ":py:obj:`rescale_operator <ray.klein.rescale_operator>`"
+
+msgid "Change one published operator's parallelism."
+msgstr "更改一个已发布算子的并行度。"
+
+msgid ":py:obj:`cancel_job <ray.klein.cancel_job>`"
+msgstr ":py:obj:`cancel_job <ray.klein.cancel_job>`"
+
+msgid "Cancel one published job by ID and wait for the state actor response."
+msgstr "按 ID 取消一个已发布作业，并等待状态 actor 响应。"
+
+msgid ":py:obj:`configure_logging <ray.klein.configure_logging>`"
+msgstr ":py:obj:`configure_logging <ray.klein.configure_logging>`"
+
+msgid "Configure Klein's logger without modifying application/root handlers."
+msgstr "配置 Klein 日志记录器，而不修改应用或根处理器。"
+
+msgid ""
+"``list_job_snapshots()`` returns current jobs plus retained terminal "
+"history. ``get_job_snapshot(job_id)`` returns one snapshot or ``None``. "
+"``rescale_operator(job_id, operator_id, parallelism, timeout=60)`` "
+"performs a local, barrier-aligned parallelism change when the operator "
+"supports it and returns a JSON-safe operation result whose status is "
+"``COMPLETED``, ``NOOP``, ``REJECTED``, or ``FAILED``. The first version "
+"does not resize source operators, transactional sinks, or collecting "
+"sinks. Multiple source operators and source subtasks are coordinated "
+"within checkpoint domains. See :doc:`../operator-rescaling` for "
+"prerequisites, result handling, state migration, and the stabilization "
+"checkpoint. ``cancel_job(job_id, timeout=60)`` addresses a published job "
+"by job ID, while the CLI ``stop`` command addresses its Ray namespace."
+msgstr ""
+"``list_job_snapshots()`` 返回当前作业及保留的终止历史。``get_job_snapshot(job_id)`` "
+"返回一个快照，未知时返回 ``None``。``rescale_operator(job_id, operator_id, "
+"parallelism, timeout=60)`` 在算子支持时执行本地、屏障对齐的并行度变更，并返回 JSON 安全的操作结果，其状态为 "
+"``COMPLETED``、``NOOP``、``REJECTED`` 或 ``FAILED``。首个版本不会调整源算子、事务型 sink "
+"或收集型 sink。多个源算子和源子任务会在各自的检查点域内协调。有关前置条件、结果处理、状态迁移和稳定化检查点，请参阅 :doc"
+":`../operator-rescaling`。``cancel_job(job_id, timeout=60)`` 按作业 ID "
+"定位已发布作业，而 CLI 的 ``stop`` 命令按其 Ray 命名空间定位。"
+
+msgid "Snapshot keys"
+msgstr "快照字段"
+
+msgid ""
+"Consumers must tolerate additional keys in future versions. Current "
+"snapshots contain job identity and status, namespace, operator topology "
+"and task status, throughput and backpressure summaries, checkpoint "
+"history, redacted configuration, failure details, and ``dashboard_stale``"
+" when the state actor returns its last good cached value."
+msgstr ""
+"使用方必须容许未来版本增加字段。当前快照包含作业标识与状态、命名空间、算子拓扑与任务状态、吞吐量与背压摘要、检查点历史、脱敏配置、失败详情；当状态"
+" actor 返回最近一次有效缓存值时，还包含 ``dashboard_stale``。"
+
+msgid ""
+"Operator rows expose interval averages as ``busy_percent`` and "
+"``backpressure_percent``. ``max_busy_percent`` and "
+"``max_backpressure_percent`` contain the hottest subtask values used to "
+"color the Dashboard job graph."
+msgstr ""
+"算子行以 ``busy_percent`` 和 ``backpressure_percent`` "
+"公开区间平均值。``max_busy_percent`` 和 ``max_backpressure_percent`` "
+"包含最繁忙子任务的值，用于为 Dashboard 作业图着色。"
+
+msgid ""
+"The API does not make terminal history durable. Checkpoint storage and "
+"state snapshots have separate lifecycles; see :doc:`../observability`."
+msgstr "此 API 不会持久化终止历史。检查点存储与状态快照具有相互独立的生命周期；请参阅 :doc:`../observability`。"
+
+msgid "Partitioning API"
+msgstr "分区 API"
+
+msgid ""
+"Prefer the convenience methods on :class:`ray.klein.DataStream`. "
+"Implement a custom partitioner only when the built-in forward, round-"
+"robin, rescale, broadcast, key, and adaptive strategies do not express "
+"the required topology."
+msgstr ""
+"优先使用 :class:`ray.klein.DataStream` 上的便捷方法。只有当内置的 forward、round-"
+"robin、rescale、broadcast、key 和 adaptive 策略无法表达所需拓扑时，才实现自定义分区器。"
+
+msgid ":py:obj:`Partitioner <ray.klein.runtime.partitioning.Partitioner>`"
+msgstr ":py:obj:`Partitioner <ray.klein.runtime.partitioning.Partitioner>`"
+
+msgid "Task-local data routing policy."
+msgstr "任务本地的数据路由策略。"
+
+msgid ""
+":py:obj:`ForwardPartitioner "
+"<ray.klein.runtime.partitioning.ForwardPartitioner>`"
+msgstr ""
+":py:obj:`ForwardPartitioner "
+"<ray.klein.runtime.partitioning.ForwardPartitioner>`"
+
+msgid ""
+"Default partition for operator if the operator can be chained with "
+"succeeding operators."
+msgstr "当算子可与后续算子链接时使用的默认分区方式。"
+
+msgid ""
+":py:obj:`RoundRobinPartitioner "
+"<ray.klein.runtime.partitioning.RoundRobinPartitioner>`"
+msgstr ""
+":py:obj:`RoundRobinPartitioner "
+"<ray.klein.runtime.partitioning.RoundRobinPartitioner>`"
+
+msgid "Partition record to downstream tasks in a round-robin matter."
+msgstr "以轮询方式将记录分配给下游任务。"
+
+msgid ""
+":py:obj:`RescalePartitioner "
+"<ray.klein.runtime.partitioning.RescalePartitioner>`"
+msgstr ""
+":py:obj:`RescalePartitioner "
+"<ray.klein.runtime.partitioning.RescalePartitioner>`"
+
+msgid "Worker-pool partitioner over a statically-assigned subset of downstreams."
+msgstr "在静态分配的下游子集上工作的 worker pool 分区器。"
+
+msgid ""
+":py:obj:`BroadcastPartitioner "
+"<ray.klein.runtime.partitioning.BroadcastPartitioner>`"
+msgstr ""
+":py:obj:`BroadcastPartitioner "
+"<ray.klein.runtime.partitioning.BroadcastPartitioner>`"
+
+msgid "Broadcast the record to all downstream partitions."
+msgstr "将记录广播到所有下游分区。"
+
+msgid ":py:obj:`KeyPartitioner <ray.klein.runtime.partitioning.KeyPartitioner>`"
+msgstr ":py:obj:`KeyPartitioner <ray.klein.runtime.partitioning.KeyPartitioner>`"
+
+msgid "Partition the record by the key."
+msgstr "按键对记录进行分区。"
+
+msgid ""
+":py:obj:`AdaptivePartitioner "
+"<ray.klein.runtime.partitioning.AdaptivePartitioner>`"
+msgstr ""
+":py:obj:`AdaptivePartitioner "
+"<ray.klein.runtime.partitioning.AdaptivePartitioner>`"
+
+msgid "Round-robin initial routing with a full eligible-worker retry ring."
+msgstr "以轮询方式进行初始路由，并提供完整的合格 worker 重试环。"
+
+msgid ""
+":py:obj:`SimplePartitioner "
+"<ray.klein.runtime.partitioning.SimplePartitioner>`"
+msgstr ""
+":py:obj:`SimplePartitioner "
+"<ray.klein.runtime.partitioning.SimplePartitioner>`"
+
+msgid "Wrap a python function as subclass of :class:`Partition`"
+msgstr "将 Python 函数包装为 :class:`Partition` 的子类。"
+
+msgid ""
+":py:obj:`WorkerPoolDispatcher "
+"<ray.klein.runtime.partitioning.WorkerPoolDispatcher>`"
+msgstr ""
+":py:obj:`WorkerPoolDispatcher "
+"<ray.klein.runtime.partitioning.WorkerPoolDispatcher>`"
+
+msgid "Backpressure-driven round-robin over a fixed set of downstream tasks."
+msgstr "在固定下游任务集合上进行背压驱动的轮询。"
+
+msgid ":py:obj:`ChannelPattern <ray.klein.runtime.partitioning.ChannelPattern>`"
+msgstr ":py:obj:`ChannelPattern <ray.klein.runtime.partitioning.ChannelPattern>`"
+
+msgid ":py:obj:`ChannelTopology <ray.klein.runtime.partitioning.ChannelTopology>`"
+msgstr ":py:obj:`ChannelTopology <ray.klein.runtime.partitioning.ChannelTopology>`"
+
+msgid "Pure mapping from one upstream subtask to its downstream channels."
+msgstr "从一个上游子任务到其下游通道的纯映射。"
+
+msgid ":py:obj:`PartitionerSpec <ray.klein.runtime.partitioning.PartitionerSpec>`"
+msgstr ":py:obj:`PartitionerSpec <ray.klein.runtime.partitioning.PartitionerSpec>`"
+
+msgid "Picklable constructor recipe stored on logical and physical edges."
+msgstr "存储在逻辑边和物理边上的可 pickle 构造配方。"
+
+msgid ""
+"A custom ``Partitioner`` passed to ``DataStream.partition_by`` must "
+"produce an immutable ``PartitionerSpec`` through ``to_spec()``. The spec,"
+" rather than a driver-owned mutable partitioner instance, is serialized "
+"into the execution graph and reconstructed per worker."
+msgstr ""
+"传给 ``DataStream.partition_by`` 的自定义 ``Partitioner`` 必须通过 ``to_spec()`` "
+"生成不可变的 ``PartitionerSpec``。序列化进执行图并在每个 worker 上重建的是该 spec，而不是由 driver "
+"持有的可变分区器实例。"
+
+msgid ""
+"Physical/control topology belongs to :attr:`topology`; retry candidates "
+"are decided while still on the operator thread and are immutable "
+"afterwards. The send layer therefore never calls back into a mutable "
+"partitioner."
+msgstr "物理和控制拓扑归 :attr:`topology` 所有；重试候选项仍在算子线程中时便已决定，此后保持不可变。因此，发送层绝不会回调可变分区器。"
+
+msgid "Return the downstream partition indices for one record."
+msgstr "返回一条记录对应的下游分区索引。"
+
+msgid "Route a *columnar* batch without exploding it into per-row records."
+msgstr "路由*列式*批次，而不将其拆成逐行记录。"
+
+msgid ""
+"Returns ``(target_index, row_indices)`` pairs. ``row_indices is None`` is"
+" a fast-path meaning \"the WHOLE batch goes to this target\" (no slicing)"
+" — used by content-independent partitioners (forward / broadcast / round-"
+"robin / worker-pool), where routing doesn't depend on row values, so the "
+"batch travels as one unit and balancing granularity is per-batch."
+msgstr ""
+"返回 ``(target_index, row_indices)`` 对。``row_indices is None`` "
+"是表示“整个批次都发送到该目标”（不切片）的快速路径，供与内容无关的分区器（forward / broadcast / round-robin /"
+" worker-pool）使用；这些分区器的路由不依赖行值，因此批次作为一个整体传输，负载均衡粒度为每批次。"
+
+msgid ""
+"Key/hash partitioning overrides this to group rows by key and return one "
+"``(target_index, [row...])`` pair per distinct target (see "
+"KeyPartitioner)."
+msgstr ""
+"键/哈希分区会重写此方法，以按键对行分组，并为每个不同目标返回一个 ``(target_index, [row...])`` 对（参见 "
+"KeyPartitioner）。"
+
+msgid ""
+"Default implementation defers to :meth:`partition` (called once with the "
+"batch record, content ignored by these partitioners) and ships the whole "
+"batch to each returned target."
+msgstr "默认实现委托给 :meth:`partition` （以批记录调用一次，这些分区器会忽略内容），并将整个批次发送到每个返回的目标。"
+
+msgid "Return the finite retry ring, starting with ``initial_target``."
+msgstr "返回从 ``initial_target`` 开始的有限重试环。"
+
+msgid ""
+"The default preserves affinity. Load-balancing partitioners override it "
+"with their static eligible channel ring. The RecordRouter validates and "
+"freezes this decision before it crosses from the operator thread to the "
+"emit loop."
+msgstr "默认实现保持亲和性。负载均衡分区器会用其静态合格通道环重写此行为。RecordRouter 会在该决定从算子线程跨入发出循环前对其进行验证并冻结。"
+
+msgid "Return an immutable recipe containing every constructor argument."
+msgstr "返回包含所有构造函数参数的不可变配方。"
+
+msgid "Ray Data adapter API"
+msgstr "Ray Data 适配器 API"
+
+msgid "Dynamic namespace for public ``ray.data`` Dataset factories."
+msgstr "公共 ``ray.data`` Dataset 工厂的动态命名空间。"
+
+msgid "Dynamic namespace for public ``ray.data.Dataset`` operations."
+msgstr "公共 ``ray.data.Dataset`` 操作的动态命名空间。"
+
+msgid "How a Ray ``Dataset`` method participates in a Klein graph."
+msgstr "Ray ``Dataset`` 方法参与 Klein 图的方式。"
+
+msgid "Raised when a dynamic Ray Data call violates its Klein contract."
+msgstr "动态 Ray Data 调用违反 Klein 契约时引发。"
+
+msgid "Advanced discovery contracts"
+msgstr "高级发现契约"
+
+msgid ""
+"The following functions support adapters that need to inspect the public "
+"API of the installed compatible Ray version. Ordinary graph code should "
+"prefer ``name in ctx.data.available`` and ``name in "
+"stream.data.available``."
+msgstr ""
+"以下函数支持需要检查已安装兼容 Ray 版本公共 API 的适配器。普通计算图代码应优先使用 ``name in ctx.data.available`` "
+"和 ``name in stream.data.available``。"
+
+msgid ""
+":py:obj:`public_dataset_factories "
+"<ray.klein.api.ray_data.public_dataset_factories>`"
+msgstr ""
+":py:obj:`public_dataset_factories "
+"<ray.klein.api.ray_data.public_dataset_factories>`"
+
+msgid ""
+":py:obj:`public_dataset_methods "
+"<ray.klein.api.ray_data.public_dataset_methods>`"
+msgstr ""
+":py:obj:`public_dataset_methods "
+"<ray.klein.api.ray_data.public_dataset_methods>`"
+
+msgid ""
+":py:obj:`has_public_dataset_factory "
+"<ray.klein.api.ray_data.has_public_dataset_factory>`"
+msgstr ""
+":py:obj:`has_public_dataset_factory "
+"<ray.klein.api.ray_data.has_public_dataset_factory>`"
+
+msgid ""
+":py:obj:`has_public_dataset_method "
+"<ray.klein.api.ray_data.has_public_dataset_method>`"
+msgstr ""
+":py:obj:`has_public_dataset_method "
+"<ray.klein.api.ray_data.has_public_dataset_method>`"
+
+msgid ""
+":py:obj:`classify_dataset_method "
+"<ray.klein.api.ray_data.classify_dataset_method>`"
+msgstr ""
+":py:obj:`classify_dataset_method "
+"<ray.klein.api.ray_data.classify_dataset_method>`"
+
+msgid "Classify a Dataset method from its return contract, without an API table."
+msgstr "根据 Dataset 方法的返回契约对其分类，无需 API 表。"
+
+msgid ":py:obj:`RayDataCall <ray.klein.api.ray_data.RayDataCall>`"
+msgstr ":py:obj:`RayDataCall <ray.klein.api.ray_data.RayDataCall>`"
+
+msgid "A lazy call resolved against the Ray version installed at execution."
+msgstr "在执行时针对已安装 Ray 版本解析的惰性调用。"
+
+msgid "Redis integration"
+msgstr "Redis 集成"
+
+msgid ""
+"See :doc:`../connectors/redis` for connection and sink defaults, lookup "
+"behavior, examples, execution modes, and delivery guarantees."
+msgstr "有关连接和 sink 默认值、查找行为、示例、执行模式及交付保证，请参阅 :doc:`../connectors/redis`。"
+
+msgid ""
+":py:obj:`RedisConnectionConfig "
+"<ray.klein.integrations.redis.RedisConnectionConfig>`"
+msgstr ""
+":py:obj:`RedisConnectionConfig "
+"<ray.klein.integrations.redis.RedisConnectionConfig>`"
+
+msgid "Connection and retry settings shared by Redis operators."
+msgstr "Redis 算子共用的连接和重试设置。"
+
+msgid ":py:obj:`RedisSinkConfig <ray.klein.integrations.redis.RedisSinkConfig>`"
+msgstr ":py:obj:`RedisSinkConfig <ray.klein.integrations.redis.RedisSinkConfig>`"
+
+msgid "Write shape and buffering policy for :class:`RedisSink`."
+msgstr ":class:`RedisSink` 的写入形态和缓冲策略。"
+
+msgid ":py:obj:`RedisDataType <ray.klein.integrations.redis.RedisDataType>`"
+msgstr ":py:obj:`RedisDataType <ray.klein.integrations.redis.RedisDataType>`"
+
+msgid "Redis structures that can be read and replaced by Klein."
+msgstr "Klein 可以读取和替换的 Redis 数据结构。"
+
+msgid ":py:obj:`RedisSink <ray.klein.integrations.redis.RedisSink>`"
+msgstr ":py:obj:`RedisSink <ray.klein.integrations.redis.RedisSink>`"
+
+msgid "Buffer records and replace Redis values in transactional batches."
+msgstr "缓冲记录，并以事务批次替换 Redis 值。"
+
+msgid ":py:obj:`RedisValueLookup <ray.klein.integrations.redis.RedisValueLookup>`"
+msgstr ":py:obj:`RedisValueLookup <ray.klein.integrations.redis.RedisValueLookup>`"
+
+msgid "Enrich each record with a value fetched from Redis."
+msgstr "使用从 Redis 获取的值扩充每条记录。"
+
+msgid ""
+":py:obj:`RedisMissingKeyFilter "
+"<ray.klein.integrations.redis.RedisMissingKeyFilter>`"
+msgstr ""
+":py:obj:`RedisMissingKeyFilter "
+"<ray.klein.integrations.redis.RedisMissingKeyFilter>`"
+
+msgid "Keep records whose extracted key does not exist in Redis."
+msgstr "保留其提取键在 Redis 中不存在的记录。"
+
+msgid "Writing records"
+msgstr "写入记录"
+
+msgid ""
+"``DataStream.write_redis`` accepts one connection object, key and value "
+"extractors, and an optional immutable sink configuration::"
+msgstr "``DataStream.write_redis`` 接受一个连接对象、键和值提取器，以及可选的不可变 sink 配置::"
+
+msgid ""
+"Strings are replaced with ``SET``. Hashes, lists, and sets are replaced "
+"in a transaction using ``DEL`` followed by ``HSET``, ``RPUSH``, or "
+"``SADD``. This makes retrying a batch idempotent and preserves list "
+"order."
+msgstr ""
+"字符串使用 ``SET`` 替换。哈希、列表和集合在事务中先执行 ``DEL``，再执行 ``HSET``、``RPUSH`` 或 "
+"``SADD`` 来替换。这使批次重试具有幂等性，并能保留列表顺序。"
+
+msgid "Resource plan API"
+msgstr "资源计划 API"
+
+msgid ""
+"``explain()`` returns the JSON representation of a :class:`ResourcePlan`."
+" Applications normally set resources on sources, transforms, and sinks; "
+"the classes below support offline inspection and validated override "
+"files."
+msgstr ""
+"``explain()`` 返回 :class:`ResourcePlan` 的 JSON "
+"表示。应用通常在源、转换和接收器上设置资源；以下类支持离线检查和经过验证的覆盖文件。"
+
+msgid "Serializable resource overrides for a stream graph."
+msgstr "流图的可序列化资源覆盖。"
+
+msgid "Replace one node through its validated immutable contract."
+msgstr "通过经过验证的不可变契约替换一个节点。"
+
+msgid ""
+"Only execution-tuning fields may change; graph identity stays fixed. "
+"Passing ``None`` explicitly clears an existing override."
+msgstr "只有执行调优字段可以更改；图身份保持不变。显式传入 ``None`` 会清除现有覆盖。"
+
+msgid "Validated resource settings for one stream graph node."
+msgstr "一个流图节点经过验证的资源设置。"
+
+msgid "Directed edge in a serialized resource plan."
+msgstr "序列化资源计划中的有向边。"
+
+msgid ""
+"Set ``RAY_KLEIN_RESOURCE_PLAN_PERSIST_PATH`` to write the compiled plan "
+"and ``RAY_KLEIN_RESOURCE_PLAN_LOAD_PATH`` to apply a compatible plan "
+"during submission. A loaded plan must contain the same node keys as the "
+"compiled graph; only CPU, GPU, concurrency, batch-size, and asynchronous-"
+"buffer fields are mutable through "
+":meth:`~ray.klein.api.resource_plan.ResourcePlan.update_node`."
+msgstr ""
+"设置 ``RAY_KLEIN_RESOURCE_PLAN_PERSIST_PATH`` 可写入编译后的计划，设置 "
+"``RAY_KLEIN_RESOURCE_PLAN_LOAD_PATH`` 可在提交期间应用兼容计划。加载的计划必须包含与编译图相同的节点键；只有"
+" CPU、GPU、并发度、批大小和异步缓冲区字段可通过 "
+":meth:`~ray.klein.api.resource_plan.ResourcePlan.update_node` 修改。"
+
+msgid ""
+"Plan files are deployment inputs, not state snapshots. They contain no "
+"source position or managed state and cannot restore a job."
+msgstr "计划文件是部署输入，不是状态快照。它们不包含源位置或托管状态，无法恢复作业。"
+
+msgid "User-function runtime API"
+msgstr "用户函数运行时 API"
+
+msgid ""
+"Callable classes can request a ``runtime_context`` constructor argument. "
+"The context exposes the physical task identity, effective configuration, "
+"batching settings, and a metric group. Keep it on the worker; it is not a"
+" serializable driver-side job handle."
+msgstr ""
+"可调用类可以请求 ``runtime_context`` 构造函数参数。该上下文公开物理任务标识、有效配置、批处理设置和指标组。请将它保留在 "
+"worker 上；它不是可序列化的 driver 端作业句柄。"
+
+msgid "Read-only execution context handed to a user function's ``open()``."
+msgstr "传给用户函数 ``open()`` 的只读执行上下文。"
+
+msgid ""
+"Common capabilities are available in both stream and batch execution; "
+"stream-only checkpoint capabilities live on "
+":class:`StreamRuntimeContext`."
+msgstr "流处理和批处理执行均提供通用能力；仅限流处理的检查点能力位于 :class:`StreamRuntimeContext`。"
+
+msgid "The config with which the parallel task runs."
+msgstr "并行任务运行时使用的配置。"
+
+msgid "Stable identifier used to scope state and observability."
+msgstr "用于限定状态和可观测性作用域的稳定标识符。"
+
+msgid "The current metric group."
+msgstr "当前指标组。"
+
+msgid "The parallelism with which the parallel task runs."
+msgstr "并行任务运行时采用的并行度。"
+
+msgid "Runtime info (batching/async) for this task."
+msgstr "此任务的运行时信息（批处理/异步）。"
+
+msgid "Index of this parallel subtask (0 .. parallelism-1)."
+msgstr "此并行子任务的索引（0 .. parallelism-1）。"
+
+msgid "Task name of the parallel task."
+msgstr "并行任务的任务名称。"
+
+msgid "RuntimeContext for streaming execution, adding checkpoint capabilities."
+msgstr "用于流处理执行的 RuntimeContext，增加了检查点能力。"
+
+msgid "The strategy used to align and persist checkpoints."
+msgstr "用于对齐和持久化检查点的策略。"
+
+msgid "Runtime batching and asynchronous buffering settings."
+msgstr "运行时批处理和异步缓冲设置。"
+
+msgid "Function lifecycle"
+msgstr "函数生命周期"
+
+msgid "Lifecycle hooks shared by user-defined sources and sinks."
+msgstr "用户定义源和 sink 共用的生命周期钩子。"
+
+msgid "Metrics"
+msgstr "指标"
+
+msgid ""
+"Register a metric once during worker initialization: use "
+"``open(runtime_context)`` for a lifecycle source or sink, or request the "
+"``runtime_context`` constructor keyword in a callable transform class. "
+"Update the returned handle while processing records. Re-registering one "
+"name with a different kind, description, boundary set, or label set "
+"raises ``ValueError``."
+msgstr ""
+"在 worker 初始化期间只注册一次指标：生命周期源或 sink 应使用 ``open(runtime_context)``，可调用转换类则应请求 "
+"``runtime_context`` 构造函数关键字参数。在处理记录时更新返回的句柄。若以不同的种类、描述、边界集合或标签集合重复注册同一名称，将引发 "
+"``ValueError``。"
+
+msgid ""
+"See :doc:`metrics` for ``MetricGroup``, metric handles, specifications, "
+"and the runtime-owned metric scopes."
+msgstr "有关 ``MetricGroup``、指标句柄、规范和运行时拥有的指标作用域，请参阅 :doc:`metrics`。"
+
+msgid "Sink API"
+msgstr "Sink API"
+
+msgid ":py:obj:`SinkFunction <ray.klein.SinkFunction>`"
+msgstr ":py:obj:`SinkFunction <ray.klein.SinkFunction>`"
+
+msgid "Interface for implementing user defined sink functionality."
+msgstr "用于实现用户定义 sink 功能的接口。"
+
+msgid ":py:obj:`SinkCommittable <ray.klein.SinkCommittable>`"
+msgstr ":py:obj:`SinkCommittable <ray.klein.SinkCommittable>`"
+
+msgid "Serializable transaction prepared by a two-phase-commit sink."
+msgstr "由两阶段提交 sink 准备的可序列化事务。"
+
+msgid ":py:obj:`StreamSink <ray.klein.StreamSink>`"
+msgstr ":py:obj:`StreamSink <ray.klein.StreamSink>`"
+
+msgid "A lazy terminal operation registered with its owning pipeline."
+msgstr "注册到其所属管道的惰性终端操作。"
+
+msgid ""
+":py:obj:`TwoPhaseCommitSinkFunction "
+"<ray.klein.TwoPhaseCommitSinkFunction>`"
+msgstr ""
+":py:obj:`TwoPhaseCommitSinkFunction "
+"<ray.klein.TwoPhaseCommitSinkFunction>`"
+
+msgid "Sink writer that prepares serializable transactions at checkpoints."
+msgstr "在检查点处准备可序列化事务的 sink writer。"
+
+msgid ""
+"The checkpoint coordinator persists the committable before invoking "
+":meth:`commit`. Implementations must make both ``commit`` and ``abort`` "
+"idempotent because coordinator recovery can retry either operation."
+msgstr ""
+"检查点协调器在调用 :meth:`commit` 前持久化 committable。实现必须使 ``commit`` 和 ``abort`` "
+"都具备幂等性，因为协调器恢复时可能重试任一操作。"
+
+msgid "Discard a transaction whose checkpoint cannot complete."
+msgstr "丢弃其检查点无法完成的事务。"
+
+msgid "Publish the prepared transaction after checkpoint durability."
+msgstr "检查点持久化后发布已准备的事务。"
+
+msgid "Stable idempotency key for this prepared transaction."
+msgstr "此已准备事务的稳定幂等键。"
+
+msgid ""
+"Records remain private to the writer until :meth:`prepare_commit` returns"
+" a committable. The checkpoint coordinator persists that value and "
+"performs the second-phase commit only after the global checkpoint is "
+"durable."
+msgstr ""
+"在 :meth:`prepare_commit` 返回 committable 前，记录仅对 writer "
+"可见。检查点协调器会持久化该值，并仅在全局检查点持久化后执行第二阶段提交。"
+
+msgid "Custom source API"
+msgstr "自定义源 API"
+
+msgid ""
+"See :doc:`../connectors/custom` for a complete implementation and :doc"
+":`../event-time` for the idle-input and watermark protocol."
+msgstr "完整实现请参阅 :doc:`../connectors/custom`，空闲输入和水位线协议请参阅 :doc:`../event-time`。"
+
+msgid "Whether ``collect_many`` is one atomic columnar runtime emission."
+msgstr "``collect_many`` 是否构成一次原子的列式运行时发出操作。"
+
+msgid "Emit one record and force its local transport buffers to drain."
+msgstr "发出一条记录，并强制排空其本地传输缓冲区。"
+
+msgid "Emit a source batch, falling back to ordered row emission."
+msgstr "发出一个源批次；不支持时回退为按序逐行发出。"
+
+msgid "Force buffered source output toward the next task when supported."
+msgstr "在支持时强制将缓冲的源输出推向下一任务。"
+
+msgid ""
+"Connectors that block-poll an external system (Kafka, etc.) should call "
+"this on an empty poll so downstream watermarks are not blocked and the "
+"runtime's time-based checkpoint trigger can still fire. A concrete "
+"context may implement this as an immediate idle transition."
+msgstr ""
+"会对外部系统执行阻塞轮询的连接器（Kafka "
+"等）应在空轮询时调用此方法，以免阻塞下游水位线，并使运行时基于时间的检查点触发器仍能触发。具体上下文可将其实现为立即进入空闲状态。"
+
+msgid "Lifecycle order"
+msgstr "生命周期顺序"
+
+msgid ""
+"For each physical source subtask Klein constructs one ``SourceFunction``,"
+" calls ``open()``, restores source state when configured, and then calls "
+"``run()``. Cancellation calls ``cancel()`` so the run loop can return; "
+"``close()`` releases resources once. Completed checkpoints invoke "
+"``notify_checkpoint_complete()`` at least once, so external offset "
+"commits must be idempotent by checkpoint ID."
+msgstr ""
+"Klein 会为每个物理源子任务构造一个 ``SourceFunction``，调用 ``open()``，在配置了恢复时恢复源状态，然后调用 "
+"``run()``。取消操作调用 ``cancel()``，使运行循环可以返回；``close()`` 只释放资源一次。完成的检查点至少调用一次 "
+"``notify_checkpoint_complete()``，因此外部 offset 提交必须按检查点 ID 保证幂等。"
+
+msgid "SQL and table API"
+msgstr "SQL 与表 API"
+
+msgid ":py:obj:`sql <ray.klein.sql>`"
+msgstr ":py:obj:`sql <ray.klein.sql>`"
+
+msgid ""
+"Build SQL over named Klein DataStreams, discovering caller variables by "
+"default."
+msgstr "基于具名 Klein DataStreams 构建 SQL；默认自动发现调用方变量。"
+
+msgid ":py:obj:`SQLQueryError <ray.klein.SQLQueryError>`"
+msgstr ":py:obj:`SQLQueryError <ray.klein.SQLQueryError>`"
+
+msgid ":py:obj:`SQLSession <ray.klein.SQLSession>`"
+msgstr ":py:obj:`SQLSession <ray.klein.SQLSession>`"
+
+msgid "A scoped catalog and planner for lazy, Ray-native SQL operations."
+msgstr "用于惰性 Ray 原生 SQL 操作的作用域化目录和规划器。"
+
+msgid "Register a session-local Python scalar function for SQL queries."
+msgstr "为 SQL 查询注册会话本地的 Python 标量函数。"
+
+msgid "Remove a session-local SQL scalar function."
+msgstr "移除会话本地的 SQL 标量函数。"
+
+msgid ":py:obj:`ChangelogRow <ray.klein.ChangelogRow>`"
+msgstr ":py:obj:`ChangelogRow <ray.klein.ChangelogRow>`"
+
+msgid "A row plus Flink-compatible changelog metadata."
+msgstr "一行数据及其 Flink 兼容的 changelog 元数据。"
+
+msgid ":py:obj:`RowKind <ray.klein.RowKind>`"
+msgstr ":py:obj:`RowKind <ray.klein.RowKind>`"
+
+msgid "Flink-compatible change carried by one dynamic-table row."
+msgstr "由一行动态表数据携带的 Flink 兼容变更类型。"
+
+msgid ":py:obj:`CatalogTable <ray.klein.CatalogTable>`"
+msgstr ":py:obj:`CatalogTable <ray.klein.CatalogTable>`"
+
+msgid "Schema and connector options stored in a :class:`SQLSession` catalog."
+msgstr "存储在 :class:`SQLSession` 目录中的 schema 和连接器选项。"
+
+msgid ":py:obj:`TableColumn <ray.klein.TableColumn>`"
+msgstr ":py:obj:`TableColumn <ray.klein.TableColumn>`"
+
+msgid "One physical column declared by a SQL ``CREATE TABLE`` statement."
+msgstr "SQL ``CREATE TABLE`` 语句声明的一个物理列。"
+
+msgid ":py:obj:`TableFactory <ray.klein.TableFactory>`"
+msgstr ":py:obj:`TableFactory <ray.klein.TableFactory>`"
+
+msgid "Validate catalog metadata and bind it directly to a source or sink."
+msgstr "验证目录元数据，并将其直接绑定到源或 sink。"
+
+msgid "Create or replace a named, non-materialized DataStream view."
+msgstr "创建或替换一个具名、非物化的 DataStream 视图。"
+
+msgid "Execute catalog DDL/DML or build a lazy query."
+msgstr "执行目录 DDL/DML，或构建惰性查询。"
+
+msgid ""
+"``CREATE/DROP TABLE`` update only session metadata. ``INSERT INTO`` "
+"builds the query graph and returns its connector sink; normal queries "
+"return a :class:`DataStream`."
+msgstr ""
+"``CREATE/DROP TABLE`` 只更新会话元数据。``INSERT INTO`` 构建查询图并返回其连接器 sink；普通查询返回 "
+":class:`DataStream`。"
+
+msgid "Register a session-local table factory."
+msgstr "注册会话本地的表工厂。"
+
+msgid "Build a lazy, bounded DataStream from one Ray-native SQL query."
+msgstr "从一条 Ray 原生 SQL 查询构建惰性、有界 DataStream。"
+
+msgid "Return changelog changes accepted by this connector sink."
+msgstr "返回此连接器 sink 接受的 changelog 变更类型。"
+
+msgid ""
+"``row_kind`` is metadata rather than a user column, so normal mapping and"
+" connector serialization continue to see only the SQL result columns."
+msgstr "``row_kind`` 是元数据而不是用户列，因此常规映射和连接器序列化仍只会看到 SQL 结果列。"
+
+msgid "State and checkpoint API"
+msgstr "状态与检查点 API"
+
+msgid ":py:obj:`CheckpointFileScope <ray.klein.state.CheckpointFileScope>`"
+msgstr ":py:obj:`CheckpointFileScope <ray.klein.state.CheckpointFileScope>`"
+
+msgid "Ownership scope matching Flink filesystem checkpoint storage."
+msgstr "与 Flink 文件系统检查点存储一致的所有权作用域。"
+
+msgid ":py:obj:`CheckpointFileSystem <ray.klein.state.CheckpointFileSystem>`"
+msgstr ":py:obj:`CheckpointFileSystem <ray.klein.state.CheckpointFileSystem>`"
+
+msgid "Small URI-aware facade over public PyArrow filesystem APIs."
+msgstr "基于公共 PyArrow 文件系统 API 的轻量 URI 感知 facade。"
+
+msgid ":py:obj:`CheckpointLayout <ray.klein.state.CheckpointLayout>`"
+msgstr ":py:obj:`CheckpointLayout <ray.klein.state.CheckpointLayout>`"
+
+msgid "Flink-compatible relative paths below a checkpoint root URI."
+msgstr "检查点根 URI 下与 Flink 兼容的相对路径。"
+
+msgid ":py:obj:`CheckpointStore <ray.klein.state.CheckpointStore>`"
+msgstr ":py:obj:`CheckpointStore <ray.klein.state.CheckpointStore>`"
+
+msgid "Durable storage boundary used for owner and cluster recovery."
+msgstr "用于所有者和集群恢复的持久存储边界。"
+
+msgid ""
+":py:obj:`FileSystemCheckpointStore "
+"<ray.klein.state.FileSystemCheckpointStore>`"
+msgstr ""
+":py:obj:`FileSystemCheckpointStore "
+"<ray.klein.state.FileSystemCheckpointStore>`"
+
+msgid "Durable checkpoint store for local filesystems and object stores."
+msgstr "面向本地文件系统和对象存储的持久检查点存储。"
+
+msgid ":py:obj:`KeyedStateContext <ray.klein.state.KeyedStateContext>`"
+msgstr ":py:obj:`KeyedStateContext <ray.klein.state.KeyedStateContext>`"
+
+msgid ":py:obj:`KeyGroupRange <ray.klein.state.KeyGroupRange>`"
+msgstr ":py:obj:`KeyGroupRange <ray.klein.state.KeyGroupRange>`"
+
+msgid "Inclusive contiguous key-group range owned by one subtask."
+msgstr "一个子任务拥有的连续、闭区间 key-group 范围。"
+
+msgid ":py:obj:`ListState <ray.klein.state.ListState>`"
+msgstr ":py:obj:`ListState <ray.klein.state.ListState>`"
+
+msgid ":py:obj:`ListStateDescriptor <ray.klein.state.ListStateDescriptor>`"
+msgstr ":py:obj:`ListStateDescriptor <ray.klein.state.ListStateDescriptor>`"
+
+msgid "Descriptor for a list per key and namespace."
+msgstr "每个键和命名空间对应一个列表的描述符。"
+
+msgid ":py:obj:`ManagedStateBackend <ray.klein.state.ManagedStateBackend>`"
+msgstr ":py:obj:`ManagedStateBackend <ray.klein.state.ManagedStateBackend>`"
+
+msgid "Backend-neutral storage contract used by keyed operators."
+msgstr "键控算子使用的后端中立存储契约。"
+
+msgid ":py:obj:`MapState <ray.klein.state.MapState>`"
+msgstr ":py:obj:`MapState <ray.klein.state.MapState>`"
+
+msgid ":py:obj:`MapStateDescriptor <ray.klein.state.MapStateDescriptor>`"
+msgstr ":py:obj:`MapStateDescriptor <ray.klein.state.MapStateDescriptor>`"
+
+msgid "Descriptor for a map per key and namespace."
+msgstr "每个键和命名空间对应一个映射的描述符。"
+
+msgid ":py:obj:`MemoryStateBackend <ray.klein.state.MemoryStateBackend>`"
+msgstr ":py:obj:`MemoryStateBackend <ray.klein.state.MemoryStateBackend>`"
+
+msgid "Reference backend for tests and small state."
+msgstr "供测试和小规模状态使用的参考后端。"
+
+msgid ""
+":py:obj:`ObjectStoreSnapshotCache "
+"<ray.klein.state.ObjectStoreSnapshotCache>`"
+msgstr ""
+":py:obj:`ObjectStoreSnapshotCache "
+"<ray.klein.state.ObjectStoreSnapshotCache>`"
+
+msgid "Caches only large immutable snapshots; small snapshots remain inline."
+msgstr "只缓存大型不可变快照；小型快照保持内联。"
+
+msgid ""
+":py:obj:`ObjectStoreStateBackend "
+"<ray.klein.state.ObjectStoreStateBackend>`"
+msgstr ""
+":py:obj:`ObjectStoreStateBackend "
+"<ray.klein.state.ObjectStoreStateBackend>`"
+
+msgid "MVCC metadata owner for immutable values held in Ray's Object Store."
+msgstr "Ray Object Store 中不可变值的 MVCC 元数据所有者。"
+
+msgid ":py:obj:`RocksDBStateBackend <ray.klein.state.RocksDBStateBackend>`"
+msgstr ":py:obj:`RocksDBStateBackend <ray.klein.state.RocksDBStateBackend>`"
+
+msgid "Task-local RocksDB managed state using byte-level column families."
+msgstr "使用字节级列族的任务本地 RocksDB 托管状态。"
+
+msgid ":py:obj:`SourceCheckpointEntry <ray.klein.state.SourceCheckpointEntry>`"
+msgstr ":py:obj:`SourceCheckpointEntry <ray.klein.state.SourceCheckpointEntry>`"
+
+msgid "One source subtask's opaque state at a completed checkpoint."
+msgstr "一个源子任务在已完成检查点处的不透明状态。"
+
+msgid ":py:obj:`StateCheckpointEntry <ray.klein.state.StateCheckpointEntry>`"
+msgstr ":py:obj:`StateCheckpointEntry <ray.klein.state.StateCheckpointEntry>`"
+
+msgid "Durable location and integrity metadata for one state partition."
+msgstr "一个状态分区的持久位置和完整性元数据。"
+
+msgid ""
+":py:obj:`StateCheckpointManifest "
+"<ray.klein.state.StateCheckpointManifest>`"
+msgstr ""
+":py:obj:`StateCheckpointManifest "
+"<ray.klein.state.StateCheckpointManifest>`"
+
+msgid "Durable, ObjectRef-free description of a completed checkpoint."
+msgstr "不含 ObjectRef 的已完成检查点持久描述。"
+
+msgid ":py:obj:`StateHandle <ray.klein.state.StateHandle>`"
+msgstr ":py:obj:`StateHandle <ray.klein.state.StateHandle>`"
+
+msgid "Ephemeral handle to an immutable value in Ray's Object Store."
+msgstr "指向 Ray Object Store 中不可变值的临时句柄。"
+
+msgid ":py:obj:`StatePartition <ray.klein.state.StatePartition>`"
+msgstr ":py:obj:`StatePartition <ray.klein.state.StatePartition>`"
+
+msgid "Stable identity of one operator key group."
+msgstr "一个算子 key group 的稳定标识。"
+
+msgid ":py:obj:`StateSnapshot <ray.klein.state.StateSnapshot>`"
+msgstr ":py:obj:`StateSnapshot <ray.klein.state.StateSnapshot>`"
+
+msgid "Hot checkpoint whose handles are pinned by a registry actor."
+msgstr "其句柄由 registry actor 固定的热检查点。"
+
+msgid ":py:obj:`StateSnapshotReference <ray.klein.state.StateSnapshotReference>`"
+msgstr ":py:obj:`StateSnapshotReference <ray.klein.state.StateSnapshotReference>`"
+
+msgid ":py:obj:`StateConflictError <ray.klein.state.StateConflictError>`"
+msgstr ":py:obj:`StateConflictError <ray.klein.state.StateConflictError>`"
+
+msgid ":py:obj:`StateTTLConfig <ray.klein.state.StateTTLConfig>`"
+msgstr ":py:obj:`StateTTLConfig <ray.klein.state.StateTTLConfig>`"
+
+msgid ":py:obj:`StateTTLUpdateType <ray.klein.state.StateTTLUpdateType>`"
+msgstr ":py:obj:`StateTTLUpdateType <ray.klein.state.StateTTLUpdateType>`"
+
+msgid ":py:obj:`StateVisibility <ray.klein.state.StateVisibility>`"
+msgstr ":py:obj:`StateVisibility <ray.klein.state.StateVisibility>`"
+
+msgid ":py:obj:`TimerDomain <ray.klein.state.TimerDomain>`"
+msgstr ":py:obj:`TimerDomain <ray.klein.state.TimerDomain>`"
+
+msgid ":py:obj:`TimerEvent <ray.klein.state.TimerEvent>`"
+msgstr ":py:obj:`TimerEvent <ray.klein.state.TimerEvent>`"
+
+msgid ":py:obj:`TimerService <ray.klein.state.TimerService>`"
+msgstr ":py:obj:`TimerService <ray.klein.state.TimerService>`"
+
+msgid ":py:obj:`ValueState <ray.klein.state.ValueState>`"
+msgstr ":py:obj:`ValueState <ray.klein.state.ValueState>`"
+
+msgid ":py:obj:`ValueStateDescriptor <ray.klein.state.ValueStateDescriptor>`"
+msgstr ":py:obj:`ValueStateDescriptor <ray.klein.state.ValueStateDescriptor>`"
+
+msgid "Descriptor for one value per key and namespace."
+msgstr "每个键和命名空间对应一个值的描述符。"
+
+msgid "Keyed state handles"
+msgstr "键控状态句柄"
+
+msgid ""
+"S.extend(iterable) -- extend sequence by appending elements from the "
+"iterable"
+msgstr "S.extend(iterable) -- 通过追加 iterable 中的元素扩展序列"
+
+msgid "S.insert(index, value) -- insert value before index"
+msgstr "S.insert(index, value) -- 在 index 之前插入 value"
+
+msgid "TTL and timers"
+msgstr "TTL 与定时器"
+
+msgid ""
+"Checkpoint and backend classes are advanced extension contracts. Ordinary"
+" applications select a backend and checkpoint URI through configuration "
+"and use the keyed handles above rather than constructing checkpoint "
+"stores directly."
+msgstr "检查点和后端类是高级扩展契约。普通应用应通过配置选择后端和检查点 URI，并使用上述键控句柄，而不是直接构造检查点存储。"
+
+msgid "Stateful stream API"
+msgstr "有状态流 API"
+
+msgid ":py:obj:`KeyedProcessFunction <ray.klein.KeyedProcessFunction>`"
+msgstr ":py:obj:`KeyedProcessFunction <ray.klein.KeyedProcessFunction>`"
+
+msgid "User function with keyed state and event/processing-time timers."
+msgstr "带键控状态以及事件时间/处理时间定时器的用户函数。"
+
+msgid ":py:obj:`KeyedStream <ray.klein.KeyedStream>`"
+msgstr ":py:obj:`KeyedStream <ray.klein.KeyedStream>`"
+
+msgid "A hash-partitioned stream ready for managed-state transformations."
+msgstr "已完成哈希分区、可用于托管状态转换的流。"
+
+msgid ":py:obj:`WindowAssigner <ray.klein.WindowAssigner>`"
+msgstr ":py:obj:`WindowAssigner <ray.klein.WindowAssigner>`"
+
+msgid ":py:obj:`TumblingWindow <ray.klein.TumblingWindow>`"
+msgstr ":py:obj:`TumblingWindow <ray.klein.TumblingWindow>`"
+
+msgid ":py:obj:`SlidingWindow <ray.klein.SlidingWindow>`"
+msgstr ":py:obj:`SlidingWindow <ray.klein.SlidingWindow>`"
+
+msgid ":py:obj:`SessionWindow <ray.klein.SessionWindow>`"
+msgstr ":py:obj:`SessionWindow <ray.klein.SessionWindow>`"
+
+msgid ":py:obj:`TimeWindow <ray.klein.TimeWindow>`"
+msgstr ":py:obj:`TimeWindow <ray.klein.TimeWindow>`"
+
+msgid "Half-open event-time interval ``[start, end)`` in milliseconds."
+msgstr "以毫秒表示的半开事件时间区间 ``[start, end)``。"
+
+msgid ":py:obj:`WindowedStream <ray.klein.WindowedStream>`"
+msgstr ":py:obj:`WindowedStream <ray.klein.WindowedStream>`"
+
+msgid "Builder for a keyed event-time window aggregation."
+msgstr "键控事件时间窗口聚合的构建器。"
+
+msgid ""
+":py:obj:`KeyedProcessFunction.process "
+"<ray.klein.api.keyed_process_function.KeyedProcessFunction.process>`"
+msgstr ""
+":py:obj:`KeyedProcessFunction.process "
+"<ray.klein.api.keyed_process_function.KeyedProcessFunction.process>`"
+
+msgid "Process one keyed record."
+msgstr "处理一条键控记录。"
+
+msgid ""
+":py:obj:`KeyedProcessFunction.on_timer "
+"<ray.klein.api.keyed_process_function.KeyedProcessFunction.on_timer>`"
+msgstr ""
+":py:obj:`KeyedProcessFunction.on_timer "
+"<ray.klein.api.keyed_process_function.KeyedProcessFunction.on_timer>`"
+
+msgid ""
+":py:obj:`KeyedStream.process "
+"<ray.klein.api.keyed_stream.KeyedStream.process>`"
+msgstr ""
+":py:obj:`KeyedStream.process "
+"<ray.klein.api.keyed_stream.KeyedStream.process>`"
+
+msgid ""
+":py:obj:`KeyedStream.window "
+"<ray.klein.api.keyed_stream.KeyedStream.window>`"
+msgstr ""
+":py:obj:`KeyedStream.window "
+"<ray.klein.api.keyed_stream.KeyedStream.window>`"
+
+msgid ""
+":py:obj:`WindowedStream.reduce "
+"<ray.klein.api.windowed_stream.WindowedStream.reduce>`"
+msgstr ""
+":py:obj:`WindowedStream.reduce "
+"<ray.klein.api.windowed_stream.WindowedStream.reduce>`"
+
+msgid "Top-level namespace and stability"
+msgstr "顶层命名空间与稳定性"
+
+msgid ""
+"Application code normally imports both ``ray`` and ``ray.klein`` and then"
+" accesses ``ray.klein``. The following categories are documented "
+"application contracts:"
+msgstr "应用代码通常同时导入 ``ray`` 和 ``ray.klein``，然后访问 ``ray.klein``。以下类别属于有文档说明的应用契约："
+
+msgid ""
+"graph construction and execution: :class:`~ray.klein.DataStream`, "
+"``from_items``, ``from_values``, ``source``, ``execute``, ``explain``, "
+"and ``sql``;"
+msgstr ""
+"图构建与执行：:class:`~ray.klein.DataStream`、``from_items``、``from_values``、``source``、``execute``、``explain`` "
+"和 ``sql``；"
+
+msgid ""
+"jobs and runtime context: :class:`~ray.klein.JobHandle`, "
+":class:`~ray.klein.JobStatus`, :class:`~ray.klein.RuntimeContext`, and "
+":class:`~ray.klein.RuntimeInfo`;"
+msgstr ""
+"作业与运行时上下文：:class:`~ray.klein.JobHandle`、:class:`~ray.klein.JobStatus`、:class:`~ray.klein.RuntimeContext`"
+" 和 :class:`~ray.klein.RuntimeInfo`；"
+
+msgid ""
+"stateful streaming: :class:`~ray.klein.KeyedStream`, "
+":class:`~ray.klein.KeyedProcessFunction`, window assigners, and watermark"
+" strategies, plus :class:`~ray.klein.api.MissingDataStrategy` for the "
+"composite map-reduce preprocessing policy;"
+msgstr ""
+"有状态流处理：:class:`~ray.klein.KeyedStream`、:class:`~ray.klein.KeyedProcessFunction`、窗口分配器和水位线策略，以及用于组合式"
+" map-reduce 预处理策略的 :class:`~ray.klein.api.MissingDataStrategy`；"
+
+msgid ""
+"connectors and tables: documented read/write methods, SQL session and "
+"table contracts, and custom source/sink interfaces;"
+msgstr "连接器与表：已文档化的读写方法、SQL 会话与表契约，以及自定义源/sink 接口；"
+
+msgid ""
+"operations: ``configure_logging``, ``list_job_snapshots``, "
+"``get_job_snapshot``, ``rescale_operator``, and ``cancel_job``."
+msgstr ""
+"运维操作：``configure_logging``、``list_job_snapshots``、``get_job_snapshot``、``rescale_operator``"
+" 和 ``cancel_job``。"
+
+msgid "Dynamic Ray Data names"
+msgstr "动态 Ray Data 名称"
+
+msgid ""
+"Public factories discovered from the installed compatible ``ray.data`` "
+"module, such as ``ray.klein.read_parquet``, are created lazily and are "
+"not enumerated in ``ray.klein.__all__``. Their signatures and "
+"documentation come from that Ray version. Use ``dir(ray.klein)`` and "
+"``stream.data.available`` when an application must support more than one "
+"compatible Ray patch."
+msgstr ""
+"从已安装且兼容的 ``ray.data`` 模块中发现的公共工厂（例如 ``ray.klein.read_parquet``）会惰性创建，不会列入"
+" ``ray.klein.__all__``。其签名和文档来自对应的 Ray 版本。当应用必须支持多个兼容的 Ray 补丁版本时，请使用 "
+"``dir(ray.klein)`` 和 ``stream.data.available``。"
+
+msgid "Runtime bridge exports"
+msgstr "运行时桥接导出"
+
+msgid ""
+"The standalone distribution currently exposes ``get``, ``aget``, "
+"``kill``, ``exit_actor``, ``get_actor_by_name``, ``get_actor_status``, "
+"``kill_actor_by_name``, ``register_debug_actor``, and ``is_debug_mode`` "
+"at the top level because the bundled CLI and runtime share the "
+"lightweight Ray/debug adapter. These names originate in "
+"``ray.klein._internal`` and are **not** an application compatibility "
+"promise. Do not use them to manage arbitrary Ray actors or build user "
+"dataflows."
+msgstr ""
+"独立发行版当前在顶层公开 "
+"``get``、``aget``、``kill``、``exit_actor``、``get_actor_by_name``、``get_actor_status``、``kill_actor_by_name``、``register_debug_actor``"
+" 和 ``is_debug_mode``，因为随附的 CLI 与运行时共用轻量级 Ray/debug 适配器。这些名称来自 "
+"``ray.klein._internal``， **不** 构成应用兼容性承诺。请勿使用它们管理任意 Ray actor 或构建用户数据流。"
+
+msgid ""
+"An exported name is not a substitute for the documented API boundary. New"
+" application code should use :class:`JobHandle`, the JSON-safe "
+"observability API, and Ray's own public APIs instead of these bridge "
+"helpers."
+msgstr ""
+"导出的名称不能替代已文档化的 API 边界。新应用代码应使用 :class:`JobHandle`、JSON 安全的可观测性 API 和 Ray "
+"自身的公共 API，而不是这些桥接辅助函数。"
+
+msgid "Import guidance"
+msgstr "导入指南"
+
+msgid ""
+"Use short imports for ordinary graph code and domain packages for "
+"specialized contracts:"
+msgstr "普通图代码使用短导入，专用契约使用领域包："
+
+msgid ""
+"The public :class:`~ray.klein.StreamSink` type is useful for annotations "
+"in advanced selective-execution code; ordinary pipelines do not need to "
+"import or pass sink tokens."
+msgstr ""
+"公共 :class:`~ray.klein.StreamSink` 类型适用于高级选择性执行代码中的类型注解；普通管道无需导入或传递 sink 标记。"
+
+msgid ""
+"``ray.klein.runtime`` and ``ray.klein._internal`` are implementation "
+"packages. The documented partitioner types are the narrow exception used "
+"by ``DataStream.partition_by``."
+msgstr ""
+"``ray.klein.runtime`` 和 ``ray.klein._internal`` 是实现包。已文档化的分区器类型是一个狭窄例外，供 "
+"``DataStream.partition_by`` 使用。"
+
+msgid ""
+"See :doc:`../api-stability` for the alpha compatibility categories, "
+"deprecation policy, and operational-contract rules."
+msgstr "有关 alpha 兼容性类别、弃用政策和运维契约规则，请参阅 :doc:`../api-stability`。"
+
+#~ msgid "Klein context API"
+#~ msgstr "Klein 上下文 API"
+
+#~ msgid ""
+#~ "``current()``, ``install()``, and ``reset()`` "
+#~ "back the concise module-level API "
+#~ "while direct construction provides isolated"
+#~ " pipeline contexts."
+#~ msgstr ""
+#~ "``current()``、``install()`` 和 ``reset()`` 为简洁的模块级"
+#~ " API 提供支持；直接构造则可创建相互隔离的流水线上下文。"
+
+#~ msgid "Overlay the current process-global context configuration."
+#~ msgstr "叠加当前进程全局上下文的配置。"
+
+#~ msgid "Return all the rows in this :class:`DataStream`."
+#~ msgstr "返回此 :class:`DataStream` 中的所有行。"
+
+#~ msgid "Execute the job."
+#~ msgstr "执行作业。"
+
+#~ msgid "Execute one or more terminal sinks."
+#~ msgstr "执行一个或多个终端接收器。"
+
+#~ msgid ""
+#~ "A submitted job reached a failure "
+#~ "boundary. A live handle raises this "
+#~ "from ``wait()`` or ``get()`` with the"
+#~ " retained job failure detail."
+#~ msgstr "已提交作业到达故障边界。实时句柄会从 ``wait()`` 或 ``get()`` 抛出该异常，并附带保留的作业故障详情。"
+
+#~ msgid "Block until finished, then return the collected result."
+#~ msgstr "阻塞直到完成，然后返回收集到的结果。"
+
+#~ msgid ""
+#~ "A lazy terminal graph root passed "
+#~ "explicitly to :func:`ray.klein.execute`."
+#~ msgstr "显式传给 :func:`ray.klein.execute` 的惰性终端图根。"
+
+msgid "``list_job_snapshots()`` returns current jobs plus retained terminal history. ``get_job_snapshot(job_id)`` returns one snapshot or ``None``. ``rescale_operator(job_id, operator_id, parallelism, timeout=60)`` performs a local, barrier-aligned parallelism change when the operator supports it and returns a JSON-safe operation result whose status is ``COMPLETED``, ``NOOP``, ``REJECTED``, or ``FAILED``. The first version does not resize source operators, transactional sinks, collecting sinks, or lifecycle classes that have not explicitly opted into concurrent runtime handoff. Parallel and multiple source operators are supported when rescaling a downstream operator; their post-commit recovery point uses one shared, direct-input-aligned checkpoint epoch. See :doc:`../operator-rescaling` for prerequisites, result handling, state migration, and the stabilization checkpoint. ``cancel_job(job_id, timeout=60)`` addresses a published job by job ID, while the CLI ``stop`` command addresses its Ray namespace."
+msgstr "``list_job_snapshots()`` 返回当前作业及保留的终态历史；``get_job_snapshot(job_id)`` 返回一个快照或 ``None``。算子支持时，``rescale_operator(job_id, operator_id, parallelism, timeout=60)`` 会执行局部且与屏障对齐的并行度调整，并返回可安全进行 JSON 序列化的操作结果，其状态为 ``COMPLETED``、``NOOP``、``REJECTED`` 或 ``FAILED``。首个版本不调整源算子、事务型 Sink、收集型 Sink，以及未明确选择并发运行时切换的生命周期类。调整下游算子时支持并行源算子和多个源算子；提交后的恢复点使用一个共享且与直接输入对齐的检查点轮次。有关前置条件、结果处理、状态迁移和稳定化检查点，请参阅 :doc:`../operator-rescaling`。``cancel_job(job_id, timeout=60)`` 按作业 ID 定位已发布作业，而 CLI 的 ``stop`` 命令按 Ray 命名空间定位。"

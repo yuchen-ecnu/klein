@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 import ray
+import ray.klein
 
 
 def main() -> None:
-    ray.klein.reset_context().enable_interactive_mode()
-    rows = (
-        ray.klein.from_items(
-            [
-                {"name": "Ada", "amount": 4},
-                {"name": "Grace", "amount": 7},
-            ]
-        )
-        .map(lambda row: {**row, "amount": row["amount"] * 2})
-        .take_all()
-    )
+    stream = ray.klein.from_items(
+        [
+            {"name": "Ada", "amount": 4},
+            {"name": "Grace", "amount": 7},
+        ]
+    ).map(lambda row: {**row, "amount": row["amount"] * 2})
+    stream.take_all()
+    rows = ray.klein.execute("quick-start").get()
     print(rows)
 
 

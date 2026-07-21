@@ -88,13 +88,6 @@ def context(configuration: Configuration) -> KleinContext:
 
 
 @pytest.fixture()
-def interactive_context(configuration: Configuration) -> KleinContext:
-    context = KleinContext(configuration)
-    context.enable_interactive_mode()
-    return context
-
-
-@pytest.fixture()
 def eventually():
     return wait_until
 

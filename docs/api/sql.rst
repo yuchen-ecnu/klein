@@ -9,6 +9,7 @@ SQL and table API
    :nosignatures:
 
    sql
+   register_scalar_function
    SQLQueryError
    SQLSession
    ChangelogRow

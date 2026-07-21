@@ -181,7 +181,15 @@ class LogicalFunction:
 
     @property
     def batch_supported(self) -> bool:
-        return self._lowering is not None
+        """Whether batch lowering preserves this function's runtime semantics.
+
+        ``async_buffer_size`` describes Klein's ordered native-streaming
+        execution window.  Ray Data lowerings do not receive that option and
+        invoke ordinary ``map`` callables synchronously, so the presence of a
+        lowering alone is not sufficient for AUTO mode to choose batch.
+        """
+
+        return self._lowering is not None and not self._runtime_info.async_enabled
 
     @property
     def batch_lowering(self) -> Callable[[LoweringContext], Any] | None:

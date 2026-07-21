@@ -15,8 +15,10 @@ orjson==3.11.9
 pandas==2.3.3
 pip==26.1.2
 pip-audit==2.10.1
+pre-commit==4.6.0
 protobuf==6.33.6
 pyarrow==23.0.1
+pyiceberg==0.11.1
 pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
@@ -24,8 +26,9 @@ pytest-timeout==2.4.0
 PyYAML==6.0.3
 ray==2.56.1
 redis==6.4.0
+redislite==6.2.912183
 reuse==6.2.0
-rich==15.0.0
+rich==14.3.4
 rocksdict==0.3.29
 rocketmq-client-python==2.0.0
 ruff==0.15.22

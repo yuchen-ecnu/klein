@@ -104,7 +104,7 @@ def test_common_union():
         num_gpus=0,
         concurrency=3,
     )
-    data_stream.write(
+    collecting_sink = data_stream.write(
         CollectFunction,
         fn_constructor_kwargs={"limit": None},
         concurrency=1,
@@ -235,7 +235,7 @@ def test_common_union():
     }
     assert expect_act_dict == act_dict
 
-    client: JobHandle = ctx.execute("test")
+    client: JobHandle = ctx.execute("test", sinks=(collecting_sink,))
     client.wait()
     result = client.get()
     expect_result = [

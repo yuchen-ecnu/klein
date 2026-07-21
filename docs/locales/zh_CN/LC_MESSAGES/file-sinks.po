@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Compatibility link to the Klein for Ray filesystem connector documentation."
+msgstr "指向 Klein for Ray 文件系统连接器文档的兼容链接。"
+
+msgid "Transactional file sinks"
+msgstr "事务性文件 Sink"
+
+msgid ""
+"This guide moved into the dedicated connector directory. See the [Filesystem "
+"connector](connectors/filesystem.md) for input APIs, output options and "
+"defaults, rolling policies, Table DDL, and the checkpoint commit lifecycle."
+msgstr "本指南已移至专用连接器目录。有关输入 API、输出选项及默认值、滚动策略、Table DDL 和检查点提交生命周期，请参阅[文件系统连接器](connectors/filesystem.md)。"
+
+msgid "The old page remains as a compatibility link for existing bookmarks."
+msgstr "旧页面仍作为兼容链接保留，以支持现有书签。"

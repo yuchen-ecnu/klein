@@ -1,0 +1,233 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 01:01+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Klein for Ray user guides for pipelines, state, event time, SQL, "
+"autoscaling, checkpointing, and operations."
+msgstr "Klein for Ray 用户指南，涵盖管道、状态、事件时间、SQL、自动伸缩、检查点和运维。"
+
+msgid "User guides"
+msgstr "用户指南"
+
+msgid ""
+"If you're new to Klein, complete [Getting started](getting-started.md) "
+"and read [Key concepts](key-concepts.md) first. Use [Feature "
+"highlights](features.md) for a separate product-oriented map of hybrid "
+"execution, state, event time, SQL, recovery, live rescaling, detached "
+"jobs, and Ray Serve. The guides below cover pipeline development and "
+"production behavior."
+msgstr ""
+"如果刚接触 Klein，请先完成[快速入门](getting-started.md)并阅读[核心概念](key-concepts.md)。要从产品视角单独了解混合执行、状态、事件时间、SQL、恢复、在线扩缩容、detached "
+"作业和 Ray Serve，请参阅[特色功能](features.md)。下列指南介绍管道开发和生产环境行为。"
+
+msgid "Build dataflows"
+msgstr "构建数据流"
+
+msgid ""
+"[Program with DataStream and UDFs](datastream-programming-guide.md) is "
+"the complete guide to records, batches, callable lifecycles, asynchronous"
+" work, ordering, errors, resources, and partitioning."
+msgstr ""
+"[使用 DataStream 和 UDF 编程](datastream-programming-"
+"guide.md)是关于记录、批次、可调用对象生命周期、异步工作、顺序、错误、资源和分区的完整指南。"
+
+#, python-brace-format
+msgid ""
+"{doc}`Develop a pipeline <development>` provides a compact first "
+"reference for transformations, resources, partitioning, and integrations."
+msgstr "{doc}`开发管道 <development>`提供转换、资源、分区和集成的精简入门参考。"
+
+msgid ""
+"[Manage the job lifecycle](job-lifecycle.md) covers contexts, sinks, "
+"compilation, submission, handles, namespaces, cancellation, and cleanup."
+msgstr "[管理作业生命周期](job-lifecycle.md)介绍上下文、sink、编译、提交、句柄、命名空间、取消和清理。"
+
+msgid ""
+"[Build a production streaming pipeline](production-streaming.md) follows "
+"a Kafka job from event-time assignment through checkpointed file output, "
+"operations, and restore."
+msgstr ""
+"[构建生产环境流式管道](production-streaming.md)跟踪一个 Kafka "
+"作业从事件时间分配到带检查点的文件输出、运维和恢复的全过程。"
+
+msgid ""
+"[Check operator compatibility](operator-compatibility.md) lists batch and"
+" streaming support, partitioning, changelog behavior, and sink "
+"boundaries."
+msgstr "[检查算子兼容性](operator-compatibility.md)列出批处理与流处理支持、分区、变更日志行为和 sink 边界。"
+
+msgid ""
+"[Choose and configure connectors](connectors/index.md) provides a "
+"dedicated directory tree for every built-in input, output, lookup, and "
+"Serve integration."
+msgstr "[选择并配置连接器](connectors/index.md)为每种内置输入、输出、lookup 和 Serve 集成提供独立目录树。"
+
+msgid ""
+"[Use Ray Data operations](ray-data-interop.md) explains bounded readers "
+"and the `stream.data` adapter."
+msgstr "[使用 Ray Data 操作](ray-data-interop.md)介绍有界 reader 和 `stream.data` 适配器。"
+
+msgid ""
+"[Query streams with SQL](sql.md) covers SQLGlot planning, temporary "
+"views, and Flink-style Table data definition language (DDL)."
+msgstr "[使用 SQL 查询数据流](sql.md)介绍 SQLGlot 规划、临时视图和 Flink 风格的 Table 数据定义语言 (DDL)。"
+
+msgid ""
+"[Write transactional files](connectors/filesystem.md) covers streaming "
+"JSON, CSV, Parquet, text, rolling policies, and two-phase commit."
+msgstr "[写入事务型文件](connectors/filesystem.md)介绍流式 JSON、CSV、Parquet、文本、滚动策略和两阶段提交。"
+
+msgid "Work with time and state"
+msgstr "使用时间与状态"
+
+msgid ""
+"[Understand delivery guarantees](delivery-semantics.md) composes source "
+"progress, replay, managed state, checkpoints, and external sink effects."
+msgstr "[理解交付保证](delivery-semantics.md)说明源进度、重放、托管状态、检查点和外部 sink 效果如何共同构成交付语义。"
+
+msgid ""
+"[Manage keyed state](ray-native-state.md) covers RocksDB, key groups, "
+"rescaling, state TTL, and timers."
+msgstr "[管理键控状态](ray-native-state.md)介绍 RocksDB、键组、扩缩容、状态 TTL 和定时器。"
+
+msgid ""
+"[Track event time](event-time.md) covers watermark generation and the "
+"idle-input protocol."
+msgstr "[跟踪事件时间](event-time.md)介绍水位线生成和空闲输入协议。"
+
+msgid ""
+"[Store durable checkpoints](checkpoint-storage.md) covers local "
+"filesystems, Amazon S3-compatible storage, and Google Cloud Storage."
+msgstr ""
+"[存储持久检查点](checkpoint-storage.md)介绍本地文件系统、Amazon S3 兼容存储和 Google Cloud "
+"Storage。"
+
+msgid ""
+"[Restore and rescale a job](checkpoint-recovery.md) covers checkpoint "
+"selection, resubmission, compatibility, validation, and common failures."
+msgstr "[恢复作业并调整其并行度](checkpoint-recovery.md)介绍检查点选择、重新提交、兼容性、验证和常见故障。"
+
+msgid ""
+"[Survive driver failure](driver-fault-tolerance.md) explains detached "
+"control actors, reattachment, checkpoint recovery, and the Compiled Graph"
+" decision."
+msgstr ""
+"[应对 driver 故障](driver-fault-tolerance.md)介绍 detached 控制 actor、重新附加、检查点恢复和"
+" Compiled Graph 决策。"
+
+msgid "Configure and operate jobs"
+msgstr "配置和运维作业"
+
+msgid ""
+"[Deploy Klein jobs](deployment.md) covers packaging, Ray Jobs, cluster "
+"resources, credentials, operations, and upgrades."
+msgstr "[部署 Klein 作业](deployment.md)介绍打包、Ray Jobs、集群资源、凭据、运维和升级。"
+
+msgid ""
+"[Observe Klein jobs](observability.md) covers structured logs, metrics, "
+"checkpoints, CLI attach, and the cluster state API."
+msgstr "[观测 Klein 作业](observability.md)介绍结构化日志、指标、检查点、CLI 附加和集群状态 API。"
+
+msgid ""
+"[Autoscaling and live operator rescaling](operator-rescaling.md) "
+"separates bounded Ray Data worker autoscaling, live streaming rescaling, "
+"and Ray cluster autoscaling, then covers the runtime safety protocol."
+msgstr ""
+"[自动伸缩与在线算子扩缩容](operator-rescaling.md)区分有界 Ray Data worker 自动伸缩、流式在线扩缩容和 "
+"Ray 集群自动伸缩，并介绍运行时安全协议。"
+
+msgid ""
+"[Tune performance](performance-tuning.md) maps symptoms and metrics to "
+"concurrency, batching, state, checkpoint, placement, and replay controls."
+msgstr "[调优性能](performance-tuning.md)将症状和指标映射到并发、批处理、状态、检查点、放置和重放控制。"
+
+msgid ""
+"[Troubleshoot jobs](troubleshooting.md) provides failure-oriented checks "
+"for installation, planning, connectors, state, event time, and recovery."
+msgstr "[排查作业故障](troubleshooting.md)提供面向故障的检查，涵盖安装、规划、连接器、状态、事件时间和恢复。"
+
+msgid ""
+"[Configure Klein](configuration.md) explains configuration sources and "
+"precedence."
+msgstr "[配置 Klein](configuration.md)介绍配置来源和优先级。"
+
+msgid ""
+"[Configuration reference](configuration-reference.md) lists every "
+"supported key, type, default, constraint, and environment variable."
+msgstr "[配置参考](configuration-reference.md)列出每个受支持的键、类型、默认值、约束和环境变量。"
+
+#, python-brace-format
+msgid ""
+"{doc}`Debug a local pipeline <local_debug>` describes embedded Ray, in-"
+"process debug mode, and logging."
+msgstr "{doc}`调试本地管道 <local_debug>`介绍嵌入式 Ray、进程内调试模式和日志记录。"
+
+msgid ""
+"[Check compatibility](compatibility.md) defines supported Python and Ray "
+"versions."
+msgstr "[检查兼容性](compatibility.md)定义受支持的 Python 和 Ray 版本。"
+
+msgid ""
+"[Check production readiness](production-readiness.md) provides an "
+"executable launch checklist; [Security](security.md), [Known "
+"limitations](limitations.md), and [Upgrading](upgrading.md) make the "
+"operational boundaries explicit."
+msgstr ""
+"[检查生产就绪状态](production-"
+"readiness.md)提供可执行的上线清单；[安全](security.md)、[已知限制](limitations.md)和[升级](upgrading.md)明确说明运维边界。"
+
+msgid ""
+"[Use the CLI](cli-reference.md) lists every command, option, exit "
+"behavior, JSON contract, and automation rule."
+msgstr "[使用 CLI](cli-reference.md)列出所有命令、选项、退出行为、JSON 契约和自动化规则。"
+
+msgid ""
+"Contributor and internal-development documentation has its own top-level "
+"navigation section so application users do not need to filter it out of "
+"the runtime guides."
+msgstr "贡献者和内部开发文档拥有独立的顶层导航，因此应用开发者无需从运行时指南中筛选这些内容。"
+
+#~ msgid "Contribute to Klein"
+#~ msgstr "为 Klein 做贡献"
+
+#~ msgid ""
+#~ "[Understand the package structure](package-"
+#~ "structure.md) before moving or adding "
+#~ "modules."
+#~ msgstr "移动或添加模块前，请先[了解包结构](package-structure.md)。"
+
+#~ msgid ""
+#~ "[Write and run tests](testing.md) explains "
+#~ "the test tiers and fixture rules."
+#~ msgstr "[编写和运行测试](testing.md)介绍测试层级和 fixture 规则。"
+
+#~ msgid ""
+#~ "[Review the Ray private-API inventory"
+#~ "](private-api-inventory.md) before adding a"
+#~ " Ray dependency."
+#~ msgstr "添加 Ray 依赖前，请[审查 Ray 私有 API 清单](private-api-inventory.md)。"
+
+#~ msgid ""
+#~ "[Release Klein](releasing.md) describes package "
+#~ "verification and publication."
+#~ msgstr "[发布 Klein](releasing.md)介绍软件包验证和发布。"

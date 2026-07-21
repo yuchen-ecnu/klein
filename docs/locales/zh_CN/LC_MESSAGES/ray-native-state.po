@@ -1,0 +1,319 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Use Klein for Ray managed keyed state, RocksDB, key-group rescaling, TTL, "
+"timers, and Object Store checkpoint acceleration."
+msgstr "使用 Klein for Ray 托管键控状态、RocksDB、键组扩缩容、TTL、定时器和 Object Store 检查点加速。"
+
+msgid "Managed state with Ray-native snapshot acceleration"
+msgstr "使用 Ray 原生快照加速的托管状态"
+
+msgid "Choose a state backend"
+msgstr "选择状态后端"
+
+msgid "Klein uses a hybrid state design:"
+msgstr "Klein 使用混合状态设计："
+
+msgid ""
+"The in-memory backend is the dependency-free default and is appropriate for "
+"moderate state that is checkpointed frequently. RocksDB is an optional hot "
+"keyed-state backend for larger state. Point reads, writes, TTL indexes, "
+"namespaces, and timers stay local to the operator task in either case."
+msgstr "内存后端是无额外依赖的默认选项，适合频繁创建检查点的中等规模状态。RocksDB 是可选的热键控状态后端，适合更大规模的状态。无论使用哪种后端，点读写、TTL 索引、命名空间和定时器均保留在算子任务本地。"
+
+msgid ""
+"Ray's Object Store is an acceleration layer for large immutable snapshots. A "
+"barrier snapshot smaller than the configured threshold stays inline; a "
+"larger snapshot is stored once with `ray.put` and the coordinator pins the "
+"nested `ObjectRef` until it is durably checkpointed or superseded."
+msgstr "Ray Object Store 是大型不可变快照的加速层。小于配置阈值的屏障快照保持内联；更大的快照通过一次 `ray.put` 存储，协调器会固定嵌套的 `ObjectRef`，直到其持久化为检查点或被取代。"
+
+msgid ""
+"External checkpoint storage is the durability boundary. Local paths, S3-"
+"compatible storage, and GCS use the [Flink-style checkpoint layout]"
+"(checkpoint-storage.md). Object spilling is a capacity feature, not a "
+"durable recovery protocol."
+msgstr "外部检查点存储是持久性边界。本地路径、兼容 S3 的存储和 GCS 使用 [Flink 风格的检查点布局](checkpoint-storage.md)。对象溢写是容量功能，不是持久恢复协议。"
+
+msgid ""
+"This design uses zero-copy sharing, distributed reference counting, "
+"spilling, and owner-local recovery without adding a distributed object round "
+"trip to the per-record state path."
+msgstr "此设计使用零拷贝共享、分布式引用计数、溢写和所有者本地恢复，且不会在逐记录状态路径中增加分布式对象往返。"
+
+msgid "How does managed state work?"
+msgstr "托管状态如何工作？"
+
+msgid ""
+"`DataStream.key_by()` creates a keyed branch and installs a "
+"`KeyPartitioner`. Stateful operators then use a backend-neutral API:"
+msgstr "`DataStream.key_by()` 创建键控分支并安装 `KeyPartitioner`。随后有状态算子使用与后端无关的 API："
+
+msgid ""
+"`ValueState`, `ListState`, and `MapState`, each created from a descriptor;"
+msgstr "`ValueState`、`ListState` 和 `MapState`，每一种都由描述符创建；"
+
+msgid "key plus namespace isolation, used by windows;"
+msgstr "窗口使用的键与命名空间隔离；"
+
+msgid "per-descriptor TTL with create/write or read/write refresh;"
+msgstr "按描述符设置 TTL，并在创建/写入或读取/写入时刷新；"
+
+msgid "ordered, deduplicated event-time and processing-time timers."
+msgstr "有序、去重的事件时间与处理时间定时器。"
+
+msgid ""
+"`MemoryStateBackend` implements the complete state contract. The optional "
+"`RocksDBStateBackend` stores state, expiry indexes, timers, and metadata in "
+"separate column families through `rocksdict`."
+msgstr "`MemoryStateBackend` 实现完整的状态约定。可选的 `RocksDBStateBackend` 通过 `rocksdict` 将状态、过期索引、定时器和元数据存储在不同的列族中。"
+
+msgid ""
+"Key ownership is stable across Python processes and parallelism changes. "
+"Klein hashes serialized keys into a fixed key-group space defined by `state."
+"keyed.max-parallelism`, then assigns contiguous key-group ranges to the "
+"current subtasks. Python's process-salted `hash()` is never used. The "
+"maximum parallelism is part of checkpoint compatibility and must not change "
+"on restore."
+msgstr "键所有权在不同 Python 进程和并行度变化之间保持稳定。Klein 将序列化键哈希到由 `state.keyed.max-parallelism` 定义的固定键组空间，再把连续键组范围分配给当前子任务。绝不使用 Python 进程加盐的 `hash()`。最大并行度属于检查点兼容性的一部分，恢复时不得更改。"
+
+msgid ""
+"Set `state.keyed.max-parallelism` before the first checkpoint. Don't change "
+"it when you restore or rescale that job."
+msgstr "请在首次创建检查点前设置 `state.keyed.max-parallelism`。恢复或扩缩该作业时不要更改它。"
+
+msgid "Choose a state handle"
+msgstr "选择状态句柄"
+
+msgid ""
+"Descriptors are stable state schema. Give every logical value a unique, "
+"unchanging name and declare descriptors on the function class rather than "
+"creating a new descriptor per record."
+msgstr "描述符是稳定的状态模式。为每个逻辑值指定唯一且不变的名称，并在函数类上声明描述符，不要为每条记录创建新描述符。"
+
+msgid "Descriptor"
+msgstr "描述符"
+
+msgid "Returned handle"
+msgstr "返回的句柄"
+
+msgid "Operations"
+msgstr "操作"
+
+msgid "`ValueStateDescriptor`"
+msgstr "`ValueStateDescriptor`"
+
+msgid "`ValueState`"
+msgstr "`ValueState`"
+
+msgid "Read/write `.value`; `None` means absent; `clear()` deletes it."
+msgstr "读写 `.value`；`None` 表示不存在；`clear()` 将其删除。"
+
+msgid "`ListStateDescriptor`"
+msgstr "`ListStateDescriptor`"
+
+msgid "`ListState`"
+msgstr "`ListState`"
+
+msgid ""
+"Standard mutable-sequence operations such as `append`, `extend`, indexing, "
+"deletion, and `clear`."
+msgstr "标准可变序列操作，例如 `append`、`extend`、索引、删除和 `clear`。"
+
+msgid "`MapStateDescriptor`"
+msgstr "`MapStateDescriptor`"
+
+msgid "`MapState`"
+msgstr "`MapState`"
+
+msgid ""
+"Standard mutable-mapping operations such as item get/set/delete, `update`, "
+"iteration, and `clear`."
+msgstr "标准可变映射操作，例如元素获取/设置/删除、`update`、迭代和 `clear`。"
+
+msgid ""
+"Every handle is isolated by the current key and an optional namespace. "
+"Windows use the window object as a namespace, so two windows for the same "
+"key do not share an aggregate."
+msgstr "每个句柄都按当前键和可选命名空间隔离。窗口使用窗口对象作为命名空间，因此同一个键的两个窗口不会共享聚合值。"
+
+msgid "Configure state TTL"
+msgstr "配置状态 TTL"
+
+msgid ""
+"`ON_CREATE_AND_WRITE` refreshes expiry only on writes; `ON_READ_AND_WRITE` "
+"also refreshes it on a successful read. `NEVER_RETURN_EXPIRED` treats an "
+"expired value as absent even before background cleanup deletes its bytes. "
+"`RETURN_EXPIRED_IF_NOT_CLEANED_UP` can expose such a value until cleanup "
+"runs and should be used only when that weaker visibility is intentional. "
+"Cleanup processes at most `state.ttl.cleanup.batch-size` entries after one "
+"operator input."
+msgstr "`ON_CREATE_AND_WRITE` 仅在写入时刷新到期时间；`ON_READ_AND_WRITE` 还会在成功读取时刷新。`NEVER_RETURN_EXPIRED` 即使在后台清理删除字节前也会把过期值视为不存在。`RETURN_EXPIRED_IF_NOT_CLEANED_UP` 在清理执行前可能暴露该值，只应在有意接受这种较弱可见性时使用。每处理一个算子输入，清理最多处理 `state.ttl.cleanup.batch-size` 个条目。"
+
+msgid ""
+"TTL uses processing time. It is independent of event-time watermarks and can "
+"make results incomplete if a key returns after expiration."
+msgstr "TTL 使用处理时间。它与事件时间水位线无关；如果某个键在到期后再次出现，可能导致结果不完整。"
+
+msgid "Register timers"
+msgstr "注册定时器"
+
+msgid ""
+"Processing-time timers fire from worker wall-clock progress. Event-time "
+"timers fire only when the aggregate input watermark reaches their timestamp. "
+"Timer timestamps are integer milliseconds and are deduplicated by key, "
+"namespace, domain, and timestamp."
+msgstr "处理时间定时器随 worker 墙上时钟推进而触发。事件时间定时器只有在聚合输入水位线到达其时间戳时才会触发。定时器时间戳是整数毫秒，并按键、命名空间、时间域和时间戳去重。"
+
+msgid ""
+"Pass a `KeyedProcessFunction` instance or a plain two-argument callable to "
+"`process()`. Use a class when `on_timer()` behavior is required. Timer state "
+"and the operator watermark are included in managed-state checkpoints."
+msgstr "向 `process()` 传入 `KeyedProcessFunction` 实例或普通双参数可调用对象。需要 `on_timer()` 行为时请使用类。定时器状态和算子水位线会包含在托管状态检查点中。"
+
+msgid "Use stateful operators"
+msgstr "使用有状态算子"
+
+msgid "The streaming runtime provides:"
+msgstr "流处理运行时提供："
+
+msgid "keyed process functions with managed state and timers;"
+msgstr "带托管状态和定时器的键控处理函数；"
+
+msgid "tumbling, sliding, and session event-time windows;"
+msgstr "滚动、滑动和会话事件时间窗口；"
+
+msgid ""
+"two-stream keyed interval joins with independent key and timestamp selectors;"
+msgstr "具有独立键和时间戳选择器的双流键控区间 join；"
+
+msgid ""
+"state TTL and incremental expiry cleanup for all managed state descriptors."
+msgstr "所有托管状态描述符的状态 TTL 和增量过期清理。"
+
+msgid ""
+"Window and join APIs accept a `state_ttl` safety bound. Interval joins also "
+"evict records once their event-time bounds can no longer match."
+msgstr "窗口和 join API 接受 `state_ttl` 安全上限。当记录的事件时间范围不可能再匹配时，区间 join 也会将其淘汰。"
+
+msgid "How does a barrier snapshot work?"
+msgstr "屏障快照如何工作？"
+
+msgid "When a barrier aligns at a stateful task:"
+msgstr "当屏障在有状态任务处对齐时："
+
+msgid "the task flushes pre-barrier output;"
+msgstr "任务刷新屏障前的输出；"
+
+msgid ""
+"the backend exports state, TTL indexes, and timers as portable logical key-"
+"group fragments and Klein serializes the operator watermark with them;"
+msgstr "后端把状态、TTL 索引和定时器导出为可移植的逻辑键组分片，Klein 同时序列化算子水位线；"
+
+msgid ""
+"the snapshot stays inline or is cached in the Ray Object Store according to "
+"`state.checkpoint.object-store-cache.min-bytes`;"
+msgstr "快照根据 `state.checkpoint.object-store-cache.min-bytes` 保持内联或缓存在 Ray Object Store 中；"
+
+msgid ""
+"the task registers the immutable reference before forwarding the barrier;"
+msgstr "任务在转发屏障前注册不可变引用；"
+
+msgid ""
+"after the sink acknowledgement, the coordinator promotes those references to "
+"the latest hot recovery point;"
+msgstr "Sink 确认后，协调器将这些引用提升为最新热恢复点；"
+
+msgid ""
+"periodic persistence materializes them under `chk-N/op-*/`, verifies size "
+"and SHA-256, and publishes `_metadata` last."
+msgstr "定期持久化会将它们物化到 `chk-N/op-*/` 下，验证大小和 SHA-256，并最后发布 `_metadata`。"
+
+msgid ""
+"On a task restart the current hot reference is preferred. If the "
+"coordinator, owner, or cluster was lost, the task restores the latest "
+"durable snapshot. Checkpoint retention releases old exclusive blobs; normal "
+"Ray reference counting releases superseded hot snapshots."
+msgstr "任务重启时优先使用当前热引用。如果协调器、所有者或集群丢失，任务会恢复最新的持久快照。检查点保留策略会释放旧的独占 blob；常规 Ray 引用计数会释放被取代的热快照。"
+
+msgid ""
+"On rescale, every prior fragment for the logical operator is available "
+"through the coordinator. A new subtask selects only the key groups in its "
+"newly assigned range and merges those groups into an empty local backend. "
+"Scale-up and scale-down therefore preserve keyed state, TTL indexes, and "
+"timers without rehashing keys or depending on the previous subtask count."
+msgstr "扩缩容时，逻辑算子之前的每个分片都可通过协调器获得。新子任务只选择其新分配范围内的键组，并将这些键组合并到空的本地后端。因此，扩容和缩容都能保留键控状态、TTL 索引和定时器，无需重新哈希键，也不依赖之前的子任务数量。"
+
+msgid "Configure managed state"
+msgstr "配置托管状态"
+
+msgid "Install `ray-klein[rocksdb]` before selecting the RocksDB backend."
+msgstr "选择 RocksDB 后端前，请安装 `ray-klein[rocksdb]`。"
+
+msgid ""
+"Put the RocksDB working directory on node-local SSD. It is disposable "
+"working state; durable checkpoints belong on replicated filesystem or object "
+"storage."
+msgstr "将 RocksDB 工作目录放在节点本地 SSD 上。它是可丢弃的工作状态；持久检查点应放在复制文件系统或对象存储中。"
+
+msgid "Understand the consistency boundary"
+msgstr "理解一致性边界"
+
+msgid ""
+"Klein's existing progress protocol is at-least-once and allocates barriers "
+"per source. Managed-state snapshots participate in that same protocol. "
+"Arbitrary non-transactional sinks are therefore not exactly-once. Event-time "
+"timers advance only from explicit aggregate watermarks; record timestamps "
+"alone never move event time. Watermark and idle-input semantics are "
+"described in [Event time and idle inputs](event-time.md). Klein can restore "
+"a new submission from an existing completed checkpoint through `execution."
+"savepoint.path`. Creating a named, user-triggered savepoint independently of "
+"the periodic checkpoint lifecycle remains future work; see [Restore and "
+"rescale a job](checkpoint-recovery.md)."
+msgstr "Klein 现有的进度协议为至少一次，并按数据源分配屏障。托管状态快照参与同一协议。因此，任意非事务性 Sink 无法保证精确一次。事件时间定时器只会随显式聚合水位线推进；仅有记录时间戳不会推进事件时间。水位线和空闲输入语义详见[事件时间与空闲输入](event-time.md)。Klein 可以通过 `execution.savepoint.path` 从现有已完成检查点恢复新的提交。独立于定期检查点生命周期创建具名、用户触发的 savepoint 仍是后续工作；请参阅[恢复作业并调整并行度](checkpoint-recovery.md)。"
+
+msgid ""
+"`ObjectStoreStateBackend` remains available as a low-level immutable MVCC "
+"primitive for coarse state partitions. The Object Store is used where its "
+"immutable-object model helps snapshots; it is not forced into the hot per-"
+"record mutation path."
+msgstr "`ObjectStoreStateBackend` 仍作为面向粗粒度状态分区的底层不可变 MVCC 原语提供。Object Store 用在其不可变对象模型有助于快照的场景，不会被强行用于热的逐记录变更路径。"
+
+msgid "References"
+msgstr "参考资料"
+
+msgid ""
+"[Ray object fault tolerance](https://docs.ray.io/en/latest/ray-core/"
+"fault_tolerance/objects.html)"
+msgstr "[Ray 对象容错](https://docs.ray.io/en/latest/ray-core/fault_tolerance/objects.html)"
+
+msgid ""
+"[Ray object spilling](https://docs.ray.io/en/latest/ray-core/internals/"
+"object-spilling.html)"
+msgstr "[Ray 对象溢写](https://docs.ray.io/en/latest/ray-core/internals/object-spilling.html)"
+
+msgid ""
+"[Flink state backends](https://nightlies.apache.org/flink/flink-docs-stable/"
+"docs/ops/state/state_backends/)"
+msgstr "[Flink 状态后端](https://nightlies.apache.org/flink/flink-docs-stable/docs/ops/state/state_backends/)"
+
+msgid "On rescale, the coordinator materializes and decodes each prior fragment once, then partitions its opaque key-group payloads into one snapshot per target subtask. Each target fetches and decodes only its assigned snapshot before merging those groups into an empty local backend. Scale-up and scale-down therefore preserve keyed state, TTL indexes, and timers without rehashing keys, without an old-by-new decode loop, and without depending on the previous subtask count."
+msgstr "扩缩容时，协调器只会物化并解码每个旧分片一次，然后将其中不透明的键组载荷划分为每个目标子任务一个快照。每个目标仅获取并解码分配给自己的快照，再把这些键组合并到空的本地后端。因此，无论扩容还是缩容，都能保留键控状态、TTL 索引和定时器，既不重新散列键，也不执行旧子任务数乘以新子任务数的解码循环，并且不依赖此前的子任务数量。"

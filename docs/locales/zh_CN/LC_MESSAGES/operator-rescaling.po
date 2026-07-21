@@ -1,0 +1,485 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Understand Ray Data autoscaling and safely change a running Klein "
+"streaming operator's parallelism."
+msgstr "了解 Ray Data 自动伸缩，并安全调整运行中 Klein 流式算子的并行度。"
+
+msgid "Autoscaling and live operator rescaling"
+msgstr "自动伸缩与在线算子扩缩容"
+
+msgid ""
+"Scaling has three independent layers in Klein. Choose the layer that "
+"matches the execution mode and the resource you need to change:"
+msgstr "Klein 中的伸缩分为三个独立层级。请选择与执行模式及待调整资源相匹配的层级："
+
+msgid "Layer"
+msgstr "层级"
+
+msgid "Execution mode"
+msgstr "执行模式"
+
+msgid "Decision owner"
+msgstr "决策方"
+
+msgid "Klein entry point"
+msgstr "Klein 入口"
+
+msgid "Ray Data worker pool"
+msgstr "Ray Data worker 池"
+
+msgid "Batch"
+msgstr "批处理"
+
+msgid "Ray Data"
+msgstr "Ray Data"
+
+msgid "`concurrency=(min, max)` on a callable-class transform"
+msgstr "可调用类转换上的 `concurrency=(min, max)`"
+
+msgid "Klein operator parallelism"
+msgstr "Klein 算子并行度"
+
+msgid "Streaming"
+msgstr "流处理"
+
+msgid "User, Dashboard, or external controller"
+msgstr "用户、Dashboard 或外部控制器"
+
+msgid "`rescale_operator()`"
+msgstr "`rescale_operator()`"
+
+msgid "Ray cluster nodes"
+msgstr "Ray 集群节点"
+
+msgid "Batch and streaming"
+msgstr "批处理和流处理"
+
+msgid "Ray cluster autoscaler"
+msgstr "Ray 集群自动伸缩器"
+
+msgid "Ray cluster configuration"
+msgstr "Ray 集群配置"
+
+msgid ""
+"Klein does not currently include a metric-driven controller that "
+"automatically changes streaming parallelism. The Dashboard and "
+"`rescale_operator()` perform an explicit, live change to one operator. "
+"The Dashboard submits the change asynchronously; the Python function "
+"waits for its topology result. Ray's cluster autoscaler can provide nodes"
+" for that request, but it does not choose the operator's parallelism."
+msgstr ""
+"Klein 目前不包含根据指标自动调整流式并行度的控制器。Dashboard 和 `rescale_operator()` "
+"会对一个算子执行显式的在线变更。Dashboard 会异步提交变更；Python 函数则等待拓扑结果。Ray "
+"集群自动伸缩器可为该请求提供节点，但不会替算子选择并行度。"
+
+msgid ""
+"`DataStream.rescale()` is a partitioning method. It limits which "
+"downstream subtasks each upstream subtask can address; it does not add or"
+" remove actors."
+msgstr "`DataStream.rescale()` 是一种分区方法。它限制每个上游子任务可寻址的下游子任务，但不会添加或移除 actor。"
+
+msgid "Autoscale a bounded transform"
+msgstr "自动伸缩有界转换"
+
+msgid ""
+"In batch mode, Klein lowers compatible transforms to Ray Data and "
+"forwards their concurrency setting. A callable class uses Ray actors, so "
+"a `(min, max)` range gives Ray Data an autoscaling actor pool:"
+msgstr ""
+"在批处理模式下，Klein 将兼容转换下沉为 Ray Data，并转发其并发设置。可调用类使用 Ray actor，因此 `(min, max)`"
+" 范围会为 Ray Data 提供自动伸缩 actor 池："
+
+msgid ""
+"Ray Data owns the utilization policy and the actor lifecycle. The range "
+"limits workers, not cluster nodes, and each live worker requests the "
+"transform's `num_cpus` and `num_gpus`. See Ray Data's [transform "
+"concurrency guide](https://docs.ray.io/en/latest/data/transforming-"
+"data.html#specifying-concurrency) for the policy in the installed Ray "
+"version."
+msgstr ""
+"Ray Data 负责利用率策略和 actor 生命周期。该范围限制的是 worker 而非集群节点，每个活动 worker 都会请求转换的 "
+"`num_cpus` 和 `num_gpus`。有关已安装 Ray 版本中的策略，请参阅 Ray Data "
+"的[转换并发指南](https://docs.ray.io/en/latest/data/transforming-data.html"
+"#specifying-concurrency)。"
+
+msgid ""
+"The same tuple has different behavior in Klein's native streaming "
+"runtime: `(2, 8)` starts the operator at the lower bound, `2`. It neither"
+" triggers a streaming policy nor caps a later `rescale_operator(..., "
+"parallelism=...)` request. Set explicit policy bounds in an external "
+"controller if one is required."
+msgstr ""
+"相同元组在 Klein 原生流式运行时中的行为不同：`(2, 8)` 会以其下限 `2` 启动算子。它既不会触发流式策略，也不会限制后续 "
+"`rescale_operator(..., parallelism=...)` 请求。如需策略边界，请在外部控制器中显式设置。"
+
+msgid "Prepare a streaming job for live rescaling"
+msgstr "为流式作业准备在线扩缩容"
+
+msgid ""
+"Live rescaling changes one running operator without restarting the entire"
+" job. The request is accepted only when all of these conditions hold:"
+msgstr "在线扩缩容可在不重启整个作业的情况下更改一个运行中的算子。只有满足以下全部条件时，请求才会被接受："
+
+msgid "Requirement"
+msgstr "要求"
+
+msgid "Current behavior"
+msgstr "当前行为"
+
+msgid "Job health"
+msgstr "作业健康状态"
+
+msgid "The job and every task instance must be `RUNNING`."
+msgstr "作业和每个任务实例都必须处于 `RUNNING` 状态。"
+
+msgid "Source topology"
+msgstr "源拓扑"
+
+msgid ""
+"Multiple source operators and source subtasks are coordinated within "
+"checkpoint domains."
+msgstr "多个源算子和源子任务会在各自的检查点域内协调。"
+
+msgid "Target"
+msgstr "目标"
+
+msgid ""
+"Source, transactional-sink, and collecting-sink operators are not "
+"supported."
+msgstr "不支持源算子、事务型 sink 算子和收集型 sink 算子。"
+
+msgid "Managed state"
+msgstr "托管状态"
+
+msgid "Target parallelism cannot exceed `state.keyed.max-parallelism`."
+msgstr "目标并行度不能超过 `state.keyed.max-parallelism`。"
+
+msgid "Coordination"
+msgstr "协调"
+
+msgid ""
+"Only one rescale runs at a time; wait for its stabilization checkpoint "
+"before the next one."
+msgstr "一次只能运行一个扩缩容操作；请等待其稳定化检查点完成后再执行下一次操作。"
+
+msgid "Capacity"
+msgstr "容量"
+
+msgid "Scale-out needs schedulable resources for the added subtasks."
+msgstr "扩容需要为新增子任务提供可调度资源。"
+
+msgid ""
+"Set `state.keyed.max-parallelism` before the first checkpoint and keep it"
+" stable:"
+msgstr "请在第一个检查点之前设置 `state.keyed.max-parallelism`，并保持其稳定："
+
+msgid ""
+"The Dashboard and stable state API require job snapshot publication "
+"through `observability.dashboard.enabled`, which is enabled by default."
+msgstr "Dashboard 和稳定状态 API 要求通过 `observability.dashboard.enabled` 发布作业快照；该选项默认启用。"
+
+msgid ""
+"Use stable, unique operator names when constructing the graph. The "
+"Dashboard shows numeric operator IDs, current parallelism, and a runtime-"
+"provided reason when an operator cannot be resized."
+msgstr "构造图时，请使用稳定且唯一的算子名称。Dashboard 会显示数字算子 ID、当前并行度；无法调整算子时，还会显示运行时提供的原因。"
+
+msgid ""
+"Operator chaining is enabled by default. Compatible stateless operators "
+"on a forward edge can become one physical operator, including a chain "
+"rooted at a source that cannot be resized. Treat the published operator "
+"snapshot as the authoritative set of scaling units. Set `pipeline"
+".operator-chaining.enabled=false` before submission when a transform must"
+" remain independently rescalable."
+msgstr ""
+"算子链默认启用。forward "
+"边上兼容的无状态算子可以合并为一个物理算子，其中也可能包括以不可调整源为根的链。请将已发布的算子快照视为扩缩容单元的权威集合。如果某个转换必须保持可独立扩缩容，请在提交前设置"
+" `pipeline.operator-chaining.enabled=false`。"
+
+msgid "Resize an operator"
+msgstr "调整算子并行度"
+
+msgid ""
+"Start the bundled Dashboard from a machine that can connect to the Ray "
+"cluster:"
+msgstr "在能够连接 Ray 集群的机器上启动随附的 Dashboard："
+
+msgid ""
+"Select a running job, enter the target parallelism on an enabled "
+"operator, and apply the change. The server returns as soon as the "
+"JobManager accepts the operation. You can close the operator panel, "
+"navigate away, or close the page; the JobManager continues the rescale. "
+"The execution graph and operator table are driven by the polled job "
+"snapshot, so reopening the page reconstructs the current target and phase"
+" instead of relying on browser-local state."
+msgstr ""
+"选择一个运行中的作业，在可调整的算子上输入目标并行度并应用变更。服务器会在 JobManager 接受操作后立即返回。你可以关闭算子面板、切换页面或关闭浏览器页面；JobManager "
+"仍会继续扩缩容。执行图和算子表由轮询得到的作业快照驱动，因此重新打开页面时会根据快照重建当前目标和阶段，而不依赖浏览器本地状态。"
+
+msgid "The Dashboard shows these operation states:"
+msgstr "Dashboard 会显示以下操作状态："
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Dashboard meaning"
+msgstr "Dashboard 含义"
+
+msgid "`ACCEPTED`"
+msgstr "`ACCEPTED`"
+
+msgid "The operation is queued by the JobManager."
+msgstr "操作已进入 JobManager 队列。"
+
+msgid "`RUNNING`"
+msgstr "`RUNNING`"
+
+msgid "Task instances and routes are being coordinated."
+msgstr "正在协调任务实例和路由。"
+
+msgid "`STABILIZING`"
+msgstr "`STABILIZING`"
+
+msgid ""
+"The new parallelism is committed and its stabilization checkpoint is "
+"pending."
+msgstr "新并行度已提交，正在等待稳定化检查点。"
+
+msgid "`COMPLETED`"
+msgstr "`COMPLETED`"
+
+msgid "The topology and stabilization checkpoint are complete."
+msgstr "拓扑变更和稳定化检查点均已完成。"
+
+msgid "`NOOP`"
+msgstr "`NOOP`"
+
+msgid "The requested parallelism already matched the operator."
+msgstr "请求的并行度已与算子当前并行度一致。"
+
+msgid "`REJECTED`"
+msgstr "`REJECTED`"
+
+msgid "A precondition or request was invalid."
+msgstr "前置条件或请求无效。"
+
+msgid "`FAILED`"
+msgstr "`FAILED`"
+
+msgid ""
+"The runtime operation failed; the snapshot reports the retained topology "
+"and error."
+msgstr "运行时操作失败；快照会报告保留的拓扑和错误。"
+
+msgid ""
+"The latest per-operator record is available as "
+"`operator[\"rescale_operation\"]`; recent job-level records are available"
+" as `job[\"rescale_operations\"]`. Both remain observable across page "
+"refreshes. Only one operation can run at a time, and the runtime keeps "
+"later rescale controls disabled through `STABILIZING`."
+msgstr ""
+"最新的算子级记录位于 `operator[\"rescale_operation\"]`；近期的作业级记录位于 "
+"`job[\"rescale_operations\"]`。刷新页面后两者仍可观测。一次只能运行一个操作，运行时会在整个 `STABILIZING` 阶段禁用后续扩缩容控件。"
+
+msgid ""
+"See [Observe Klein jobs](observability.md) before exposing the Dashboard "
+"beyond its loopback listener."
+msgstr "将 Dashboard 暴露到回环监听地址之外前，请参阅[观测 Klein 作业](observability.md)。"
+
+msgid ""
+"Automation that needs to wait for the topology result can use the stable,"
+" synchronous state API:"
+msgstr "需要等待拓扑结果的自动化程序可以使用稳定的同步状态 API："
+
+msgid "The result is JSON-safe and has one of these statuses:"
+msgstr "结果可以安全地序列化为 JSON，并具有以下状态之一："
+
+msgid "Meaning"
+msgstr "含义"
+
+msgid "Next action"
+msgstr "后续操作"
+
+msgid "The topology change committed."
+msgstr "拓扑变更已提交。"
+
+msgid "Wait for the stabilization checkpoint, then validate rates and lag."
+msgstr "等待稳定化检查点完成，然后验证速率和延迟。"
+
+msgid "The target already has that parallelism."
+msgstr "目标已经具有该并行度。"
+
+msgid "No action is required."
+msgstr "无需操作。"
+
+msgid "Read `error` and correct the request."
+msgstr "读取 `error` 并修正请求。"
+
+msgid "The runtime operation raised an error."
+msgstr "运行时操作引发错误。"
+
+msgid "Refresh the job snapshot before deciding whether to retry."
+msgstr "决定是否重试前，请刷新作业快照。"
+
+msgid ""
+"A result of `None` means that the job is no longer published in this "
+"cluster. A client timeout only stops that caller from waiting. The remote"
+" operation can still commit. Likewise, a `FAILED` response can follow the"
+" topology commit if a later checkpoint-gate response fails. Never retry "
+"blindly; first refresh `get_job_snapshot()` and compare the operator's "
+"current parallelism."
+msgstr ""
+"结果为 `None` "
+"表示该作业已不再发布到此集群。客户端超时只会让该调用方停止等待，远程操作仍可能提交。同样，如果后续检查点门控响应失败，也可能在拓扑提交后收到 "
+"`FAILED` 响应。切勿盲目重试；请先刷新 `get_job_snapshot()`，并比较算子的当前并行度。"
+
+msgid "What happens at the local cut?"
+msgstr "局部切点处会发生什么？"
+
+msgid ""
+"On scale-out, Klein creates and pings only the added actors. Subtasks "
+"whose indexes exist at both parallelisms retain their Ray actor "
+"identities."
+msgstr "扩容时，Klein 只创建并探测新增 actor。在新旧并行度中索引均存在的子任务会保留其 Ray actor 身份。"
+
+msgid ""
+"The coordinator pauses new checkpoints and waits for in-flight checkpoint"
+" completion before changing the data plane."
+msgstr "协调器暂停创建新检查点，并等待在途检查点完成后再更改数据平面。"
+
+msgid ""
+"Direct upstream tasks insert an ordered local barrier and pause at that "
+"cut. A directly connected source pauses cooperatively at a record "
+"boundary; unrelated regions keep running."
+msgstr "直接上游任务会插入一个有序局部屏障，并在该切点暂停。直接连接的源会在记录边界协同暂停；不相关区域继续运行。"
+
+msgid ""
+"The target aligns the barriers, snapshots managed state, and fences its "
+"direct downstream tasks. Retained and added actors prepare the new "
+"runtime and their assigned state while the old runtime remains available."
+msgstr "目标对齐屏障、生成托管状态快照，并为其直接下游任务设置围栏。在旧运行时仍可用期间，保留和新增的 actor 会准备新运行时及各自分配的状态。"
+
+msgid ""
+"Klein commits the new topology and routing atomically. A pre-commit "
+"failure rolls back to the old runtime. On scale-in, only surplus actors "
+"are stopped after commit."
+msgstr "Klein 以原子方式提交新拓扑和路由。提交前故障会回滚到旧运行时。缩容时，只有多余 actor 会在提交后停止。"
+
+msgid ""
+"The source emits an ordinary stabilization checkpoint. Until it becomes "
+"durable, a task failure deliberately escalates to consistent global "
+"checkpoint recovery instead of restoring one task from stale state."
+msgstr "源会发出一个普通的稳定化检查点。在其持久化之前，任务故障会有意升级为一致的全局检查点恢复，而不是从陈旧状态恢复单个任务。"
+
+msgid ""
+"Keyed state moves by stable key group; keys are not rehashed with "
+"Python's process-local `hash()`. The operation does not change connector "
+"delivery guarantees, so sinks still need the idempotency or transaction "
+"design described in [Delivery semantics](delivery-semantics.md)."
+msgstr ""
+"键控状态按稳定键组移动；键不会使用 Python 的进程本地 `hash()` 重新哈希。该操作不会改变连接器交付保证，因此 sink "
+"仍需要[交付语义](delivery-semantics.md)中所述的幂等或事务设计。"
+
+msgid ""
+"An incident `FORWARD` edge is valid only while its endpoints have equal "
+"parallelism. Klein changes that edge to its normal shuffle choice when a "
+"rescale makes the counts differ. Explicit non-forward partitioners are "
+"preserved."
+msgstr ""
+"相连的 `FORWARD` 边仅在两端并行度相等时有效。扩缩容导致数量不同时，Klein 会将该边改为其常规 shuffle 选择。显式非 "
+"forward 分区器会被保留。"
+
+msgid "Coordinate with Ray cluster autoscaling"
+msgstr "与 Ray 集群自动伸缩协调"
+
+msgid ""
+"Ray's cluster autoscaler is outside Klein. A streaming scale-out creates "
+"actor CPU/GPU demands that an already configured cluster autoscaler can "
+"satisfy, but node provisioning must finish within "
+"`job.scheduler.start.timeout`. The operator request can otherwise time "
+"out while waiting for its added actors."
+msgstr ""
+"Ray 集群自动伸缩器位于 Klein 之外。流式扩容会产生 actor CPU/GPU "
+"需求，已配置的集群自动伸缩器可满足这些需求，但节点供应必须在 `job.scheduler.start.timeout` "
+"内完成，否则算子请求可能在等待新增 actor 时超时。"
+
+msgid ""
+"Existing job-wide PlacementGroup bundles are not resized. Added scale-out"
+" actors use Ray's native placement, and bundles made surplus by scale-in "
+"remain reserved until the job ends. A streaming scale-in therefore does "
+"not guarantee that the cluster autoscaler can remove a node."
+msgstr ""
+"现有作业级 PlacementGroup bundle 不会调整大小。扩容新增的 actor 使用 Ray 原生放置；缩容后多余的 bundle "
+"仍会保留到作业结束。因此，流式缩容并不保证集群自动伸缩器能够移除节点。"
+
+msgid "Validate and automate safely"
+msgstr "安全地验证和自动化"
+
+msgid "After a completed request, verify that:"
+msgstr "请求完成后，请验证："
+
+msgid ""
+"the operator snapshot reports the target `parallelism` and all instances "
+"are running;"
+msgstr "算子快照报告目标 `parallelism`，且所有实例都在运行；"
+
+msgid ""
+"`job[\"checkpoints\"][\"rescale_recovery_fenced\"]` becomes `False` after"
+" a new completed checkpoint;"
+msgstr "新检查点完成后，`job[\"checkpoints\"][\"rescale_recovery_fenced\"]` 变为 `False`；"
+
+msgid ""
+"source lag, throughput, busy time, and backpressure move in the expected "
+"direction; and"
+msgstr "源延迟、吞吐量、忙碌时间和背压按预期方向变化；"
+
+msgid ""
+"checkpoint duration, external connections, and sink fan-out remain within"
+" their operating limits."
+msgstr "检查点持续时间、外部连接和 sink 扇出保持在运行限制以内。"
+
+msgid ""
+"An external autoscaling controller should use both interval averages and "
+"the hottest-subtask values, require several consecutive samples, apply "
+"hysteresis and a cooldown, and enforce explicit minimum and maximum "
+"parallelism. It should submit a request only while `can_rescale` is true,"
+" serialize changes, and wait for the recovery fence to clear. "
+"Backpressure alone is not sufficient: a slow sink, broker limit, or hot "
+"key can get worse when parallelism increases."
+msgstr ""
+"外部自动伸缩控制器应同时使用区间平均值和最热子任务值，要求连续多次采样，应用迟滞和冷却机制，并强制设置显式的最小与最大并行度。它只应在 "
+"`can_rescale` 为 true 时提交请求，串行化变更，并等待恢复围栏清除。仅凭背压不足以决策：慢速 sink、broker "
+"限制或热点键可能会在并行度增加后进一步恶化。"
+
+msgid ""
+"For symptom-oriented tuning, see [Tune Klein performance](performance-"
+"tuning.md). For changing parallelism while resubmitting from a durable "
+"checkpoint, see [Restore and rescale a job](checkpoint-recovery.md)."
+msgstr ""
+"有关面向症状的调优，请参阅[调优 Klein 性能](performance-"
+"tuning.md)。有关从持久检查点重新提交时调整并行度，请参阅[恢复作业并调整其并行度](checkpoint-recovery.md)。"
+
+#~ msgid "Automation can use the same stable state API:"
+#~ msgstr "自动化程序可以使用相同的稳定状态 API："

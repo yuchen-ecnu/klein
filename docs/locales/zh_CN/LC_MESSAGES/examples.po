@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Runnable Klein for Ray examples for bounded pipelines, streaming state, "
+"SQL, and event time."
+msgstr "可运行的 Klein for Ray 示例，涵盖有界管道、流式状态、SQL 和事件时间。"
+
+msgid "Examples"
+msgstr "示例"
+
+msgid ""
+"The examples use public `ray.klein` APIs and run from the project root "
+"after you install the package."
+msgstr "这些示例使用公共 `ray.klein` API。安装软件包后，可从项目根目录运行它们。"
+
+msgid "Run the quick start"
+msgstr "运行快速入门示例"
+
+msgid ""
+"The quick start creates a bounded pipeline, attaches a collection sink, "
+"and retrieves its rows from the completed job handle:"
+msgstr "快速入门示例创建一个有界管道，挂接集合 sink，并从已完成的作业句柄中取回记录："
+
+msgid "examples/quick_start.py"
+msgstr "examples/quick_start.py"
+
+msgid "Run it with:"
+msgstr "运行命令如下："
+
+msgid "Run batch SQL"
+msgstr "运行批处理 SQL"
+
+msgid "examples/sql_batch.py"
+msgstr "examples/sql_batch.py"
+
+msgid "Run managed state on a finite streaming source"
+msgstr "在有限流式源上运行托管状态"
+
+msgid "examples/stateful_streaming.py"
+msgstr "examples/stateful_streaming.py"
+
+msgid ""
+"This example explicitly selects streaming because managed keyed state has"
+" no Ray Data batch lowering. The finite collection source reaches end-of-"
+"data, the job completes, and ``JobHandle.get()`` returns the collected "
+"rows."
+msgstr "此示例显式选择 streaming，因为托管键控状态无法下沉为 Ray Data 批处理。有限集合源到达数据末尾后，作业完成，``JobHandle.get()`` 返回收集到的记录。"
+
+msgid "Explore feature examples"
+msgstr "探索功能示例"
+
+msgid ""
+"The guides include focused examples next to the behavior they explain. "
+"Code containing placeholders or external URIs is illustrative; the "
+"standalone files under `examples/` are the smoke-tested local examples."
+msgstr "各指南会在所解释的行为旁提供针对性示例。包含占位符或外部 URI 的代码仅用于说明；`examples/` 下的独立文件才是经过冒烟测试的本地示例。"
+
+msgid ""
+"[Production streaming walkthrough](production-streaming.md) provides one "
+"complete Kafka, watermark, window, checkpoint, file-sink, CLI, and "
+"restore path and states all external prerequisites."
+msgstr ""
+"[生产环境流处理实战](production-streaming.md)提供一条涵盖 Kafka、水位线、窗口、检查点、文件 sink、CLI "
+"和恢复的完整路径，并列出所有外部前置条件。"
+
+msgid ""
+"[Ray Data interoperability](ray-data-interop.md) shows native Dataset "
+"transforms and multi-stream dependencies."
+msgstr "[Ray Data 互操作性](ray-data-interop.md)演示原生 Dataset 转换和多流依赖。"
+
+msgid ""
+"[Connector catalog](connectors/index.md) includes runnable setup examples"
+" for Kafka, filesystems, Redis, collections, console, custom connectors, "
+"and Ray Serve."
+msgstr ""
+"[连接器目录](connectors/index.md)包含 Kafka、文件系统、Redis、集合、控制台、自定义连接器和 Ray Serve "
+"的可运行配置示例。"
+
+msgid ""
+"[SQL and Table connectors](sql.md) shows caller-scope tables, temporary "
+"views, joins, aggregates, and connector DDL."
+msgstr "[SQL 和 Table 连接器](sql.md)演示调用方作用域表、临时视图、连接、聚合和连接器 DDL。"
+
+msgid ""
+"[Managed state](ray-native-state.md) shows a keyed running total and "
+"event-time windows."
+msgstr "[托管状态](ray-native-state.md)演示键控累计值和事件时间窗口。"
+
+msgid ""
+"[Event time](event-time.md) shows bounded-out-of-orderness watermarks and"
+" idle-input detection."
+msgstr "[事件时间](event-time.md)演示有限乱序水位线和空闲输入检测。"
+
+msgid ""
+"Connector and production examples state whether they require a bounded "
+"source, a streaming source, or an external service."
+msgstr "连接器和生产环境示例会说明其是否需要有界源、流式源或外部服务。"

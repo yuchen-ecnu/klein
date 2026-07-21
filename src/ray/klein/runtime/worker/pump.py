@@ -87,6 +87,7 @@ class InboxPump:
         emit_pipeline: "EmitPipeline",
         inbox_timeout: float = 3.0,
         input_vertex_ids: tuple[ExecutionVertexId, ...] = (),
+        input_channels: tuple[DeliveryChannel, ...] | None = None,
     ) -> None:
         self._task = task
         self._state = state
@@ -107,6 +108,9 @@ class InboxPump:
         self._checkpoint_held: deque[InboxEnvelope] = deque()
         self._checkpoint_ready: deque[InboxEnvelope] = deque()
         self._last_coordinated_barrier_id = -1
+        self._checkpoint_input_channels: frozenset[DeliveryChannel] | None = None
+        self._retired_checkpoint_input_channels: set[DeliveryChannel] = set()
+        self._install_checkpoint_inputs(input_vertex_ids, input_channels)
 
     async def run_once(self) -> None:
         """One pump iteration (the body of the AsyncWorker loop)."""
@@ -117,6 +121,9 @@ class InboxPump:
                 timeout=self._inbox_timeout,
             )
         except asyncio.TimeoutError:
+            if self._state.is_async_operator:
+                await self._idle_flush_async()
+                return
             await loop.run_in_executor(self._state.executor, self._idle_flush)
             await self._emit.drain_pending()
             # Idle: force a watermark flush so a low-rate stream still releases
@@ -198,17 +205,15 @@ class InboxPump:
         if payload.id <= self._last_coordinated_barrier_id:
             return False
         sender = envelope.sender_vertex_id
-        if not isinstance(sender, ExecutionVertexId):
-            raise ValueError("a coordinated checkpoint barrier requires a physical sender")
-        if self._checkpoint_expected_inputs and sender not in self._checkpoint_expected_inputs:
-            raise ValueError(f"unexpected coordinated checkpoint sender {sender}")
+        channel = self._coordinated_checkpoint_channel(sender, envelope.delivery_channel)
+        if channel is None:
+            return False
         if self._checkpoint_barrier_id is None:
             self._checkpoint_barrier_id = payload.id
         elif self._checkpoint_barrier_id != payload.id:
             raise RuntimeError(
                 f"coordinated checkpoint {payload.id} arrived while {self._checkpoint_barrier_id} is aligning"
             )
-        channel = envelope.delivery_channel or sender
         if channel in self._checkpoint_seen_channels:
             return False
         self._checkpoint_seen_channels.add(channel)
@@ -237,17 +242,15 @@ class InboxPump:
             return True
         if barrier.id <= self._last_coordinated_barrier_id:
             return False
-        if not isinstance(sender, ExecutionVertexId):
-            raise ValueError("a coordinated checkpoint barrier requires a physical sender")
-        if self._checkpoint_expected_inputs and sender not in self._checkpoint_expected_inputs:
-            raise ValueError(f"unexpected coordinated checkpoint sender {sender}")
+        channel = self._coordinated_checkpoint_channel(sender, delivery_channel)
+        if channel is None:
+            return False
         if self._checkpoint_barrier_id is None:
             self._checkpoint_barrier_id = barrier.id
         elif self._checkpoint_barrier_id != barrier.id:
             raise RuntimeError(
                 f"coordinated checkpoint {barrier.id} arrived while {self._checkpoint_barrier_id} is aligning"
             )
-        channel = self._input_channel(sender, delivery_channel)
         if channel in self._checkpoint_announced_channels:
             return False
         self._checkpoint_announced_channels.add(channel)
@@ -264,6 +267,24 @@ class InboxPump:
     @staticmethod
     def _input_channel(sender: object, delivery_channel: DeliveryChannel | None) -> object:
         return delivery_channel or sender
+
+    def _coordinated_checkpoint_channel(
+        self,
+        sender: object | None,
+        delivery_channel: DeliveryChannel | None,
+    ) -> object | None:
+        if not isinstance(sender, ExecutionVertexId):
+            raise ValueError("a coordinated checkpoint barrier requires a physical sender")
+        channel = self._input_channel(sender, delivery_channel)
+        if delivery_channel is not None and delivery_channel.sender_vertex_id != sender:
+            raise ValueError("checkpoint delivery_channel does not match its sender")
+        if channel in self._retired_checkpoint_input_channels:
+            return None
+        if self._checkpoint_input_channels is not None and channel not in self._checkpoint_input_channels:
+            raise RuntimeError(f"unexpected checkpoint delivery channel {channel}")
+        if self._checkpoint_expected_inputs and sender not in self._checkpoint_expected_inputs:
+            raise ValueError(f"unexpected coordinated checkpoint sender {sender}")
+        return channel
 
     def checkpoint_input_blocked(
         self,
@@ -330,11 +351,34 @@ class InboxPump:
     def reconfigure_checkpoint_inputs(
         self,
         input_vertex_ids: tuple[ExecutionVertexId, ...],
+        input_channels: tuple[DeliveryChannel, ...] | None = None,
     ) -> None:
         """Install the physical input multiplicity for the committed topology."""
 
         self.validate_checkpoint_reconfiguration()
-        self._checkpoint_expected_inputs = Counter(input_vertex_ids)
+        self._install_checkpoint_inputs(input_vertex_ids, input_channels)
+
+    def _install_checkpoint_inputs(
+        self,
+        input_vertex_ids: tuple[ExecutionVertexId, ...],
+        input_channels: tuple[DeliveryChannel, ...] | None,
+    ) -> None:
+        expected = Counter(input_vertex_ids)
+        configured: frozenset[DeliveryChannel] | None = None
+        if input_channels is not None:
+            channels = tuple(input_channels)
+            if len(channels) != len(set(channels)):
+                raise ValueError("checkpoint input channels cannot contain duplicates")
+            if Counter(channel.sender_vertex_id for channel in channels) != expected:
+                raise ValueError("checkpoint input channel inventory does not match input vertex multiplicity")
+            configured = frozenset(channels)
+            if self._checkpoint_input_channels is not None:
+                self._retired_checkpoint_input_channels.update(self._checkpoint_input_channels.difference(configured))
+            self._retired_checkpoint_input_channels.difference_update(configured)
+        else:
+            self._retired_checkpoint_input_channels.clear()
+        self._checkpoint_expected_inputs = expected
+        self._checkpoint_input_channels = configured
 
     def _release_checkpoint_inputs(self) -> None:
         for resume in (*self._checkpoint_admission_resumes.values(), *self._checkpoint_input_resumes.values()):
@@ -385,6 +429,7 @@ class InboxPump:
         if not self._task.eof_reached:
             await loop.run_in_executor(self._state.executor, self._task._check_end_of_stream)
         if self._task.eof_reached:
+            await self._task.report_eof_finished()
             await self._task.stop()
 
     # --- operator dispatch ---
@@ -405,7 +450,12 @@ class InboxPump:
                 record.sender = sender_vertex_id
                 record.delivery_channel = delivery_channel
             for emitted in self._state.input_batches.accept(record):
-                self.data_handler(emitted)
+                is_input_barrier = emitted is record and isinstance(record, Barrier)
+                self.data_handler(
+                    emitted,
+                    sender_vertex_id=sender_vertex_id if is_input_barrier else None,
+                    delivery_channel=delivery_channel if is_input_barrier else None,
+                )
         if isinstance(payload, EndOfData):
             self.flush_input()
 
@@ -450,7 +500,11 @@ class InboxPump:
                 self._state.input_batches.accept,
                 record,
             )
-            await self._dispatch_async(emitted)
+            await self._dispatch_async(
+                emitted,
+                sender_vertex_id=sender_vertex_id if isinstance(record, Barrier) else None,
+                delivery_channel=delivery_channel if isinstance(record, Barrier) else None,
+            )
         if isinstance(payload, EndOfData):
             emitted = await loop.run_in_executor(
                 self._state.executor,
@@ -470,7 +524,13 @@ class InboxPump:
             )
         )
 
-    async def _dispatch_async(self, records) -> None:
+    async def _dispatch_async(
+        self,
+        records,
+        *,
+        sender_vertex_id: object | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> None:
         """Route batcher-flushed records to the ordered runner.
 
         Data records become concurrent computes; barriers become in-order
@@ -482,13 +542,15 @@ class InboxPump:
         runner = self._state.async_runner
         for record in records:
             if isinstance(record, Barrier):
+                sender = sender_vertex_id if sender_vertex_id is not None else record.sender
+                channel = delivery_channel or getattr(record, "delivery_channel", None)
                 await runner.submit_control(
-                    lambda barrier=record: loop.run_in_executor(
+                    lambda barrier=record, sender=sender, channel=channel: loop.run_in_executor(
                         self._state.executor,
                         self.handle_barrier,
                         barrier,
-                        barrier.sender,
-                        getattr(barrier, "delivery_channel", None),
+                        sender,
+                        channel,
                     )
                 )
             elif isinstance(record, StreamControl):
@@ -521,16 +583,24 @@ class InboxPump:
 
         await asyncio.get_running_loop().run_in_executor(self._state.executor, collect_all)
 
-    def data_handler(self, record) -> None:
+    def data_handler(
+        self,
+        record,
+        *,
+        sender_vertex_id: object | None = None,
+        delivery_channel: DeliveryChannel | None = None,
+    ) -> None:
         """Route one accumulator output to the operator or barrier handler.
 
         Runs on the executor thread (sync path) or the loop (async barrier path).
         """
         if isinstance(record, Barrier):
+            sender = sender_vertex_id if sender_vertex_id is not None else record.sender
+            channel = delivery_channel or getattr(record, "delivery_channel", None)
             self.handle_barrier(
                 record,
-                record.sender,
-                getattr(record, "delivery_channel", None),
+                sender,
+                channel,
             )
         elif isinstance(record, StreamControl):
             self.handle_stream_control(record, None)
@@ -550,6 +620,42 @@ class InboxPump:
             lambda: self._state.input_batches.flush(force=force),
         )
         await self._dispatch_async(emitted)
+
+    async def flush_input_async_boundary(self) -> None:
+        """Process a partial batch inside an ordered async durability control."""
+        emitted = await asyncio.get_running_loop().run_in_executor(
+            self._state.executor,
+            lambda: self._state.input_batches.flush(force=True),
+        )
+        for record in emitted:
+            if isinstance(record, Barrier):
+                await asyncio.get_running_loop().run_in_executor(
+                    self._state.executor,
+                    self.handle_barrier,
+                    record,
+                    None,
+                    None,
+                )
+            elif isinstance(record, StreamControl):
+                await asyncio.get_running_loop().run_in_executor(
+                    self._state.executor,
+                    self.handle_stream_control,
+                    record,
+                    None,
+                )
+            else:
+                await self.on_async_result(await self._state.runner.process_async(record))
+
+    async def _idle_flush_async(self) -> None:
+        """Queue an async operator's idle boundary behind its in-flight work."""
+        await self.flush_input_async(force=False)
+        await self._state.async_runner.submit_control(self._complete_async_idle)
+
+    async def _complete_async_idle(self) -> None:
+        """Flush outputs and replay progress at the ordered async idle boundary."""
+        await self._watermark.advance()
+        await asyncio.get_running_loop().run_in_executor(self._state.executor, self._notify_idle)
+        await self._emit.drain_pending()
 
     def handle_stream_control(self, control: StreamControl, sender_vertex_id: object | None) -> None:
         tracker = self._state.event_time_tracker
@@ -586,27 +692,48 @@ class InboxPump:
             # the flush to whichever component owns buffered side effects.
             self._state.operator.flush()
             self._task.prepare_sink_commit(barrier.id)
-            if isinstance(barrier, EndOfData):
+            if getattr(self._state.checkpoint_strategy, "last_alignment_is_terminal", False) is True or (
+                sender_vertex_id is None and isinstance(barrier, EndOfData)
+            ):
                 self._state.operator.finish()
             state_size_bytes = self._task.snapshot_operator_state(barrier.id)
             self._task.register_checkpoint_metrics(barrier, state_size_bytes)
 
-        if self._state.checkpoint_strategy.on_barrier_received(
-            barrier,
-            on_barrier_aligned,
-            sender_vertex_id,
-            delivery_channel,
-        ):
+        if delivery_channel is not None:
+            aligned = self._state.checkpoint_strategy.on_barrier_received(
+                barrier,
+                on_barrier_aligned,
+                sender_vertex_id,
+                delivery_channel,
+            )
+        elif sender_vertex_id is not None:
+            aligned = self._state.checkpoint_strategy.on_barrier_received(
+                barrier,
+                on_barrier_aligned,
+                sender_vertex_id=sender_vertex_id,
+            )
+        else:
+            aligned = self._state.checkpoint_strategy.on_barrier_received(barrier, on_barrier_aligned)
+        if aligned:
+            normalize = getattr(self._state.checkpoint_strategy, "barrier_to_forward", None)
+            forwarded = normalize(barrier) if callable(normalize) else barrier
             self._state.metrics.barriers_out.inc()
-            self._state.operator.collect(barrier)
-            if isinstance(barrier, EndOfData) and self._state.checkpoint_strategy.on_eof_received(barrier):
-                self._task.report_eof_finished()
+            self._state.operator.collect(forwarded)
+            if isinstance(forwarded, EndOfData) and self._state.checkpoint_strategy.on_eof_received(forwarded):
+                self._task.mark_eof_finished()
+            aligned_callback = getattr(self._task, "checkpoint_barrier_aligned", None)
+            if callable(aligned_callback):
+                aligned_callback(barrier.id)
 
         self._state.metrics.observe_barrier(barrier.timestamp)
 
     def _idle_flush(self) -> None:
         """Executor thread on inbox idle: flush input batcher + buffered micro-batches."""
         self.flush_input(force=False)
+        self._notify_idle()
+
+    def _notify_idle(self) -> None:
+        """Notify operator/output of an ordered idle boundary on the executor."""
         self._state.operator.on_idle()
         if self._state.output is not None:
             self._state.output.flush()

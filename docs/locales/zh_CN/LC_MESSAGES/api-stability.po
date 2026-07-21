@@ -1,0 +1,339 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Klein for Ray API stability, compatibility, deprecation, and public-"
+"contract policy."
+msgstr "Klein for Ray API 稳定性、兼容性、弃用及公共契约政策。"
+
+msgid "API stability and compatibility"
+msgstr "API 稳定性与兼容性"
+
+msgid ""
+"Klein for Ray is an alpha project. The word **public** identifies an "
+"intended application or extension boundary; it does not yet mean the 1.0 "
+"compatibility guarantee of a mature stable release. Pin the Klein and Ray"
+" versions used in production and read [CHANGELOG.md](https://github.com"
+"/yuchen-ecnu/klein/blob/main/CHANGELOG.md) before upgrading."
+msgstr "Klein for Ray 目前处于 alpha 阶段。**公共（public）** 表示预期供应用程序或扩展使用的边界，但尚不代表成熟稳定版所提供的 1.0 兼容性保证。请固定生产环境使用的 Klein 和 Ray 版本，并在升级前阅读 [CHANGELOG.md](https://github.com/yuchen-ecnu/klein/blob/main/CHANGELOG.md)。"
+
+msgid "Contract categories"
+msgstr "契约类别"
+
+msgid "Category"
+msgstr "类别"
+
+msgid "How to recognize it"
+msgstr "识别方式"
+
+msgid "Current promise"
+msgstr "当前承诺"
+
+msgid "Documented application API"
+msgstr "有文档说明的应用 API"
+
+msgid ""
+"Listed in the [API reference](api/api.rst), connector catalog, CLI "
+"reference, or configuration reference"
+msgstr "列在 [API 参考](api/api.rst)、连接器目录、CLI 参考或配置参考中"
+
+msgid ""
+"Supported for the documented release. Alpha changes are announced in the "
+"changelog and upgrade guide."
+msgstr "在相应文档版本中受支持。alpha 阶段的变更会在变更日志和升级指南中公布。"
+
+msgid "Documented extension API"
+msgstr "有文档说明的扩展 API"
+
+msgid ""
+"Custom source/sink, table factory, partitioner, state backend, metric, "
+"and related contracts explicitly described in the reference"
+msgstr "参考文档中明确说明的自定义源/接收器、表工厂、分区器、状态后端、指标及相关契约"
+
+msgid ""
+"Intended for integrations, but more likely to evolve before 1.0. Pin the "
+"exact release and test lifecycle behavior."
+msgstr "供集成使用，但在 1.0 之前更可能发生演进。请固定确切版本并测试生命周期行为。"
+
+msgid "Delegated Ray API"
+msgstr "委托给 Ray 的 API"
+
+msgid "Dynamic `ray.klein.read_*` and `stream.data.*` methods"
+msgstr "动态 `ray.klein.read_*` 和 `stream.data.*` 方法"
+
+msgid ""
+"Signature, schema, and batch behavior belong to the pinned Ray release. "
+"Klein only promises the documented adapter boundary."
+msgstr "签名、模式和批处理行为由固定的 Ray 版本定义。Klein 仅保证文档所述的适配器边界。"
+
+msgid "Operational contract"
+msgstr "运维契约"
+
+msgid ""
+"Configuration keys, CLI syntax, JSON snapshots, metric names/labels, "
+"checkpoint layout, and environment variables"
+msgstr "配置键、CLI 语法、JSON 快照、指标名称/标签、检查点布局和环境变量"
+
+msgid ""
+"Public only where explicitly documented. Consumers must tolerate additive"
+" JSON fields. Alpha releases can make announced breaking changes."
+msgstr "仅明确写入文档的部分属于公共契约。使用方必须能容忍新增 JSON 字段。alpha 版本可以进行已公布的破坏性变更。"
+
+msgid "Internal implementation"
+msgstr "内部实现"
+
+msgid ""
+"`ray.klein._internal`, most of `ray.klein.runtime`, underscore-prefixed "
+"names, undocumented actor methods, and undocumented files"
+msgstr "`ray.klein._internal`、`ray.klein.runtime` 的大部分内容、以下划线开头的名称、未记录的 actor 方法和未记录的文件"
+
+msgid ""
+"No compatibility promise. Do not import or automate against these "
+"surfaces."
+msgstr "不提供兼容性承诺。请勿导入这些接口，也不要针对它们编写自动化。"
+
+msgid ""
+"An object appearing in Python's `dir()` or a package `__all__` is not by "
+"itself a stability declaration. The documentation is the source of truth."
+" Some runtime bridge names remain top-level for the bundled CLI; the "
+"[top-level namespace reference](api/top_level.rst) identifies them as "
+"non-application APIs."
+msgstr "某个对象出现在 Python 的 `dir()` 或包的 `__all__` 中，本身并不代表稳定性声明。文档才是事实依据。为支持随附的 CLI，一些运行时桥接名称仍保留在顶层；[顶层命名空间参考](api/top_level.rst) 会将它们标明为非应用 API。"
+
+msgid "What compatibility means"
+msgstr "兼容性的含义"
+
+msgid "Compatibility has several independent dimensions:"
+msgstr "兼容性包含多个相互独立的维度："
+
+msgid "Python source compatibility"
+msgstr "Python 源码兼容性"
+
+msgid ""
+"Existing documented calls continue to import and accept the same "
+"arguments."
+msgstr "现有且有文档说明的调用仍可导入，并接受相同的参数。"
+
+msgid "Behavioral compatibility"
+msgstr "行为兼容性"
+
+msgid ""
+"Ordering, state, delivery, execution-mode, and failure semantics remain "
+"the same. A source-compatible change can still be behaviorally "
+"incompatible."
+msgstr "顺序、状态、交付、执行模式和故障语义保持不变。源码兼容的变更仍可能在行为上不兼容。"
+
+msgid "Operational compatibility"
+msgstr "运维兼容性"
+
+msgid ""
+"Automation can continue to use documented configuration, CLI, snapshot, "
+"and metric contracts. New JSON fields and new enum values can be added; "
+"clients must ignore fields they do not understand."
+msgstr "自动化可以继续使用有文档说明的配置、CLI、快照和指标契约。可以新增 JSON 字段和枚举值；客户端必须忽略无法识别的字段。"
+
+msgid "State compatibility"
+msgstr "状态兼容性"
+
+msgid ""
+"A new deployment can read checkpoint metadata, source positions, managed "
+"state, timers, and sink committables written by the old deployment. This "
+"is not guaranteed across arbitrary alpha versions."
+msgstr "新部署可以读取旧部署写入的检查点元数据、源位置、托管状态、定时器和接收器可提交项。任意 alpha 版本之间并不保证这一点。"
+
+msgid "Wire compatibility"
+msgstr "线协议兼容性"
+
+msgid ""
+"Running tasks, actors, and drivers can exchange messages. Klein does not "
+"support a rolling binary upgrade in which one live job mixes Klein "
+"versions."
+msgstr "运行中的任务、actor 和驱动程序可以交换消息。Klein 不支持在同一个运行中作业里混用不同 Klein 版本的滚动二进制升级。"
+
+msgid "Dependency compatibility"
+msgstr "依赖兼容性"
+
+msgid ""
+"The application, all eligible workers, connector clients, and Ray cluster"
+" use versions in the tested matrix. See "
+"[Compatibility](compatibility.md)."
+msgstr "应用程序、所有符合条件的工作节点、连接器客户端和 Ray 集群均使用测试矩阵内的版本。请参阅[兼容性](compatibility.md)。"
+
+msgid ""
+"Do not infer state or wire compatibility from a successful import. Use "
+"the procedure in [Upgrading](upgrading.md)."
+msgstr "不要根据导入成功来推断状态或线协议兼容性。请遵循[升级](upgrading.md)中的流程。"
+
+msgid "Public API rules"
+msgstr "公共 API 规则"
+
+msgid ""
+"Application code should import ordinary graph contracts from `ray.klein`,"
+" specialized contracts from `ray.klein.api`, configuration descriptors "
+"from `ray.klein.config`, and managed-state contracts from "
+"`ray.klein.state`."
+msgstr "应用代码应从 `ray.klein` 导入常规图契约，从 `ray.klein.api` 导入专用契约，从 `ray.klein.config` 导入配置描述符，并从 `ray.klein.state` 导入托管状态契约。"
+
+msgid ""
+"`ray.klein.runtime.partitioning` is the documented exception for custom "
+"partitioners. Other runtime modules are implementation details unless a "
+"reference page says otherwise."
+msgstr "`ray.klein.runtime.partitioning` 是供自定义分区器使用且有文档说明的例外。除非参考页面另有说明，否则其他运行时模块均属于实现细节。"
+
+msgid ""
+"A method, option, or connector is supported only in the execution modes "
+"shown in the [operator compatibility matrix](operator-compatibility.md) "
+"or connector catalog."
+msgstr "方法、选项或连接器仅在[算子兼容性矩阵](operator-compatibility.md)或连接器目录所列的执行模式中受支持。"
+
+msgid ""
+"Optional integrations may raise `ModuleNotFoundError` until their named "
+"package extra and native dependencies are installed on every worker."
+msgstr "在每个工作节点上安装相应的可选依赖组和原生依赖之前，可选集成可能抛出 `ModuleNotFoundError`。"
+
+msgid ""
+"A callable's Python type annotation does not upgrade its runtime "
+"contract. Record shape, batch format, serialization, and lifecycle rules "
+"remain those in the programming guide."
+msgstr "可调用对象的 Python 类型注解不会提升其运行时契约。记录形状、批格式、序列化和生命周期规则仍以编程指南为准。"
+
+msgid "Dynamic Ray Data surface"
+msgstr "动态 Ray Data 接口面"
+
+msgid ""
+"Klein discovers public Ray Data readers and Dataset methods from the "
+"installed compatible Ray version. This avoids copying a large, version-"
+"sensitive API, but it means the names are not all present in "
+"`ray.klein.__all__` or static API pages."
+msgstr "Klein 从已安装的兼容 Ray 版本中发现公共 Ray Data 读取器和 Dataset 方法。这样无需复制庞大且对版本敏感的 API，但也意味着这些名称不会全部出现在 `ray.klein.__all__` 或静态 API 页面中。"
+
+msgid "Use:"
+msgstr "用法："
+
+msgid ""
+"Library code that supports several Ray patches should check availability "
+"rather than assume a method exists. Native `DataStream` methods retain "
+"Klein semantics; dynamic methods retain Ray Data semantics and are batch-"
+"only unless the [interop guide](ray-data-interop.md) explicitly documents"
+" a streaming form."
+msgstr "支持多个 Ray 补丁版本的库代码应检查功能是否可用，而不要假定某个方法一定存在。原生 `DataStream` 方法保留 Klein 语义；动态方法保留 Ray Data 语义，并且仅支持批处理，除非[互操作指南](ray-data-interop.md)明确记录了流处理形式。"
+
+msgid "Deprecation policy before 1.0"
+msgstr "1.0 之前的弃用政策"
+
+msgid ""
+"Klein has no fixed multi-release deprecation window while it is alpha. "
+"The project follows this best-effort process for a documented contract:"
+msgstr "Klein 在 alpha 阶段没有固定的跨版本弃用窗口。对于已有文档的契约，项目会尽力遵循以下流程："
+
+msgid ""
+"Record the old behavior, replacement, and compatibility impact in the "
+"changelog and upgrade guide."
+msgstr "在变更日志和升级指南中记录旧行为、替代方案及兼容性影响。"
+
+msgid ""
+"Emit a warning when a safe runtime warning is possible and does not "
+"create excessive worker log volume."
+msgstr "如果能够安全地发出运行时警告且不会产生过量工作节点日志，则发出警告。"
+
+msgid ""
+"Keep read compatibility for persisted state when practical, or state "
+"clearly that a migration or clean start is required."
+msgstr "在可行时保持对持久化状态的读取兼容性，否则明确说明需要迁移或全新启动。"
+
+msgid "Add or update contract tests so the announced boundary is reviewable."
+msgstr "新增或更新契约测试，使公布的边界可以接受审查。"
+
+msgid ""
+"Security fixes, correctness fixes, and dependency incompatibilities can "
+"require an immediate change. Do not suppress deprecation or compatibility"
+" warnings without reviewing the associated release note."
+msgstr "安全修复、正确性修复和依赖不兼容可能要求立即变更。请勿在未审阅相关发布说明的情况下屏蔽弃用或兼容性警告。"
+
+msgid "Contracts that require explicit review"
+msgstr "需要明确审查的契约"
+
+msgid ""
+"Changes to any of the following need documentation, tests, and an upgrade"
+" note:"
+msgstr "对以下任何内容的变更都需要文档、测试和升级说明："
+
+msgid "a top-level or documented extension API;"
+msgstr "顶层 API 或有文档说明的扩展 API；"
+
+msgid "operator ordering, partitioning, changelog, or delivery behavior;"
+msgstr "算子顺序、分区、变更日志或交付行为；"
+
+msgid "a configuration key, default, type, precedence, or environment spelling;"
+msgstr "配置键、默认值、类型、优先级或环境变量拼写；"
+
+msgid "a CLI command, exit behavior, or documented JSON field;"
+msgstr "CLI 命令、退出行为或有文档说明的 JSON 字段；"
+
+msgid "a metric name, kind, unit, label, or histogram boundary;"
+msgstr "指标名称、种类、单位、标签或直方图区间边界；"
+
+msgid ""
+"checkpoint manifests, state codecs, key hashing, key groups, source "
+"state, or sink committables;"
+msgstr "检查点清单、状态编解码器、键哈希、键组、源状态或接收器可提交项；"
+
+msgid "connector schema, offset ownership, transaction behavior, or option;"
+msgstr "连接器模式、偏移量所有权、事务行为或选项；"
+
+msgid "supported Python, Ray, SQLGlot, PyArrow, or connector dependency ranges."
+msgstr "受支持的 Python、Ray、SQLGlot、PyArrow 或连接器依赖版本范围。"
+
+msgid ""
+"The [documentation contract tests](testing.md) mechanically cover part of"
+" this surface. They complement, rather than replace, upgrade testing with"
+" real production-shaped state."
+msgstr "[文档契约测试](testing.md)以机械方式覆盖了其中一部分。它们是使用真实生产形态状态进行升级测试的补充，而非替代。"
+
+msgid "Reporting an accidental break"
+msgstr "报告意外破坏"
+
+msgid "Open a reproducible issue with:"
+msgstr "请提交可复现的问题，并包含："
+
+msgid "old and new Klein, Ray, Python, and connector versions;"
+msgstr "新旧 Klein、Ray、Python 和连接器版本；"
+
+msgid ""
+"whether the break concerns source, behavior, operations, or persisted "
+"state;"
+msgstr "破坏涉及源码、行为、运维还是持久化状态；"
+
+msgid "the smallest graph and configuration that demonstrate it;"
+msgstr "能够复现问题的最小图和配置；"
+
+msgid ""
+"the old checkpoint format/version and a copy of non-sensitive error "
+"output;"
+msgstr "旧检查点的格式/版本以及不含敏感信息的错误输出副本；"
+
+msgid "whether a clean start works and whether rollback remains possible."
+msgstr "全新启动是否可行，以及是否仍能回滚。"
+
+msgid ""
+"Use the private process in the project security policy when the break can"
+" expose data, credentials, or code execution."
+msgstr "如果该破坏可能暴露数据、凭据或代码执行能力，请使用项目安全政策规定的私密报告流程。"

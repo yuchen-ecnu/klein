@@ -1,0 +1,349 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:53+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Troubleshoot Klein for Ray installation, execution-mode, connector, "
+"checkpoint, watermark, backpressure, and CLI problems."
+msgstr "排查 Klein for Ray 的安装、执行模式、连接器、检查点、水位线、背压和 CLI 问题。"
+
+msgid "Troubleshooting"
+msgstr "故障排查"
+
+msgid ""
+"Start by saving the job plan, namespace, effective explicit "
+"configuration, Klein/Ray versions, first exception, and recent checkpoint"
+" history. Later actor failures are often consequences of the first error."
+msgstr ""
+"首先保存作业计划、命名空间、生效的显式配置、Klein/Ray 版本、首个异常和最近的检查点历史。后续 actor "
+"故障通常是第一个错误所导致的结果。"
+
+msgid ""
+"Never paste credentials, complete connector configuration, arbitrary "
+"records, or checkpoint payloads into an issue or log bundle."
+msgstr "切勿将凭据、完整连接器配置、任意记录或检查点载荷粘贴到 issue 或日志包中。"
+
+msgid "Installation and imports"
+msgstr "安装与导入"
+
+msgid "`ModuleNotFoundError` for a connector dependency"
+msgstr "连接器依赖引发 `ModuleNotFoundError`"
+
+msgid ""
+"Install the matching extra on every worker image, not only on the "
+"submitting machine:"
+msgstr "请在每个 worker 镜像上安装相应的 extra，而不只是在提交作业的机器上安装："
+
+msgid ""
+"RocketMQ additionally needs a compatible native `librocketmq`. A Python "
+"wheel being importable on the driver does not prove the native library "
+"exists on a remote worker."
+msgstr ""
+"RocketMQ 还需要兼容的原生 `librocketmq`。driver 能够导入 Python wheel，并不能证明远程 worker "
+"上存在该原生库。"
+
+msgid "Dynamic `read_*` or `stream.data` method is unavailable"
+msgstr "动态 `read_*` 或 `stream.data` 方法不可用"
+
+msgid "Check the installed Ray API before building the graph:"
+msgstr "构建图之前，请检查已安装的 Ray API："
+
+msgid ""
+"Klein discovers public Ray Data factories and Dataset methods at runtime."
+" Stay inside the Ray range in [Compatibility](compatibility.md)."
+msgstr ""
+"Klein 在运行时发现公共 Ray Data 工厂和 Dataset 方法。请使用[兼容性](compatibility.md)中规定的 Ray"
+" 版本范围。"
+
+msgid "Planning and execution mode"
+msgstr "规划与执行模式"
+
+msgid "`Batch function is not defined`"
+msgstr "`Batch function is not defined`"
+
+msgid ""
+"The graph selected batch execution but contains a native-streaming-only "
+"source, operator, or sink. Check [Operator compatibility](operator-"
+"compatibility.md). Set `execution.runtime.mode=streaming` only when every"
+" node supports native streaming; changing the mode cannot give a Ray "
+"Data-only operation a streaming implementation."
+msgstr ""
+"图选择了批执行，但包含仅支持原生流处理的源、算子或 sink。请检查[算子兼容性](operator-"
+"compatibility.md)。只有每个节点都支持原生流处理时，才设置 "
+"`execution.runtime.mode=streaming`；更改模式无法为仅支持 Ray Data 的操作提供流式实现。"
+
+msgid "A bounded custom source does not run in batch"
+msgstr "有界自定义数据源未以批处理模式运行"
+
+msgid ""
+"Source boundedness does not prove that a custom `SourceFunction` has a "
+"Ray Data lowering. `auto` selects streaming when that lowering is absent."
+" Use a Ray Data factory or `from_ray_dataset()` when batch execution is "
+"required; forcing `batch` cannot add a missing lowering."
+msgstr ""
+"数据源有界并不能证明自定义 `SourceFunction` 具有 Ray Data 下沉实现。缺少该下沉实现时，`auto` 会选择流处理。"
+"需要批处理执行时，请使用 Ray Data 工厂或 `from_ray_dataset()`；强制使用 `batch` 无法补上缺失的下沉实现。"
+
+msgid "Streams from different pipelines cannot be combined"
+msgstr "无法组合来自不同管道的流"
+
+msgid ""
+"Every graph belongs to one internal pipeline. Rebuild all branches from "
+"the same module-level construction scope; do not join or union those "
+"streams with streams built by an explicitly isolated advanced context."
+msgstr "每个图都属于一个内部管道。请在同一模块级构建作用域中重新构建所有分支；不要将这些流与显式隔离的高级上下文所构建的流进行 join 或 union。"
+
+msgid "SQL fails during planning"
+msgstr "SQL 在规划期间失败"
+
+msgid ""
+"Confirm whether the selected mode supports the statement. Continuous SQL "
+"supports a smaller subset than batch SQL and deliberately rejects "
+"unsupported CTEs, outer joins, arbitrary ordering, window syntax, and "
+"other forms rather than changing semantics. Check table changelog "
+"compatibility before attaching a sink."
+msgstr ""
+"请确认所选模式是否支持该语句。持续 SQL 支持的子集小于批处理 SQL，并会有意拒绝不受支持的 "
+"CTE、外连接、任意排序、窗口语法及其他形式，而不是更改语义。挂接 sink 前，请检查表变更日志兼容性。"
+
+msgid "Jobs and CLI"
+msgstr "作业与 CLI"
+
+msgid "`ray-klein list` cannot query the Ray state API"
+msgstr "`ray-klein list` 无法查询 Ray 状态 API"
+
+msgid ""
+"Confirm that the client can reach the Ray cluster, the dashboard/state "
+"service is enabled, and `ray.init(address=\"auto\")` would attach to the "
+"intended cluster. Network policy must allow the client to reach the "
+"cluster control plane."
+msgstr ""
+"请确认客户端能够访问 Ray 集群、dashboard/state 服务已启用，且 `ray.init(address=\"auto\")` "
+"会附加到预期集群。网络策略必须允许客户端访问集群控制平面。"
+
+msgid "`No JobManager found in namespace ...`"
+msgstr "`No JobManager found in namespace ...`"
+
+msgid ""
+"Use `ray-klein list` to copy the exact namespace. An automatically "
+"generated namespace includes a sanitized job name and an eight-character "
+"suffix. A job ID from the state snapshot API is not interchangeable with "
+"every CLI argument."
+msgstr ""
+"使用 `ray-klein list` 复制准确的命名空间。自动生成的命名空间包含清理后的作业名称和八字符后缀。状态快照 API 中的作业 ID "
+"不能与每个 CLI 参数互换使用。"
+
+msgid "`attach` says stdout is not a TTY"
+msgstr "`attach` 提示 stdout 不是 TTY"
+
+msgid ""
+"Live progress rendering requires an interactive terminal. Use `status` or"
+" the JSON-safe state API from automation."
+msgstr "实时进度渲染需要交互式终端。自动化程序应使用 `status` 或可安全序列化为 JSON 的状态 API。"
+
+msgid "Ctrl+C did not stop the job"
+msgstr "Ctrl+C 未停止作业"
+
+msgid ""
+"Ctrl+C while attached detaches intentionally. Run `ray-klein stop "
+"<namespace>` or call `JobHandle.cancel()` to cancel the detached job."
+msgstr ""
+"附加状态下按 Ctrl+C 会按设计解除附加。运行 `ray-klein stop <namespace>` 或调用 "
+"`JobHandle.cancel()` 取消 detached 作业。"
+
+msgid "Checkpoints and recovery"
+msgstr "检查点与恢复"
+
+msgid "No completed checkpoint appears"
+msgstr "没有出现已完成的检查点"
+
+msgid ""
+"Check that at least one trigger is enabled, sources are still emitting "
+"idle or checkpoint control, all sinks acknowledge barriers, and storage "
+"is writable. Setting both trigger intervals to zero disables periodic "
+"barriers. A blocked source that never calls `on_idle()` can also delay "
+"time-based progress."
+msgstr ""
+"请检查是否至少启用了一个触发器、源是否仍在发出空闲或检查点控制消息、所有 sink "
+"是否确认屏障，以及存储是否可写。将两个触发间隔都设为零会禁用周期性屏障。从不调用 `on_idle()` 的阻塞源也会延迟基于时间的进度。"
+
+msgid "Restore silently starts from the beginning"
+msgstr "恢复静默地从头开始"
+
+msgid ""
+"Use the exact key `execution.savepoint.path` and pass the full completed "
+"`chk-N` URI. Unknown configuration keys are retained, so a misspelled "
+"restore key does not necessarily raise an error."
+msgstr ""
+"请使用准确的键 `execution.savepoint.path`，并传入完整的已完成 `chk-N` "
+"URI。未知配置键会被保留，因此恢复键拼写错误不一定会引发错误。"
+
+msgid "Restore reports checksum or metadata errors"
+msgstr "恢复报告校验和或元数据错误"
+
+msgid ""
+"Do not edit `_metadata` or serialized state. Verify storage consistency "
+"and permissions, then try an earlier retained checkpoint. An unsupported "
+"format version requires the matching Klein release or an explicit "
+"migration."
+msgstr ""
+"不要编辑 `_metadata` 或序列化状态。请验证存储一致性和权限，然后尝试更早保留的检查点。不受支持的格式版本需要匹配的 Klein "
+"发行版或显式迁移。"
+
+msgid "Restore fails after changing concurrency"
+msgstr "更改并发后恢复失败"
+
+msgid ""
+"Keep `state.keyed.max-parallelism`, operator identity, state descriptor "
+"names, and serializers stable. New concurrency must not exceed max "
+"parallelism. See [Restore and rescale](checkpoint-recovery.md)."
+msgstr ""
+"请保持 `state.keyed.max-parallelism`、算子身份、状态描述符名称和 serializer "
+"稳定。新并发不得超过最大并行度。请参阅[恢复与扩缩容](checkpoint-recovery.md)。"
+
+msgid "Event time and state"
+msgstr "事件时间与状态"
+
+msgid "Windows never emit"
+msgstr "窗口始终不发出结果"
+
+msgid "Verify all of the following:"
+msgstr "请验证以下所有条件："
+
+msgid "timestamps are non-negative integer milliseconds;"
+msgstr "时间戳是非负整数毫秒值；"
+
+msgid "a watermark strategy or source emits watermarks;"
+msgstr "水位线策略或源会发出水位线；"
+
+msgid "every active physical input has emitted its first watermark;"
+msgstr "每个活动物理输入都已发出其第一个水位线；"
+
+msgid "empty inputs are marked idle;"
+msgstr "空输入已标记为空闲；"
+
+msgid "the watermark has passed the window end plus allowed lateness."
+msgstr "水位线已经越过窗口结束时间与允许延迟之和。"
+
+msgid "Records carrying timestamps do not advance event time by themselves."
+msgstr "携带时间戳的记录本身不会推进事件时间。"
+
+msgid "`late_records_dropped` rises"
+msgstr "`late_records_dropped` 上升"
+
+msgid ""
+"Compare record timestamps with the current input/output watermark and "
+"`allowed_lateness`. Look for clock/unit mistakes—seconds interpreted as "
+"milliseconds are common—and for partitions reactivating with old data. "
+"Raising allowed lateness retains more state and delays window cleanup."
+msgstr ""
+"将记录时间戳与当前输入/输出水位线及 `allowed_lateness` "
+"进行比较。检查时钟/单位错误——将秒误作毫秒很常见——以及分区是否携带旧数据重新激活。提高允许延迟会保留更多状态，并延后窗口清理。"
+
+msgid "Managed state grows without bound"
+msgstr "托管状态无限增长"
+
+msgid ""
+"Confirm that the key cardinality is expected, add descriptor TTL or an "
+"operator `state_ttl` where semantics allow, and verify watermark progress"
+" for event-time-cleaned state. TTL is a correctness choice: expiration "
+"can make late future results incomplete."
+msgstr ""
+"请确认键基数符合预期；在语义允许时添加描述符 TTL 或算子 `state_ttl`；对于由事件时间清理的状态，还要验证水位线进度。TTL "
+"是正确性选择：过期可能使未来的迟到结果不完整。"
+
+msgid "Backpressure and memory"
+msgstr "背压与内存"
+
+msgid "Throughput falls while input buffers stay full"
+msgstr "输入缓冲区持续满载时吞吐量下降"
+
+msgid ""
+"Find the first downstream operator with rising processing latency or "
+"external call duration. Increase capacity there or reduce its work before"
+" enlarging upstream buffers. Check hot keys, sink throttling, and "
+"checkpoint alignment."
+msgstr "找到第一个处理延迟或外部调用持续时间上升的下游算子。增大上游缓冲区之前，应提高该处容量或减少其工作量。检查热点键、sink 限流和检查点对齐。"
+
+msgid "Replay buffer exceeds its byte limit"
+msgstr "重放缓冲区超过字节限制"
+
+msgid ""
+"This is a safety failure, not a request to raise the limit automatically."
+" Inspect downstream acknowledgements, checkpoint/sink completion, network"
+" errors, and task restarts. Raise the limit only after measuring worst-"
+"case memory on the same node shape."
+msgstr ""
+"这是安全保护失败，不表示应自动提高限制。请检查下游确认、检查点/sink "
+"完成情况、网络错误和任务重启。只有在相同节点规格上测量最坏情况内存后，才提高限制。"
+
+msgid "Placement group times out"
+msgstr "Placement group 超时"
+
+msgid ""
+"Compare the plan's total CPU/GPU bundles with currently free cluster "
+"resources. Add capacity, reduce requests, change the placement strategy, "
+"or use balanced deployment. Klein may fall back to another placement "
+"path, but locality and startup time can change."
+msgstr ""
+"将计划的 CPU/GPU bundle 总量与当前空闲集群资源进行比较。增加容量、减少请求、更改放置策略，或使用 balanced "
+"deployment。Klein 可能回退到其他放置路径，但局部性和启动时间可能发生变化。"
+
+msgid "Collect a useful report"
+msgstr "收集有用的报告"
+
+msgid "Include:"
+msgstr "请包含："
+
+msgid "minimal graph code and whether the source is bounded;"
+msgstr "最小图代码以及源是否有界；"
+
+msgid "`ray.klein.explain()` output;"
+msgstr "`ray.klein.explain()` 输出；"
+
+msgid "Klein, Ray, Python, operating system, and connector versions;"
+msgstr "Klein、Ray、Python、操作系统和连接器版本；"
+
+msgid "sanitized explicit configuration;"
+msgstr "经过脱敏的显式配置；"
+
+msgid "namespace and job status transitions;"
+msgstr "命名空间和作业状态转换；"
+
+msgid "first traceback and relevant component logs;"
+msgstr "首个 traceback 和相关组件日志；"
+
+msgid "checkpoint revision/path shape without credentials;"
+msgstr "不含凭据的检查点修订版/路径形态；"
+
+msgid "a small metric window covering the failure."
+msgstr "覆盖故障时段的一小段指标窗口。"
+
+msgid ""
+"Use the repository's [support policy](https://github.com/yuchen-"
+"ecnu/klein/blob/main/SUPPORT.md) for help channels and [security "
+"policy](https://github.com/yuchen-ecnu/klein/blob/main/SECURITY.md) for "
+"vulnerabilities or reports containing sensitive infrastructure details."
+msgstr ""
+"有关求助渠道，请参阅仓库的[支持策略](https://github.com/yuchen-"
+"ecnu/klein/blob/main/SUPPORT.md)；有关漏洞或包含敏感基础设施详情的报告，请参阅[安全策略](https://github.com"
+"/yuchen-ecnu/klein/blob/main/SECURITY.md)。"

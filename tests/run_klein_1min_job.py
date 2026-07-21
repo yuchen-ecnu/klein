@@ -69,6 +69,8 @@ class DoubleMapFunction:
     ``put`` 因 inbox 满而挂起。用于在 wait() 视图中观察中间算子的反压状态。
     """
 
+    supports_concurrent_rescale = True
+
     def __init__(self, runtime_context: RuntimeContext = None, process_delay: float = 0.15):
         self.runtime_context = runtime_context
         self._process_delay = process_delay
@@ -90,6 +92,8 @@ class DoubleMapFunction:
 class TagMapFunction:
     """给数据打上经过哪个上游 map 的标记（便于追踪 union 前的两条分支）。"""
 
+    supports_concurrent_rescale = True
+
     def __init__(self, runtime_context: RuntimeContext = None, branch: str = "?"):
         self.runtime_context = runtime_context
         self._branch = branch
@@ -101,6 +105,8 @@ class TagMapFunction:
 
 class EvenFilterFunction:
     """只保留 idx 为偶数的记录。"""
+
+    supports_concurrent_rescale = True
 
     def __init__(self, runtime_context: RuntimeContext = None):
         self.runtime_context = runtime_context

@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid ""
+"Klein for Ray compatibility policy for Python, Ray, Ray Data extension APIs, "
+"and package namespaces."
+msgstr "Klein for Ray 针对 Python、Ray、Ray Data 扩展 API 和包命名空间的兼容性策略。"
+
+msgid "Compatibility policy"
+msgstr "兼容性策略"
+
+msgid ""
+"Klein for Ray 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The "
+"upper bound is intentional: several Ray Data extension points used by the "
+"current code are DeveloperAPI and can change between Ray minors."
+msgstr "Klein for Ray 0.1 支持 Python 3.10–3.12 和 `ray>=2.56.1,<2.57`。设置上限是有意为之：当前代码使用的若干 Ray Data 扩展点属于 DeveloperAPI，可能在不同 Ray 次版本之间发生变化。"
+
+msgid ""
+"Every supported Python version is tested against the latest compatible Ray "
+"2.56 patch. Before widening the range, CI must run the full unit and "
+"integration suite against the new Ray minor and the API inventory must be "
+"reviewed."
+msgstr "每个受支持的 Python 版本都会针对最新兼容的 Ray 2.56 补丁版本进行测试。扩展版本范围前，CI 必须在新的 Ray 次版本上运行完整的单元与集成测试套件，并复核 API 清单。"
+
+msgid ""
+"The distributed package contains no direct Ray private imports. New private "
+"imports are compatibility debt and require a documented compatibility shim, "
+"fallback behavior, and tests against the minimum and maximum supported Ray "
+"versions. See [the inventory](private-api-inventory.md)."
+msgstr "发布的包不直接导入 Ray 私有 API。新增私有导入会形成兼容性负债，必须提供有文档说明的兼容层、回退行为，以及覆盖最低和最高受支持 Ray 版本的测试。请参阅[清单](private-api-inventory.md)。"
+
+msgid ""
+"The Ray Data bridge discovers Dataset factories and methods at runtime "
+"rather than maintaining a version-specific list. It preserves the installed "
+"method's signature and documentation and validates Dataset-producing "
+"operations at the execution boundary. Compatibility tests enumerate every "
+"public API exported by the pinned Ray version so newly added methods cannot "
+"be silently hidden."
+msgstr "Ray Data 桥接层在运行时发现 Dataset 工厂和方法，而不维护特定版本的方法列表。它保留已安装方法的签名和文档，并在执行边界验证生成 Dataset 的操作。兼容性测试会枚举固定 Ray 版本导出的所有公共 API，确保新增方法不会被悄然隐藏。"
+
+msgid ""
+"Supported Ray Serve releases still read the protobuf `FieldDescriptor.label` "
+"attribute, which protobuf 7 removed. Klein for Ray therefore constrains "
+"`protobuf<7` until that incompatibility is fixed upstream."
+msgstr "受支持的 Ray Serve 版本仍会读取 protobuf 的 `FieldDescriptor.label` 属性，而 protobuf 7 已移除该属性。因此，在上游修复此不兼容问题前，Klein for Ray 将依赖约束为 `protobuf<7`。"
+
+msgid "The distributed package keeps its small set of unavoidable Ray Data private imports inside `ray.klein._compat`. New private imports are compatibility debt and require an exact inventory entry, an isolated adapter, and tests against the supported Ray line. Normal Klein modules are forbidden from importing them. See [the inventory](private-api-inventory.md)."
+msgstr "分发包将少量不可避免的 Ray Data 私有导入集中在 `ray.klein._compat` 中。新增私有导入属于兼容性债务，必须提供精确的清单条目、隔离的适配器，并针对受支持的 Ray 版本系列进行测试。普通 Klein 模块禁止导入这些符号。请参阅[私有 API 清单](private-api-inventory.md)。"

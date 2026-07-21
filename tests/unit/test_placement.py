@@ -212,6 +212,76 @@ def test_placement_rescale_rollback_releases_only_candidate_group():
         assert plan.placement_group_for(second.id) is None
 
 
+def test_placement_group_reserves_each_actor_with_exact_resources(monkeypatch):
+    first = ExecutionVertexId(1, 0)
+    second = ExecutionVertexId(2, 0)
+    independent = ExecutionVertexId(3, 0)
+    graph = SimpleNamespace(
+        affinity_groups=((first, second), (independent,)),
+        execution_vertices=(
+            SimpleNamespace(id=first, resources=SimpleNamespace(cpus=0.5, gpus=0.25)),
+            SimpleNamespace(id=second, resources=SimpleNamespace(cpus=1.5, gpus=0.0)),
+            SimpleNamespace(id=independent, resources=SimpleNamespace(cpus=2.0, gpus=0.0)),
+        ),
+    )
+    captured = []
+    groups = [MagicMock(), MagicMock(), MagicMock()]
+    for group in groups:
+        group.ready.return_value = "ready-ref"
+    remove = MagicMock()
+
+    def create(bundles, *, strategy):
+        captured.append((bundles, strategy))
+        return groups[len(captured) - 1]
+
+    monkeypatch.setattr(placement_group_module, "placement_group", create)
+    monkeypatch.setattr(placement_group_module, "remove_placement_group", remove)
+    monkeypatch.setattr("ray.klein.get", lambda value, *, timeout: (value, timeout))
+
+    plan = PlacementGroupStrategy("SPREAD", ready_timeout=3.5).plan(graph)
+
+    assert captured == [
+        ([{"CPU": 0.5, "GPU": 0.25}], "SPREAD"),
+        ([{"CPU": 1.5}], "SPREAD"),
+        ([{"CPU": 2.0}], "SPREAD"),
+    ]
+    assert plan.bundle_for(first) == plan.bundle_for(second) == plan.bundle_for(independent) == 0
+    plan.rollback()
+    assert remove.call_args_list == [call(group) for group in groups]
+
+
+def test_placement_group_ready_failure_releases_reservation(monkeypatch):
+    vertex_id = ExecutionVertexId(1, 0)
+    graph = SimpleNamespace(
+        affinity_groups=((vertex_id,),),
+        execution_vertices=(SimpleNamespace(id=vertex_id, resources=SimpleNamespace(cpus=1.0, gpus=0.0)),),
+    )
+    placement_group = MagicMock()
+    placement_group.ready.return_value = "ready-ref"
+    remove = MagicMock()
+    monkeypatch.setattr(placement_group_module, "placement_group", lambda *_args, **_kwargs: placement_group)
+    monkeypatch.setattr(placement_group_module, "remove_placement_group", remove)
+
+    def timeout(*_args, **_kwargs):
+        raise TimeoutError("not ready")
+
+    monkeypatch.setattr("ray.klein.get", timeout)
+
+    with pytest.raises(PlacementError, match="elastic groups not ready"):
+        PlacementGroupStrategy("PACK", ready_timeout=1.25).plan(graph)
+    remove.assert_called_once_with(placement_group)
+
+
+def test_placement_group_rejects_empty_execution_graph(monkeypatch):
+    create = MagicMock()
+    monkeypatch.setattr(placement_group_module, "placement_group", create)
+    graph = SimpleNamespace(affinity_groups=(), execution_vertices=())
+
+    plan = PlacementGroupStrategy("PACK", ready_timeout=1).plan(graph)
+    assert not plan.uses_placement_group
+    create.assert_not_called()
+
+
 def test_error_hierarchy():
     # PlacementError is a DeploymentError so the cascade's `except PlacementError`
     # catches it AND schedule()'s `except DeploymentError` would too.

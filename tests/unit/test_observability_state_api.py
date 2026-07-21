@@ -15,6 +15,7 @@ def test_list_job_snapshots_without_state_actor(monkeypatch) -> None:
 def test_rescale_operator_without_state_actor(monkeypatch) -> None:
     monkeypatch.setattr(state_api, "get_state_actor", lambda: None)
     assert state_api.rescale_operator("j", 2, 4) is None
+    assert state_api.submit_operator_rescale("j", 2, 4) is None
 
 
 def test_state_api_resolves_remote_calls(monkeypatch) -> None:
@@ -23,6 +24,7 @@ def test_state_api_resolves_remote_calls(monkeypatch) -> None:
     actor.get_job.remote.return_value = "job-ref"
     actor.cancel_job.remote.return_value = "cancel-ref"
     actor.rescale_operator.remote.return_value = "rescale-ref"
+    actor.submit_operator_rescale.remote.return_value = "submit-rescale-ref"
     monkeypatch.setattr(state_api, "get_state_actor", lambda: actor)
     ray_get = MagicMock(
         side_effect=lambda ref, **_kwargs: {
@@ -30,6 +32,7 @@ def test_state_api_resolves_remote_calls(monkeypatch) -> None:
             "job-ref": {"job_id": "j"},
             "cancel-ref": True,
             "rescale-ref": {"status": "COMPLETED"},
+            "submit-rescale-ref": {"operation_id": "resize-1", "status": "ACCEPTED"},
         }[ref]
     )
     monkeypatch.setattr(state_api.ray, "get", ray_get)
@@ -38,10 +41,17 @@ def test_state_api_resolves_remote_calls(monkeypatch) -> None:
     assert state_api.get_job_snapshot("j") == {"job_id": "j"}
     assert state_api.cancel_job("j", timeout=9)
     assert state_api.rescale_operator("j", 2, 4, timeout=9) == {"status": "COMPLETED"}
+    assert state_api.submit_operator_rescale("j", 2, 4, timeout=3) == {
+        "operation_id": "resize-1",
+        "status": "ACCEPTED",
+    }
     actor.get_job.remote.assert_called_once_with("j")
     actor.cancel_job.remote.assert_called_once_with("j", 9)
     actor.rescale_operator.remote.assert_called_once_with("j", 2, 4, 9)
-    ray_get.assert_called_with("rescale-ref", timeout=14)
+    actor.submit_operator_rescale.remote.assert_called_once_with("j", 2, 4, 3)
+    assert ray_get.call_args_list[-2].args == ("rescale-ref",)
+    assert ray_get.call_args_list[-2].kwargs == {"timeout": 14}
+    ray_get.assert_called_with("submit-rescale-ref", timeout=8)
 
 
 @pytest.mark.parametrize("function", [state_api.get_job_snapshot, state_api.cancel_job])

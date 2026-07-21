@@ -7,7 +7,7 @@ from ray.klein.runtime.resources import Resources
 
 
 class StreamSink(Stream):
-    """Represents a sink of the DataStream."""
+    """A lazy terminal operation registered with its owning pipeline."""
 
     def __init__(
         self,

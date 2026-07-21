@@ -22,7 +22,6 @@ class SlidingWindow(WindowAssigner):
         windows = []
         start = last_start
         while start + self._size > timestamp:
-            if start >= 0:
-                windows.append(TimeWindow(start, start + self._size))
+            windows.append(TimeWindow(start, start + self._size))
             start -= self._slide
         return tuple(windows)

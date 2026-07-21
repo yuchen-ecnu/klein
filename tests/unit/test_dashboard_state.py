@@ -29,6 +29,7 @@ class _FakeJobManager:
         self.dashboard_snapshot = _RemoteMethod(self._dashboard_snapshot)
         self.cancel = _RemoteMethod(self._cancel)
         self.rescale_operator = _RemoteMethod(self._rescale_operator)
+        self.submit_operator_rescale = _RemoteMethod(self._submit_operator_rescale)
 
     async def _dashboard_snapshot(self):
         if isinstance(self.snapshot, BaseException):
@@ -43,6 +44,9 @@ class _FakeJobManager:
         if self.rescale_delay:
             await asyncio.sleep(self.rescale_delay)
         return deepcopy(self.rescale_result)
+
+    async def _submit_operator_rescale(self, operator_id, parallelism):
+        return await self._rescale_operator(operator_id, parallelism)
 
 
 def test_dashboard_configuration_redacts_credential_like_options() -> None:
@@ -265,6 +269,29 @@ async def test_state_actor_forwards_rescale_and_normalizes_the_result() -> None:
     }
     assert manager.rescaled_with == (3, 4)
     assert await actor.rescale_operator("missing", 3, 4) is None
+
+
+@pytest.mark.asyncio
+async def test_state_actor_submits_rescale_without_changing_operation_identity() -> None:
+    manager = _FakeJobManager(
+        {"status": "RUNNING", "operators": []},
+        rescale_result={
+            "operation_id": "resize-1",
+            "operator_id": 3,
+            "target_parallelism": 4,
+            "status": "ACCEPTED",
+            "phase": "QUEUED",
+        },
+    )
+    actor = _KleinStateActor()
+    actor.register_job("job-1", manager, {"job_name": "events"})
+
+    result = await actor.submit_operator_rescale("job-1", 3, 4)
+
+    assert result["operation_id"] == "resize-1"
+    assert result["status"] == "ACCEPTED"
+    assert result["parallelism"] == 4
+    assert manager.rescaled_with == (3, 4)
 
 
 @pytest.mark.asyncio

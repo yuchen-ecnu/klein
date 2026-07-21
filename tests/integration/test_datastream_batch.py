@@ -9,6 +9,7 @@ from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.config.execution_options import ExecutionOptions
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
 from tests.support.assertions import assert_rows_equal
+from tests.support.terminal import execute_terminal
 
 logger = get_logger(__name__)
 
@@ -78,41 +79,43 @@ def batch_stream(batch_context, test_data_dir):
 
 def test_batch_pipeline_writes_parquet(batch_stream, tmp_path) -> None:
     context, stream = batch_stream
-    stream.data.write_parquet(str(tmp_path / "parquet"))
+    sink = stream.data.write_parquet(str(tmp_path / "parquet"))
 
-    context.execute("batch-write-parquet").wait()
+    context.execute("batch-write-parquet", sinks=(sink,)).wait()
 
 
 def test_schema_and_show_are_executable_sinks(batch_stream) -> None:
     context, stream = batch_stream
-    stream.schema()
-    stream.show(limit=1)
+    schema_sink = stream.schema()
+    show_sink = stream.show(limit=1)
 
-    results = context.execute("batch-metadata-sinks").get()
+    results = context.execute("batch-metadata-sinks", sinks=(schema_sink, show_sink)).get()
 
     assert len(results) == 2
 
 
 def test_take_returns_exact_prefix(batch_stream) -> None:
-    context, stream = batch_stream
-    context.enable_interactive_mode()
+    _, stream = batch_stream
 
-    assert stream.take(limit=1) == [{"id": 3}]
+    assert execute_terminal(stream.take(limit=1), job_name="batch-take-prefix") == [{"id": 3}]
 
 
 def test_take_all_supports_actor_pool_concurrency(batch_stream) -> None:
-    context, stream = batch_stream
-    context.enable_interactive_mode()
+    _, stream = batch_stream
 
-    assert stream.map(IdentityMap, concurrency=(1, 2)).take_all() == [{"id": 3}, {"id": 5}, {"id": 7}]
+    sink = stream.map(IdentityMap, concurrency=(1, 2)).take_all()
+    assert execute_terminal(sink, job_name="batch-take-all-concurrency") == [
+        {"id": 3},
+        {"id": 5},
+        {"id": 7},
+    ]
 
 
 def test_take_all_rejects_a_limit(batch_stream) -> None:
-    context, stream = batch_stream
-    context.enable_interactive_mode()
+    _, stream = batch_stream
 
     with pytest.raises(ValueError, match="limit"):
-        stream.take_all(limit=1)
+        execute_terminal(stream.take_all(limit=1), job_name="batch-take-all-limit")
 
 
 def test_runtime_context_is_injected_into_callable_class(batch_context, test_data_dir) -> None:
@@ -124,9 +127,9 @@ def test_runtime_context_is_injected_into_callable_class(batch_context, test_dat
         batch_size=2,
         name="MapOperator",
     )
-    stream.show(limit=2)
+    sink = stream.show(limit=2)
 
-    batch_context.execute("runtime-context-injection").wait()
+    batch_context.execute("runtime-context-injection", sinks=(sink,)).wait()
 
 
 def test_constructor_kwargs_are_injected(batch_context, test_data_dir) -> None:
@@ -139,9 +142,9 @@ def test_constructor_kwargs_are_injected(batch_context, test_data_dir) -> None:
         batch_size=2,
         name="MapOperator",
     )
-    stream.show(limit=2)
+    sink = stream.show(limit=2)
 
-    batch_context.execute("constructor-kwargs-injection").wait()
+    batch_context.execute("constructor-kwargs-injection", sinks=(sink,)).wait()
 
 
 def test_multi_sink_outputs_are_independent(batch_context, test_data_dir, tmp_path) -> None:
@@ -158,7 +161,6 @@ def test_multi_sink_outputs_are_independent(batch_context, test_data_dir, tmp_pa
     batch_context.execute("multi-sink").wait()
 
     reader = KleinContext(batch_context.config)
-    reader.enable_interactive_mode()
     union_rows = [
         {"id": "cd2_1", "name": "cd2_tom", "age": 18},
         {"id": "cd2_2", "name": "cd2_tony", "age": 22},
@@ -169,6 +171,12 @@ def test_multi_sink_outputs_are_independent(batch_context, test_data_dir, tmp_pa
     ]
     second_rows = union_rows[:3]
 
-    assert_rows_equal(reader.data.read_csv(str(csv_output)).take_all(), union_rows, order_sensitive=False)
-    assert_rows_equal(reader.data.read_json(str(json_output)).take_all(), union_rows, order_sensitive=False)
-    assert_rows_equal(reader.data.read_parquet(str(parquet_output)).take_all(), second_rows, order_sensitive=False)
+    csv_rows = execute_terminal(reader.data.read_csv(str(csv_output)).take_all(), job_name="read-multi-csv")
+    json_rows = execute_terminal(reader.data.read_json(str(json_output)).take_all(), job_name="read-multi-json")
+    parquet_rows = execute_terminal(
+        reader.data.read_parquet(str(parquet_output)).take_all(),
+        job_name="read-multi-parquet",
+    )
+    assert_rows_equal(csv_rows, union_rows, order_sensitive=False)
+    assert_rows_equal(json_rows, union_rows, order_sensitive=False)
+    assert_rows_equal(parquet_rows, second_rows, order_sensitive=False)
