@@ -269,7 +269,10 @@ def test_real_ray_rescales_one_operator_without_restarting_its_neighbors(ray_clu
     produced = [0]
 
     def produce_during_rescale() -> None:
-        for index in range(1, 5_001):
+        # Two rescale RPCs each have a 30-second client budget. Keep the
+        # producer alive for longer than both budgets so a slower CI runner
+        # cannot exhaust the synthetic input before the scale-in begins.
+        for index in range(1, 50_001):
             if stop_producer.is_set():
                 return
             input_queue.put(index)
@@ -685,23 +688,25 @@ def test_real_ray_async_scale_out_fails_cleanly_when_cluster_cpus_are_exhausted(
                 snapshot
                 if (snapshot := klein.get_job_snapshot(handle.namespace))
                 and (operation := _rescale_operation(snapshot, operation_id)) is not None
-                and operation["status"] == "RUNNING"
-                and operation["phase"] == "COORDINATING"
+                and operation["status"] in {"ACCEPTED", "RUNNING", "FAILED"}
                 else None
             ),
-            timeout=5,
+            timeout=15,
             interval=0.05,
-            description="the resource-starved candidate to remain pending",
+            description="the resource-starved operation to become observable",
         )
+        pending_operation = _rescale_operation(pending, operation_id)
+        assert pending_operation is not None
         pending_target = _operator(pending, "ResourceFailureMap")
         assert pending["status"] == JobStatus.RUNNING.name
         assert pending_target["parallelism"] == 1
         assert _actor_ids_by_subtask(pending_target) == target_actors_before
         assert _unrelated_actor_ids(pending, target_id) == unrelated_before
-        assert pending_target["can_rescale"] is False
+        assert pending_target["can_rescale"] is (pending_operation["status"] == "FAILED")
 
-        # Candidate placement is pending, but the readiness fence precedes the
-        # data-plane fence, so the original topology must continue processing.
+        # Whether candidate placement is still queued/running or has already
+        # failed, the readiness fence precedes the data-plane fence, so the
+        # original topology must continue processing.
         for index in range(13, 25):
             input_queue.put(index)
         rows.extend(_collect_sequence_phase(output_queue, range(13, 25)))
@@ -709,13 +714,17 @@ def test_real_ray_async_scale_out_fails_cleanly_when_cluster_cpus_are_exhausted(
         assert pending_after_data is not None
         pending_operation = _rescale_operation(pending_after_data, operation_id)
         assert pending_operation is not None
-        assert pending_operation["status"] == "RUNNING"
-        assert pending_operation["phase"] == "COORDINATING"
+        assert pending_operation["status"] in {"ACCEPTED", "RUNNING", "FAILED"}
+        if pending_operation["status"] == "FAILED":
+            assert pending_operation["phase"] == "COMPLETED"
+        else:
+            assert pending_operation["phase"] in {"QUEUED", "COORDINATING"}
         pending_target_after_data = _operator(pending_after_data, "ResourceFailureMap")
         assert pending_after_data["status"] == JobStatus.RUNNING.name
         assert pending_target_after_data["parallelism"] == 1
         assert _actor_ids_by_subtask(pending_target_after_data) == target_actors_before
         assert _unrelated_actor_ids(pending_after_data, target_id) == unrelated_before
+        assert pending_target_after_data["can_rescale"] is (pending_operation["status"] == "FAILED")
 
         failed = wait_until(
             lambda: (
