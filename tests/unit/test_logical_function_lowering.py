@@ -146,6 +146,12 @@ class MiscTest(unittest.TestCase):
         self.assertTrue(LogicalFunction(_user_fn, lowering=lower_union).batch_supported)
         self.assertFalse(LogicalFunction(_user_fn).batch_supported)
 
+    def test_async_execution_window_requires_streaming_despite_lowering(self):
+        logical = LogicalFunction(_user_fn, lowering=lower_union, async_buffer_size=4)
+
+        self.assertFalse(logical.batch_supported)
+        self.assertIs(logical.batch_lowering, lower_union)
+
     def test_lowering_context_runtime_context_injection(self):
         ctx = LoweringContext(
             upstream_ds=[],

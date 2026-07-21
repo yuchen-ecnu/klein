@@ -1,17 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 from ray.data.expressions import col, download
 
+from ray.klein.api.changelog_row import ChangelogRow
 from ray.klein.api.collect_function import CollectFunction
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.node_type import NodeType
 from ray.klein.api.row_kind import RowKind
 from ray.klein.config.configuration import Configuration
 from tests.support.streaming import LoopSourceFunction
+from tests.support.terminal import execute_terminal
+
+
+def _add_offset(value, offset):
+    return None if value is None else value + offset
+
+
+def _bucket(value):
+    return value // 10
+
+
+def _twice(value):
+    return value * 2
 
 
 def test_join_group_expression_uses_ray_native_operators() -> None:
     context = KleinContext()
-    context.enable_interactive_mode()
     orders = context.data.from_items(
         [
             {"customer_id": 1, "amount": 10},
@@ -37,14 +50,15 @@ def test_join_group_expression_uses_ray_native_operators() -> None:
         tables={"orders": orders, "customers": customers},
     )
 
-    assert totals.data.take_all() == [{"name": "Ada", "total": 25}, {"name": "Lin", "total": 7}]
+    rows = execute_terminal(totals.data.take_all(), job_name="sql-join-group")
+    assert rows == [{"name": "Ada", "total": 25}, {"name": "Lin", "total": 7}]
 
 
 def test_query_without_input_tables() -> None:
     context = KleinContext()
-    context.enable_interactive_mode()
 
-    assert context.sql("SELECT 40 + 2 AS answer", tables={}).data.take_all() == [{"answer": 42}]
+    sink = context.sql("SELECT 40 + 2 AS answer", tables={}).data.take_all()
+    assert execute_terminal(sink, job_name="sql-without-input") == [{"answer": 42}]
 
 
 def test_download_expression_uses_ray_data_operator(tmp_path) -> None:
@@ -52,7 +66,6 @@ def test_download_expression_uses_ray_data_operator(tmp_path) -> None:
     source_file = tmp_path / "payload.bin"
     source_file.write_bytes(payload)
     context = KleinContext()
-    context.enable_interactive_mode()
     files = context.data.from_items([{"id": 1, "uri": f"local://{source_file}"}])
 
     result = context.sql(
@@ -60,12 +73,12 @@ def test_download_expression_uses_ray_data_operator(tmp_path) -> None:
         tables={"files": files},
     )
 
-    assert result.data.take_all() == [{"id": 1, "body": payload}]
+    rows = execute_terminal(result.data.take_all(), job_name="sql-download")
+    assert rows == [{"id": 1, "body": payload}]
 
 
 def test_ray_data_scalar_expressions_execute_natively() -> None:
     context = KleinContext()
-    context.enable_interactive_mode()
     rows = context.data.from_items(
         [
             {"value": -5, "name": "ADA"},
@@ -73,11 +86,12 @@ def test_ray_data_scalar_expressions_execute_natively() -> None:
         ]
     )
 
-    result = context.sql(
+    result_stream = context.sql(
         "SELECT value / 2 AS ratio, ABS(value) AS magnitude, LOWER(name) AS normalized, "
         "RANDOM(42) AS sample, UUID() AS uid, MONOTONICALLY_INCREASING_ID() AS mid FROM rows",
         tables={"rows": rows},
-    ).data.take_all()
+    )
+    result = execute_terminal(result_stream.data.take_all(), job_name="sql-scalar-expressions")
 
     assert [row["ratio"] for row in result] == [-2.5, 1.0]
     assert [row["magnitude"] for row in result] == [5, 2]
@@ -85,6 +99,93 @@ def test_ray_data_scalar_expressions_execute_natively() -> None:
     assert all(0 <= row["sample"] < 1 for row in result)
     assert len({row["uid"] for row in result}) == 2
     assert len({row["mid"] for row in result}) == 2
+
+
+def test_klein_scalar_function_executes_in_batch_sql() -> None:
+    context = KleinContext()
+    offset = 2
+
+    def add_offset(value):
+        return None if value is None else value + offset
+
+    rows = context.data.from_items(
+        [
+            {"id": 1, "value": 1},
+            {"id": 2, "value": 3},
+            {"id": 3, "value": None},
+        ]
+    )
+
+    result = context.sql(
+        "SELECT id, ABS(ADD_OFFSET(value) - 6) AS distance FROM rows WHERE ADD_OFFSET(value) >= 5",
+        tables={"rows": rows},
+        functions={"add_offset": add_offset},
+    )
+
+    assert execute_terminal(result.data.take_all(), job_name="sql-scalar-udf") == [{"id": 2, "distance": 1}]
+
+
+def test_klein_scalar_functions_execute_in_batch_group_and_aggregate_inputs() -> None:
+    context = KleinContext()
+    rows = context.data.from_items([{"amount": 12}, {"amount": 18}, {"amount": 25}])
+
+    result = context.sql(
+        "SELECT BUCKET(amount) AS bucket, SUM(TWICE(amount)) AS total FROM rows GROUP BY BUCKET(amount)",
+        tables={"rows": rows},
+        functions={"bucket": _bucket, "twice": _twice},
+    )
+
+    assert sorted(
+        execute_terminal(result.data.take_all(), job_name="sql-scalar-udf-aggregate"), key=lambda row: row["bucket"]
+    ) == [
+        {"bucket": 1, "total": 60},
+        {"bucket": 2, "total": 50},
+    ]
+
+
+def test_klein_scalar_function_executes_in_streaming_sql(ray_cluster) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    rows = context.from_values({"id": 1, "value": 1}, {"id": 2, "value": 3})
+    context.sql_session.register_scalar_function("add_offset", _add_offset)
+    result = context.sql(
+        "SELECT id, ABS(ADD_OFFSET(value, -4)) AS distance FROM rows",
+        tables={"rows": rows},
+    )
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLScalarUDF")
+
+    handle = context.execute("streaming-sql-scalar-udf", sinks=(sink,))
+    handle.wait()
+
+    assert sorted(handle.get(), key=lambda row: row["id"]) == [
+        {"id": 1, "distance": 3},
+        {"id": 2, "distance": 1},
+    ]
+
+
+def test_streaming_scalar_functions_preserve_aggregate_retractions(ray_cluster) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    rows = context.from_values(
+        ChangelogRow.insert({"amount": 12}),
+        ChangelogRow.insert({"amount": 18}),
+        ChangelogRow.delete({"amount": 12}),
+    )
+    result = context.sql(
+        "SELECT BUCKET(amount) AS bucket, SUM(TWICE(amount)) AS total FROM rows GROUP BY BUCKET(amount)",
+        tables={"rows": rows},
+        functions={"bucket": _bucket, "twice": _twice},
+    )
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLScalarUDFAggregate")
+
+    handle = context.execute("streaming-sql-scalar-udf-aggregate", sinks=(sink,))
+    handle.wait()
+
+    assert [(row.row_kind, dict(row)) for row in handle.get()] == [
+        (RowKind.INSERT, {"bucket": 1, "total": 24}),
+        (RowKind.UPDATE_BEFORE, {"bucket": 1, "total": 24}),
+        (RowKind.UPDATE_AFTER, {"bucket": 1, "total": 60}),
+        (RowKind.UPDATE_BEFORE, {"bucket": 1, "total": 60}),
+        (RowKind.UPDATE_AFTER, {"bucket": 1, "total": 36}),
+    ]
 
 
 def test_streaming_sql_executes_download_and_synthetic_expressions(ray_cluster, tmp_path) -> None:
@@ -103,9 +204,9 @@ def test_streaming_sql_executes_download_and_synthetic_expressions(ray_cluster, 
         "MONOTONICALLY_INCREASING_ID() AS mid FROM files",
         tables={"files": files},
     )
-    result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLStreamingExpressions")
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLStreamingExpressions")
 
-    handle = context.execute("streaming-sql-expressions")
+    handle = context.execute("streaming-sql-expressions", sinks=(sink,))
     handle.wait()
     rows = sorted(handle.get(), key=lambda row: row["id"])
 
@@ -125,9 +226,9 @@ def test_stream_data_expressions_execute_in_streaming_mode(ray_cluster, tmp_path
         .data.with_column("doubled", col("value") * 2)
         .data.filter(expr=col("doubled") == 6)
     )
-    result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="StreamDataExpressions")
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="StreamDataExpressions")
 
-    handle = context.execute("stream-data-expressions")
+    handle = context.execute("stream-data-expressions", sinks=(sink,))
     handle.wait()
 
     assert handle.get() == [{"uri": f"local://{payload}", "value": 3, "body": b"payload", "doubled": 6}]
@@ -156,9 +257,9 @@ def test_streaming_join_group_by_emits_flink_changelog(ray_cluster) -> None:
         """,
         tables={"orders": orders, "customers": customers},
     )
-    result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLChangelog")
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLChangelog")
 
-    handle = context.execute("streaming-sql-changelog")
+    handle = context.execute("streaming-sql-changelog", sinks=(sink,))
     handle.wait()
     changes = handle.get()
     by_name = {}
@@ -187,9 +288,9 @@ def test_unbounded_input_selects_continuous_sql_automatically(ray_cluster) -> No
         "SELECT idx % 2 AS parity, COUNT(*) AS total FROM events GROUP BY idx % 2",
         tables={"events": events},
     )
-    result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLUnboundedChangelog")
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLUnboundedChangelog")
 
-    handle = context.execute("unbounded-streaming-sql")
+    handle = context.execute("unbounded-streaming-sql", sinks=(sink,))
     handle.wait()
     changes = handle.get()
     by_parity = {}
@@ -204,9 +305,8 @@ def test_unbounded_input_selects_continuous_sql_automatically(ray_cluster) -> No
     assert by_parity == {0: expected_updates, 1: expected_updates}
 
 
-def test_cte_filter_limit_and_union_all() -> None:
+def test_cte_filter_and_union_all() -> None:
     context = KleinContext()
-    context.enable_interactive_mode()
     events = context.data.from_items(
         [
             {"id": 1, "score": 5},
@@ -228,10 +328,34 @@ def test_cte_filter_limit_and_union_all() -> None:
     )
 
     # Distributed datasets do not promise block order without ORDER BY.
-    assert sorted(result.data.take_all(), key=lambda row: row["id"]) == [
+    rows = execute_terminal(result.data.take_all(), job_name="sql-cte-union")
+    assert sorted(rows, key=lambda row: row["id"]) == [
         {"id": 2, "score": 40},
         {"id": 3, "score": 60},
         {"id": 99, "score": 1},
+    ]
+
+
+def test_order_by_multiple_columns_and_limit() -> None:
+    context = KleinContext()
+    events = context.from_items(
+        [
+            {"id": 3, "score": 20},
+            {"id": 1, "score": 30},
+            {"id": 2, "score": 30},
+            {"id": 4, "score": 10},
+        ]
+    )
+
+    result = context.sql(
+        "SELECT id, score FROM events ORDER BY score DESC, id ASC LIMIT 2",
+        tables={"events": events},
+    )
+
+    rows = execute_terminal(result.take_all(), job_name="sql-order-limit")
+    assert rows == [
+        {"id": 1, "score": 30},
+        {"id": 2, "score": 30},
     ]
 
 
@@ -259,9 +383,9 @@ def test_flink_ddl_lazily_connects_filesystem_source_and_sink(tmp_path) -> None:
         )
         """
     )
-    context.execute_sql("INSERT INTO output_events SELECT id, amount * 2 AS doubled FROM input_events")
+    sink = context.execute_sql("INSERT INTO output_events SELECT id, amount * 2 AS doubled FROM input_events")
 
-    context.execute("sql-table-insert").wait()
+    context.execute("sql-table-insert", sinks=(sink,)).wait()
 
     import ray.data
 

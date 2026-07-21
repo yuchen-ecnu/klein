@@ -24,19 +24,18 @@ the docstring come from that same Ray installation.
 
 ```python
 import ray
+import ray.klein
 
-ray.klein.reset_context().enable_interactive_mode()
-
-rows = (
+stream = (
     ray.klein.read_csv("s3://bucket/input")
     .data.random_shuffle(seed=7)
-    .data.take(10)
 )
+stream.data.take(10)
+rows = ray.klein.execute("ray-data-read").get()
 ```
 
 New Ray factories and Dataset methods are available automatically. Inspect the
-current installation with `ray.klein.current_context().data.available` and
-`stream.data.available`.
+current installation with `dir(ray.klein)` and `stream.data.available`.
 
 ## Ray Data expressions
 
@@ -98,12 +97,13 @@ aggregated = source.data.transform(
     lambda ds: ds.groupby("customer_id").mean("amount")
 )
 
-result = aggregated.data.consume(lambda ds: ds.summary())
+aggregated.data.consume(lambda ds: ds.summary())
+summary = ray.klein.execute("customer-summary").get()
 ```
 
 A transform callable must return exactly one `Dataset`. A consumer may return
-any value. In interactive mode a consumer returns that value immediately; in
-regular mode use `ray.klein.execute(...).get()`.
+any value. Consumers remain lazy: the terminal call registers the consumer and
+`ray.klein.execute("job-name").get()` returns its result.
 
 Other Klein streams passed anywhere inside positional or keyword arguments are
 automatically compiled into Dataset dependencies. This supports methods such
@@ -115,13 +115,14 @@ right = ray.klein.read_parquet("right/")
 joined = left.data.join(right, join_keys="id")
 ```
 
-## Isolate graph-building contexts
+## Advanced: isolate graph-building contexts
 
 `KleinContext` can isolate multiple graph builders in one process. Its
 `context.data` namespace remains available for explicitly scoped graph builders,
-while application code should prefer the module-level readers. Ray Data methods
-are generally unavailable directly on `KleinContext` or `DataStream`; use
-`context.data.read_csv(...)` and `stream.data.random_shuffle(...)` when the
-explicit namespace is needed. The documented stable sink entry points are
-exceptions, including `stream.write_sql(...)`, which uses Ray Data in batch
-mode and Klein's at-least-once DB-API sink in streaming mode.
+while ordinary application code should prefer the module-level readers. Ray
+Data methods are generally unavailable directly on `KleinContext` or
+`DataStream`; use `context.data.read_csv(...)` and
+`stream.data.random_shuffle(...)` when the explicit namespace is needed. The
+documented stable sink entry points are exceptions, including
+`stream.write_sql(...)`, which uses Ray Data in batch mode and Klein's
+at-least-once DB-API sink in streaming mode.

@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-20 11:04+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+
+msgid "Local development and debugging"
+msgstr "本地开发与调试"
+
+msgid "Embedded local cluster"
+msgstr "嵌入式本地集群"
+
+msgid ""
+"Streaming execution calls ``ray.init()`` when no Ray runtime is active. This "
+"starts a local cluster whose lifetime follows the Python process. You can "
+"also start Ray first and attach to it. Pre-initialize Ray in the application "
+"when you need custom dashboard, metrics-export, address, or resource "
+"settings; Klein for Ray will reuse the active runtime:"
+msgstr "当没有活动的 Ray 运行时，流处理执行会调用 ``ray.init()``。这将启动一个生命周期与 Python 进程一致的本地集群。你也可以先启动 Ray，再连接到它。需要自定义仪表板、指标导出、地址或资源设置时，请在应用中预先初始化 Ray；Klein for Ray 会复用活动的运行时："
+
+msgid ""
+"Use ``ray stop --force`` after interrupted local integration tests if Ray "
+"processes remain."
+msgstr "如果中断的本地集成测试遗留了 Ray 进程，请运行 ``ray stop --force``。"
+
+msgid "In-process debug mode"
+msgstr "进程内调试模式"
+
+msgid ""
+"Set ``RAY_KLEIN_DEBUG=1`` to replace Ray actors with local Python objects "
+"and dedicated event-loop threads. This is useful for IDE breakpoints in "
+"streaming operators, but it does not validate serialization, placement, "
+"resource scheduling, process isolation, or Ray failure recovery."
+msgstr "设置 ``RAY_KLEIN_DEBUG=1``，可用本地 Python 对象和专用事件循环线程替代 Ray actor。这适合在 IDE 中为流处理算子设置断点，但无法验证序列化、放置、资源调度、进程隔离或 Ray 故障恢复。"
+
+msgid ""
+"Run the integration suite without debug mode before relying on a pipeline in "
+"production."
+msgstr "在生产环境依赖某条流水线前，请先在不启用调试模式的情况下运行集成测试套件。"
+
+msgid "Logging"
+msgstr "日志"
+
+msgid ""
+"Libraries should not configure application logging on import. Applications "
+"can call ``ray.klein.configure_logging()`` explicitly. Set "
+"``RAY_KLEIN_LOGGING_CONFIG`` to load a custom YAML configuration."
+msgstr "库不应在导入时配置应用日志。应用可以显式调用 ``ray.klein.configure_logging()``。设置 ``RAY_KLEIN_LOGGING_CONFIG`` 可加载自定义 YAML 配置。"

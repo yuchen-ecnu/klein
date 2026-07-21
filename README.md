@@ -45,12 +45,12 @@ status.
 | Capability | What Klein provides |
 | --- | --- |
 | Unified dataflows | One lazy `DataStream` graph for bounded and continuous sources. |
-| Native Ray execution | Ray Data lowers bounded work; Ray Core runs long-lived streaming operators. |
+| Native Ray execution | Ray Data lowers compatible bounded work; Ray Core runs long-lived streaming operators. |
 | Event time | Watermarks, idle-input detection, windows, and event-time timers. |
 | Managed state | Keyed state, TTL, key groups, rescaling, and checkpoint restore. |
 | Recovery | Durable checkpoints, source-position restore, and replay-aware sinks. |
 | Relational APIs | Bounded SQL plus dynamic tables and explicit changelog rows for continuous queries. |
-| Connectors | Ray Data, collections, Kafka, RocketMQ, filesystems, Redis, console, custom connectors, and Ray Serve integration. |
+| Connectors | Ray Data, collections, Kafka, RocketMQ, filesystems, Iceberg, Redis, console, custom connectors, Canal JSON, and Ray Serve integration. |
 | Operations | Structured logs, Ray metrics, checkpoint inspection, CLI attach, and a JSON-safe state API. |
 
 ### How Klein fits into Ray
@@ -59,7 +59,7 @@ status.
 | --- | --- |
 | Ray Core | Runs distributed operators and coordinates streaming recovery. |
 | Ray Data | Executes bounded sources, transformations, shuffles, and sinks. |
-| Ray Object Store | Shares immutable checkpoint fragments to accelerate recovery. |
+| Ray Object Store | Can cache sufficiently large immutable checkpoint fragments to accelerate recovery. |
 
 ![Klein for Ray component architecture](docs/_static/architecture-overview.png)
 
@@ -75,8 +75,8 @@ not install `ray/__init__.py` or replace files owned by Ray.
 
 ## Installation
 
-Klein for Ray currently targets Python 3.10–3.12 and Ray 2.56.1. Install the
-Alpha release from PyPI:
+Klein for Ray currently targets Python 3.10–3.12 and Ray 2.56.x
+(`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:
 
 ```bash
 python -m venv .venv
@@ -89,6 +89,7 @@ Install connector dependencies only when needed:
 
 ```bash
 python -m pip install "ray-klein[kafka]==0.1.0a1"   # continuous Kafka source/sink
+python -m pip install "ray-klein[iceberg]==0.1.0a1" # Iceberg catalog and output
 python -m pip install "ray-klein[rocketmq]==0.1.0a1" # continuous RocketMQ source
 python -m pip install "ray-klein[redis]==0.1.0a1"   # Redis lookup/sink
 python -m pip install "ray-klein[rocksdb]==0.1.0a1" # local RocksDB state backend
@@ -107,14 +108,14 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 
 ## Quick start
 
-Interactive mode executes this bounded graph when `take_all()` is called:
+Klein builds the bounded graph lazily. A terminal operation registers its sink,
+and `execute("job-name")` runs all registered sinks explicitly:
 
 ```python
 import ray
+import ray.klein
 
-ray.klein.reset_context().enable_interactive_mode()
-
-rows = (
+stream = (
     ray.klein.from_items(
         [
             {"name": "Ada", "amount": 4},
@@ -122,8 +123,9 @@ rows = (
         ]
     )
     .map(lambda row: {**row, "amount": row["amount"] * 2})
-    .take_all()
 )
+stream.take_all()
+rows = ray.klein.execute("quick-start").get()
 
 print(rows)
 ```
@@ -154,22 +156,48 @@ ray-klein dashboard --open \
 
 | Start here | What it covers |
 | --- | --- |
+| [Installation](docs/installation.md) | Supported environments, base and optional extras, cluster consistency, verification, upgrades, and removal. |
 | [Getting started](docs/getting-started.md) | Installation, bounded pipelines, streaming submission, and configuration. |
 | [Key concepts](docs/key-concepts.md) | Execution modes, state, event time, and recovery. |
 | [Architecture](docs/architecture.md) | Planning, batch and streaming runtimes, the ordered data plane, checkpoints, recovery, and extension boundaries. |
 | [User guides](docs/user-guides.md) | Production streaming, SQL, state, delivery semantics, recovery, deployment, tuning, and operations. |
+| [DataStream programming](docs/datastream-programming-guide.md) | Records, batches, UDF forms, ordering, errors, resources, partitioning, and external side effects. |
+| [Job lifecycle](docs/job-lifecycle.md) | Contexts, terminal sinks, planning, submission, job handles, cancellation, namespaces, and cleanup. |
 | [Operator compatibility](docs/operator-compatibility.md) | Batch/streaming support, partitioning, state, changelog, and sink behavior. |
 | [Production walkthrough](docs/production-streaming.md) | Kafka input through event-time state, checkpoints, file output, CLI operations, and restore. |
 | [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
 | [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
 | [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
-| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the standalone Klein Dashboard. |
+| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the web Dashboard with operator scaling. |
+| [Production readiness](docs/production-readiness.md) | A release checklist for compatibility, recovery, capacity, observability, security, and rollback. |
+| [Security](docs/security.md) | Trust boundaries, UDF and pickle risks, control-plane exposure, secrets, and hardening. |
+| [Limits, stability, and upgrades](docs/limitations.md) | Unsupported combinations, API guarantees, checkpoint compatibility, upgrade rehearsal, and rollback. |
+| [CLI reference](docs/cli-reference.md) | Commands, options, JSON output, exit statuses, terminal behavior, and automation examples. |
+| [FAQ](docs/faq.md) | Short answers about installation, execution, state, SQL, connectors, and operations. |
 | [Troubleshooting](docs/troubleshooting.md) | Installation, planning, connector, watermark, checkpoint, backpressure, and CLI failures. |
+
+### Feature guides
+
+| Feature | Dedicated documentation |
+| --- | --- |
+| Feature overview | [Feature highlights](docs/features.md) maps every distinctive capability to its programming, operations, and limitation guides. |
+| Hybrid Ray execution and dynamic Ray Data access | [Ray Data interoperation](docs/ray-data-interop.md) |
+| Managed keyed state, TTL, timers, and key groups | [Managed state](docs/ray-native-state.md) |
+| Watermarks, idleness, windows, and interval joins | [Event time](docs/event-time.md) |
+| Bounded and continuous relational processing | [SQL and Table APIs](docs/sql.md) |
+| Checkpoint-aware recovery and sink guarantees | [Delivery semantics](docs/delivery-semantics.md) |
+| Ray Data autoscaling and live streaming rescaling | [Autoscaling and live operator rescaling](docs/operator-rescaling.md) |
+| Detached streaming jobs and driver failure | [Driver fault tolerance](docs/driver-fault-tolerance.md) |
+| Independently deployed transform regions | [Ray Serve execution integration](docs/connectors/ray-serve.md) |
 
 Build the documentation locally with:
 
 ```bash
-make docs
+make docs          # English at docs/_build/html, Chinese at docs/_build/html/zh_CN
+make docs-en       # English only
+make docs-zh       # Chinese only
+make docs-gettext  # Refresh translation templates
+KLEIN_DOCS_OFFLINE=1 make docs  # Skip remote intersphinx inventories
 ```
 
 ## Compatibility and stability

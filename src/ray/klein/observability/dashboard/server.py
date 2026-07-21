@@ -37,6 +37,8 @@ class _DashboardState(Protocol):
 
     def rescale_operator(self, job_id: str, operator_id: int, parallelism: int) -> Any: ...
 
+    def submit_operator_rescale(self, job_id: str, operator_id: int, parallelism: int) -> Any: ...
+
 
 class _PublishedState:
     """Lazy adapter so importing the HTTP server does not initialize Ray."""
@@ -64,6 +66,12 @@ class _PublishedState:
         from ray.klein.observability.state_api import rescale_operator
 
         return rescale_operator(job_id, operator_id, parallelism)
+
+    @staticmethod
+    def submit_operator_rescale(job_id: str, operator_id: int, parallelism: int) -> Any:
+        from ray.klein.observability.state_api import submit_operator_rescale
+
+        return submit_operator_rescale(job_id, operator_id, parallelism)
 
 
 class _DashboardHTTPServer(ThreadingHTTPServer):
@@ -215,7 +223,12 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return
 
         def _rescale() -> None:
-            result = self.server.state.rescale_operator(job_id, operator_id, parallelism)
+            submit = getattr(self.server.state, "submit_operator_rescale", None)
+            result = (
+                submit(job_id, operator_id, parallelism)
+                if submit is not None
+                else self.server.state.rescale_operator(job_id, operator_id, parallelism)
+            )
             if result is False or result is None:
                 self._send_error_json(HTTPStatus.NOT_FOUND, "The job or operator is no longer available")
                 return
@@ -228,7 +241,15 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
                     "operator_id": operator_id,
                     "parallelism": parallelism,
                 }
-            self._send_json(HTTPStatus.OK, response)
+            operation_status = str(response.get("status", "")).upper()
+            response_status = (
+                HTTPStatus.ACCEPTED
+                if operation_status == "ACCEPTED"
+                else HTTPStatus.CONFLICT
+                if operation_status == "REJECTED"
+                else HTTPStatus.OK
+            )
+            self._send_json(response_status, response)
 
         self._state_call(_rescale)
 

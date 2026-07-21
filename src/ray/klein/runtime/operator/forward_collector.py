@@ -17,11 +17,9 @@ class ForwardCollector(Collector):
             for op in self._succeeding_operators:
                 op.collect(record)
             return
-        for index, op in enumerate(self._succeeding_operators):
-            if index == 0:
-                self._process(op, record)
-            else:
-                self._process(op, record.fork())
+        branch_records = [record, *(record.fork() for _ in self._succeeding_operators[1:])]
+        for op, branch_record in zip(self._succeeding_operators, branch_records, strict=True):
+            self._process(op, branch_record)
 
     def flush(self, force: bool = False) -> None:
         """Flush every chained branch through its final output collector."""

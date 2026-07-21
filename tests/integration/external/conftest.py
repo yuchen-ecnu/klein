@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
+import os
+import socket
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +21,25 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 @pytest.fixture(scope="module")
 def redis_service():
     from redis import Redis
+
+    if os.environ.get("KLEIN_TEST_EMBEDDED_SERVICES") == "1":
+        from redislite import Redis as EmbeddedRedis
+
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        port = int(probe.getsockname()[1])
+        probe.close()
+        owner = EmbeddedRedis(serverconfig={"bind": "127.0.0.1", "port": str(port)})
+        client = Redis(host="127.0.0.1", port=port)
+        wait_until(client.ping, timeout=30, interval=0.2, description="embedded Redis to accept connections")
+        try:
+            yield SimpleNamespace(host="127.0.0.1", port=port, client=client)
+        finally:
+            client.close()
+            owner.shutdown()
+            owner.close()
+        return
+
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 

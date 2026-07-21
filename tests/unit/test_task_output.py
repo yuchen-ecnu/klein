@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +16,7 @@ from ray.klein.runtime.collector.delivery_command import (
 from ray.klein.runtime.collector.downstream_batcher import DownstreamBatcher
 from ray.klein.runtime.collector.edge_output import DeliveryMode, EdgeOutput
 from ray.klein.runtime.collector.task_output import TaskOutput
-from ray.klein.runtime.message import Barrier, PutAck, Record
+from ray.klein.runtime.message import Barrier, PutAck, Record, Watermark
 from ray.klein.runtime.partitioning import BroadcastPartitioner
 from tests.unit.task_output_utils import open_task_output
 
@@ -134,6 +135,154 @@ def test_downstream_batcher_flushes_wide_records_by_bytes() -> None:
     batcher.append(0, record)
 
     assert batcher.take_full(0) == (record,)
+
+
+def test_delivery_abort_releases_synchronous_backpressure() -> None:
+    attempted = threading.Event()
+    errors = []
+
+    class FullTarget:
+        def try_put(self, _records, **_kwargs):
+            attempted.set()
+            return PutAck(False, 1)
+
+    output = open_task_output(
+        [FullTarget()],
+        BroadcastPartitioner(),
+        (0,),
+        ["full"],
+        max_rows=1,
+    )
+
+    def send() -> None:
+        try:
+            output.collect(Record({"id": 1}))
+        except BaseException as error:
+            errors.append(error)
+
+    sender = threading.Thread(target=send)
+    sender.start()
+    assert attempted.wait(1)
+
+    output.abort_delivery()
+    sender.join(1)
+
+    assert not sender.is_alive()
+    assert errors == []
+    output.close()
+
+
+@pytest.mark.asyncio
+async def test_delivery_abort_releases_asynchronous_backpressure() -> None:
+    attempted = asyncio.Event()
+
+    class FullTarget:
+        def try_put(self, _records, **_kwargs):
+            attempted.set()
+            return PutAck(False, 1)
+
+    output = open_task_output(
+        [FullTarget()],
+        BroadcastPartitioner(),
+        (0,),
+        ["full"],
+        max_rows=1,
+        delivery_mode=DeliveryMode.PIPELINED,
+    )
+    output.collect(Record({"id": 1}))
+    sending = asyncio.create_task(output.send_commands(output.take_pending_commands()))
+    await asyncio.wait_for(attempted.wait(), timeout=1)
+
+    output.abort_delivery()
+    await asyncio.wait_for(sending, timeout=1)
+
+    output.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [Record({"id": 1}), Barrier(1), Watermark(1)])
+async def test_debug_delivery_abort_cancels_an_inflight_async_rpc(payload) -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class Target:
+        def try_put(self, _records, **_kwargs):
+            return object()
+
+        def emit_barrier(self, _barrier, **_kwargs):
+            return object()
+
+        def emit_stream_control(self, _control, **_kwargs):
+            return object()
+
+    async def blocked_aget(_request):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    output = open_task_output(
+        [Target()],
+        BroadcastPartitioner(),
+        (0,),
+        ["target"],
+        max_rows=1,
+        delivery_mode=DeliveryMode.PIPELINED,
+    )
+    output.collect(payload)
+    with (
+        patch("ray.klein.runtime.collector.downstream_sender.klein.is_debug_mode", return_value=True),
+        patch("ray.klein.runtime.collector.downstream_sender.klein.aget", side_effect=blocked_aget),
+    ):
+        sending = asyncio.create_task(output.send_commands(output.take_pending_commands()))
+        await asyncio.wait_for(started.wait(), timeout=1)
+
+        aborter = threading.Thread(target=output.abort_delivery)
+        aborter.start()
+        aborter.join(1)
+        assert not aborter.is_alive()
+        await asyncio.wait_for(sending, timeout=1)
+
+    assert cancelled.is_set()
+    output.close()
+
+
+@pytest.mark.asyncio
+async def test_real_ray_delivery_keeps_the_direct_inflight_wait_path() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class Target:
+        def emit_barrier(self, _barrier, **_kwargs):
+            return object()
+
+    async def blocked_aget(_request):
+        started.set()
+        await release.wait()
+
+    output = open_task_output(
+        [Target()],
+        BroadcastPartitioner(),
+        (0,),
+        ["target"],
+        delivery_mode=DeliveryMode.PIPELINED,
+    )
+    output.collect(Barrier(1))
+    with (
+        patch("ray.klein.runtime.collector.downstream_sender.klein.is_debug_mode", return_value=False),
+        patch("ray.klein.runtime.collector.downstream_sender.klein.aget", side_effect=blocked_aget),
+    ):
+        sending = asyncio.create_task(output.send_commands(output.take_pending_commands()))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        output.abort_delivery()
+        await asyncio.sleep(0)
+        assert not sending.done()
+
+        release.set()
+        await asyncio.wait_for(sending, timeout=1)
+
+    output.close()
 
 
 def test_edge_swap_rejects_invalid_transactions_without_losing_the_live_route() -> None:

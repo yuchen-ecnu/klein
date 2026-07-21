@@ -49,7 +49,7 @@ components.
 
 | Key | Type | Default | Meaning and constraints |
 | --- | --- | --- | --- |
-| `execution.runtime.mode` | enum: `auto`, `batch`, `streaming` | `auto` | Selects the execution engine. `auto` uses streaming when any source is unbounded or any sink lacks a Ray Data lowering; otherwise it uses batch. A bounded custom source without a batch lowering must explicitly select streaming. |
+| `execution.runtime.mode` | enum: `auto`, `batch`, `streaming` | `auto` | Selects the execution engine. `auto` uses streaming when any source is unbounded, any graph vertex has no batch lowering, or `udf.ignore-exception=true`; otherwise it uses batch. Explicit modes must still support every vertex. |
 | `execution.task.deployment.mode` | enum: `default`, `balanced` | `default` | Selects streaming-task placement. `default` tries a placement group, then round-robin placement, then native Ray placement. `balanced` skips the placement-group attempt. |
 | `execution.restart-strategy.fixed-delay.attempts` | int | `3` | Maximum restarts allowed inside the count window. Must be at least `0`; `0` suppresses the first restart. |
 | `execution.restart-strategy.fixed-delay.delay` | duration | `10s` | Delay before each restart. Must be non-negative. |
@@ -117,7 +117,7 @@ you intentionally don't need periodic recovery points.
 | `state.keyed.max-parallelism` | int | `32768` | Stable key-group count for keyed state. Must be at least `1`, must not be lower than operator parallelism, and must match the value stored in a restored checkpoint. |
 | `table.exec.state.ttl` | duration or `None` | `None` | Default idle retention for streaming SQL regular joins, Top-N, and non-windowed aggregations. A configured value must be greater than zero. SQL hints or operator arguments override it for their state. |
 | `event-time.idle-input.check-interval` | duration | `1s` | How often a task evaluates its input-idleness strategy while its inbox is empty. Must be greater than zero. |
-| `udf.ignore-exception` | bool | `false` | If `true`, log a user-function exception and continue processing later records. Leave disabled when dropping a failed record would violate correctness. |
+| `udf.ignore-exception` | bool | `false` | If `true`, log a user-function exception and continue processing later records. In `auto` mode this selects native streaming so Klein can preserve record-level error and metric semantics. Leave disabled when dropping a failed record would violate correctness. |
 
 `state.keyed.max-parallelism` is checkpoint metadata, not a routine tuning
 knob. Changing ordinary operator concurrency can rescale keyed state, but

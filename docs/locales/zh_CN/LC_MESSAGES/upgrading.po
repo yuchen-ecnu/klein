@@ -1,0 +1,658 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:53+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Compatibility, rehearsal, upgrade, validation, and rollback procedures "
+"for Klein for Ray jobs."
+msgstr "Klein for Ray 作业的兼容性、演练、升级、验证和回滚流程。"
+
+msgid "Upgrade Klein jobs"
+msgstr "升级 Klein 作业"
+
+msgid ""
+"Upgrading a long-running Klein job means replacing its application "
+"artifact, Klein/Ray environment, or graph while deciding whether its "
+"checkpointed source positions, managed state, timers, and prepared sink "
+"transactions remain compatible."
+msgstr ""
+"升级长期运行的 Klein 作业意味着替换其应用构件、Klein/Ray 环境或图，同时判断检查点记录的数据源位置、托管状态、定时器和已预备的 "
+"Sink 事务是否仍然兼容。"
+
+msgid ""
+"Klein is currently `0.1.0.dev0` alpha software. Before 1.0, Semantic "
+"Versioning compatibility is not promised, only the latest release is "
+"eligible for security fixes, and checkpoint formats can change between "
+"releases. Klein currently ships no automatic checkpoint migration tool "
+"and no user-triggered command for creating an independently named "
+"savepoint."
+msgstr ""
+"Klein 当前是 `0.1.0.dev0` alpha 软件。1.0 "
+"之前不承诺语义化版本兼容性，只有最新版本符合获得安全修复的条件，而且检查点格式可能在版本之间发生变化。Klein "
+"目前既没有自动检查点迁移工具，也没有用于创建独立具名 savepoint 的用户触发命令。"
+
+msgid ""
+"The supported maintenance path is a controlled stop and new submission "
+"from a completed checkpoint. Replacing packages in live Ray actors, "
+"mixing Klein versions within one job, or performing a rolling worker-by-"
+"worker framework upgrade is not supported."
+msgstr ""
+"受支持的维护路径是受控停止，然后从已完成的检查点重新提交。不支持替换运行中 Ray actor 内的软件包、在一个作业内混用 Klein "
+"版本，或逐个 worker 滚动升级框架。"
+
+msgid "Check the version boundary"
+msgstr "检查版本边界"
+
+msgid "The current tested compatibility target is:"
+msgstr "当前经过测试的兼容性目标为："
+
+msgid "Python 3.10--3.12;"
+msgstr "Python 3.10--3.12；"
+
+msgid "`ray>=2.56.1,<2.57` with the `data` extra;"
+msgstr "`ray>=2.56.1,<2.57`，并包含 `data` 可选依赖；"
+
+msgid "`protobuf>=3.20.3,<7`;"
+msgstr "`protobuf>=3.20.3,<7`；"
+
+msgid "connector dependencies within the ranges in `pyproject.toml`."
+msgstr "连接器依赖须处于 `pyproject.toml` 中声明的范围内。"
+
+msgid ""
+"Ray Data integration uses DeveloperAPI extension points. A newer Ray "
+"minor is not supported merely because the package imports. Before "
+"widening the Ray range, run the full unit, state, architecture, Ray "
+"integration, SQL, and external-connector suites and review the "
+"private/public API inventory. See [Compatibility](compatibility.md)."
+msgstr ""
+"Ray Data 集成使用 DeveloperAPI 扩展点。仅仅能够导入软件包，并不表示支持更新的 Ray 次版本。放宽 Ray "
+"范围前，请运行完整的单元、状态、架构、Ray 集成、SQL 和外部连接器测试套件，并审查私有/公共 API "
+"清单。请参阅[兼容性](compatibility.md)。"
+
+msgid ""
+"Pin exact resolved versions and the worker image for an upgrade. A "
+"dependency upgrade can change pickle import paths, connector protocols, "
+"SQL planning, or native-library behavior even when the Klein version does"
+" not change."
+msgstr ""
+"升级时请固定准确的解析版本和 worker 镜像。即使 Klein 版本不变，依赖升级也可能改变 pickle 导入路径、连接器协议、SQL "
+"规划或原生库行为。"
+
+msgid "Preserve the checkpoint contract"
+msgstr "保留检查点契约"
+
+msgid ""
+"The current restore implementation accepts only its current versioned "
+"checkpoint metadata and managed-state formats. It rejects an unknown "
+"format instead of guessing a migration. Checkpoint metadata and "
+"application state use pickle, so class/module availability is also part "
+"of compatibility."
+msgstr ""
+"当前恢复实现只接受当前版本的检查点元数据和托管状态格式。它会拒绝未知格式，而不是猜测迁移方式。检查点元数据和应用状态使用 "
+"pickle，因此类/模块是否可用也是兼容性的一部分。"
+
+msgid "Review every dimension below before attempting a stateful restore."
+msgstr "尝试有状态恢复前，请审查以下每个维度。"
+
+msgid "Dimension"
+msgstr "维度"
+
+msgid "Compatible requirement"
+msgstr "兼容性要求"
+
+msgid "Unsafe or unsupported change"
+msgstr "不安全或不受支持的变更"
+
+msgid "Completed checkpoint"
+msgstr "已完成的检查点"
+
+msgid ""
+"Restore from the full URI of one `chk-N` directory whose `_metadata` is "
+"readable. Preserve every referenced state object in the job prefix."
+msgstr "从 `_metadata` 可读的某个 `chk-N` 目录完整 URI 恢复。保留作业前缀中所有被引用的状态对象。"
+
+msgid ""
+"An incomplete directory, only a copied `_metadata` file, edited pickle "
+"metadata, or an object whose checksum/size no longer matches."
+msgstr "不完整目录、只复制的 `_metadata` 文件、编辑过的 pickle 元数据，或校验和/大小不再匹配的对象。"
+
+msgid "Graph identity"
+msgstr "图标识"
+
+msgid ""
+"Rebuild streams in the same construction order and preserve sources, "
+"stateful operators, sinks, names, partition edges, and chaining-sensitive"
+" layout. After registering the terminals, save and compare "
+"`ray.klein.explain(\"<job-name>\")` output."
+msgstr ""
+"按相同构建顺序重建流，并保留数据源、有状态算子、Sink、名称、分区边以及对算子链敏感的布局。保存并比较 "
+"注册终结操作后的 `ray.klein.explain(\"<job-name>\")` 输出。"
+
+msgid ""
+"Adding, removing, or reordering even a stateless stream can shift "
+"downstream numeric operator IDs. A same-numbered but different operator "
+"can receive the wrong checkpoint entry."
+msgstr "即使添加、删除或重新排序一个无状态流，也可能改变下游算子的数字 ID。编号相同但含义不同的算子可能收到错误的检查点条目。"
+
+msgid "Managed state"
+msgstr "托管状态"
+
+msgid ""
+"Preserve `state.keyed.max-parallelism`, descriptor names, key "
+"type/serialization, value shape/serializer, namespaces, timer "
+"representation, and stateful operator meaning."
+msgstr ""
+"保留 `state.keyed.max-"
+"parallelism`、描述符名称、键类型/序列化、值形态/序列化器、命名空间、定时器表示以及有状态算子的含义。"
+
+msgid ""
+"Changing max parallelism, renaming descriptors/classes/modules, "
+"incompatible value or key serialization, or assuming arbitrary Python "
+"objects will migrate automatically."
+msgstr "更改最大并行度，重命名描述符/类/模块，使用不兼容的值或键序列化，或假定任意 Python 对象会自动迁移。"
+
+msgid "State backend"
+msgstr "状态后端"
+
+msgid ""
+"Keep `state.backend.type` and its dependency unchanged for the upgrade "
+"unless a separately tested migration is provided. Node-local state "
+"remains disposable; durable checkpoint data is authoritative."
+msgstr "除非提供单独测试过的迁移，否则升级时保持 `state.backend.type` 及其依赖不变。节点本地状态仍可丢弃；持久检查点数据才是权威来源。"
+
+msgid ""
+"Treating a memory-to-RocksDB or RocksDB-to-memory change as a documented "
+"migration path. Klein does not currently promise cross-backend restore."
+msgstr "将 memory 到 RocksDB 或 RocksDB 到 memory 的变更视为已有文档支持的迁移路径。Klein 当前不承诺跨后端恢复。"
+
+msgid "Ordinary concurrency"
+msgstr "普通并发度"
+
+msgid ""
+"Keyed operator concurrency may change only when it remains at or below "
+"the unchanged max parallelism and a rehearsal proves key-group "
+"redistribution."
+msgstr "只有在键控算子并发度不超过保持不变的最大并行度，且演练已证明键组能够重新分布时，才能更改该并发度。"
+
+msgid ""
+"Changing source or sink concurrency without connector-specific evidence, "
+"or changing concurrency together with unreviewed topology and state-"
+"schema changes."
+msgstr "没有连接器特定证据就更改数据源或 Sink 并发度，或者在更改并发度的同时引入未经审查的拓扑和状态模式变更。"
+
+msgid "Source state"
+msgstr "数据源状态"
+
+msgid ""
+"Preserve source type, topic/table/path identity, consumer group, "
+"partition/split interpretation, start policy, source class, and "
+"checkpoint-state schema."
+msgstr "保留数据源类型、topic/table/path 标识、消费者组、分区/split 解释、起始策略、数据源类和检查点状态模式。"
+
+msgid ""
+"Switching connectors or identities and expecting old offsets to be "
+"translated. RocketMQ broker-managed progress cannot be rolled back by a "
+"Klein checkpoint."
+msgstr "切换连接器或身份，却期望旧 offset 自动转换。由 RocketMQ broker 管理的进度无法通过 Klein 检查点回滚。"
+
+msgid "Sink transactions"
+msgstr "Sink 事务"
+
+msgid ""
+"Preserve sink type, destination, transaction/idempotency scheme, "
+"credentials, serializer, and the code needed to deserialize and commit "
+"prepared committables."
+msgstr "保留 Sink 类型、目标、事务/幂等方案、凭据、序列化器，以及反序列化并提交已预备可提交项所需的代码。"
+
+msgid ""
+"Restoring a checkpoint into a rehearsal with access to production sinks, "
+"or changing sink semantics while a checkpoint contains prepared work. "
+"Restore may retry a durable committable."
+msgstr "将检查点恢复到能够访问生产 Sink 的演练环境，或者在检查点包含已预备工作时更改 Sink 语义。恢复可能重试已持久化的可提交项。"
+
+msgid "Event time and SQL"
+msgstr "事件时间和 SQL"
+
+msgid ""
+"Preserve timestamp units/types, watermark and idleness assumptions, state"
+" TTL meaning, changelog schema, join/window keys, and UDF semantics "
+"unless the change has an explicit data migration plan."
+msgstr ""
+"除非变更具有显式数据迁移计划，否则应保留时间戳单位/类型、水位线和空闲假设、状态 TTL 含义、changelog 模式、连接/窗口键以及 UDF"
+" 语义。"
+
+msgid ""
+"A change that makes existing timers/state semantically wrong even if "
+"deserialization succeeds."
+msgstr "即使反序列化成功，也会使现有定时器/状态语义错误的变更。"
+
+msgid "Configuration"
+msgstr "配置"
+
+msgid ""
+"Use canonical keys and preserve recovery-critical values. Compare the "
+"effective configuration, not only source defaults."
+msgstr "使用规范键，并保留恢复关键值。比较有效配置，而不只是源码默认值。"
+
+msgid ""
+"Relying on an unknown or misspelled key: Klein retains unknown keys as "
+"metadata but does not apply them."
+msgstr "依赖未知或拼写错误的键：Klein 会将未知键保留为元数据，但不会应用它们。"
+
+msgid "External effects"
+msgstr "外部副作用"
+
+msgid ""
+"Preserve deduplication keys and identify effects produced between the "
+"rollback checkpoint and the cutover."
+msgstr "保留去重键，并识别回滚检查点与切换之间产生的副作用。"
+
+msgid ""
+"Assuming checkpoint restore reverses Kafka, SQL, Redis, RocketMQ, "
+"console, or other already-visible external writes."
+msgstr "假定检查点恢复会撤销 Kafka、SQL、Redis、RocketMQ、控制台或其他已经可见的外部写入。"
+
+msgid ""
+"There is no general “stateless edit is safe” rule because source and sink"
+" checkpoint keys also depend on graph identity. For a job whose old state"
+" can be discarded, start a fresh deployment without "
+"`execution.savepoint.path` and explicitly accept the new source/output "
+"semantics instead of pretending it is a compatible restore."
+msgstr ""
+"不存在通用的“无状态编辑是安全的”规则，因为数据源和 Sink 的检查点键也依赖图标识。对于可以丢弃旧状态的作业，请在不设置 "
+"`execution.savepoint.path` 的情况下启动全新部署，并明确接受新的数据源/输出语义，而不要假装这是兼容恢复。"
+
+msgid "Prepare the upgrade"
+msgstr "准备升级"
+
+msgid "Keep the following rollback bundle before touching the running job:"
+msgstr "接触运行中的作业前，请保留以下回滚包："
+
+msgid "old wheel/application and immutable worker-image digest;"
+msgstr "旧 wheel/应用以及不可变的 worker 镜像摘要；"
+
+msgid "complete dependency lock and Python/Ray versions;"
+msgstr "完整的依赖锁和 Python/Ray 版本；"
+
+msgid "canonical configuration with secret references, not secret values;"
+msgstr "包含密钥引用而非密钥值的规范配置；"
+
+msgid ""
+"saved `ray.klein.explain(\"<job-name>\")` output for the fully registered"
+" graph;"
+msgstr "已保存的、针对完整注册图的 `ray.klein.explain(\"<job-name>\")` 输出；"
+
+msgid ""
+"job name, namespace, source identities, sink destinations, and checkpoint"
+" root;"
+msgstr "作业名、命名空间、数据源身份、Sink 目标和检查点根目录；"
+
+msgid "exact URI of a completed pre-upgrade `chk-N` directory;"
+msgstr "已完成的升级前 `chk-N` 目录的准确 URI；"
+
+msgid "evidence that the checkpoint's referenced objects remain retained;"
+msgstr "检查点所引用对象仍被保留的证据；"
+
+msgid "duplicate reconciliation and external rollback procedures."
+msgstr "重复项对账和外部回滚流程。"
+
+msgid "Inspect the running job from an operations client:"
+msgstr "从运维客户端检查运行中的作业："
+
+msgid ""
+"Confirm that the snapshot is not marked `dashboard_stale`, the job is "
+"running, and a recent checkpoint completed within the RPO. Validate "
+"`_metadata` with the object-store or filesystem tooling used by the "
+"platform. Do not select `_latest` as the restore URI; record the resolved"
+" `chk-N` directory."
+msgstr ""
+"确认快照未标记为 `dashboard_stale`、作业正在运行，且近期检查点在 RPO 内完成。使用平台采用的对象存储或文件系统工具验证 "
+"`_metadata`。不要选择 `_latest` 作为恢复 URI；请记录解析后的 `chk-N` 目录。"
+
+msgid ""
+"`ray-klein stop` requests cancellation. It does **not** first create a "
+"checkpoint or savepoint. If the recorded checkpoint is too old, leave the"
+" job running until a newer periodic checkpoint completes. At least one of"
+" `execution.checkpointing.trigger.interval-duration` and "
+"`execution.checkpointing.trigger.interval-records` must be nonzero for "
+"periodic progress."
+msgstr ""
+"`ray-klein stop` 会请求取消。它**不会**先创建检查点或 "
+"savepoint。如果记录的检查点太旧，请让作业继续运行，直到更新的周期性检查点完成。要周期性推进，`execution.checkpointing.trigger"
+".interval-duration` 和 `execution.checkpointing.trigger.interval-records` "
+"至少有一个必须非零。"
+
+msgid "Rehearse safely"
+msgstr "安全演练"
+
+msgid ""
+"Run the exact candidate artifact in an isolated Ray cluster before "
+"production:"
+msgstr "投入生产前，请在隔离的 Ray 集群中运行完全一致的候选构件："
+
+msgid ""
+"Use the same Python/Ray versions, optional extras, graph, max "
+"parallelism, serializers, and state scale expected at cutover."
+msgstr "使用切换时预期采用的相同 Python/Ray 版本、可选依赖、图、最大并行度、序列化器和状态规模。"
+
+msgid ""
+"Replay representative production-shaped input into staging source "
+"identities and build a staging checkpoint with the current version."
+msgstr "将有代表性的、接近生产形态的输入重放到预发布数据源身份，并使用当前版本创建预发布检查点。"
+
+msgid ""
+"Upgrade from that checkpoint into isolated sinks and a new checkpoint "
+"prefix. Do not give the rehearsal credentials for production "
+"destinations."
+msgstr "从该检查点升级到隔离的 Sink 和新检查点前缀。不要向演练环境提供生产目标的凭据。"
+
+msgid ""
+"Inject worker, coordinator, driver, and sink failures during and after "
+"restore."
+msgstr "在恢复期间和恢复后注入 worker、协调器、driver 和 Sink 故障。"
+
+msgid ""
+"Compare state-derived output, source position, watermarks, late records, "
+"duplicate envelope, restore duration, and first checkpoint duration."
+msgstr "比较状态派生输出、数据源位置、水位线、迟到记录、重复范围、恢复耗时和首个检查点耗时。"
+
+msgid ""
+"Stop the candidate and prove the old artifact can still restore the "
+"retained old-version staging checkpoint."
+msgstr "停止候选版本，并证明旧构件仍可恢复保留的旧版本预发布检查点。"
+
+msgid ""
+"Do not restore an untrusted checkpoint. Also avoid using a production "
+"checkpoint as a harmless test fixture: it contains pickle payloads and "
+"may contain prepared sink committables that recovery can retry. Generate "
+"a production-shaped staging checkpoint with isolated connector "
+"identities."
+msgstr ""
+"不要恢复不受信任的检查点。也不要把生产检查点当作无害的测试夹具：它包含 pickle 载荷，还可能包含恢复时会重试的已预备 Sink "
+"可提交项。请使用隔离的连接器身份生成接近生产形态的预发布检查点。"
+
+msgid "Perform the cutover"
+msgstr "执行切换"
+
+msgid "1. Freeze the deployment definition"
+msgstr "1. 冻结部署定义"
+
+msgid ""
+"Prevent concurrent graph, image, configuration, schema, and connector "
+"changes. Record the candidate digests and approved checkpoint URI."
+msgstr "阻止同时发生的图、镜像、配置、模式和连接器变更。记录候选版本摘要和已批准的检查点 URI。"
+
+msgid "2. Wait for the recovery point"
+msgstr "2. 等待恢复点"
+
+msgid ""
+"Wait for a completed durable checkpoint and capture its exact `chk-N` "
+"URI. Verify source lag, checkpoint duration, pending sink transactions, "
+"and output health. A directory without `_metadata` is incomplete."
+msgstr ""
+"等待持久检查点完成，并获取其准确的 `chk-N` URI。验证数据源延迟、检查点耗时、待处理 Sink 事务和输出健康状况。缺少 "
+"`_metadata` 的目录是不完整的。"
+
+msgid "3. Stop the old job"
+msgstr "3. 停止旧作业"
+
+msgid ""
+"Confirm terminal status and that old detached actors no longer serve "
+"control requests. Stop external schedulers from resubmitting the old "
+"artifact. Do not run old and new jobs concurrently against the same "
+"consumer identity or non-idempotent destination."
+msgstr "确认终止状态，并确认旧的分离 actor 不再处理控制请求。阻止外部调度器重新提交旧构件。不要让新旧作业使用相同的消费者身份或非幂等目标并发运行。"
+
+msgid "4. Deploy one candidate environment"
+msgstr "4. 部署单一候选环境"
+
+msgid ""
+"Roll out the immutable candidate to every eligible Ray node before "
+"submission. Do not mix old and new Klein workers. If the Ray framework "
+"itself changes, create a separately tested cluster rather than upgrading "
+"live actors in place."
+msgstr ""
+"提交前，将不可变候选版本部署到每个符合条件的 Ray 节点。不要混用新旧 Klein worker。如果 Ray "
+"框架本身发生变化，请创建单独测试过的集群，不要原地升级运行中的 actor。"
+
+msgid "5. Restore explicitly"
+msgstr "5. 显式恢复"
+
+msgid "Build the compatible graph and set the complete checkpoint URI:"
+msgstr "构建兼容的图并设置完整的检查点 URI："
+
+msgid ""
+"Use a fresh namespace when old actors may still exist or when a shadow "
+"cluster must remain operationally distinct. After restore, new "
+"checkpoints are written under the new namespace's job directory. Reusing "
+"a stable namespace can retain the old operational identity, but only "
+"after the old actors are confirmed gone. In both cases, "
+"`execution.savepoint.path` must identify the approved checkpoint "
+"explicitly."
+msgstr ""
+"旧 actor 可能仍然存在，或影子集群必须在运维上保持独立时，请使用新命名空间。恢复后，新检查点会写入新命名空间的作业目录。只有确认旧 "
+"actor 已消失后，才能通过复用稳定命名空间保留旧运维标识。无论哪种情况，`execution.savepoint.path` "
+"都必须显式指向已批准的检查点。"
+
+msgid "6. Validate before declaring success"
+msgstr "6. 验证后再宣布成功"
+
+msgid "Require all of the following:"
+msgstr "必须满足以下全部条件："
+
+msgid "the job reaches and remains `RUNNING` without exhausting restart attempts;"
+msgstr "作业到达并保持 `RUNNING`，且未用尽重启次数；"
+
+msgid ""
+"the graph/operator IDs and effective configuration match the reviewed "
+"plan;"
+msgstr "图/算子 ID 和有效配置与审查过的计划一致；"
+
+msgid "restored source positions are near the recorded checkpoint;"
+msgstr "恢复后的数据源位置接近记录的检查点；"
+
+msgid ""
+"keyed state, timers, SQL state, watermarks, and late-data behavior are "
+"correct;"
+msgstr "键控状态、定时器、SQL 状态、水位线和迟到数据行为正确；"
+
+msgid ""
+"output has no loss outside the documented source boundary and duplicates "
+"are absorbed by the designed idempotency/reconciliation mechanism;"
+msgstr "除已记录的数据源边界外，输出没有丢失，并且重复项被设计的幂等/对账机制吸收；"
+
+msgid "prepared transactional output reaches the expected final state;"
+msgstr "已预备事务输出达到预期最终状态；"
+
+msgid "restore duration is inside the RTO;"
+msgstr "恢复耗时在 RTO 以内；"
+
+msgid "the first post-upgrade checkpoint completes and is readable;"
+msgstr "升级后首个检查点完成且可读取；"
+
+msgid ""
+"checkpoint age, restart, lag, backpressure, state, replay, and sink-"
+"failure alerts remain healthy through a soak period."
+msgstr "在稳定性观察期内，检查点年龄、重启、延迟、反压、状态、重放和 Sink 失败告警持续健康。"
+
+msgid ""
+"Use `ray-klein status <new-namespace> --json`, retained logs, exported "
+"metrics, and destination-level reconciliation. Successful submission "
+"alone is not an upgrade success."
+msgstr ""
+"使用 `ray-klein status <new-namespace> "
+"--json`、保留的日志、导出的指标和目标端对账进行验证。仅成功提交并不代表升级成功。"
+
+msgid "Roll back"
+msgstr "回滚"
+
+msgid ""
+"Roll back when restore fails, the job repeatedly recovers, state-derived "
+"output is wrong, a connector cannot resume, or the candidate cannot "
+"complete a new checkpoint."
+msgstr "当恢复失败、作业反复进入恢复、状态派生输出错误、连接器无法恢复，或候选版本无法完成新检查点时，请回滚。"
+
+msgid "Stop the candidate and disable its automatic resubmission."
+msgstr "停止候选版本并禁用其自动重新提交。"
+
+msgid "Prevent further candidate writes or requests to external sinks."
+msgstr "阻止候选版本继续写入外部 Sink 或向其发送请求。"
+
+msgid ""
+"Preserve its logs, status snapshot, failed checkpoint paths, and "
+"destination reconciliation evidence."
+msgstr "保留其日志、状态快照、失败检查点路径和目标端对账证据。"
+
+msgid ""
+"Redeploy the exact old application, worker image, dependencies, "
+"Ray/Python versions, graph, and configuration."
+msgstr "重新部署完全相同的旧应用、worker 镜像、依赖、Ray/Python 版本、图和配置。"
+
+msgid ""
+"Restore the old artifact from the recorded **pre-upgrade** checkpoint, "
+"not a checkpoint written by the candidate."
+msgstr "从记录的**升级前**检查点恢复旧构件，而不是从候选版本写入的检查点恢复。"
+
+msgid ""
+"Validate source positions, state, sink effects, and completion of a new "
+"old-version checkpoint."
+msgstr "验证数据源位置、状态、Sink 副作用以及新的旧版本检查点是否完成。"
+
+msgid ""
+"Reconcile or deduplicate external effects produced since the rollback "
+"point."
+msgstr "对账或去重回滚点之后产生的外部副作用。"
+
+msgid ""
+"A rollback rewinds Klein state; it does not undo output already visible "
+"in an external system. Kafka, SQL, Redis, RocketMQ, console, and custom "
+"sinks can replay or retain effects according to their documented "
+"guarantees. Filesystem, Iceberg, and correct two-phase sinks have "
+"stronger checkpoint publication boundaries, but destination-specific "
+"validation is still required."
+msgstr ""
+"回滚会倒退 Klein 状态，但不会撤销外部系统中已经可见的输出。Kafka、SQL、Redis、RocketMQ、控制台和自定义 Sink "
+"可能按照其已记录的保证重放或保留副作用。文件系统、Iceberg 和正确实现的两阶段 Sink "
+"具有更强的检查点发布边界，但仍需要针对具体目标进行验证。"
+
+msgid ""
+"Never assume an old release can read a checkpoint created by a newer "
+"alpha release. Keep the pre-upgrade checkpoint, its referenced objects, "
+"and the old artifact until the candidate has passed the agreed soak "
+"period and rollback window."
+msgstr ""
+"绝不要假定旧版本能够读取较新 alpha "
+"版本创建的检查点。在候选版本通过约定的稳定性观察期和回滚窗口之前，请保留升级前检查点、其引用的对象和旧构件。"
+
+msgid "Upgrade decision matrix"
+msgstr "升级决策矩阵"
+
+msgid "Proposed change"
+msgstr "拟议变更"
+
+msgid "Default decision"
+msgstr "默认决策"
+
+msgid ""
+"Patch within the pinned application dependencies, no state, graph, or "
+"connector change"
+msgstr "固定的应用依赖范围内的补丁，且不更改状态、图或连接器"
+
+msgid ""
+"Rebuild and run the full relevant test tiers; still perform a normal "
+"stop/resubmit."
+msgstr "重新构建并运行所有相关测试层级；仍需执行正常的停止/重新提交。"
+
+msgid "Klein release change with stateful restore"
+msgstr "进行有状态恢复的 Klein 版本变更"
+
+msgid ""
+"Rehearsal and explicit checkpoint compatibility proof required. No "
+"default compatibility promise before 1.0."
+msgstr "需要演练并明确证明检查点兼容性。1.0 之前不提供默认兼容性承诺。"
+
+msgid "Ray 2.56 patch change inside the declared range"
+msgstr "声明范围内的 Ray 2.56 补丁版本变更"
+
+msgid ""
+"Test the resolved patch on every supported Python version and run Ray "
+"integration/connector suites."
+msgstr "在每个受支持的 Python 版本上测试解析后的补丁版本，并运行 Ray 集成/连接器测试套件。"
+
+msgid "Ray minor outside `>=2.56.1,<2.57`"
+msgstr "`>=2.56.1,<2.57` 范围之外的 Ray 次版本"
+
+msgid ""
+"Unsupported until the project widens the declared range after API review "
+"and CI."
+msgstr "在项目经过 API 审查和 CI 后放宽声明范围之前，不受支持。"
+
+msgid "Python minor change"
+msgstr "Python 次版本变更"
+
+msgid ""
+"Rebuild all native dependencies and prove pickle/state and connector "
+"compatibility in rehearsal."
+msgstr "重新构建所有原生依赖，并在演练中证明 pickle/状态和连接器兼容性。"
+
+msgid "Add/remove/reorder an operator"
+msgstr "添加/删除/重新排序算子"
+
+msgid ""
+"Treat as topology-incompatible unless an explicit migration and restore "
+"test proves all checkpoint identities and semantics."
+msgstr "除非显式迁移和恢复测试证明所有检查点标识及语义，否则按拓扑不兼容处理。"
+
+msgid "Change keyed concurrency only"
+msgstr "仅更改键控并发度"
+
+msgid ""
+"Permitted only at or below unchanged max parallelism, with connector "
+"constraints and restore/rescale testing."
+msgstr "只有在不超过保持不变的最大并行度，并满足连接器约束且完成恢复/扩缩测试时才允许。"
+
+msgid ""
+"Change max parallelism, state descriptor/serializer, checkpoint format, "
+"or backend type"
+msgstr "更改最大并行度、状态描述符/序列化器、检查点格式或后端类型"
+
+msgid ""
+"No automatic migration. Start without old state or implement and validate"
+" a dedicated migration before cutover."
+msgstr "没有自动迁移。请在不使用旧状态的情况下启动，或在切换前实现并验证专用迁移。"
+
+msgid "Change source/sink type, identity, or delivery semantics"
+msgstr "更改数据源/Sink 类型、身份或交付语义"
+
+msgid ""
+"Design a data migration and reconciliation procedure; checkpoint restore "
+"alone is insufficient."
+msgstr "设计数据迁移和对账流程；仅恢复检查点并不足够。"
+
+msgid ""
+"See [Checkpoint recovery](checkpoint-recovery.md) for restore mechanics, "
+"[Delivery guarantees](delivery-semantics.md) for external effects, "
+"[Security](security.md) for trusted checkpoint handling, and the "
+"[Production readiness checklist](production-readiness.md) for the release"
+" gate."
+msgstr ""
+"恢复机制请参阅[检查点恢复](checkpoint-recovery.md)，外部副作用请参阅[交付保证](delivery-"
+"semantics.md)，受信任检查点处理请参阅[安全](security.md)，发布门槛请参阅[生产就绪检查清单](production-"
+"readiness.md)。"

@@ -78,6 +78,11 @@ class CheckpointTrigger:
             return True
         return False
 
+    def reset(self) -> None:
+        """Restart both thresholds after an externally assigned checkpoint."""
+
+        self._reset(self._clock())
+
     def _reset(self, now: float) -> None:
         self._counter = 0
         self._last_trigger = now

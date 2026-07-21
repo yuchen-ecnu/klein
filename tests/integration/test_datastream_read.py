@@ -3,6 +3,8 @@ import json
 
 import pytest
 
+from tests.support.terminal import execute_terminal
+
 
 @pytest.fixture()
 def tabular_files(tmp_path):
@@ -20,8 +22,9 @@ def tabular_files(tmp_path):
     return {"csv": csv_path, "json": json_path, "rows": rows}
 
 
-def test_read_text_returns_each_line(interactive_context, tabular_files) -> None:
-    rows = interactive_context.data.read_text(str(tabular_files["csv"])).take_all()
+def test_read_text_returns_each_line(context, tabular_files) -> None:
+    sink = context.data.read_text(str(tabular_files["csv"])).take_all()
+    rows = execute_terminal(sink, job_name="read-text")
 
     assert rows == [
         {"text": "sepal_length,sepal_width,variety"},
@@ -31,7 +34,8 @@ def test_read_text_returns_each_line(interactive_context, tabular_files) -> None
 
 
 @pytest.mark.parametrize("format_name", ["csv", "json"])
-def test_read_tabular_formats(interactive_context, tabular_files, format_name) -> None:
-    rows = getattr(interactive_context.data, f"read_{format_name}")(str(tabular_files[format_name])).take_all()
+def test_read_tabular_formats(context, tabular_files, format_name) -> None:
+    stream = getattr(context.data, f"read_{format_name}")(str(tabular_files[format_name]))
+    rows = execute_terminal(stream.take_all(), job_name=f"read-{format_name}")
 
     assert rows == tabular_files["rows"]

@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import logging
+import re
 import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, TypeVar
 
+from ray.exceptions import RayTaskError
 from ray.util.queue import Queue
 
 import ray.klein as klein
@@ -43,6 +45,33 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _T = TypeVar("_T")
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
+_RESCALE_OPERATION_HISTORY_LIMIT = 20
+_RESCALE_STABILIZATION_POLL_SECONDS = 0.25
+_TERMINAL_RESCALE_STATUSES = frozenset({"COMPLETED", "NOOP", "REJECTED", "FAILED"})
+
+
+def _format_rescale_error(error: BaseException) -> str:
+    """Return the innermost useful exception without Ray's remote traceback."""
+
+    cause = error
+    seen: set[int] = set()
+    while id(cause) not in seen:
+        seen.add(id(cause))
+        nested = None
+        for attribute in ("cause", "__cause__", "__context__"):
+            candidate = getattr(cause, attribute, None)
+            if isinstance(candidate, BaseException) and id(candidate) not in seen:
+                nested = candidate
+                break
+        if nested is None:
+            break
+        cause = nested
+    if isinstance(cause, RayTaskError):
+        return "RayTaskError: remote task failed"
+    message = _ANSI_ESCAPE_RE.sub("", str(cause)).strip()
+    return f"{type(cause).__name__}: {message}"
 
 
 class JobManager(AsyncWorker):
@@ -102,6 +131,10 @@ class JobManager(AsyncWorker):
         self._status_history: list[dict[str, object]] = [{"status": JobStatus.CREATED.name, "timestamp_ms": now_ms}]
         self._rescale_in_progress = False
         self._rescale_done_obj: asyncio.Event | None = None
+        self._rescale_operations: dict[str, dict[str, object]] = {}
+        self._active_rescale_operation_id: str | None = None
+        self._rescale_task_obj: asyncio.Task | None = None
+        self._completion_task_obj: asyncio.Task[None] | None = None
         # Serialize whole lifecycle transactions (local rescale, cancellation
         # and failover), not only their individual execution-graph writes.
         self._lifecycle_lock_obj: asyncio.Lock | None = None
@@ -208,6 +241,8 @@ class JobManager(AsyncWorker):
             await self.run_exclusive(self.job_master.schedule, restore_path)
         except Exception as error:
             self._submission_error = f"{type(error).__name__}: {error}"
+            self._lifecycle_stop_requested = True
+            self._wake_event.set()
             log_event(
                 logger,
                 logging.ERROR,
@@ -218,8 +253,22 @@ class JobManager(AsyncWorker):
                 job_id=self.namespace,
                 job_name=job_name,
             )
-            await self._stop_job()
-            self._update_job_status(JobStatus.FAILED)
+            try:
+                await self._stop_job()
+            except Exception as teardown_error:
+                self._record_teardown_failure("Deployment teardown failed", teardown_error)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "job.deployment.teardown_failed",
+                    "Failed to tear down partially deployed job %s",
+                    job_name,
+                    exc_info=True,
+                    job_id=self.namespace,
+                    job_name=job_name,
+                )
+            finally:
+                self._update_job_status(JobStatus.FAILED)
             return False
         await self.start_job_supervisor()
         self._update_job_status(JobStatus.RUNNING)
@@ -239,7 +288,22 @@ class JobManager(AsyncWorker):
         try:
             if self.job_status().is_terminal:
                 return False
-            await self._stop_job(force=True, timeout=timeout)
+            try:
+                await self._stop_job(force=True, timeout=timeout)
+            except Exception as error:
+                self._record_teardown_failure("Cancellation teardown failed", error)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "job.cancellation.teardown_failed",
+                    "Failed to tear down cancelled job %s",
+                    self.job_name,
+                    exc_info=True,
+                    job_id=self.namespace,
+                    job_name=self.job_name,
+                )
+                self._update_job_status(JobStatus.FAILED)
+                return False
             self._update_job_status(JobStatus.CANCELLED)
             return True
         finally:
@@ -253,19 +317,326 @@ class JobManager(AsyncWorker):
         return self._rescale_done_obj
 
     async def rescale_operator(self, operator_id: int | str, parallelism: int) -> dict:
-        """Locally change one running operator's physical parallelism."""
+        """Change one operator and retain the historical synchronous API."""
 
-        # A healthy supervisor may be sleeping while holding the lifecycle
-        # gate. Wake it so the operator request need not wait for the poll
-        # interval.
+        while True:
+            operation = await self.submit_operator_rescale(operator_id, parallelism)
+            active_operation_id = operation.get("active_operation_id")
+            if operation["status"] != "REJECTED" or active_operation_id is None:
+                break
+            # The old synchronous entry point serialized callers behind the
+            # lifecycle lock. Keep that behavior even though the new admission
+            # RPC correctly rejects a concurrent HTTP request immediately.
+            await self._wait_for_rescale_operation_terminal(str(active_operation_id))
+        if operation["status"] != "ACCEPTED":
+            return operation
+        return await self._wait_for_rescale_operation(str(operation["operation_id"]))
+
+    async def submit_operator_rescale(self, operator_id: int | str, parallelism: int) -> dict:
+        """Admit one rescale and return before its topology transaction runs.
+
+        There is deliberately no ``await`` before the active slot is reserved.
+        Ray async-actor calls can interleave at await points, so this makes the
+        single-rescale admission decision atomic on the actor event loop.
+        """
+
+        active_operation_id = self._active_rescale_operation_id
+        if active_operation_id is not None or self._rescale_in_progress:
+            return self._rejected_rescale_submission(
+                operator_id,
+                parallelism,
+                active_operation_id=active_operation_id,
+                error="another operator rescale is already in progress",
+            )
+
+        # Validation is intentionally synchronous and precedes the first await,
+        # so an unknown/unsupported operator never produces an orphan ACCEPTED
+        # record that no operator row can display.  Graph construction and the
+        # authoritative revalidation still happen under the lifecycle lock.
+        try:
+            vertex_id, logical_vertex = self._resolve_rescale_request(operator_id, parallelism)
+        except (KeyError, TypeError, ValueError, RuntimeError) as error:
+            return self._rejected_rescale_submission(
+                operator_id,
+                parallelism,
+                active_operation_id=None,
+                error=str(error),
+                remember=True,
+            )
+
+        previous_parallelism = logical_vertex.concurrency
+        if previous_parallelism == parallelism:
+            return self._terminal_rescale_submission(
+                vertex_id.index,
+                parallelism,
+                status="NOOP",
+                operator_name=logical_vertex.name,
+                previous_parallelism=previous_parallelism,
+            )
+
+        operation_id = uuid.uuid4().hex
+        now_ms = int(time.time() * 1000)
+        operation: dict[str, object] = {
+            "operation_id": operation_id,
+            "job_id": self.namespace,
+            "operator_id": vertex_id.index,
+            "operator_name": logical_vertex.name,
+            "previous_parallelism": previous_parallelism,
+            "parallelism": parallelism,
+            "target_parallelism": parallelism,
+            "status": "ACCEPTED",
+            "phase": "QUEUED",
+            "accepted_at_ms": now_ms,
+            "started_at_ms": None,
+            "updated_at_ms": now_ms,
+            "ended_at_ms": None,
+            "error": None,
+        }
+        self._remember_rescale_operation(operation)
+        self._active_rescale_operation_id = operation_id
+        self._rescale_in_progress = True
+        self._rescale_done.clear()
         self._wake_event.set()
-        async with self._lifecycle_lock:
-            return await self._rescale_operator_locked(operator_id, parallelism)
+        self._rescale_task_obj = asyncio.create_task(
+            self._execute_rescale_operation(operation_id, vertex_id.index, parallelism),
+            name=f"klein-rescale-{operation_id[:8]}",
+        )
+        # Return an immutable point-in-time response.  The background task may
+        # advance the authoritative record as soon as this actor method yields.
+        return dict(operation)
 
-    async def _rescale_operator_locked(self, operator_id: int | str, parallelism: int) -> dict:
+    async def _wait_for_rescale_operation(self, operation_id: str) -> dict:
+        """Wait for a submitted operation without coupling it to its caller."""
+
+        while True:
+            operation = self._rescale_operations.get(operation_id)
+            if operation is None:
+                raise KeyError(f"unknown operator rescale operation: {operation_id}")
+            if operation["status"] == "STABILIZING":
+                # Preserve the public synchronous API's historical contract:
+                # COMPLETED means the topology commit finished.  The durable
+                # operation record remains STABILIZING until its checkpoint.
+                result = dict(operation)
+                result["status"] = "COMPLETED"
+                result["ended_at_ms"] = int(time.time() * 1000)
+                return result
+            if operation["status"] in _TERMINAL_RESCALE_STATUSES:
+                return dict(operation)
+            await self._rescale_done.wait()
+
+    async def _wait_for_rescale_operation_terminal(self, operation_id: str) -> dict:
+        """Wait through stabilization for synchronous request serialization."""
+
+        while True:
+            operation = self._rescale_operations.get(operation_id)
+            if operation is None:
+                raise KeyError(f"unknown operator rescale operation: {operation_id}")
+            if operation["status"] in _TERMINAL_RESCALE_STATUSES:
+                return dict(operation)
+            await asyncio.sleep(_RESCALE_STABILIZATION_POLL_SECONDS)
+
+    async def _execute_rescale_operation(
+        self,
+        operation_id: str,
+        operator_id: int | str,
+        parallelism: int,
+    ) -> None:
+        """Run an admitted rescale independently of the submitting client."""
+
+        try:
+            async with self._lifecycle_lock:
+                self._update_rescale_operation(
+                    operation_id,
+                    status="RUNNING",
+                    phase="COORDINATING",
+                    started_at_ms=int(time.time() * 1000),
+                )
+                result = await self._rescale_operator_locked(
+                    operator_id,
+                    parallelism,
+                    operation_id=operation_id,
+                )
+            self._merge_rescale_result(operation_id, result)
+            if result["status"] == "COMPLETED":
+                # The topology is live, but recovery must remain fenced until
+                # its first checkpoint is durable.  Observe that fence outside
+                # the lifecycle lock so cancellation and failover can proceed.
+                self._update_rescale_operation(
+                    operation_id,
+                    status="STABILIZING",
+                    phase="STABILIZING",
+                )
+                # Wake compatibility callers at topology commit. Coordinator
+                # health or a slow stabilization checkpoint must not extend
+                # their historical synchronous response latency.
+                self._rescale_done.set()
+                stabilization_error = await self._wait_for_rescale_stabilization(operation_id)
+                if stabilization_error is None:
+                    self._update_rescale_operation(
+                        operation_id,
+                        status="COMPLETED",
+                        phase="COMPLETED",
+                    )
+                else:
+                    self._update_rescale_operation(
+                        operation_id,
+                        status="FAILED",
+                        phase="COMPLETED",
+                        error=stabilization_error,
+                    )
+            else:
+                self._update_rescale_operation(
+                    operation_id,
+                    status=str(result["status"]),
+                    phase="COMPLETED",
+                    error=result.get("error"),
+                )
+        except asyncio.CancelledError:
+            self._update_rescale_operation(
+                operation_id,
+                status="FAILED",
+                phase="COMPLETED",
+                error="operator rescale task was cancelled",
+            )
+            raise
+        except Exception as error:
+            self._update_rescale_operation(
+                operation_id,
+                status="FAILED",
+                phase="COMPLETED",
+                error=_format_rescale_error(error),
+            )
+        finally:
+            if self._active_rescale_operation_id == operation_id:
+                self._active_rescale_operation_id = None
+            self._rescale_in_progress = False
+            self._rescale_done.set()
+            if self._rescale_task_obj is asyncio.current_task():
+                self._rescale_task_obj = None
+
+    async def _wait_for_rescale_stabilization(self, operation_id: str) -> str | None:
+        while self._active_rescale_operation_id == operation_id:
+            fenced = await self._rescale_recovery_fenced()
+            if fenced is False:
+                return None
+            # Probe the fence first so a job that finishes immediately after a
+            # durable checkpoint is not reported as a failed rescale.
+            if self._job_status.is_terminal:
+                if await self._rescale_recovery_fenced() is False:
+                    return None
+                return f"job became {self._job_status.name} before the stabilization checkpoint completed"
+            await asyncio.sleep(1.0 if fenced is None else _RESCALE_STABILIZATION_POLL_SECONDS)
+        return "operator rescale was superseded before stabilization completed"
+
+    async def _rescale_recovery_fenced(self) -> bool | None:
+        coordinator = None if self.job_master is None else getattr(self.job_master, "coordinator", None)
+        if coordinator is None:
+            return False
+        try:
+            result = await klein.aget(
+                coordinator.operator_rescale_recovery_fenced(),
+                timeout=self.config.get(JobManagerOptions.COORDINATOR_RPC_TIMEOUT),
+            )
+        except Exception:
+            logger.debug("Unable to inspect operator rescale stabilization fence", exc_info=True)
+            return None
+        # Test doubles and a mismatched coordinator must not create an endless
+        # stabilization wait.  The real coordinator contract returns bool.
+        return result if type(result) is bool else False
+
+    def _remember_rescale_operation(self, operation: dict[str, object]) -> None:
+        operation_id = str(operation["operation_id"])
+        self._rescale_operations[operation_id] = operation
+        while len(self._rescale_operations) > _RESCALE_OPERATION_HISTORY_LIMIT:
+            oldest_operation_id = next(iter(self._rescale_operations))
+            if oldest_operation_id == self._active_rescale_operation_id:
+                break
+            self._rescale_operations.pop(oldest_operation_id)
+
+    def _update_rescale_operation(self, operation_id: str, **updates: object) -> None:
+        operation = self._rescale_operations[operation_id]
+        operation.update(updates)
+        now_ms = int(time.time() * 1000)
+        operation["updated_at_ms"] = now_ms
+        if operation["status"] in _TERMINAL_RESCALE_STATUSES:
+            operation["ended_at_ms"] = now_ms
+
+    def _merge_rescale_result(self, operation_id: str, result: dict) -> None:
+        operation = self._rescale_operations[operation_id]
+        for key in (
+            "operator_id",
+            "operator_name",
+            "previous_parallelism",
+            "parallelism",
+            "target_parallelism",
+            "error",
+        ):
+            if key in result:
+                operation[key] = result[key]
+        operation["updated_at_ms"] = int(time.time() * 1000)
+
+    def _rejected_rescale_submission(
+        self,
+        operator_id: int | str,
+        parallelism: int,
+        *,
+        active_operation_id: str | None,
+        error: str,
+        remember: bool = False,
+    ) -> dict:
+        operation = self._terminal_rescale_submission(
+            operator_id,
+            parallelism,
+            status="REJECTED",
+            error=error,
+            remember=remember,
+        )
+        if active_operation_id is not None:
+            operation["active_operation_id"] = active_operation_id
+        return operation
+
+    def _terminal_rescale_submission(
+        self,
+        operator_id: int | str,
+        parallelism: int,
+        *,
+        status: str,
+        operator_name: str | None = None,
+        previous_parallelism: int | None = None,
+        error: str | None = None,
+        remember: bool = True,
+    ) -> dict:
+        now_ms = int(time.time() * 1000)
+        operation: dict[str, object] = {
+            "operation_id": uuid.uuid4().hex,
+            "job_id": self.namespace,
+            "operator_id": operator_id,
+            "operator_name": operator_name,
+            "previous_parallelism": previous_parallelism,
+            "parallelism": parallelism,
+            "target_parallelism": parallelism,
+            "status": status,
+            "phase": "COMPLETED",
+            "accepted_at_ms": now_ms,
+            "started_at_ms": now_ms,
+            "updated_at_ms": now_ms,
+            "ended_at_ms": now_ms,
+            "error": error,
+        }
+        if remember:
+            self._remember_rescale_operation(operation)
+        return dict(operation)
+
+    async def _rescale_operator_locked(
+        self,
+        operator_id: int | str,
+        parallelism: int,
+        *,
+        operation_id: str,
+    ) -> dict:
         """Run one local rescale while holding the lifecycle transaction gate."""
 
-        started_at_ms = int(time.time() * 1000)
+        started_at_ms = int(self._rescale_operations[operation_id]["started_at_ms"] or time.time() * 1000)
         try:
             vertex_id, logical_vertex = self._resolve_rescale_request(operator_id, parallelism)
         except (KeyError, TypeError, ValueError, RuntimeError) as error:
@@ -293,7 +664,12 @@ class JobManager(AsyncWorker):
                 f"{type(error).__name__}: {error}",
             )
 
-        error = await self._run_operator_rescale(vertex_id.index, parallelism, resized_logical_graph)
+        error = await self._run_operator_rescale(
+            vertex_id.index,
+            parallelism,
+            resized_logical_graph,
+            operation_id,
+        )
         return self._rescale_result(
             started_at_ms,
             vertex_id.index,
@@ -309,8 +685,6 @@ class JobManager(AsyncWorker):
         operator_id: int | str,
         parallelism: int,
     ) -> tuple[VertexId, VertexSpec]:
-        if self._rescale_in_progress:
-            raise RuntimeError("another operator rescale is already in progress")
         if self._job_status != JobStatus.RUNNING:
             raise RuntimeError("operator rescale requires a RUNNING job")
         if isinstance(parallelism, bool) or not isinstance(parallelism, int) or parallelism <= 0:
@@ -376,9 +750,9 @@ class JobManager(AsyncWorker):
         target_id: int,
         parallelism: int,
         logical_graph: LogicalGraph,
+        operation_id: str | None = None,
     ) -> str | None:
-        self._rescale_in_progress = True
-        self._rescale_done.clear()
+        operation_id = operation_id or uuid.uuid4().hex
         # Observability is best-effort and must never reject a valid topology
         # change.  Actor RPC failures are already represented by cached/zero
         # counts inside ProgressReporter; guard structural failures as well.
@@ -391,7 +765,7 @@ class JobManager(AsyncWorker):
                 self.job_master.rescale_operator,
                 target_id,
                 parallelism,
-                uuid.uuid4().hex,
+                operation_id,
             )
         except Exception as error:
             # The topology commit precedes checkpoint-gate release. If that
@@ -399,21 +773,35 @@ class JobManager(AsyncWorker):
             # graph and forces global recovery; keep health reporting and the
             # Dashboard on that same committed graph even though the request
             # itself reports FAILED.
-            committed_graph = self.job_master.execution_graph
-            if committed_graph.job_vertex(target_id).concurrency == parallelism:
+            committed_graph = self._authoritative_rescale_graph(target_id, parallelism)
+            if committed_graph is not None:
                 self.logical_graph = logical_graph
                 self.execution_graph = committed_graph
                 await self._replace_progress_execution_graph(committed_graph)
-            return f"{type(error).__name__}: {error}"
+            return _format_rescale_error(error)
         else:
-            committed_graph = self.job_master.execution_graph
+            committed_graph = self._authoritative_rescale_graph(target_id, parallelism)
+            if committed_graph is None:
+                # Lightweight unit/debug doubles do not own a real graph. The
+                # production JobMaster always returns the writer-owned graph.
+                committed_graph = self.execution_graph.resize_operator(target_id, parallelism)
             self.logical_graph = logical_graph
             self.execution_graph = committed_graph
             await self._replace_progress_execution_graph(committed_graph)
             return None
-        finally:
-            self._rescale_in_progress = False
-            self._rescale_done.set()
+
+    def _authoritative_rescale_graph(
+        self,
+        target_id: int,
+        parallelism: int,
+    ) -> ExecutionGraph | None:
+        graph = getattr(self.job_master, "execution_graph", None)
+        if not isinstance(graph, ExecutionGraph):
+            return None
+        try:
+            return graph if graph.job_vertex(target_id).concurrency == parallelism else None
+        except KeyError:
+            return None
 
     async def _replace_progress_execution_graph(self, execution_graph: ExecutionGraph) -> None:
         retired_counts = self.job_master.take_retired_rescale_counts()
@@ -490,7 +878,10 @@ class JobManager(AsyncWorker):
     ) -> None:
         # The status update + all-sinks-finished scan are atomic inside
         # on_task_status_report (one run_exclusive call); we only react here.
-        if self.job_master is None:
+        # Once lifecycle teardown starts, its writer transaction owns the graph
+        # until every worker is gone. A late FINISHED/FAILED report must neither
+        # mutate that graph nor retain an actor RPC while the actor is closing.
+        if self.job_master is None or self._lifecycle_stop_requested:
             return
         accepted, all_finished, resolved_name = await self.run_exclusive(
             self.job_master.apply_task_status_report,
@@ -508,11 +899,47 @@ class JobManager(AsyncWorker):
             return
         self._lifecycle_stop_requested = True
         self._wake_event.set()
-        async with self._lifecycle_lock:
-            if self._job_status.is_terminal:
-                return
-            await self._stop_job()
-            self._update_job_status(JobStatus.FINISHED)
+        completion_task = self._completion_task_obj
+        if completion_task is None or completion_task.done():
+            self._completion_task_obj = asyncio.create_task(
+                self._complete_finished_job(),
+                name=f"{self.namespace}-complete-job",
+            )
+
+    async def _complete_finished_job(self) -> None:
+        """Tear down a naturally finished job outside the reporting worker RPC.
+
+        A terminal worker reports its status while still unwinding its pump and
+        executor.  Running the survivor sweep inline in that status RPC can
+        synchronously re-enter ``worker.stop()`` (notably for debug actors),
+        deadlocking the worker that is waiting for the RPC response.  Deferring
+        the lifecycle transaction lets the report return before actor cleanup.
+        """
+
+        try:
+            async with self._lifecycle_lock:
+                if self._job_status.is_terminal:
+                    return
+                try:
+                    await self._stop_job()
+                except Exception as error:
+                    self._submission_error = f"{type(error).__name__}: {error}"
+                    log_event(
+                        logger,
+                        logging.ERROR,
+                        "job.completion.teardown_failed",
+                        "Failed to tear down naturally completed job %s",
+                        self.job_name,
+                        exc_info=True,
+                        job_id=self.namespace,
+                        job_name=self.job_name,
+                    )
+                    self._update_job_status(JobStatus.FAILED)
+                else:
+                    self._update_job_status(JobStatus.FINISHED)
+        finally:
+            if self._completion_task_obj is asyncio.current_task():
+                self._completion_task_obj = None
 
     async def _stop_job(self, force: bool = False, timeout: int | None = None) -> None:
         # One Deadline bounds the whole teardown (supervisor stop + writer queue +
@@ -601,6 +1028,9 @@ class JobManager(AsyncWorker):
         progress = await self.progress_snapshot()
         checkpoint = await self._checkpoint_dashboard_snapshot()
         rescale_stabilizing = bool(checkpoint.get("rescale_recovery_fenced", False))
+        rescale_operations = [
+            dashboard_value(dict(operation)) for operation in reversed(tuple(self._rescale_operations.values()))
+        ]
         operators = [dashboard_value(operator) for operator in progress.operators]
         for operator in operators:
             job_vertex = (
@@ -633,6 +1063,14 @@ class JobManager(AsyncWorker):
                 if reason is not None
                 else (None if self._job_status == JobStatus.RUNNING else "The job is not running.")
             )
+            operator["rescale_operation"] = next(
+                (
+                    operation
+                    for operation in rescale_operations
+                    if str(operation.get("operator_id")) == str(operator["op_id"])
+                ),
+                None,
+            )
         status = self._job_status.name
         return {
             "job_id": self.namespace or self.job_name or "unknown",
@@ -645,6 +1083,7 @@ class JobManager(AsyncWorker):
             "updated_at_ms": self._status_updated_at_ms,
             "duration_ms": (self._ended_at_ms or now_ms) - (self._started_at_ms or self._created_at_ms),
             "status_history": list(self._status_history),
+            "rescale_operations": rescale_operations,
             "operators": operators,
             "edges": [
                 {"source": operator["op_id"], "target": target}
@@ -751,8 +1190,25 @@ class JobManager(AsyncWorker):
 
     async def _fail_permanently(self, force: bool) -> None:
         """Tear the job down and mark it FAILED — the supervisor's SUPPRESSED path."""
-        await self._stop_job(force=force)
-        self._update_job_status(JobStatus.FAILED)
+        self._lifecycle_stop_requested = True
+        self._wake_event.set()
+        try:
+            await self._stop_job(force=force)
+        except Exception as error:
+            self._record_teardown_failure("Permanent-failure teardown failed", error)
+            log_event(
+                logger,
+                logging.ERROR,
+                "job.permanent_failure.teardown_failed",
+                "Failed to tear down permanently failed job %s",
+                self.job_name,
+                exc_info=True,
+                job_id=self.namespace,
+                job_name=self.job_name,
+            )
+        finally:
+            # Teardown errors must not strand a fenced job in RUNNING forever.
+            self._update_job_status(JobStatus.FAILED)
 
     async def restart(self, force: bool = False) -> None:
         if self.job_master is None:
@@ -766,6 +1222,12 @@ class JobManager(AsyncWorker):
         # attempt; the JobMaster owns HOW (the execution-graph writes).
         async with self._lifecycle_lock:
             if self._lifecycle_stop_requested:
+                # ``AsyncWorker._loop`` immediately invokes ``_run`` again.
+                # Merely returning here therefore creates a no-await busy loop:
+                # acquiring an unlocked asyncio.Lock completes synchronously and
+                # can starve the completion task that is waiting to tear the job
+                # down.  End this supervisor loop at the lifecycle fence.
+                self._stopping = True
                 return
             await self._failover_supervisor().tick()
 
@@ -790,8 +1252,31 @@ class JobManager(AsyncWorker):
         self._lifecycle_stop_requested = True
         self._wake_event.set()
         async with self._lifecycle_lock:
-            await self._stop_job(force=True)
-            self._update_job_status(JobStatus.FAILED)
+            try:
+                await self._stop_job(force=True)
+            except Exception as error:
+                self._record_teardown_failure("Supervisor-failure teardown failed", error)
+                log_event(
+                    logger,
+                    logging.ERROR,
+                    "job.supervisor.teardown_failed",
+                    "Failed to tear down job %s after a supervisor failure",
+                    self.job_name,
+                    exc_info=True,
+                    job_id=self.namespace,
+                    job_name=self.job_name,
+                )
+            finally:
+                self._update_job_status(JobStatus.FAILED)
+
+    def _record_teardown_failure(self, context: str, error: Exception) -> None:
+        """Preserve the root cause while retaining cleanup diagnostics."""
+
+        diagnostic = f"{type(error).__name__}: {error}"
+        if self._submission_error:
+            self._submission_error = f"{self._submission_error}\n{context}: {diagnostic}"
+        else:
+            self._submission_error = diagnostic
 
     async def start_job_supervisor(self) -> None:
         log_event(

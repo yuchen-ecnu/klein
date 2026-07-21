@@ -10,6 +10,7 @@ transforms, attach at least one sink, and execute the current graph.
 .. code-block:: python
 
    import ray
+   import ray.klein
 
    stream = ray.klein.from_items([{"value": 1}, {"value": 2}, {"value": 3}])
    stream.map(lambda row: {"value": row["value"] ** 2}).show()

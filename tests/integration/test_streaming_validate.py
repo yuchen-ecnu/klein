@@ -150,7 +150,7 @@ def test_base_stream_job(debug: bool, chaining: bool, monkeypatch):
         num_gpus=0,
         concurrency=3,
     )
-    data_stream.write(
+    collecting_sink = data_stream.write(
         CollectFunction,
         fn_constructor_kwargs={"limit": None},
         concurrency=1,
@@ -158,7 +158,7 @@ def test_base_stream_job(debug: bool, chaining: bool, monkeypatch):
         name="Take",
     )
 
-    client: JobHandle = ctx.execute("test")
+    client: JobHandle = ctx.execute("test", sinks=(collecting_sink,))
     client.wait()
     actual_result = client.get()
 

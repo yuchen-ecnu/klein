@@ -22,14 +22,19 @@ Typical control flow
 .. code-block:: python
 
    import ray
+   import ray.klein
 
+   ray.klein.configure({"execution.runtime.mode": "streaming"})
+   stream = ray.klein.from_values({"order_id": 1})
+   stream.show()
    handle = ray.klein.execute("orders")
    print(handle.namespace)
    print(handle.status)
    handle.wait()
 
-``wait()`` blocks until a terminal state. ``get()`` also waits and then
-returns the batch or collection result. ``cancel(timeout=...)`` requests a
-cooperative stop and returns whether cancellation completed inside the time
-budget. A live handle's ``namespace`` is the Ray namespace accepted by the
-``ray-klein status``, ``attach``, and ``stop`` commands.
+``wait()`` blocks until a terminal state and is the normal choice for jobs with
+one or more side-effect sinks. ``get()`` is for one result-producing terminal;
+``take()`` or ``take_all()`` must be executed alone. ``cancel(timeout=...)``
+requests a cooperative stop and returns whether cancellation completed inside
+the time budget. A live handle's ``namespace`` is the Ray namespace accepted by
+the ``ray-klein status``, ``attach``, and ``stop`` commands.

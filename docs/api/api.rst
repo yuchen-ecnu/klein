@@ -12,8 +12,11 @@ Klein for Ray API
     datastream.rst
     jobs.rst
     runtime.rst
+    metrics.rst
     sources.rst
     sinks.rst
+    connectors.rst
+    formats.rst
     observability.rst
     partitioning.rst
     redis.rst
@@ -23,5 +26,7 @@ Klein for Ray API
     sql.rst
     state.rst
     stateful_stream.rst
+    resources.rst
+    exceptions.rst
     config_options.rst
     configurations.rst

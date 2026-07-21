@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import hashlib
 import logging
 import time
 from collections import deque
+from typing import TYPE_CHECKING
 
 import ray.klein as klein
 from ray.klein._internal.constants import ComponentName
@@ -22,6 +24,7 @@ from ray.klein.runtime.coordinator.checkpoint_registration import CheckpointRegi
 from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
+from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionVertexStatus
 from ray.klein.runtime.worker.async_worker import AsyncWorker
 from ray.klein.state.managed_state_snapshot import repartition_managed_state_snapshots
 from ray.klein.state.object_store_snapshot_cache import ObjectStoreSnapshotCache
@@ -33,6 +36,9 @@ from ray.klein.state.sink_committable_checkpoint_entry import (
 )
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
+
+if TYPE_CHECKING:
+    from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 
 logger = get_logger(__name__)
 
@@ -226,6 +232,10 @@ class CheckpointCoordinator(AsyncWorker):
         self._required_acknowledgements: dict[ExecutionVertexId, int] = {}
         self._inflight_checkpoints: dict[int, Checkpoint] = {}
         self._pending_checkpoint_releases: dict[int, tuple[ExecutionVertexId, ...]] = {}
+        # At most one epoch is active inside a physical weakly-connected
+        # component. Disconnected components retain independent progress.
+        self._active_checkpoint_by_domain: dict[str, int] = {}
+        self._finished_sources: set[ExecutionVertexId] = set()
         # An aligned checkpoint leaves ``_inflight_checkpoints`` before its
         # source notification/state merge has completed. Keep that second phase
         # visible so a topology change cannot race an old-epoch state commit.
@@ -255,6 +265,7 @@ class CheckpointCoordinator(AsyncWorker):
         self._opened: bool = False
         self._progress_lock = None
         self._persistence_lock = None
+        self._rescale_gate_lock = None
         self._rescale_operation_id: str | None = None
         # A committed local topology is not independently recoverable until one
         # full checkpoint has captured source progress and every stateful task
@@ -283,6 +294,8 @@ class CheckpointCoordinator(AsyncWorker):
             self._progress_lock = asyncio.Lock()
         if self._persistence_lock is None:
             self._persistence_lock = asyncio.Lock()
+        if self._rescale_gate_lock is None:
+            self._rescale_gate_lock = asyncio.Lock()
 
     async def open(self, execution_graph: ExecutionGraph, restore_path: str | None) -> None:
         self._ensure_locks()
@@ -362,6 +375,12 @@ class CheckpointCoordinator(AsyncWorker):
         self._inflight_operator_states = {}
         self._inflight_checkpoints = {}
         self._pending_checkpoint_releases = {}
+        self._active_checkpoint_by_domain = {}
+        self._finished_sources = {
+            vertex.id
+            for vertex in execution_graph.source_execution_vertices
+            if vertex.status == ExecutionVertexStatus.FINISHED
+        }
         self._completing_checkpoints = set()
         self._state_revision = 0
         self._persisted_state_revision = 0
@@ -454,6 +473,7 @@ class CheckpointCoordinator(AsyncWorker):
         ]
         for barrier_id in stale:
             checkpoint = self._inflight_checkpoints.pop(barrier_id)
+            self._release_domain_slot(checkpoint)
             self._inflight_operator_states.pop(barrier_id, None)
             await self._abort_inflight_sink_committables(barrier_id)
             checkpoint.mark_failed(f"checkpoint timed out after {self._checkpoint_timeout}s")
@@ -470,6 +490,7 @@ class CheckpointCoordinator(AsyncWorker):
                 checkpoint_id=barrier_id,
             )
             await self._release_checkpoint_sources(barrier_id, checkpoint.trigger_sources)
+            await self._abort_checkpoint_tasks(barrier_id, checkpoint)
 
     async def _release_checkpoint_sources(
         self,
@@ -562,29 +583,148 @@ class CheckpointCoordinator(AsyncWorker):
             )
             return False
 
+    async def _release_sources_inflight(
+        self,
+        barrier_id: int,
+        source_vertex_ids: tuple[ExecutionVertexId, ...],
+    ) -> None:
+        await asyncio.gather(
+            *(self._release_source_inflight(barrier_id, source_id) for source_id in source_vertex_ids),
+            return_exceptions=True,
+        )
+
+    def _checkpoint_domain_for_source(self, vertex_id: ExecutionVertexId) -> CheckpointDomain | None:
+        graph = self._execution_graph
+        if graph is None:
+            return None
+        finder = getattr(graph, "find_checkpoint_domain", None)
+        if not callable(finder):
+            return None
+        domain = finder(vertex_id)
+        # Several coordinator unit tests deliberately use a loose Mock graph.
+        # Only accept the concrete graph value; otherwise preserve the legacy
+        # single-source fallback below.
+        return domain if isinstance(domain, CheckpointDomain) else None
+
+    def _find_execution_vertex(self, vertex_id: ExecutionVertexId) -> "ExecutionVertex | None":
+        graph = self._execution_graph
+        if graph is None:
+            return None
+        finder = getattr(graph, "find_execution_vertex", None)
+        if callable(finder):
+            return finder(vertex_id)
+        lookup = getattr(graph, "execution_vertex", None)
+        if not callable(lookup):
+            return None
+        try:
+            return lookup(vertex_id)
+        except KeyError:
+            return None
+
+    def _reachable_domain_sinks(
+        self,
+        domain: CheckpointDomain,
+        source_ids: tuple[ExecutionVertexId, ...],
+    ) -> tuple[ExecutionVertexId, ...]:
+        """Return sink subtasks reachable from this epoch's live sources."""
+
+        members = frozenset(domain.vertex_ids)
+        adjacency: dict[ExecutionVertexId, list[ExecutionVertexId]] = {vertex_id: [] for vertex_id in members}
+        for job_edge in self._execution_graph.job_edges:
+            for edge in job_edge.execution_edges:
+                if edge.source.id in members and edge.target.id in members:
+                    adjacency[edge.source.id].append(edge.target.id)
+        reachable: set[ExecutionVertexId] = set()
+        stack = list(source_ids)
+        while stack:
+            vertex_id = stack.pop()
+            if vertex_id in reachable:
+                continue
+            reachable.add(vertex_id)
+            stack.extend(adjacency.get(vertex_id, ()))
+        sinks = reachable.intersection(domain.sink_vertex_ids)
+        return tuple(sorted(sinks, key=lambda item: (item.job_vertex_id, item.index)))
+
+    def _release_domain_slot(self, checkpoint: Checkpoint) -> None:
+        domain_id = checkpoint.domain_id
+        if domain_id is not None and self._active_checkpoint_by_domain.get(domain_id) == checkpoint.barrier_id:
+            self._active_checkpoint_by_domain.pop(domain_id, None)
+
+    def _request_domain_sources(
+        self,
+        checkpoint: Checkpoint,
+        requester: ExecutionVertexId,
+    ) -> None:
+        """Fire the shared epoch to every other source in the physical domain."""
+
+        for source_id in checkpoint.trigger_sources:
+            if source_id == requester:
+                continue
+            source_vertex = self._find_execution_vertex(source_id)
+            stream_task = None if source_vertex is None else source_vertex.stream_task
+            if stream_task is None:
+                logger.warning(
+                    "Source task %s is unavailable while broadcasting checkpoint %s",
+                    source_id,
+                    checkpoint.barrier_id,
+                )
+                continue
+            try:
+                # Deliberately do not block the coordinator on source actor
+                # scheduling. The source acknowledges emission separately via
+                # source_checkpoint_started().
+                stream_task.request_checkpoint(checkpoint.barrier_id)
+            except Exception:
+                logger.warning(
+                    "Failed to request checkpoint %s from source %s",
+                    checkpoint.barrier_id,
+                    source_id,
+                    exc_info=True,
+                )
+
     def register_checkpoint(self, vertex_id: ExecutionVertexId, *, force: bool = False) -> CheckpointRegistration:
-        # Intentionally sync: pure in-memory bookkeeping with no I/O. Ray async
-        # actors happily expose sync methods alongside async ones.
+        # Intentionally sync: pure in-memory bookkeeping with no I/O.
         if self._rescale_operation_id is not None:
             return CheckpointRegistration.skip(
                 f"Checkpoint registration is paused for operator rescale {self._rescale_operation_id}"
             )
         if self._rescale_recovery_fence is not None:
             return self._register_rescale_stabilization_checkpoint(vertex_id)
-        # No sink path downstream -> nothing to align/ack -> checkpointing this
-        # source is meaningless without a required sink acknowledgement count.
+
         domain = self._checkpoint_domain_for_source(vertex_id)
-        required_committers = self._reachable_domain_sinks(domain, (vertex_id,)) if domain is not None else ()
-        required_acknowledgements = (
-            len(required_committers) if required_committers else self._required_acknowledgements.get(vertex_id, 0)
-        )
+        if domain is None:
+            # Compatibility for lightweight mocked graphs and older serialized
+            # graph values: retain the previous single-source registration.
+            domain_id = f"legacy-source-{vertex_id.job_vertex_id}-{vertex_id.index}"
+            trigger_sources = (vertex_id,)
+            required_committers: tuple[ExecutionVertexId, ...] = ()
+            required_acknowledgements = self._required_acknowledgements.get(vertex_id, 0)
+        else:
+            domain_id = domain.id
+            trigger_sources = tuple(
+                source_id for source_id in domain.source_vertex_ids if source_id not in self._finished_sources
+            )
+            if vertex_id not in trigger_sources:
+                return CheckpointRegistration.skip(f"Source {vertex_id} is already finished")
+            required_committers = self._reachable_domain_sinks(domain, trigger_sources)
+            required_acknowledgements = len(required_committers)
+
+        active_barrier_id = self._active_checkpoint_by_domain.get(domain_id)
+        if active_barrier_id is not None:
+            active = self._inflight_checkpoints.get(active_barrier_id)
+            if active is not None and vertex_id not in active.started_sources:
+                # The request broadcast may still be queued at this source.
+                return CheckpointRegistration.success(active_barrier_id)
+            return CheckpointRegistration.skip(
+                f"Checkpoint {active_barrier_id} is already active for domain {domain_id}"
+            )
+
         if required_acknowledgements <= 0:
-            reason = f"Source {vertex_id} has no checkpointable sink path; skipping checkpoint"
+            reason = f"Checkpoint domain {domain_id} has no checkpointable sink path; skipping checkpoint"
             logger.debug(reason)
             return CheckpointRegistration.skip(reason)
 
         pending_checkpoints = len(self._inflight_checkpoints)
-        # Enforce the cap before allocating another checkpoint.
         if not force and pending_checkpoints >= self._max_concurrent_checkpoints:
             reason = (
                 f"Pending checkpoints {pending_checkpoints} reached the concurrent "
@@ -607,12 +747,13 @@ class CheckpointCoordinator(AsyncWorker):
         checkpoint = Checkpoint(
             barrier_id,
             required_acknowledgements,
-            (vertex_id,),
-            domain_id=None if domain is None else domain.id,
+            trigger_sources,
+            domain_id=domain_id,
             required_committers=required_committers,
         )
         self._track_checkpoint(checkpoint)
-
+        self._active_checkpoint_by_domain[domain_id] = barrier_id
+        self._request_domain_sources(checkpoint, requester=vertex_id)
         return CheckpointRegistration.success(barrier_id)
 
     def _register_rescale_stabilization_checkpoint(
@@ -637,8 +778,6 @@ class CheckpointCoordinator(AsyncWorker):
                 return CheckpointRegistration.skip(
                     f"Rescale stabilization barrier {barrier_id} is durable and awaiting source release"
                 )
-            # The previous attempt failed or timed out.  Keep the recovery fence
-            # and let the next source registration create a fresh shared epoch.
             barrier_id = None
             self._coordinated_checkpoint_barrier_id = None
             self._coordinated_checkpoint_registered_sources.clear()
@@ -656,21 +795,12 @@ class CheckpointCoordinator(AsyncWorker):
                     for sink in self._execution_graph.sink_execution_vertices
                     if isinstance(getattr(sink, "id", None), ExecutionVertexId)
                 }
-            required_acknowledgements = len(pending_sinks)
-            if required_acknowledgements <= 0:
+            if not pending_sinks:
                 return CheckpointRegistration.skip("Job has no sink task for rescale stabilization")
             barrier_id = next(self._barrier_id_gen)
-            sources = tuple(
-                sorted(
-                    expected_sources,
-                    key=lambda source_id: (source_id.job_vertex_id, source_id.index),
-                )
-            )
+            sources = tuple(sorted(expected_sources, key=lambda source_id: (source_id.job_vertex_id, source_id.index)))
             required_committers = tuple(
-                sorted(
-                    pending_sinks,
-                    key=lambda sink_id: (sink_id.job_vertex_id, sink_id.index),
-                )
+                sorted(pending_sinks, key=lambda sink_id: (sink_id.job_vertex_id, sink_id.index))
             )
             source_domains = {
                 domain.id: domain
@@ -679,13 +809,14 @@ class CheckpointCoordinator(AsyncWorker):
             }
             checkpoint = Checkpoint(
                 barrier_id,
-                required_acknowledgements,
+                len(required_committers),
                 sources,
                 coordinated=True,
                 domain_id=next(iter(source_domains)) if len(source_domains) == 1 else None,
                 required_committers=required_committers,
             )
             self._track_checkpoint(checkpoint)
+            self._activate_checkpoint_domain(checkpoint)
             self._coordinated_checkpoint_barrier_id = barrier_id
         self._coordinated_checkpoint_registered_sources.add(vertex_id)
         return CheckpointRegistration.success(barrier_id, coordinated=True)
@@ -700,29 +831,103 @@ class CheckpointCoordinator(AsyncWorker):
         self._checkpoints_triggered.inc()
         self._checkpoints_in_progress.set(len(self._inflight_checkpoints))
 
+    def _activate_checkpoint_domain(self, checkpoint: Checkpoint) -> None:
+        if checkpoint.domain_id is not None:
+            self._active_checkpoint_by_domain[checkpoint.domain_id] = checkpoint.barrier_id
+
+    def source_checkpoint_started(
+        self,
+        barrier_id: int,
+        vertex_id: ExecutionVertexId,
+        *,
+        is_eof: bool = False,
+    ) -> bool:
+        """Record source participation in a coordinator-assigned domain epoch."""
+
+        checkpoint = self._inflight_checkpoints.get(barrier_id)
+        if checkpoint is None or checkpoint.status.is_terminal:
+            return False
+        if not checkpoint.mark_source_started(vertex_id, is_eof=is_eof):
+            logger.warning(
+                "Source %s attempted to join checkpoint %s outside its domain",
+                vertex_id,
+                barrier_id,
+            )
+            return False
+        return True
+
     async def begin_operator_rescale(self, operation_id: str, timeout: float) -> bool:
-        """Stop admitting checkpoints and wait for the old topology to drain."""
+        """Stop admitting checkpoints and quiesce the old checkpoint topology.
+
+        An in-flight checkpoint has not committed any progress and is safe to
+        discard.  Cancel it after closing admission rather than letting a lost
+        barrier/ack block an otherwise independent operator rescale until its
+        (usually much longer) checkpoint timeout.  A checkpoint already in its
+        completion phase may be publishing durable state, so that phase still
+        has to finish before the topology can change.
+        """
 
         if not isinstance(operation_id, str) or not operation_id.strip():
             raise ValueError("rescale operation_id cannot be empty")
         if timeout <= 0:
             raise ValueError("rescale timeout must be greater than zero")
         deadline = time.monotonic() + timeout
-        while self._rescale_recovery_fence is not None:
-            if time.monotonic() >= deadline:
-                raise TimeoutError(
-                    "timed out waiting for the committed topology to complete its stabilization checkpoint"
-                )
-            await asyncio.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
-        if self._rescale_operation_id not in {None, operation_id}:
-            raise RuntimeError(f"checkpoint coordinator is busy with rescale {self._rescale_operation_id}")
-        self._rescale_operation_id = operation_id
-        while self._inflight_checkpoints or self._completing_checkpoints:
-            if time.monotonic() >= deadline:
-                self._rescale_operation_id = None
-                raise TimeoutError("timed out waiting for in-flight checkpoints before rescale")
-            await asyncio.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
-        return True
+        self._ensure_locks()
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            await asyncio.wait_for(self._rescale_gate_lock.acquire(), timeout=remaining)
+        except asyncio.TimeoutError as error:
+            raise TimeoutError("timed out waiting for another checkpoint gate transition") from error
+        try:
+            while self._rescale_recovery_fence is not None:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "timed out waiting for the committed topology to complete its stabilization checkpoint"
+                    )
+                await asyncio.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+            if self._rescale_operation_id not in {None, operation_id}:
+                raise RuntimeError(f"checkpoint coordinator is busy with rescale {self._rescale_operation_id}")
+            self._rescale_operation_id = operation_id
+            await self._abort_inflight_checkpoints_for_rescale(operation_id)
+            while self._completing_checkpoints:
+                if time.monotonic() >= deadline:
+                    self._rescale_operation_id = None
+                    raise TimeoutError("timed out waiting for checkpoint completion before rescale")
+                await asyncio.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+            return True
+        finally:
+            self._rescale_gate_lock.release()
+
+    async def _abort_inflight_checkpoints_for_rescale(self, operation_id: str) -> None:
+        """Detach and fail every uncommitted checkpoint from the old topology."""
+
+        # Detach the full snapshot before the first await.  Coordinator methods
+        # can interleave at awaits; doing all pops first ensures a late sink ack
+        # cannot move one of these checkpoints into the completion phase while
+        # its cleanup is already under way.  A final ack that won the race before
+        # this method ran has already moved the checkpoint to
+        # ``_completing_checkpoints`` and is deliberately left alone.
+        aborted: list[tuple[int, Checkpoint]] = []
+        for barrier_id, checkpoint in tuple(self._inflight_checkpoints.items()):
+            if self._inflight_checkpoints.pop(barrier_id, None) is not checkpoint:
+                continue
+            self._release_domain_slot(checkpoint)
+            aborted.append((barrier_id, checkpoint))
+
+        for barrier_id, checkpoint in aborted:
+            await self._fail_checkpoint(
+                checkpoint,
+                barrier_id,
+                f"Checkpoint aborted for operator rescale {operation_id}.",
+                wait_for_task_abort=True,
+            )
+        self._checkpoints_in_progress.set(len(self._inflight_checkpoints) + len(self._completing_checkpoints))
+        if aborted:
+            logger.info(
+                "Aborted %d in-flight checkpoint(s) before operator rescale %s",
+                len(aborted),
+                operation_id,
+            )
 
     def finish_operator_rescale(
         self,
@@ -889,12 +1094,13 @@ class CheckpointCoordinator(AsyncWorker):
         self._completing_checkpoints.add(barrier_id)
         self._checkpoints_in_progress.set(len(self._inflight_checkpoints) + len(self._completing_checkpoints))
         logger.debug(
-            "Checkpoint barrier %s is aligned; collecting source state",
+            "Checkpoint barrier %s is aligned; notifying its domain sources",
             barrier_id,
         )
         try:
             return await self._complete_aligned_checkpoint(checkpoint, barrier_id)
         finally:
+            self._release_domain_slot(checkpoint)
             self._completing_checkpoints.discard(barrier_id)
             self._checkpoints_in_progress.set(len(self._inflight_checkpoints) + len(self._completing_checkpoints))
 
@@ -903,62 +1109,34 @@ class CheckpointCoordinator(AsyncWorker):
         checkpoint: Checkpoint,
         barrier_id: int,
     ) -> bool:
-        """Merge every trigger source and make one aligned cut visible."""
+        """Commit one domain cut after collecting every participating source."""
 
         try:
-            source_vertices = [
-                self._execution_graph.execution_vertex(source_vertex_id)
-                for source_vertex_id in checkpoint.trigger_sources
-            ]
-            if any(source_vertex.stream_task is None for source_vertex in source_vertices):
+            source_states = await self._collect_domain_source_states(checkpoint, barrier_id)
+            if source_states is None:
                 await self._fail_checkpoint(
                     checkpoint,
                     barrier_id,
-                    "Source task is unavailable during checkpoint completion.",
+                    "Notifying all domain sources of checkpoint completion failed.",
+                )
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "checkpoint.failed",
+                    "Checkpoint %s failed while notifying its domain sources",
+                    barrier_id,
+                    job_id=self._job_id,
+                    checkpoint_id=barrier_id,
                 )
                 return False
-            source_results = await klein.aget(
-                [
-                    (
-                        source_vertex.stream_task.source_checkpoint_state(barrier_id)
-                        if checkpoint.coordinated
-                        else source_vertex.stream_task.notify_source_checkpoint_complete(barrier_id)
-                    )
-                    for source_vertex in source_vertices
-                ],
-                timeout=self._checkpoint_operation_timeout(),
+            has_committables, stabilization_ready = await self._merge_aligned_checkpoint_progress(
+                checkpoint,
+                barrier_id,
+                source_states,
             )
-            if len(source_results) != len(source_vertices) or any(not success for success, _state in source_results):
-                await self._fail_checkpoint(
-                    checkpoint,
-                    barrier_id,
-                    "Collecting source checkpoint state failed.",
-                )
-                return False
-            async with self._progress_lock:
-                for source_vertex, (_success, source_state) in zip(
-                    source_vertices,
-                    source_results,
-                    strict=True,
-                ):
-                    self._update_latest_source_state(
-                        SourceCheckpointEntry(
-                            task_key=self._source_state_key(source_vertex.id),
-                            checkpoint_id=barrier_id,
-                            state=source_state,
-                        )
-                    )
-                completed_states = self._inflight_operator_states.pop(barrier_id, {})
-                self._replace_logical_operator_states(completed_states)
-                completed_committables = self._inflight_sink_committables.pop(barrier_id, {})
-                for entry in completed_committables.values():
-                    self._pending_sink_committables[self._sink_committable_identity(entry)] = entry
-                self._update_pending_sink_transaction_metric()
-                if completed_committables:
-                    self._state_revision += 1
-                stabilization_ready = self._record_rescale_stabilization_progress(checkpoint)
-            if completed_committables or stabilization_ready:
+            if has_committables or stabilization_ready:
                 await self._persist_checkpoint_metadata(strict=True)
+            self._finished_sources.update(checkpoint.eof_sources)
             checkpoint.mark_complete()
             duration_ms = max(
                 0,
@@ -986,6 +1164,7 @@ class CheckpointCoordinator(AsyncWorker):
             checkpoint.mark_failed("Checkpoint could not become durable.")
             self._checkpoints_failed.inc()
             await self._release_checkpoint_sources(barrier_id, checkpoint.trigger_sources)
+            await self._abort_checkpoint_tasks(barrier_id, checkpoint)
             logger.exception("Checkpoint %s could not become durable", barrier_id)
             raise
         except Exception:
@@ -998,6 +1177,7 @@ class CheckpointCoordinator(AsyncWorker):
             )
             checkpoint.mark_failed("Notifying source checkpoint completion failed.")
             self._checkpoints_failed.inc()
+            await self._abort_checkpoint_tasks(barrier_id, checkpoint)
             log_event(
                 logger,
                 logging.WARNING,
@@ -1009,14 +1189,177 @@ class CheckpointCoordinator(AsyncWorker):
             )
             return False
 
-    async def _fail_checkpoint(self, checkpoint: Checkpoint, barrier_id: int, reason: str) -> None:
+    async def _collect_domain_source_states(
+        self,
+        checkpoint: Checkpoint,
+        barrier_id: int,
+    ) -> dict[ExecutionVertexId, object] | None:
+        source_tasks: list[tuple[ExecutionVertexId, KleinActorHandle]] = []
+        for source_vertex_id in checkpoint.trigger_sources:
+            source_vertex = self._find_execution_vertex(source_vertex_id)
+            stream_task = None if source_vertex is None else source_vertex.stream_task
+            if stream_task is None:
+                logger.warning(
+                    "Source task %s is unavailable while completing checkpoint %s",
+                    source_vertex_id,
+                    barrier_id,
+                )
+                return None
+            source_tasks.append((source_vertex_id, stream_task))
+
+        results = await asyncio.gather(
+            *(
+                self._collect_source_checkpoint_result(checkpoint, barrier_id, stream_task)
+                for _, stream_task in source_tasks
+            ),
+            return_exceptions=True,
+        )
+        source_states: dict[ExecutionVertexId, object] = {}
+        for (source_vertex_id, _), result in zip(source_tasks, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "Source task %s failed checkpoint %s completion notification: %r",
+                    source_vertex_id,
+                    barrier_id,
+                    result,
+                )
+                continue
+            success, source_state = result
+            if success:
+                source_states[source_vertex_id] = source_state
+        return source_states if len(source_states) == len(source_tasks) else None
+
+    async def _collect_source_checkpoint_result(
+        self,
+        checkpoint: Checkpoint,
+        barrier_id: int,
+        stream_task: KleinActorHandle,
+    ) -> object:
+        if checkpoint.coordinated:
+            return await klein.aget(
+                stream_task.source_checkpoint_state(barrier_id),
+                timeout=self._checkpoint_operation_timeout(),
+            )
+        return await klein.aget(stream_task.notify_source_checkpoint_complete(barrier_id))
+
+    async def _merge_aligned_checkpoint_progress(
+        self,
+        checkpoint: Checkpoint,
+        barrier_id: int,
+        source_states: dict[ExecutionVertexId, object],
+    ) -> tuple[bool, bool]:
+        async with self._progress_lock:
+            completed_committables = self._coalesce_sink_committables(
+                barrier_id,
+                self._inflight_sink_committables.get(barrier_id, {}),
+            )
+            for source_vertex_id, source_state in source_states.items():
+                self._update_latest_source_state(
+                    SourceCheckpointEntry(
+                        task_key=self._source_state_key(source_vertex_id),
+                        checkpoint_id=barrier_id,
+                        state=source_state,
+                    )
+                )
+            completed_states = self._inflight_operator_states.pop(barrier_id, {})
+            if checkpoint.coordinated:
+                self._replace_logical_operator_states(completed_states)
+            else:
+                self._merge_checkpoint_operator_states(completed_states)
+            self._inflight_sink_committables.pop(barrier_id, None)
+            for entry in completed_committables.values():
+                self._pending_sink_committables[self._sink_committable_identity(entry)] = entry
+            self._update_pending_sink_transaction_metric()
+            if completed_committables:
+                self._state_revision += 1
+            stabilization_ready = self._record_rescale_stabilization_progress(checkpoint)
+        return bool(completed_committables), stabilization_ready
+
+    async def _fail_checkpoint(
+        self,
+        checkpoint: Checkpoint,
+        barrier_id: int,
+        reason: str,
+        *,
+        wait_for_task_abort: bool = False,
+    ) -> None:
         """Release non-durable task state and mark a checkpoint failed."""
 
         self._inflight_operator_states.pop(barrier_id, None)
         await self._abort_inflight_sink_committables(barrier_id)
         await self._release_checkpoint_sources(barrier_id, checkpoint.trigger_sources)
+        await self._abort_checkpoint_tasks(
+            barrier_id,
+            checkpoint,
+            wait_for_completion=wait_for_task_abort,
+        )
         checkpoint.mark_failed(reason)
         self._checkpoints_failed.inc()
+
+    async def _abort_checkpoint_tasks(
+        self,
+        barrier_id: int,
+        checkpoint: Checkpoint,
+        *,
+        wait_for_completion: bool = False,
+    ) -> None:
+        """Best-effort release of input gates held by a failed epoch."""
+
+        vertex_ids: tuple[ExecutionVertexId, ...] = ()
+        if checkpoint.domain_id is not None:
+            domains = getattr(self._execution_graph, "checkpoint_domains", ())
+            for domain in domains if isinstance(domains, tuple) else ():
+                if isinstance(domain, CheckpointDomain) and domain.id == checkpoint.domain_id:
+                    vertex_ids = domain.vertex_ids
+                    break
+        if not vertex_ids:
+            vertex_ids = tuple(dict.fromkeys(checkpoint.trigger_sources + checkpoint.required_committers))
+
+        pending: list[tuple[ExecutionVertexId, object]] = []
+        for vertex_id in vertex_ids:
+            vertex = self._find_execution_vertex(vertex_id)
+            stream_task = None if vertex is None else vertex.stream_task
+            if stream_task is None or not hasattr(stream_task, "abort_checkpoint"):
+                continue
+            try:
+                # Ordinary checkpoint-failure paths fire without awaiting: a
+                # synchronous sink may be blocked in notify_checkpoint_aligned,
+                # waiting for this coordinator call to return.  Rescale first
+                # detaches all non-completing checkpoints, so it can safely wait
+                # for these acknowledgements before inserting its own fence.
+                result = stream_task.abort_checkpoint(barrier_id)
+                if wait_for_completion:
+                    pending.append((vertex_id, result))
+            except Exception:
+                logger.debug(
+                    "Failed to abort checkpoint %s on task %s",
+                    barrier_id,
+                    vertex_id,
+                    exc_info=True,
+                )
+        if not pending:
+            return
+        await self._await_checkpoint_task_aborts(barrier_id, pending)
+
+    @staticmethod
+    async def _await_checkpoint_task_aborts(
+        barrier_id: int,
+        pending: list[tuple[ExecutionVertexId, object]],
+    ) -> None:
+        """Wait until rescale-time input-gate cleanup reaches every live task."""
+
+        results = await klein.aget(
+            [result for _, result in pending],
+            return_exceptions=True,
+        )
+        for (vertex_id, _), result in zip(pending, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.debug(
+                    "Task %s failed to acknowledge checkpoint %s abort",
+                    vertex_id,
+                    barrier_id,
+                    exc_info=result,
+                )
 
     async def _persist_checkpoint_metadata(
         self,
@@ -1271,6 +1614,48 @@ class CheckpointCoordinator(AsyncWorker):
                     exc_info=True,
                 )
         self._update_pending_sink_transaction_metric()
+
+    def _coalesce_sink_committables(
+        self,
+        barrier_id: int,
+        entries: dict[str, SinkCommittableCheckpointEntry],
+    ) -> dict[str, SinkCommittableCheckpointEntry]:
+        """Collapse parallel Iceberg writers into one logical-sink commit."""
+
+        if len(entries) < 2:
+            return entries
+        from ray.klein.integrations.iceberg.iceberg_global_committable import (
+            combine_iceberg_committables,
+        )
+        from ray.klein.integrations.iceberg.iceberg_sink_committable import IcebergSinkCommittable
+
+        result: dict[str, SinkCommittableCheckpointEntry] = {}
+        iceberg_groups: dict[str, list[SinkCommittableCheckpointEntry]] = {}
+        for task_key, entry in entries.items():
+            if isinstance(entry.committable, IcebergSinkCommittable):
+                logical_sink_id = task_key.partition(":")[0]
+                iceberg_groups.setdefault(logical_sink_id, []).append(entry)
+            else:
+                result[task_key] = entry
+
+        for logical_sink_id, group in iceberg_groups.items():
+            if len(group) == 1:
+                result[group[0].task_key] = group[0]
+                continue
+            global_task_key = f"{logical_sink_id}:global"
+            writer_transaction_ids = sorted(entry.transaction_id for entry in group)
+            transaction_digest = hashlib.sha256("\0".join(writer_transaction_ids).encode()).hexdigest()
+            global_transaction_id = f"klein:iceberg:{self._job_id}:{logical_sink_id}:{barrier_id}:{transaction_digest}"
+            committable = combine_iceberg_committables(
+                tuple(entry.committable for entry in group),
+                transaction_id=global_transaction_id,
+            )
+            result[global_task_key] = SinkCommittableCheckpointEntry(
+                global_task_key,
+                barrier_id,
+                committable,
+            )
+        return result
 
     def _update_pending_sink_transaction_metric(self) -> None:
         inflight_count = sum(len(entries) for entries in self._inflight_sink_committables.values())
@@ -1530,6 +1915,9 @@ class CheckpointCoordinator(AsyncWorker):
             raise RuntimeError("cannot reconfigure checkpoint topology with checkpoints in flight")
         self._execution_graph = execution_graph
         self._required_acknowledgements = checkpoint_io.coordinator_ack_counts(execution_graph)
+        self._active_checkpoint_by_domain = {}
+        live_sources = {vertex.id for vertex in execution_graph.source_execution_vertices}
+        self._finished_sources.intersection_update(live_sources)
 
     async def latest_operator_states(
         self,
@@ -1744,14 +2132,47 @@ class CheckpointCoordinator(AsyncWorker):
         if completed_states:
             self._state_revision += 1
 
+    def _merge_checkpoint_operator_states(
+        self,
+        completed_states: dict[str, StateSnapshotReference],
+    ) -> None:
+        """Merge a domain-local cut without dropping sibling-domain subtasks."""
+
+        self._latest_operator_states.update(completed_states)
+        if completed_states:
+            self._state_revision += 1
+
+    def _finalize_rescale_operator_states(self, operation_id: str) -> None:
+        """Retire transient/stale fragments after every source has stabilized."""
+
+        transient_keys = {key for key in self._transient_rescale_states if key[0] == operation_id}
+        logical_ids = {job_vertex_id for _, job_vertex_id in transient_keys}
+        state_changed = False
+        for job_vertex_id in logical_ids:
+            job_vertex = self._execution_graph.find_job_vertex(job_vertex_id)
+            live_keys = (
+                set()
+                if job_vertex is None
+                else {f"{job_vertex_id}:{vertex.index}" for vertex in job_vertex.execution_vertices.values()}
+            )
+            prefix = f"{job_vertex_id}:"
+            for states in (self._latest_operator_states, self._restored_operator_states):
+                stale = [key for key in states if key.startswith(prefix) and key not in live_keys]
+                for key in stale:
+                    states.pop(key, None)
+                state_changed = bool(stale) or state_changed
+        self._superseded_rescale_operations.update(transient_keys)
+        for key in transient_keys:
+            self._transient_rescale_states.pop(key, None)
+        if state_changed:
+            self._state_revision += 1
+
     def _record_rescale_stabilization_progress(self, checkpoint: Checkpoint) -> bool:
         """Validate one shared cut and report whether strict persistence is due.
 
-        Stateless rescaled operators have no transient fragments, so any fully
-        aligned checkpoint is sufficient.  For a stateful operator the state
-        replacement above removes the transient cut first. The fence itself is
-        only cleared later, after metadata at or beyond the captured revision is
-        durable.
+        The actor-preserving rescale fence uses one coordinated epoch spanning
+        every affected source domain. It is cleared only after that merged cut
+        has become durable and every source has been released.
         """
 
         operation_id = self._rescale_recovery_fence
@@ -1771,6 +2192,7 @@ class CheckpointCoordinator(AsyncWorker):
                 operation_id,
             )
             return False
+        self._finalize_rescale_operator_states(operation_id)
         if any(key[0] == operation_id for key in self._transient_rescale_states):
             logger.warning(
                 "Checkpoint completed without superseding transient state for rescale %s; "

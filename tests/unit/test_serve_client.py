@@ -10,8 +10,10 @@ import numpy as np
 import orjson
 import pytest
 
+from ray.klein.api.function import Function
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.serve_options import ServeOptions
+from ray.klein.runtime.operator.map_operator import MapOperator
 from ray.klein.runtime.serve_client import EmbeddedProxyClient
 
 
@@ -84,7 +86,10 @@ async def test_retryable_status_reuses_request_id(retryable_status: int) -> None
     assert requests[0].headers["X-Request-ID"] == requests[1].headers["X-Request-ID"]
     assert requests[0].headers["Content-Type"] == "application/octet-stream"
     assert orjson.loads(requests[0].content) == {"value": [1, 2]}
-    backoff.assert_awaited_once_with(0)
+    backoff.assert_awaited_once()
+    assert backoff.await_args.args == (0,)
+    assert backoff.await_args.kwargs["remaining"] > 0
+    assert backoff.await_args.kwargs["retry_after"] is None
 
 
 @pytest.mark.asyncio
@@ -135,7 +140,7 @@ async def test_total_timeout_covers_the_whole_attempt() -> None:
         return httpx.Response(200, json={"ok": True})
 
     client = _client(max_attempts=1)
-    client._http_timeout = 0.01
+    client.request_timeout = 0.01
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as session:
         client._session = session
         client._session_loop = asyncio.get_running_loop()
@@ -181,7 +186,7 @@ async def test_per_host_wait_uses_connect_timeout() -> None:
         return httpx.Response(200, json={"ok": True})
 
     client = _client(limit_per_host=1)
-    client._http_connect_timeout = 0.01
+    client.connect_timeout = 0.01
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as session:
         client._session = session
         client._session_loop = asyncio.get_running_loop()
@@ -207,3 +212,77 @@ def test_close_uses_httpx_async_close_and_clears_host_limits() -> None:
     session.aclose.assert_awaited_once_with()
     assert client._session is None
     assert client._host_semaphores == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 422])
+async def test_permanent_http_failure_reports_actual_attempts(status: int) -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, json={"error": "permanent"})
+
+    client = _client(max_attempts=5)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as session:
+        client._session = session
+        client._session_loop = asyncio.get_running_loop()
+        with pytest.raises(RuntimeError, match=rf"after 1/5 attempts.*status={status}"):
+            await client.post_request_with_retry({"value": np.array([1])})
+
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_http_timeout_is_one_budget_across_backoff_and_retries() -> None:
+    client = _client(max_attempts=3, request_timeout=1)
+    request = httpx.Request("POST", "http://proxy/request")
+    connection_error = httpx.ConnectError("dns failed", request=request)
+    clock = {"now": 0.0}
+
+    async def exhaust_budget(*_args, **_kwargs) -> None:
+        clock["now"] = 2.0
+
+    with (
+        patch("ray.klein.runtime.serve_client.time.monotonic", side_effect=lambda: clock["now"]),
+        patch.object(client, "_post", new=AsyncMock(side_effect=connection_error)) as post,
+        patch.object(client, "_backoff", side_effect=exhaust_budget),
+        pytest.raises(RuntimeError, match=r"after 1/3 attempts.*deadline_exhausted=True") as raised,
+    ):
+        await client.post_request_with_retry({"value": np.array([1])})
+
+    assert raised.value.__cause__ is connection_error
+    post.assert_awaited_once()
+
+
+def test_client_participates_in_operator_lifecycle_and_closes_session() -> None:
+    client = _client()
+    session = SimpleNamespace(is_closed=False, aclose=AsyncMock())
+    client._session = session
+    client._session_loop = None
+    operator = MapOperator()
+    operator._function = client
+
+    assert isinstance(client, Function)
+    operator.close()
+    session.aclose.assert_awaited_once_with()
+    assert client._session is None
+
+
+@pytest.mark.asyncio
+async def test_client_close_from_worker_thread_uses_owning_event_loop() -> None:
+    client = _client()
+    session = SimpleNamespace(is_closed=False, aclose=AsyncMock())
+    client._session = session
+    client._session_loop = asyncio.get_running_loop()
+
+    await asyncio.to_thread(client.close)
+
+    session.aclose.assert_awaited_once_with()
+    assert client._session is None
+
+
+def test_client_rejects_non_positive_attempt_count() -> None:
+    with pytest.raises(ValueError, match=r"max-attempts.*positive"):
+        _client(max_attempts=0)

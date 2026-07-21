@@ -28,7 +28,8 @@ transactional sinks, collecting sinks, or lifecycle classes that have not
 explicitly opted into concurrent runtime handoff. Parallel and multiple source
 operators are supported when rescaling a downstream operator; their
 post-commit recovery point uses one shared, direct-input-aligned checkpoint
-epoch.
+epoch. See :doc:`../operator-rescaling` for prerequisites, result handling,
+state migration, and the stabilization checkpoint.
 ``cancel_job(job_id, timeout=60)`` addresses a published job by job ID, while
 the CLI ``stop`` command addresses its Ray namespace.
 

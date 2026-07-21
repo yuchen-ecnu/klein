@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from collections.abc import Callable, Sequence
+from contextlib import suppress
 from typing import Any
 
 from ray.exceptions import ActorUnavailableError
@@ -19,6 +21,9 @@ from ray.klein.runtime.collector.delivery_journal import DeliveryJournal
 from ray.klein.runtime.message import Barrier, PutAck, Record, StreamControl
 
 logger = get_logger(__name__)
+
+
+_DELIVERY_ABORTED = PutAck(True, 0)
 
 
 class DownstreamSender:
@@ -58,6 +63,55 @@ class DownstreamSender:
         self._transport_send_duration_ms: Histogram | None = None
         self._transport_inflight_observer: Callable[[int], None] | None = None
         self._inflight_requests = 0
+        # Force-killing a debug actor still closes it in-process; unlike a Ray
+        # worker exit, retry loops therefore need an explicit cross-thread fence.
+        self._delivery_aborted = threading.Event()
+        self._delivery_waiters_lock = threading.Lock()
+        self._delivery_waiters: set[tuple[asyncio.AbstractEventLoop, asyncio.Task[Any]]] = set()
+
+    def abort_delivery(self) -> None:
+        """Release debug retry loops and cancel any in-flight local RPC wait."""
+
+        self._delivery_aborted.set()
+        with self._delivery_waiters_lock:
+            waiters = tuple(self._delivery_waiters)
+        for loop, waiter in waiters:
+            with suppress(RuntimeError):
+                loop.call_soon_threadsafe(waiter.cancel)
+
+    async def _await_delivery(self, request: Any) -> Any:
+        """Make local debug RPC waits cancellable from the force-stop thread.
+
+        Real Ray actors are killed at the process boundary and retain the direct
+        ``klein.aget`` path. Only the in-process debug runtime registers a task
+        that :meth:`abort_delivery` can cancel cross-thread.
+        """
+
+        if not klein.is_debug_mode():
+            return await klein.aget(request)
+        if self._delivery_aborted.is_set():
+            return _DELIVERY_ABORTED
+
+        loop = asyncio.get_running_loop()
+        waiter = asyncio.create_task(klein.aget(request))
+        registration = (loop, waiter)
+        with self._delivery_waiters_lock:
+            if self._delivery_aborted.is_set():
+                cancel = True
+            else:
+                self._delivery_waiters.add(registration)
+                cancel = False
+        if cancel:
+            waiter.cancel()
+        try:
+            return await waiter
+        except asyncio.CancelledError:
+            if self._delivery_aborted.is_set():
+                return _DELIVERY_ABORTED
+            raise
+        finally:
+            with self._delivery_waiters_lock:
+                self._delivery_waiters.discard(registration)
 
     def attach_backpressure_metrics(self, events: Counter, duration_ms: Histogram) -> None:
         self._backpressure_events = events
@@ -161,6 +215,8 @@ class DownstreamSender:
         acknowledgement: PutAck,
         is_replay: bool,
     ) -> None:
+        if acknowledgement is _DELIVERY_ABORTED:
+            return
         self._journal.acknowledge(target_index, acknowledgement.forwarded_sequence)
         self._target_buffer_size[target_index] = acknowledgement.buffer_size
         self._observe_batch(records)
@@ -197,7 +253,7 @@ class DownstreamSender:
         unavailable_waited = 0.0
         started_at = time.monotonic()
         encountered_backpressure = False
-        while True:
+        while not self._delivery_aborted.is_set():
             actual_target = ring[ring_index]
             sequence = replay_sequence if is_replay else self._journal.next_sequence(actual_target)
             if sequence is None:
@@ -221,7 +277,7 @@ class DownstreamSender:
                 if unavailable_waited > self._reresolve_max_wait:
                     self._observe_backpressure(started_at, encountered_backpressure)
                     raise
-                time.sleep(backoff)
+                self._delivery_aborted.wait(backoff)
                 continue
             if acknowledgement.accepted:
                 self._on_success(actual_target, records, sequence, acknowledgement, is_replay)
@@ -235,7 +291,7 @@ class DownstreamSender:
             ring_index = (ring_index + 1) % len(ring)
             if ring_index == 0:
                 backoff = min(0.1, backoff * 2 + 0.001)
-                time.sleep(backoff)
+                self._delivery_aborted.wait(backoff)
 
     async def send_async(
         self,
@@ -255,7 +311,7 @@ class DownstreamSender:
         unavailable_waited = 0.0
         started_at = time.monotonic()
         encountered_backpressure = False
-        while True:
+        while not self._delivery_aborted.is_set():
             actual_target = ring[ring_index]
             try:
                 async with self._target_locks[actual_target]:
@@ -264,7 +320,7 @@ class DownstreamSender:
                         raise ValueError("replay sends require their original sequence number")
                     request_started_at = self._begin_request()
                     try:
-                        acknowledgement = await klein.aget(
+                        acknowledgement = await self._await_delivery(
                             self._admission_request(
                                 actual_target,
                                 records if wire_records is None else wire_records,
@@ -308,10 +364,14 @@ class DownstreamSender:
         ]
 
     def send_barrier_sync(self, barrier: Barrier) -> None:
+        if self._delivery_aborted.is_set():
+            return
         klein.get(self._barrier_requests(barrier))
 
     async def send_barrier_async(self, barrier: Barrier) -> None:
-        await klein.aget(self._barrier_requests(barrier))
+        if self._delivery_aborted.is_set():
+            return
+        await self._await_delivery(self._barrier_requests(barrier))
 
     def _control_requests(self, control: StreamControl) -> list:
         return [
@@ -324,10 +384,14 @@ class DownstreamSender:
         ]
 
     def send_control_sync(self, control: StreamControl) -> None:
+        if self._delivery_aborted.is_set():
+            return
         klein.get(self._control_requests(control))
 
     async def send_control_async(self, control: StreamControl) -> None:
-        await klein.aget(self._control_requests(control))
+        if self._delivery_aborted.is_set():
+            return
+        await self._await_delivery(self._control_requests(control))
 
     def refresh_target(self, target_index: int) -> None:
         name = self._target_operator_names[target_index]

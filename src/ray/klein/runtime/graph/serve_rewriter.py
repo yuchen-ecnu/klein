@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pure Ray Serve region rewriting for the logical graph."""
 
+import inspect
 from dataclasses import dataclass
 
 from ray.klein._internal.logging import get_logger
@@ -14,6 +15,9 @@ from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.operator.map_operator import MapOperator
+from ray.klein.runtime.partitioning.channel_topology import ChannelPattern
+from ray.klein.runtime.partitioning.forward_partitioner import ForwardPartitioner
+from ray.klein.runtime.partitioning.partitioner_spec import PartitionerSpec
 from ray.klein.runtime.resources import Resources
 
 logger = get_logger(__name__)
@@ -67,7 +71,115 @@ class ServeRewriter:
         components = self._connected_components(serve_ids)
         if len(components) != 1:
             raise ValueError("Multiple disconnected ray_serve_enabled regions found in the LogicalGraph.")
-        return _ServeRegion(tuple(self._ordered_chain(set(components[0]))))
+        region = _ServeRegion(tuple(self._ordered_chain(set(components[0]))))
+        self._validate_region(region)
+        return region
+
+    def _validate_region(self, region: _ServeRegion) -> None:
+        """Reject shapes and functions the current Serve runtime cannot preserve."""
+
+        region_ids = set(region.node_ids)
+        head, tail = region.node_ids[0], region.node_ids[-1]
+        for edge in self._graph.edges:
+            if edge.source not in region_ids and edge.target in region_ids and edge.target != head:
+                raise ValueError(
+                    "Ray Serve region has an external input into an internal vertex; "
+                    "external inputs may only enter the region head"
+                )
+            if edge.source in region_ids and edge.target not in region_ids and edge.source != tail:
+                raise ValueError(
+                    "Ray Serve region has an external output from an internal vertex; "
+                    "external outputs may only leave the region tail"
+                )
+
+        for vertex_id in region.node_ids:
+            self._validate_supported_vertex(self._graph.get(vertex_id))
+
+    @staticmethod
+    def _validate_supported_vertex(vertex: VertexSpec) -> None:
+        logical_function = vertex.operator.logical_function
+        if (
+            vertex.operator.operator_class is not MapOperator
+            or logical_function is None
+            or logical_function.batch_lowering is not lower_map_batches
+        ):
+            raise ValueError(f"Ray Serve vertex {vertex.name} is unsupported; only map_batches operators are supported")
+
+        batch_format = logical_function.runtime_info.batch_format
+        if batch_format not in {"default", "numpy"}:
+            raise ValueError(
+                f"Ray Serve vertex {vertex.name} has unsupported batch_format {batch_format!r}; "
+                "use 'default' or 'numpy'"
+            )
+
+        ServeRewriter._validate_callable(vertex.name, logical_function.function)
+
+    @staticmethod
+    def _validate_callable(vertex_name: str, function) -> None:
+        candidates = ServeRewriter._callable_candidates(vertex_name, function)
+        candidates = [ServeRewriter._unwrap_callable(vertex_name, candidate) for candidate in candidates]
+        if any(ServeRewriter._is_async_or_generator(candidate) for candidate in candidates):
+            raise ValueError(
+                f"Ray Serve vertex {vertex_name} is unsupported; only synchronous, non-generator callables "
+                "are supported"
+            )
+        ServeRewriter._validate_close(vertex_name, function)
+        ServeRewriter._validate_constructor_context(vertex_name, function)
+
+    @staticmethod
+    def _callable_candidates(vertex_name: str, function) -> list:
+        if inspect.isclass(function):
+            if not any("__call__" in base.__dict__ for base in function.__mro__):
+                raise ValueError(
+                    f"Ray Serve vertex {vertex_name} is unsupported; callable classes must define __call__"
+                )
+            return [function, function.__call__]
+        if not callable(function):
+            raise ValueError(f"Ray Serve vertex {vertex_name} is unsupported; map_batches function must be callable")
+        return [function] if inspect.isfunction(function) else [function, type(function).__call__]
+
+    @staticmethod
+    def _unwrap_callable(vertex_name: str, function) -> object:
+        try:
+            return inspect.unwrap(function)
+        except ValueError as error:
+            raise ValueError(f"Ray Serve vertex {vertex_name} has an invalid callable wrapper chain") from error
+
+    @staticmethod
+    def _validate_close(vertex_name: str, function) -> None:
+        close = inspect.getattr_static(function, "close", None)
+        if isinstance(close, (classmethod, staticmethod)):
+            close = close.__func__
+        if close is not None:
+            close = ServeRewriter._unwrap_callable(f"{vertex_name} close()", close)
+            if ServeRewriter._is_async_or_generator(close):
+                raise ValueError(
+                    f"Ray Serve vertex {vertex_name} is unsupported; close() must be synchronous and non-generator"
+                )
+
+    @staticmethod
+    def _validate_constructor_context(vertex_name: str, function) -> None:
+        if inspect.isclass(function):
+            try:
+                needs_runtime_context = "runtime_context" in inspect.signature(function.__init__).parameters
+            except (TypeError, ValueError):
+                needs_runtime_context = False
+            if needs_runtime_context:
+                raise ValueError(
+                    f"Ray Serve vertex {vertex_name} is unsupported; callable classes requiring "
+                    "runtime_context cannot run in a Serve deployment"
+                )
+
+    @staticmethod
+    def _is_async_or_generator(function) -> bool:
+        return any(
+            predicate(function)
+            for predicate in (
+                inspect.iscoroutinefunction,
+                inspect.isasyncgenfunction,
+                inspect.isgeneratorfunction,
+            )
+        )
 
     def _connected_components(self, serve_ids: set[VertexId]) -> list[list[VertexId]]:
         seen: set[VertexId] = set()
@@ -194,39 +306,44 @@ class ServeRewriter:
 
     def _splice_in_proxy(self, region: _ServeRegion, proxy: VertexSpec) -> LogicalGraph:
         region_ids = set(region.node_ids)
-        upstream = {
-            vertex_id
-            for region_id in region.node_ids
-            for vertex_id in self._graph.upstream(region_id)
-            if vertex_id not in region_ids
-        }
-        downstream = {
-            vertex_id
-            for region_id in region.node_ids
-            for vertex_id in self._graph.downstream(region_id)
-            if vertex_id not in region_ids
-        }
+        incoming = [edge for edge in self._graph.edges if edge.source not in region_ids and edge.target in region_ids]
+        outgoing = [edge for edge in self._graph.edges if edge.source in region_ids and edge.target not in region_ids]
 
         builder = self._graph.to_builder()
         for vertex_id in region.node_ids:
             builder.remove_vertex(vertex_id)
         builder.add_vertex(proxy)
-        for vertex_id in sorted(upstream, key=lambda candidate: candidate.index):
-            source = self._graph.get(vertex_id)
+        for edge in sorted(incoming, key=lambda candidate: candidate.source.index):
+            source = self._graph.get(edge.source)
             builder.add_edge(
                 EdgeSpec(
-                    vertex_id,
+                    edge.source,
                     proxy.id,
-                    default_partitioner(source.concurrency, proxy.concurrency).to_spec(),
+                    self._retarget_partitioner(edge.partitioner, source.concurrency, proxy.concurrency),
                 )
             )
-        for vertex_id in sorted(downstream, key=lambda candidate: candidate.index):
-            target = self._graph.get(vertex_id)
+        for edge in sorted(outgoing, key=lambda candidate: candidate.target.index):
+            target = self._graph.get(edge.target)
             builder.add_edge(
                 EdgeSpec(
                     proxy.id,
-                    vertex_id,
-                    default_partitioner(proxy.concurrency, target.concurrency).to_spec(),
+                    edge.target,
+                    self._retarget_partitioner(edge.partitioner, proxy.concurrency, target.concurrency),
                 )
             )
         return builder.build()
+
+    @staticmethod
+    def _retarget_partitioner(
+        partitioner: PartitionerSpec,
+        source_concurrency: int | tuple[int, int],
+        target_concurrency: int | tuple[int, int],
+    ) -> PartitionerSpec:
+        if partitioner.topology.pattern is ChannelPattern.FORWARD and source_concurrency != target_concurrency:
+            if partitioner.partitioner_class is not ForwardPartitioner:
+                raise ValueError(
+                    f"Cannot preserve custom FORWARD partitioner {partitioner.name!r} when replacing a Ray Serve "
+                    f"boundary with concurrency {source_concurrency!r} -> {target_concurrency!r}"
+                )
+            return default_partitioner(source_concurrency, target_concurrency).to_spec()
+        return partitioner

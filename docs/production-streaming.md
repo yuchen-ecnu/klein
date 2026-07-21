@@ -60,8 +60,8 @@ def add_amount(left: dict, right: dict) -> dict:
     }
 
 
-def build_pipeline():
-    ctx = ray.klein.reset_context(
+def build_pipeline() -> None:
+    ray.klein.configure(
         {
             "execution.runtime.mode": "streaming",
             "execution.checkpointing.dir": "s3://platform/klein-checkpoints",
@@ -75,7 +75,7 @@ def build_pipeline():
         }
     )
 
-    raw_orders = ctx.read_kafka(
+    raw_orders = ray.klein.read_kafka(
         "orders",
         bootstrap_servers="kafka-1:9092,kafka-2:9092",
         trigger="continuous",
@@ -112,14 +112,13 @@ def build_pipeline():
         rollover_interval=timedelta(minutes=15),
         concurrency=4,
     )
-    return ctx
 
 
 def main() -> None:
     ray.init(address="auto")
-    ctx = build_pipeline()
-    print(ctx.explain("orders"))
-    handle = ctx.execute("orders")
+    build_pipeline()
+    print(ray.klein.explain("orders"))
+    handle = ray.klein.execute("orders")
     print(f"namespace={handle.namespace}")
     try:
         handle.wait()
@@ -185,7 +184,7 @@ s3://platform/klein-checkpoints/orders-production/chk-42
 Add it to the same graph configuration before `execute()`:
 
 ```python
-ctx.configure({
+ray.klein.configure({
     "execution.savepoint.path": (
         "s3://platform/klein-checkpoints/orders-production/chk-42"
     )

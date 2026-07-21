@@ -22,6 +22,7 @@ from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
 )
+from ray.klein.runtime.message import DeliveryChannel
 from ray.klein.runtime.scheduler.errors import DeploymentError, PlacementCleanupError
 from ray.klein.runtime.scheduler.placement import PlacementPlan, PlacementStrategy
 from ray.klein.runtime.scheduler.task_deployment_descriptor import (
@@ -54,7 +55,7 @@ def validate_vertex_statuses(execution_graph: ExecutionGraph) -> None:
         if current_status != ExecutionVertexStatus.CREATED and not current_status.is_terminal:
             raise DeploymentError(
                 "create workers",
-                f"ExecutionVertex '{vertex}' is in {current_status}, which can not be recreated. Please stop first.",
+                f"ExecutionVertex '{vertex.name}' is in {current_status}, which can not be recreated. Please stop first.",
             )
 
 
@@ -80,12 +81,16 @@ def place_workers(
         try:
             plan.rollback()
         except Exception as cleanup_error:
-            raise PlacementCleanupError(
+            cleanup_failure = PlacementCleanupError(
                 strategy.name,
                 error,
                 cleanup_error,
                 plan,
-            ) from error
+            )
+            # Actor construction remains the primary cause while the richer
+            # error retains the exact reservation plan for reconciliation.
+            cleanup_failure.cause = error
+            raise cleanup_failure from error
         raise DeploymentError("create workers", error) from error
     return plan
 
@@ -174,12 +179,19 @@ def build_descriptor(
         )
         for output_edge in graph.output_job_edges(job_vertex.id)
     )
-    input_vertex_ids = tuple(
-        edge.source.id
+    input_channels = tuple(
+        DeliveryChannel(
+            edge.source.id,
+            edge.source.name,
+            graph.output_job_edges(input_edge.source).index(input_edge),
+            edge.target.index,
+            graph.topology_epoch(input_edge.source, input_edge.target),
+        )
         for input_edge in graph.input_job_edges(job_vertex.id)
         for edge in input_edge.execution_edges
         if edge.target.id == vertex.id
     )
+    input_vertex_ids = tuple(channel.sender_vertex_id for channel in input_channels)
     return TaskDeploymentDescriptor(
         operator=job_vertex.operator_spec,
         vertex_id=vertex.id,
@@ -196,6 +208,7 @@ def build_descriptor(
         output_queue=job_vertex.output_queue,
         namespace=graph.namespace,
         input_vertex_ids=input_vertex_ids,
+        input_channels=input_channels,
         restore_operation_id=restore_operation_id,
     )
 
@@ -277,8 +290,20 @@ def _cancel_created_tasks(
 ) -> None:
     for vertex in select_vertices(job_vertex, vertices):
         if vertex.stream_task is not None:
-            klein.kill(vertex.stream_task)
-            vertex.stream_task = None
+            try:
+                klein.kill(vertex.stream_task)
+            except Exception:
+                # Actor creation failures are the primary error.  Teardown is
+                # best-effort here: retain a failed handle for later named-actor
+                # reconciliation, continue cancelling siblings, and never skip
+                # releasing the placement reservation.
+                logger.warning("Failed to cancel partially-created execution vertex %s", vertex, exc_info=True)
+            else:
+                vertex.stream_task = None
+
+
+# Compatibility for callers that imported the former module-local validator.
+_select_vertices = select_vertices
 
 
 def deploy_workers(execution_graph: ExecutionGraph) -> None:

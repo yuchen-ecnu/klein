@@ -5,9 +5,12 @@ import pytest
 from sqlglot import parse_one
 
 from ray.klein import ChangelogRow, KleinContext, RowKind, SQLQueryError
+from ray.klein._internal.sql.execution import _FilterRow
 from ray.klein._internal.sql.streaming import (
+    _AddStreamingExpressions,
     _AsyncAddStreamingExpressions,
     _AsyncRayProjectChangelogRow,
+    _ProjectChangelogRow,
     _RayProjectChangelogRow,
 )
 from ray.klein.api.collector import Collector
@@ -118,6 +121,26 @@ def test_regular_join_emits_insert_and_delete_changes() -> None:
     operator.close()
 
 
+def test_regular_join_does_not_match_or_retain_null_keys() -> None:
+    operator = SQLRegularJoinOperator(
+        left_keys=("o.customer_id",),
+        right_keys=("c.customer_id",),
+    )
+    collector = _open(operator)
+    left = Record({"o.customer_id": None, "o.amount": 10})
+    left.input_tag = 0
+    right = Record({"c.customer_id": None, "c.name": "unknown"})
+    right.input_tag = 1
+
+    operator.process_element(left)
+    operator.process_element(right)
+
+    assert _changes(collector) == []
+    assert list(operator._backend.namespaces(operator._left_state)) == []
+    assert list(operator._backend.namespaces(operator._right_state)) == []
+    operator.close()
+
+
 def test_streaming_planner_builds_managed_join_and_aggregate() -> None:
     context = KleinContext(Configuration("execution.runtime.mode=streaming"))
     orders = context.from_items([{"customer_id": 1, "amount": 10}])
@@ -144,6 +167,18 @@ def test_streaming_global_order_by_follows_flink_restriction() -> None:
 
     with pytest.raises(SQLQueryError, match="ascending time attribute"):
         context.sql("SELECT * FROM orders ORDER BY amount", tables={"orders": orders})
+
+
+@pytest.mark.parametrize("literal", ["1.5", "'2'", "-1"])
+def test_streaming_top_n_rejects_non_integer_limits(literal: str) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    orders = context.from_items([{"amount": 10}])
+
+    with pytest.raises(SQLQueryError, match="non-negative integer literal"):
+        context.sql(
+            f"SELECT * FROM orders ORDER BY amount LIMIT {literal}",
+            tables={"orders": orders},
+        )
 
 
 @pytest.mark.parametrize(
@@ -184,6 +219,31 @@ def test_streaming_aggregate_precomputes_download_inputs_asynchronously() -> Non
     logical = logical_function_of(inputs)
     assert logical.function is _AsyncAddStreamingExpressions
     assert logical.runtime_info.async_buffer_size == 32
+
+
+def test_streaming_sql_plans_klein_scalar_function_projection_and_filter() -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    rows = context.from_items([{"value": 2}])
+    context.sql_session.register_scalar_function("twice", lambda value: value * 2)
+    context.sql_session.register_scalar_function("positive", lambda value: value > 0)
+
+    projected = context.sql("SELECT TWICE(value) AS value FROM rows", tables={"rows": rows})
+    filtered = context.sql("SELECT * FROM rows WHERE POSITIVE(value)", tables={"rows": rows})
+
+    assert logical_function_of(projected).function is _ProjectChangelogRow
+    assert logical_function_of(filtered.input_streams[0]).function is _FilterRow
+
+
+def test_streaming_aggregate_precomputes_klein_scalar_function_inputs() -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    rows = context.from_items([{"amount": 2}])
+    context.sql_session.register_scalar_function("twice", lambda value: value * 2)
+
+    result = context.sql("SELECT SUM(TWICE(amount)) AS total FROM rows", tables={"rows": rows})
+
+    assert isinstance(result.stream_operator, SQLAggregateOperator)
+    logical = logical_function_of(result.input_streams[0])
+    assert logical.function is _AddStreamingExpressions
 
 
 def test_streaming_top_n_emits_retractions_when_rank_changes() -> None:

@@ -1,0 +1,191 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:53+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Install Klein for Ray and build your first bounded and streaming data "
+"pipelines."
+msgstr "安装 Klein for Ray，并构建第一个有界和流式数据管道。"
+
+msgid "Get started with Klein for Ray"
+msgstr "Klein for Ray 快速入门"
+
+msgid ""
+"This guide creates a bounded `DataStream`, executes it explicitly, and "
+"shows how to submit a long-running pipeline."
+msgstr "本指南将创建一个有界 `DataStream`，显式执行它，并演示如何提交长时间运行的管道。"
+
+msgid "Install Klein"
+msgstr "安装 Klein"
+
+msgid ""
+"Create an isolated Python environment and install Klein from the project "
+"checkout:"
+msgstr "创建隔离的 Python 环境，并从项目检出版本安装 Klein："
+
+msgid ""
+"Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional "
+"integrations. Install only the extra required by the application, for "
+"example `.[kafka]`, `.[iceberg]`, `.[rocketmq]`, `.[redis]`, "
+"`.[rocksdb]`, or `.[serve]`. Use `.[all]` for an integration development "
+"environment. RocketMQ also requires the native `librocketmq` runtime on "
+"every worker."
+msgstr ""
+"Kafka、Iceberg、RocketMQ、Redis、RocksDB 和 Serve 均为可选集成。只需安装应用所需的 "
+"extra，例如 `.[kafka]`、`.[iceberg]`、`.[rocketmq]`、`.[redis]`、`.[rocksdb]` 或 "
+"`.[serve]`。集成开发环境请使用 `.[all]`。RocketMQ 还要求每个 worker 都具备原生 "
+"`librocketmq` 运行时。"
+
+msgid "Run a bounded pipeline"
+msgstr "运行有界管道"
+
+msgid ""
+"A terminal operation such as `take_all()` registers a sink. Call `execute"
+"(\"job-name\")` to run every registered sink in the bounded graph:"
+msgstr "`take_all()` 等终结操作会注册 sink。调用 `execute(\"job-name\")` 以运行有界图中所有已注册的 sink："
+
+msgid "The completed job handle returns these rows:"
+msgstr "已完成的作业句柄会返回以下行："
+
+msgid ""
+"Klein creates a lazy graph through the registered terminal sinks. "
+"`execute()` selects batch execution for the bounded source and lowers the"
+" graph to Ray Data."
+msgstr "Klein 通过已注册的终结 sink 创建惰性图。`execute()` 为有界源选择批处理执行，并将图下沉到 Ray Data。"
+
+msgid "Read data with Ray Data"
+msgstr "使用 Ray Data 读取数据"
+
+msgid ""
+"Source construction follows `ray.data`. Call a reader directly from "
+"`ray.klein`, then choose Klein or Ray Data transformations:"
+msgstr "源的构造方式遵循 `ray.data`。直接从 `ray.klein` 调用 reader，然后选择 Klein 或 Ray Data 转换："
+
+msgid ""
+"Klein forwards reader and Dataset arguments to the installed Ray version."
+" See [Ray Data interoperability](ray-data-interop.md) for the execution "
+"boundary and advanced adapters, or the [connector "
+"catalog](connectors/index.md) to choose an input or output and review all"
+" of its options."
+msgstr ""
+"Klein 会将 reader 和 Dataset 参数转发给已安装的 Ray 版本。有关执行边界和高级适配器，请参阅 [Ray Data "
+"互操作性](ray-data-interop.md)；也可以通过[连接器目录](connectors/index.md) "
+"选择输入或输出并查看其全部选项。"
+
+msgid "Submit a dataflow"
+msgstr "提交数据流"
+
+msgid "Register one or more terminal sinks, then submit them together:"
+msgstr "注册一个或多个终结 sink，然后将它们一并提交："
+
+msgid ""
+"`explain()` returns the dataflow plan without submitting it. `execute()` "
+"returns a job handle that you can use to wait for completion or inspect "
+"status."
+msgstr "`explain()` 返回数据流计划，但不会提交它。`execute()` 返回作业句柄，可用来等待作业完成或检查状态。"
+
+msgid ""
+"Bounded sources complete after producing all records. Streaming sources, "
+"such as Kafka or a custom `SourceFunction`, keep the job active until you"
+" stop it or the source terminates."
+msgstr "有界源生成全部记录后便会完成。Kafka 或自定义 `SourceFunction` 等流式源会让作业保持活动，直到用户将其停止或源终止。"
+
+msgid ""
+"The Kafka source emits the same raw byte schema as `ray.data.read_kafka`."
+" It discovers new partitions while running, marks empty inputs idle for "
+"watermark progress, and resumes from the next offsets stored in the "
+"latest checkpoint. For bounded jobs, `write_kafka` uses Ray Data. For "
+"streaming jobs, Klein owns a producer per sink subtask and waits for "
+"Kafka delivery acknowledgements before advancing checkpoint and replay "
+"watermarks. This provides at-least-once delivery: failures can replay a "
+"message, so downstream consumers must tolerate duplicates when exactly-"
+"once processing is required."
+msgstr ""
+"Kafka 源发出与 `ray.data.read_kafka` "
+"相同的原始字节模式。它会在运行期间发现新分区，将空输入标记为空闲以推进水位线，并从最新检查点中存储的下一偏移量恢复。对于有界作业，`write_kafka`"
+" 使用 Ray Data。对于流式作业，Klein 为每个 sink 子任务持有一个 producer，并在推进检查点和重放水位线前等待 "
+"Kafka 交付确认。这提供至少一次交付：故障可能导致消息重放，因此在需要精确一次处理时，下游消费者必须能够容忍重复消息。"
+
+msgid "Configure a pipeline"
+msgstr "配置管道"
+
+msgid ""
+"Use a mapping, a `key=value` string, typed options, or `RAY_KLEIN_*` "
+"environment variables. Explicit code takes precedence over environment "
+"values:"
+msgstr "可使用映射、`key=value` 字符串、类型化选项或 `RAY_KLEIN_*` 环境变量。代码中的显式配置优先于环境变量值："
+
+msgid ""
+"This example selects the optional RocksDB backend; install `.[rocksdb]` "
+"first. The dependency-free default is `memory`."
+msgstr "此示例选择可选的 RocksDB 后端；请先安装 `.[rocksdb]`。不依赖额外组件的默认后端是 `memory`。"
+
+msgid ""
+"See [Configure Klein](configuration.md) for precedence and value "
+"conversion, then use the [configuration reference](configuration-"
+"reference.md) to find every supported key, default, constraint, and "
+"environment variable."
+msgstr ""
+"有关优先级和值转换，请参阅[配置 Klein](configuration.md)；随后可使用[配置参考](configuration-"
+"reference.md) 查找所有受支持的键、默认值、约束和环境变量。"
+
+msgid "Next steps"
+msgstr "后续步骤"
+
+msgid ""
+"Read [Key concepts](key-concepts.md) to understand execution, state, "
+"event time, and recovery."
+msgstr "阅读[核心概念](key-concepts.md)，了解执行、状态、事件时间和恢复。"
+
+msgid ""
+"Build the [production streaming walkthrough](production-streaming.md) "
+"when you are ready to connect Kafka, watermarks, state, checkpoints, and "
+"transactional file output."
+msgstr "准备好连接 Kafka、水位线、状态、检查点和事务型文件输出后，请完成[生产环境流处理实战](production-streaming.md)。"
+
+msgid ""
+"Check the [operator compatibility matrix](operator-compatibility.md) "
+"before mixing Ray Data and native streaming operations."
+msgstr "混用 Ray Data 与原生流式操作前，请查看[算子兼容性矩阵](operator-compatibility.md)。"
+
+msgid ""
+"Follow the [user guides](user-guides.md) to build stateful pipelines and "
+"configure production storage."
+msgstr "按照[用户指南](user-guides.md) 构建有状态管道并配置生产存储。"
+
+#, python-brace-format
+msgid ""
+"Browse the {doc}`API reference <api/api>` for public methods and "
+"configuration options."
+msgstr "浏览 {doc}`API 参考 <api/api>`，了解公共方法和配置选项。"
+
+#~ msgid ""
+#~ "Interactive mode runs a bounded graph"
+#~ " when you call a terminal operation"
+#~ " such as `take_all()`:"
+#~ msgstr "在交互模式下，调用 `take_all()` 等终结操作时会运行有界图："
+
+msgid "Create an isolated Python environment and install the Alpha release:"
+msgstr "创建隔离的 Python 环境并安装 Alpha 版本："
+
+msgid "Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install only the extra required by the application, for example `ray-klein[kafka]`, `ray-klein[iceberg]`, `ray-klein[rocketmq]`, `ray-klein[redis]`, `ray-klein[rocksdb]`, or `ray-klein[serve]`. Use `ray-klein[all]` for an integration development environment. RocketMQ also requires the native `librocketmq` runtime on every worker."
+msgstr "Kafka、Iceberg、RocketMQ、Redis、RocksDB 和 Serve 均为可选集成。请只安装应用所需的额外依赖，例如 `ray-klein[kafka]`、`ray-klein[iceberg]`、`ray-klein[rocketmq]`、`ray-klein[redis]`、`ray-klein[rocksdb]` 或 `ray-klein[serve]`。集成开发环境可使用 `ray-klein[all]`。RocketMQ 还要求每个 Worker 都具备原生 `librocketmq` 运行时。"

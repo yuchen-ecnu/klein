@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 from datetime import timedelta
 
+import pytest
+
 from ray.klein.api.collector import Collector
 from ray.klein.api.keyed_process_function import KeyedProcessFunction
 from ray.klein.api.runtime_info import RuntimeInfo
 from ray.klein.api.session_window import SessionWindow
+from ray.klein.api.sliding_window import SlidingWindow
+from ray.klein.api.time_window import TimeWindow
 from ray.klein.api.tumbling_window import TumblingWindow
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.state_options import StateOptions
@@ -19,6 +23,8 @@ from ray.klein.state.keyed_state_context import KeyedStateContext
 from ray.klein.state.list_state_descriptor import ListStateDescriptor
 from ray.klein.state.map_state_descriptor import MapStateDescriptor
 from ray.klein.state.memory_state_backend import MemoryStateBackend
+from ray.klein.state.timer_domain import TimerDomain
+from ray.klein.state.timer_event import TimerEvent
 from ray.klein.state.timer_service import TimerService
 from ray.klein.state.value_state_descriptor import ValueStateDescriptor
 
@@ -90,6 +96,20 @@ def _open(operator, task_name="stateful-task"):
     operator.name = task_name
     operator.open(collector, context)
     return collector
+
+
+def _sum_window_operator(assigner, *, allowed_lateness=timedelta(0)):
+    return WindowOperator(
+        key_selector=lambda row: row["key"],
+        timestamp_selector=lambda row: row["ts"],
+        assigner=assigner,
+        reduce_function=lambda left, right: {
+            "key": left["key"],
+            "value": left["value"] + right["value"],
+            "ts": max(left["ts"], right["ts"]),
+        },
+        allowed_lateness=allowed_lateness,
+    )
 
 
 def test_keyed_process_state_snapshot_round_trip():
@@ -275,6 +295,100 @@ def test_tumbling_window_drops_events_after_cleanup_watermark():
     operator.close()
 
 
+def test_tumbling_window_accepts_late_data_until_exact_cleanup_boundary():
+    operator = _sum_window_operator(
+        TumblingWindow(timedelta(seconds=1)),
+        allowed_lateness=timedelta(milliseconds=500),
+    )
+    collector = _open(operator)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+
+    operator.on_event_time_watermark(999)
+    operator.process_element(Record({"key": "a", "value": 2, "ts": 200}))
+    operator.on_event_time_watermark(1_498)
+    assert collector.records == []
+
+    operator.on_event_time_watermark(1_499)
+    assert [record.block for record in collector.records] == [{"key": "a", "value": 3, "ts": 200}]
+
+    operator.process_element(Record({"key": "a", "value": 4, "ts": 300}))
+    operator.finish()
+    assert [record.block for record in collector.records] == [{"key": "a", "value": 3, "ts": 200}]
+    assert operator._late_records_metric.value == 1
+    operator.close()
+
+
+def test_sliding_window_emits_each_overlapping_aggregate_in_timer_order():
+    operator = _sum_window_operator(
+        SlidingWindow(
+            timedelta(seconds=1),
+            timedelta(milliseconds=500),
+        )
+    )
+    collector = _open(operator)
+
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 0}))
+    operator.process_element(Record({"key": "a", "value": 2, "ts": 500}))
+    operator.finish()
+
+    assert [record.block for record in collector.records] == [
+        {"key": "a", "value": 1, "ts": 0},
+        {"key": "a", "value": 3, "ts": 500},
+        {"key": "a", "value": 2, "ts": 500},
+    ]
+    operator.close()
+
+
+def test_sliding_window_counts_one_late_record_across_overlapping_windows():
+    operator = _sum_window_operator(
+        SlidingWindow(
+            timedelta(seconds=1),
+            timedelta(milliseconds=500),
+        )
+    )
+    collector = _open(operator)
+
+    operator.on_event_time_watermark(999)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+    operator.finish()
+
+    assert collector.records == []
+    assert operator._late_records_metric.value == 1
+    operator.close()
+
+
+def test_window_ignores_processing_time_timer_for_event_time_state():
+    operator = _sum_window_operator(TumblingWindow(timedelta(seconds=1)))
+    collector = _open(operator)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+
+    namespace = TimeWindow(0, 1_000)
+    operator.timer_service.register_processing_time_timer(0, namespace)
+    operator.on_idle()
+    assert collector.records == []
+
+    operator.on_event_time_watermark(999)
+    assert [record.block for record in collector.records] == [{"key": "a", "value": 1, "ts": 100}]
+    assert operator._timers_fired_metric.value == 2
+    operator.close()
+
+
+def test_window_on_timer_ignores_foreign_timer_domain():
+    operator = _sum_window_operator(TumblingWindow(timedelta(seconds=1)))
+    collector = _open(operator)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+
+    operator.on_timer(
+        TimerEvent(999, "a", TimeWindow(0, 1_000), TimerDomain.PROCESSING_TIME),
+        operator.state_context,
+    )
+    assert collector.records == []
+
+    operator.on_event_time_watermark(999)
+    assert [record.block for record in collector.records] == [{"key": "a", "value": 1, "ts": 100}]
+    operator.close()
+
+
 def test_session_window_merges_overlapping_namespaces():
     operator = WindowOperator(
         key_selector=lambda row: row["key"],
@@ -293,6 +407,94 @@ def test_session_window_merges_overlapping_namespaces():
     operator.finish()
 
     assert [record.block for record in collector.records] == [{"key": "a", "value": 3, "ts": 150}]
+    operator.close()
+
+
+def test_session_window_does_not_merge_events_at_exact_gap_boundary():
+    operator = _sum_window_operator(SessionWindow(timedelta(milliseconds=100)))
+    collector = _open(operator)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+    operator.process_element(Record({"key": "a", "value": 2, "ts": 200}))
+
+    assert operator._backend.namespaces(operator._window_state) == (
+        TimeWindow(100, 200),
+        TimeWindow(200, 300),
+    )
+    operator.finish()
+    assert [record.block for record in collector.records] == [
+        {"key": "a", "value": 1, "ts": 100},
+        {"key": "a", "value": 2, "ts": 200},
+    ]
+    operator.close()
+
+
+def test_session_bridge_event_merges_both_neighboring_sessions():
+    operator = _sum_window_operator(SessionWindow(timedelta(milliseconds=100)))
+    collector = _open(operator)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+    operator.process_element(Record({"key": "a", "value": 2, "ts": 250}))
+    operator.process_element(Record({"key": "a", "value": 4, "ts": 190}))
+
+    assert operator._backend.namespaces(operator._window_state) == (TimeWindow(100, 350),)
+    operator.finish()
+    assert [record.block for record in collector.records] == [{"key": "a", "value": 7, "ts": 250}]
+    operator.close()
+
+
+def test_session_late_event_uses_merged_session_cleanup_boundary():
+    operator = _sum_window_operator(SessionWindow(timedelta(milliseconds=100)))
+    collector = _open(operator)
+    operator.process_element(Record({"key": "a", "value": 1, "ts": 100}))
+    operator.process_element(Record({"key": "a", "value": 2, "ts": 190}))
+
+    operator.on_event_time_watermark(200)
+    operator.process_element(Record({"key": "a", "value": 4, "ts": 50}))
+    assert operator._late_records_metric.value == 0
+
+    operator.on_event_time_watermark(289)
+    assert [record.block for record in collector.records] == [{"key": "a", "value": 7, "ts": 190}]
+
+    operator.process_element(Record({"key": "a", "value": 8, "ts": 50}))
+    assert operator._late_records_metric.value == 1
+    operator.close()
+
+
+def test_window_rejects_sub_millisecond_negative_allowed_lateness():
+    with pytest.raises(ValueError, match="allowed_lateness must not be negative"):
+        _sum_window_operator(
+            TumblingWindow(timedelta(seconds=1)),
+            allowed_lateness=timedelta(microseconds=-1),
+        )
+
+
+def test_window_rejects_missing_event_timestamp():
+    operator = WindowOperator(
+        key_selector=lambda row: row["key"],
+        timestamp_selector=lambda row: row.get("ts"),
+        assigner=TumblingWindow(timedelta(seconds=1)),
+        reduce_function=lambda left, right: right,
+    )
+    _open(operator)
+
+    with pytest.raises(
+        ValueError,
+        match="window timestamp_selector must return a non-negative integer",
+    ):
+        operator.process_element(Record({"key": "a", "value": 1}))
+    operator.close()
+
+
+def test_window_ignores_stale_event_timer_without_state():
+    operator = _sum_window_operator(TumblingWindow(timedelta(seconds=1)))
+    collector = _open(operator)
+    operator.state_context.bind("a", 999)
+
+    operator.on_timer(
+        TimerEvent(999, "a", TimeWindow(0, 1_000), TimerDomain.EVENT_TIME),
+        operator.state_context,
+    )
+
+    assert collector.records == []
     operator.close()
 
 

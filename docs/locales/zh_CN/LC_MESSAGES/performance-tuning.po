@@ -1,0 +1,384 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein for Ray package
+# Simplified Chinese translations for Klein for Ray.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:35+0800\n"
+"PO-Revision-Date: 2026-07-20 11:04+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Measure and tune Klein for Ray concurrency, batching, partitioning, "
+"buffers, replay, state, checkpoints, and placement."
+msgstr "测量并调优 Klein for Ray 的并发、批处理、分区、缓冲区、重放、状态、检查点和放置。"
+
+msgid "Performance tuning"
+msgstr "性能调优"
+
+msgid ""
+"Tune from measurements, one boundary at a time. Increasing concurrency or"
+" buffer capacity can move a bottleneck downstream, increase checkpoint "
+"alignment time, and enlarge the replay window without increasing end-to-"
+"end throughput."
+msgstr "应以测量结果为依据，每次只调优一个边界。提高并发或缓冲区容量可能只是将瓶颈移到下游，增加检查点对齐时间并扩大重放窗口，却无法提高端到端吞吐量。"
+
+msgid "Establish a baseline"
+msgstr "建立基线"
+
+msgid ""
+"Record the following under representative input, state size, and external"
+" service latency:"
+msgstr "在具有代表性的输入、状态大小和外部服务延迟下记录以下数据："
+
+msgid "records in/out per operator;"
+msgstr "每个算子的输入/输出记录数；"
+
+msgid "processing p50/p95/p99 latency;"
+msgstr "处理 p50/p95/p99 延迟；"
+
+msgid "input-buffer utilization and backpressure duration;"
+msgstr "输入缓冲区利用率和背压持续时间；"
+
+msgid "source lag and idle inputs;"
+msgstr "源延迟和空闲输入；"
+
+msgid "checkpoint duration, alignment time, persistence time, and failures;"
+msgstr "检查点持续时间、对齐时间、持久化时间和故障；"
+
+msgid "managed-state size and snapshot/restore duration;"
+msgstr "托管状态大小和快照/恢复持续时间；"
+
+msgid "replay-buffer records and bytes;"
+msgstr "重放缓冲区中的记录数和字节数；"
+
+msgid ""
+"CPU, memory, Object Store pressure, spilling, and network use per Ray "
+"node."
+msgstr "每个 Ray 节点的 CPU、内存、Object Store 压力、溢写和网络使用量。"
+
+msgid ""
+"Use `ray.klein.explain()` to save the logical plan with every benchmark. "
+"A different plan or concurrency topology is a different baseline."
+msgstr "每次基准测试都使用 `ray.klein.explain()` 保存逻辑计划。不同的计划或并发拓扑应视为不同的基线。"
+
+msgid "Diagnose by symptom"
+msgstr "按症状诊断"
+
+msgid "Symptom"
+msgstr "症状"
+
+msgid "Inspect first"
+msgstr "首先检查"
+
+msgid "Likely actions"
+msgstr "建议操作"
+
+msgid "Source lag rises, downstream idle"
+msgstr "源延迟上升，下游空闲"
+
+msgid "Source poll duration, assigned partitions, source CPU"
+msgstr "源轮询持续时间、已分配分区、源 CPU"
+
+msgid ""
+"Increase source concurrency up to useful partitions; increase connector "
+"poll batch size; verify broker throttling."
+msgstr "将源并发提高到有效分区数；增大连接器轮询批大小；确认 broker 是否限流。"
+
+msgid "One transform is CPU-bound"
+msgstr "某个转换受 CPU 限制"
+
+msgid "Operator processing latency and CPU"
+msgstr "算子处理延迟和 CPU"
+
+msgid ""
+"Increase that operator's concurrency/CPU; use `map_batches`; vectorize "
+"the UDF."
+msgstr "提高该算子的并发/CPU；使用 `map_batches`；对 UDF 进行向量化。"
+
+msgid "GPU/model calls underutilized"
+msgstr "GPU/模型调用利用不足"
+
+msgid "Batch fill time, async pending work, service latency"
+msgstr "批次填充时间、异步待处理工作、服务延迟"
+
+msgid ""
+"Increase `batch_size` carefully, set a bounded timeout, or use "
+"`async_buffer_size`; do not chain async operators."
+msgstr "谨慎增大 `batch_size`、设置有界超时，或使用 `async_buffer_size`；不要链接异步算子。"
+
+msgid "High input-buffer utilization"
+msgstr "输入缓冲区利用率高"
+
+msgid "Slow downstream operator, write timeout, backpressure metrics"
+msgstr "慢速下游算子、写入超时、背压指标"
+
+msgid ""
+"Fix the consumer first; then adjust concurrency or batching. Larger "
+"buffers only absorb bursts."
+msgstr "先修复消费方，再调整并发或批处理。更大的缓冲区只能吸收突发流量。"
+
+msgid "Checkpoints are slow"
+msgstr "检查点速度慢"
+
+msgid "Alignment, state snapshot, persistence, sink commit histograms"
+msgstr "对齐、状态快照、持久化、sink 提交直方图"
+
+msgid ""
+"Reduce skew/in-flight buffers, use local RocksDB, review object-store "
+"latency and sink commit time."
+msgstr "减少倾斜/在途缓冲，使用本地 RocksDB，并检查对象存储延迟和 sink 提交时间。"
+
+msgid "Replay memory approaches limit"
+msgstr "重放内存接近上限"
+
+msgid "Replay bytes, downstream acknowledgements, checkpoint cadence"
+msgstr "重放字节数、下游确认、检查点频率"
+
+msgid ""
+"Remove downstream stalls, shorten the durability interval, or raise the "
+"limit only with measured memory headroom."
+msgstr "消除下游停滞、缩短持久化间隔；只有在测得足够内存余量后，才提高上限。"
+
+msgid "Placement startup times out"
+msgstr "放置启动超时"
+
+msgid "Cluster free resources and placement-group bundle"
+msgstr "集群空闲资源和 placement-group bundle"
+
+msgid ""
+"Reduce requests, add nodes, change placement strategy, or select balanced"
+" deployment."
+msgstr "减少资源请求、添加节点、更改放置策略，或选择 balanced deployment。"
+
+msgid "Too many tiny output files"
+msgstr "微小输出文件过多"
+
+msgid "Checkpoint cadence and rolling thresholds"
+msgstr "检查点频率和滚动阈值"
+
+msgid ""
+"Increase checkpoint interval/records or file rolling limits while "
+"preserving recovery objectives."
+msgstr "在满足恢复目标的前提下，提高检查点间隔/记录数或文件滚动限制。"
+
+msgid ""
+"Checkpoint cadence is applied per weakly connected physical execution-"
+"graph domain, not once per source subtask. All sources in one domain "
+"share an epoch; physically disconnected lanes remain independent and can "
+"still produce one set of files per lane and interval."
+msgstr ""
+"检查点节奏按物理执行图的弱连通域应用，而不是按每个源子任务分别应用。同一域中的所有源共享一个 epoch；物理上断开的通道保持独立，仍可按每个通道和间隔生成一组文件。"
+
+msgid "Set operator concurrency"
+msgstr "设置算子并发"
+
+msgid ""
+"`concurrency` creates physical subtasks for native streaming operators "
+"and maps to the relevant Ray Data operation in batch where supported. "
+"Choose it from the scarcer of input parallelism, external-service "
+"capacity, and cluster resources."
+msgstr ""
+"`concurrency` 为原生流式算子创建物理子任务，并在批处理中映射到受支持的相应 Ray Data "
+"操作。应根据输入并行度、外部服务容量和集群资源中最稀缺的一项来选择其值。"
+
+msgid ""
+"Kafka source concurrency above the topic-partition count creates idle "
+"subtasks."
+msgstr "Kafka 源并发高于 topic 分区数时会产生空闲子任务。"
+
+msgid "Keyed operator concurrency cannot exceed `state.keyed.max-parallelism`."
+msgstr "键控算子并发不能超过 `state.keyed.max-parallelism`。"
+
+msgid "Sink concurrency multiplies connections and transaction fan-out."
+msgstr "Sink 并发会成倍增加连接数和事务扇出。"
+
+msgid ""
+"Increasing concurrency during restore redistributes key groups; it does "
+"not change the max-parallelism compatibility value."
+msgstr "恢复期间提高并发会重新分配键组，但不会更改 max-parallelism 兼容性值。"
+
+msgid ""
+"Keep explicit operator names when comparing plans and metrics across "
+"tuning runs. [Autoscaling and live operator rescaling](operator-"
+"rescaling.md) explains when a batch concurrency range is dynamic, how to "
+"resize a running streaming operator, and why `DataStream.rescale()` does "
+"not change parallelism."
+msgstr ""
+"在不同调优运行之间比较计划和指标时，请保留显式算子名称。[自动伸缩与在线算子扩缩容](operator-"
+"rescaling.md)介绍批处理并发范围何时是动态的、如何调整运行中流式算子的并行度，以及 `DataStream.rescale()` "
+"为何不会改变并行度。"
+
+msgid "Choose row or batch processing"
+msgstr "选择逐行处理或批处理"
+
+msgid ""
+"Use `map()` and `flat_map()` for record-oriented logic. Use "
+"`map_batches()` when a library benefits from columnar/vectorized input or"
+" amortized model calls."
+msgstr ""
+"面向记录的逻辑请使用 `map()` 和 `flat_map()`。当库能从列式/向量化输入或分摊模型调用成本中受益时，请使用 "
+"`map_batches()`。"
+
+msgid ""
+"The streaming batch boundary is controlled by an operator's `batch_size` "
+"and `batch_timeout`. A large batch improves throughput but increases "
+"latency, working memory, checkpoint alignment delay, and replay size. A "
+"timeout is required when sparse traffic must not wait indefinitely for a "
+"full batch."
+msgstr ""
+"流式批次边界由算子的 `batch_size` 和 `batch_timeout` "
+"控制。大批次可提高吞吐量，但也会增加延迟、工作内存、检查点对齐延迟和重放大小。当稀疏流量不能无限期等待批次填满时，必须设置超时。"
+
+msgid ""
+"`pipeline.internal.batch-size`, `pipeline.internal.batch-max-rows`, and "
+"`pipeline.internal.batch-max-bytes` control downstream transport micro-"
+"batches; they are distinct from a user UDF's batch size. The first "
+"reached record, row, byte, or idle-time threshold flushes a target lane. "
+"Output row/byte limits and `pipeline.emit-queue.max-batches` are safety "
+"bounds, not throughput targets."
+msgstr ""
+"`pipeline.internal.batch-size`、`pipeline.internal.batch-max-rows` 和 "
+"`pipeline.internal.batch-max-bytes` 控制下游传输微批；它们不同于用户 UDF "
+"的批大小。记录数、行数、字节数或空闲时间阈值中最先达到的一项会刷新目标通道。输出行/字节限制和 `pipeline.emit-queue.max-"
+"batches` 是安全边界，而非吞吐量目标。"
+
+msgid "Operator chaining and columnar passthrough"
+msgstr "算子链接与列式直通"
+
+msgid ""
+"Operator chaining removes an actor hop only when adjacent operators have "
+"a forward edge, matching resource/runtime contracts, no managed state, "
+"and no async execution. Disable `pipeline.operator-chaining.enabled` when"
+" isolating a hot operator, debugging lifecycle behavior, or assigning "
+"different resources."
+msgstr ""
+"只有当相邻算子具有 forward 边、资源/运行时契约匹配、没有托管状态且没有异步执行时，算子链接才会消除一次 actor "
+"跳转。在隔离热点算子、调试生命周期行为或分配不同资源时，请禁用 `pipeline.operator-chaining.enabled`。"
+
+msgid ""
+"`pipeline.columnar-passthrough.enabled` is on by default and keeps "
+"compatible batches column-oriented across an edge. It removes column-to-"
+"row-to-column conversion for batch-heavy UDFs; keyed/custom partitioning "
+"still performs row-level slicing. Large duplicated broadcast batches are "
+"placed in Ray's Object Store once after `pipeline.transport.object-store-"
+"threshold-bytes`."
+msgstr ""
+"`pipeline.columnar-passthrough.enabled` 默认启用，可让兼容批次跨边保持列式形态。它为批处理密集型 UDF "
+"消除列到行再到列的转换；键控/自定义分区仍会执行行级切片。大型重复 broadcast 批次超过 `pipeline.transport"
+".object-store-threshold-bytes` 后，只会在 Ray 的 Object Store 中放置一次。"
+
+msgid "Partitioning and skew"
+msgstr "分区与倾斜"
+
+msgid ""
+"Use `key_by()` only when key affinity or state is required. A hot key "
+"remains hot regardless of total parallelism."
+msgstr "仅在需要键亲和性或状态时使用 `key_by()`。无论总并行度如何，热点键仍然是热点。"
+
+msgid "Use `round_robin()` for even stateless distribution."
+msgstr "使用 `round_robin()` 均匀分配无状态工作。"
+
+msgid ""
+"Use `rescale()` to limit edge fan-out when upstream/downstream "
+"concurrency ratios align."
+msgstr "当上游/下游并发比例合适时，使用 `rescale()` 限制边扇出。"
+
+msgid ""
+"Use `broadcast()` only for small streams; its network and processing cost"
+" multiplies by downstream concurrency."
+msgstr "仅对小型流使用 `broadcast()`；其网络和处理成本会随下游并发成倍增加。"
+
+msgid ""
+"`adaptive_shuffle()` reacts to downstream write timeouts. It cannot "
+"repair a logically hot key whose state must stay on one subtask."
+msgstr "`adaptive_shuffle()` 会响应下游写入超时，但无法修复状态必须保留在单个子任务上的逻辑热点键。"
+
+msgid ""
+"For batch execution, use `stream.data.repartition`, sorting, or the "
+"matching Ray Data operation; Klein streaming partitioners do not tune Ray"
+" Data partitions."
+msgstr ""
+"对于批执行，请使用 `stream.data.repartition`、排序或相应的 Ray Data 操作；Klein 流式分区器不会调优 "
+"Ray Data 分区。"
+
+msgid "State backend and checkpoints"
+msgstr "状态后端与检查点"
+
+msgid ""
+"Memory state has low overhead for moderate state. RocksDB moves mutation-"
+"heavy state to node-local storage and is usually preferable when state no"
+" longer fits comfortably in worker memory. Put its local directory on "
+"fast disposable SSD."
+msgstr ""
+"对于中等大小的状态，内存状态开销较低。RocksDB 将变更密集型状态移至节点本地存储；当状态已无法轻松容纳于 worker "
+"内存时，通常更适合使用 RocksDB。请将其本地目录放在快速、可丢弃的 SSD 上。"
+
+msgid ""
+"The Object Store snapshot cache avoids repeatedly moving large immutable "
+"snapshots through coordinator memory. Lowering its minimum size caches "
+"more objects but increases Object Store metadata and capacity pressure."
+msgstr ""
+"Object Store 快照缓存可避免大型不可变快照反复经过协调器内存。降低其最小大小会缓存更多对象，但会增加 Object Store "
+"元数据和容量压力。"
+
+msgid "Checkpoint cadence is a recovery-time objective:"
+msgstr "检查点频率是一项恢复时间目标："
+
+msgid ""
+"shorter intervals reduce the replay window and time since the last "
+"durable state, but add barrier, snapshot, storage, and sink-commit "
+"overhead;"
+msgstr "更短的间隔可缩小重放窗口和距上次持久状态的时间，但会增加屏障、快照、存储和 sink 提交开销；"
+
+msgid ""
+"longer intervals improve steady-state throughput but increase recovery "
+"work and pending external transactions."
+msgstr "更长的间隔可提高稳态吞吐量，但会增加恢复工作和待处理外部事务。"
+
+msgid ""
+"Record and duration triggers race; whichever fires first resets both. Do "
+"not disable both unless the job intentionally accepts no periodic "
+"recovery point or checkpoint-driven sink publication."
+msgstr "记录数触发器和持续时间触发器会竞速；任一先触发都会重置两者。除非作业有意不接受周期性恢复点或检查点驱动的 sink 发布，否则不要同时禁用两者。"
+
+msgid "Replay and backpressure bounds"
+msgstr "重放与背压边界"
+
+msgid ""
+"The replay buffer keeps output until downstream progress confirms it is "
+"safe to drop. `pipeline.replay-buffer.max-bytes` is a hard guard: "
+"exceeding it fails the task into normal recovery before process OOM. "
+"Raising it should be the last step after fixing stalled acknowledgements "
+"and verifying node memory."
+msgstr ""
+"重放缓冲区会保留输出，直到下游进度确认可以安全丢弃。`pipeline.replay-buffer.max-bytes` "
+"是硬性保护：超过该值会在进程 OOM 前使任务失败并进入正常恢复。只有修复停滞的确认并验证节点内存后，才应最后考虑提高该值。"
+
+msgid ""
+"`pipeline.input-buffer.size` and `pipeline.input-buffer.max-bytes` bound "
+"logical rows and estimated payload bytes. One oversized columnar block is"
+" admitted only into an otherwise empty inbox. The same dual bound applies"
+" to output buffering, so wide records cannot bypass a row-only limit."
+msgstr ""
+"`pipeline.input-buffer.size` 和 `pipeline.input-buffer.max-bytes` "
+"限制逻辑行数和估算的载荷字节数。一个超大列式块只能进入原本为空的 inbox。同样的双重边界也适用于输出缓冲，因此宽记录无法绕过仅基于行数的限制。"
+
+msgid ""
+"After every change, compare throughput, tail latency, checkpoint "
+"duration, failure recovery time, and peak memory. Keep the change only "
+"when the full job, not one isolated operator, improves."
+msgstr "每次变更后，都要比较吞吐量、尾延迟、检查点持续时间、故障恢复时间和内存峰值。只有整个作业而非单个孤立算子得到改善时，才保留该变更。"

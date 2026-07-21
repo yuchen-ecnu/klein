@@ -20,6 +20,7 @@ python -m pip install "ray-klein[kafka]"
 
 ```python
 import ray
+import ray.klein
 
 events = ray.klein.read_kafka(
     ["orders", "refunds"],

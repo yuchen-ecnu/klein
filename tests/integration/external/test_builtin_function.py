@@ -13,6 +13,7 @@ from ray.klein.integrations.redis import (
     RedisValueLookup,
 )
 from tests.support.assertions import assert_rows_equal
+from tests.support.terminal import execute_terminal
 
 ROWS = [
     {"id": "known", "name": "Jack"},
@@ -35,18 +36,12 @@ def seeded_redis(clean_redis):
     return clean_redis
 
 
-def _interactive_context() -> KleinContext:
-    context = KleinContext()
-    context.enable_interactive_mode()
-    return context
-
-
 @pytest.mark.parametrize("batch_size", [None, 2])
 def test_redis_filter_handles_single_rows_and_batches(seeded_redis, batch_size) -> None:
-    context = _interactive_context()
+    context = KleinContext()
     connection = RedisConnectionConfig(seeded_redis.host, port=seeded_redis.port)
 
-    actual = (
+    sink = (
         context.data.from_items(ROWS)
         .filter(
             RedisMissingKeyFilter,
@@ -56,6 +51,7 @@ def test_redis_filter_handles_single_rows_and_batches(seeded_redis, batch_size) 
         )
         .take_all()
     )
+    actual = execute_terminal(sink, job_name=f"redis-filter-{batch_size}")
 
     assert actual == [{"id": "new", "name": "Lucy"}]
 
@@ -81,10 +77,10 @@ def test_redis_lookup_handles_single_rows_and_batches(
     key_prefix: str,
     expected: list[Any],
 ) -> None:
-    context = _interactive_context()
+    context = KleinContext()
     connection = RedisConnectionConfig(seeded_redis.host, port=seeded_redis.port)
 
-    actual = (
+    sink = (
         context.data.from_items(ROWS)
         .map(
             RedisValueLookup,
@@ -97,6 +93,7 @@ def test_redis_lookup_handles_single_rows_and_batches(
         )
         .take_all()
     )
+    actual = execute_terminal(sink, job_name=f"redis-lookup-{data_type.value}-{batch_size}")
 
     expected_rows = [{**row, "redis_value": value} for row, value in zip(ROWS, expected, strict=True)]
     assert_rows_equal(actual, expected_rows)

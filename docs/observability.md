@@ -36,6 +36,7 @@ Operations integrations can consume the stable Python state API:
 
 ```python
 import ray
+import ray.klein
 
 ray.init(address="auto")
 jobs = ray.klein.list_job_snapshots()
@@ -51,6 +52,7 @@ Configure publication and retention with:
 
 ```python
 import ray
+import ray.klein
 
 ray.klein.configure({
     "observability.dashboard.enabled": True,
@@ -145,6 +147,10 @@ external resources. Such a class may set
 `supports_concurrent_rescale = True` only when two task-local instances can
 safely overlap during rollback-preserving handoff.
 
+See [Autoscaling and live operator rescaling](operator-rescaling.md) for the
+batch/streaming distinction, prerequisites, Dashboard and Python procedures,
+state migration, rollback boundary, recovery fence, and current limitations.
+
 The normal scale path does not restart the job. Before the committed topology
 is released, the checkpoint coordinator arms every physical source in the
 target operator's physical `CheckpointDomain` set for one shared stabilization
@@ -181,6 +187,7 @@ the normal Ray driver, worker, and actor logging pipeline. Call
 
 ```python
 import ray
+import ray.klein
 
 ray.klein.configure_logging(level="INFO", log_format="json")
 ```

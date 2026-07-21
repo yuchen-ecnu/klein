@@ -1,0 +1,538 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2024-2026, Klein for Ray Authors
+# This file is distributed under the same license as the Klein for Ray
+# package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 00:53+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Definitions of Klein for Ray streaming, state, checkpoint, SQL, "
+"scheduling, and operations terminology."
+msgstr "Klein for Ray 流处理、状态、检查点、SQL、调度和运维术语的定义。"
+
+msgid "Glossary"
+msgstr "术语表"
+
+msgid ""
+"This glossary defines terms as Klein uses them. A similarly named Ray, "
+"Flink, database, or broker concept can have a different lifecycle or "
+"guarantee."
+msgstr "本术语表按 Klein 中的含义定义术语。Ray、Flink、数据库或 broker 中名称相似的概念可能具有不同的生命周期或保证。"
+
+msgid "Actor"
+msgstr "Actor"
+
+msgid ""
+"A stateful Ray process addressed through a handle. Klein's native "
+"streaming runtime uses actors for long-lived tasks and coordinators."
+msgstr "通过句柄寻址的有状态 Ray 进程。Klein 的原生流处理运行时使用 actor 承载长时间运行的任务和协调器。"
+
+msgid "Aligned checkpoint"
+msgstr "对齐检查点"
+
+msgid ""
+"A checkpoint in which an operator waits for the same barrier epoch on "
+"every active physical input before snapshotting state and forwarding the "
+"barrier. Post-barrier input is held until the cut is complete."
+msgstr "一种检查点：算子在快照状态并转发屏障前，等待每个活动物理输入上的同一屏障 epoch。屏障后的输入会被保留，直到一致性切面完成。"
+
+msgid "At-least-once"
+msgstr "至少一次"
+
+msgid ""
+"A delivery contract that preserves records inside its stated recovery "
+"boundary but can repeat a logical record or external effect after "
+"failure."
+msgstr "一种交付契约：在其声明的恢复边界内保留记录，但在故障后可能重复某条逻辑记录或外部副作用。"
+
+msgid "Backpressure"
+msgstr "反压"
+
+msgid ""
+"Upstream slowing caused by bounded downstream capacity or a slow external"
+" operation. In Klein it is visible through queue, transport, and "
+"backpressure-duration metrics."
+msgstr "由下游容量有界或缓慢的外部操作引起的上游减速。在 Klein 中，可以通过队列、传输和反压持续时间指标观察到它。"
+
+msgid "Barrier"
+msgstr "屏障"
+
+msgid ""
+"An ordered control message separating records before and after one "
+"checkpoint epoch. A barrier cannot overtake earlier records on the same "
+"edge."
+msgstr "一种有序控制消息，用于分隔某个检查点 epoch 前后的记录。屏障无法越过同一条边上更早的记录。"
+
+msgid "Batch execution"
+msgstr "批处理执行"
+
+msgid ""
+"The execution path that lowers a compatible bounded Klein graph to Ray "
+"Data Dataset operations."
+msgstr "将兼容的有界 Klein 图下沉为 Ray Data Dataset 操作的执行路径。"
+
+msgid "Bounded source"
+msgstr "有界数据源"
+
+msgid ""
+"A source with a finite input that can eventually report completion. "
+"Bounded describes input lifetime, not data size."
+msgstr "输入有限且最终能够报告完成的数据源。有界描述的是输入生命周期，而不是数据大小。"
+
+msgid "Changelog row"
+msgstr "Changelog 行"
+
+msgid ""
+"A mapping carrying a `RowKind`: insert (`+I`), update-before (`-U`), "
+"update-after (`+U`), or delete (`-D`). Dynamic-table queries and CDC "
+"formats can emit changelog rows."
+msgstr ""
+"携带 `RowKind` 的映射：插入（`+I`）、更新前（`-U`）、更新后（`+U`）或删除（`-D`）。动态表查询和 CDC 格式可以发出 "
+"changelog 行。"
+
+msgid "Checkpoint"
+msgstr "检查点"
+
+msgid ""
+"A coordinated, durable recovery point containing source positions, "
+"managed state, timers, watermarks, and supported sink committables. A "
+"completed checkpoint is published only after its referenced state is "
+"durable."
+msgstr "一种协调后的持久恢复点，包含数据源位置、托管状态、定时器、水位线和受支持的 Sink 可提交项。只有在其引用的状态持久化后，才会发布已完成的检查点。"
+
+msgid "Checkpoint domain"
+msgstr "检查点域"
+
+msgid ""
+"A weakly connected component of the physical streaming graph that shares "
+"a checkpoint epoch. Disconnected components can make checkpoint progress "
+"independently."
+msgstr "物理流处理图中共享一个检查点 epoch 的弱连通分量。彼此断开的组件可以独立推进检查点。"
+
+msgid "Checkpoint-transactional sink"
+msgstr "检查点事务型 Sink"
+
+msgid ""
+"A sink that keeps prepared output private until the matching checkpoint "
+"is durable and whose commit can be retried idempotently. This term "
+"describes visibility at the sink boundary, not every side effect in an "
+"end-to-end job."
+msgstr ""
+"一种 Sink：在对应检查点持久化前将已预备输出保持为私有，并且其提交可幂等重试。该术语描述的是 Sink "
+"边界上的可见性，而不是端到端作业中的每个副作用。"
+
+msgid "Chaining"
+msgstr "算子链"
+
+msgid ""
+"Combining compatible adjacent operators into one physical task to remove "
+"an actor and serialization boundary. The chain becomes one scheduling, "
+"failure, and live-rescaling unit."
+msgstr "将兼容的相邻算子合并到一个物理任务中，以消除一个 actor 和序列化边界。合并后的链成为单个调度、故障和在线扩缩单元。"
+
+msgid "Collector"
+msgstr "收集器"
+
+msgid ""
+"The runtime interface through which a source or operator emits records "
+"and ordered control messages downstream."
+msgstr "数据源或算子用来向下游发出记录和有序控制消息的运行时接口。"
+
+msgid "Committable"
+msgstr "可提交项"
+
+msgid ""
+"A serializable description of prepared sink output. The checkpoint "
+"coordinator persists it and performs the second-phase commit after the "
+"global checkpoint becomes durable."
+msgstr "对已预备 Sink 输出的可序列化描述。检查点协调器会将其持久化，并在全局检查点持久化后执行第二阶段提交。"
+
+msgid "Concurrency"
+msgstr "并发度"
+
+msgid ""
+"The number of physical workers for an operator. In Ray Data, a `(min, "
+"max)` tuple can describe an autoscaling actor pool; in native streaming, "
+"the lower value is the initial parallelism and live changes are explicit."
+msgstr ""
+"一个算子的物理 worker 数量。在 Ray Data 中，`(min, max)` 元组可以描述自动扩缩 actor "
+"池；在原生流处理中，下限值是初始并行度，在线变更需要显式执行。"
+
+msgid "Control plane"
+msgstr "控制平面"
+
+msgid ""
+"The components that compile, schedule, monitor, checkpoint, recover, and "
+"control a job. They coordinate the data plane but do not proxy every "
+"record."
+msgstr "编译、调度、监控、检查点、恢复和控制作业的组件。它们协调数据平面，但不会代理每条记录。"
+
+msgid "Data plane"
+msgstr "数据平面"
+
+msgid ""
+"The ordered physical paths over which streaming tasks exchange records, "
+"micro-batches, barriers, and watermarks."
+msgstr "流处理任务交换记录、微批、屏障和水位线的有序物理路径。"
+
+msgid "DataStream"
+msgstr "DataStream"
+
+msgid ""
+"A lazy logical stream plus the operations required to produce it. Calling"
+" a transformation builds a graph; a sink and terminal execution submit "
+"it."
+msgstr "一个惰性逻辑流及生成它所需的操作。调用转换会构建图；添加 Sink 并执行终止操作会提交该图。"
+
+msgid "Detached actor"
+msgstr "分离 actor"
+
+msgid ""
+"A Ray actor whose lifetime is not owned by the driver that created it. "
+"Klein uses detached control actors so a submitted streaming job can "
+"outlive its original driver."
+msgstr ""
+"生命周期不归创建它的 driver 所有的 Ray actor。Klein 使用分离的控制 actor，使已提交的流作业可以比其原始 driver"
+" 存活更久。"
+
+msgid "Driver"
+msgstr "Driver"
+
+msgid ""
+"The Python process that builds the logical graph through module-level "
+"APIs and submits it. The driver is distinct from the streaming "
+"JobManager."
+msgstr "通过模块级 API 构建逻辑图并提交它的 Python 进程。driver 与流处理 JobManager 不同。"
+
+msgid "Dynamic table"
+msgstr "动态表"
+
+msgid ""
+"The relational view of a changing stream. Each input change can update "
+"the materialized table and produce one or more changelog rows."
+msgstr "变化数据流的关系视图。每个输入变更都可能更新物化表，并生成一行或多行 changelog。"
+
+msgid "Event time"
+msgstr "事件时间"
+
+msgid ""
+"Time carried by records and advanced by watermarks, rather than the "
+"worker's wall clock. Event time drives event-time windows and timers."
+msgstr "由记录携带并通过水位线推进的时间，而不是 worker 的墙上时钟时间。事件时间驱动事件时间窗口和定时器。"
+
+msgid "Execution mode"
+msgstr "执行模式"
+
+msgid ""
+"`batch`, `streaming`, or `auto`. The selected mode applies to the whole "
+"job."
+msgstr "`batch`、`streaming` 或 `auto`。所选模式应用于整个作业。"
+
+msgid "Execution graph"
+msgstr "执行图"
+
+msgid ""
+"The physical graph after logical optimization, chaining, partitioning, "
+"and expansion by concurrency. Its vertices represent deployable task "
+"instances."
+msgstr "经过逻辑优化、算子链合并、分区和按并发度展开后的物理图。其顶点表示可部署的任务实例。"
+
+msgid "Idle input"
+msgstr "空闲输入"
+
+msgid ""
+"A physical input temporarily excluded from a multi-input watermark "
+"minimum because it has no data. It becomes active before a resumed record"
+" is processed."
+msgstr "因没有数据而暂时从多输入水位线最小值计算中排除的物理输入。恢复的记录被处理前，该输入会重新变为活动状态。"
+
+msgid "Interactive mode"
+msgstr "交互模式"
+
+msgid ""
+"A development mode in which a bounded terminal operation runs its graph "
+"and returns a result immediately. It is separate from in-process debug "
+"mode."
+msgstr "一种开发模式：有界终止操作运行其图并立即返回结果。它与进程内调试模式不同。"
+
+msgid "Job ID"
+msgstr "作业 ID"
+
+msgid ""
+"The identifier used by the state API and published snapshots. In the "
+"current streaming runtime it is the Klein Ray namespace; consumers should"
+" still read the `job_id` field instead of deriving it."
+msgstr ""
+"状态 API 和已发布快照使用的标识符。在当前流处理运行时中，它是 Klein Ray 命名空间；使用方仍应读取 `job_id` "
+"字段，而不是自行推导。"
+
+msgid "JobManager"
+msgstr "JobManager"
+
+msgid ""
+"The per-job control actor that owns job status, the execution graph, "
+"scheduling, recovery, progress snapshots, and live operator rescaling."
+msgstr "每个作业独有的控制 actor，负责作业状态、执行图、调度、恢复、进度快照和在线算子扩缩。"
+
+msgid "Key group"
+msgstr "键组"
+
+msgid ""
+"A stable bucket in the keyed-state hash space. Contiguous key-group "
+"ranges move between subtasks when stateful operator parallelism changes."
+msgstr "键控状态哈希空间中的稳定桶。有状态算子并行度变化时，连续的键组范围会在子任务之间移动。"
+
+msgid "Keyed state"
+msgstr "键控状态"
+
+msgid ""
+"Managed state scoped first to an operator and then to the current record "
+"key. Klein exposes value, list, and map handles through "
+"`KeyedStateContext`."
+msgstr "先限定于算子、再限定于当前记录键的托管状态。Klein 通过 `KeyedStateContext` 提供值、列表和映射句柄。"
+
+msgid "KleinContext"
+msgstr "KleinContext"
+
+msgid ""
+"The advanced explicit owner used to isolate graph construction. Ordinary "
+"module-level APIs keep this implementation detail out of application "
+"code."
+msgstr "用于隔离图构建的高级显式所有者。常规模块级 API 不会向应用代码暴露这一实现细节。"
+
+msgid "Logical graph"
+msgstr "逻辑图"
+
+msgid ""
+"The lazy user-facing graph before optimization, chaining, resource "
+"planning, and physical task expansion."
+msgstr "优化、算子链合并、资源规划和物理任务展开之前，面向用户的惰性图。"
+
+msgid "Managed state"
+msgstr "托管状态"
+
+msgid ""
+"State whose lifecycle, partitioning, snapshot, restore, TTL, and "
+"rescaling are coordinated by Klein rather than manually stored in a UDF "
+"object."
+msgstr "生命周期、分区、快照、恢复、TTL 和扩缩由 Klein 协调的状态，而不是手动存储在 UDF 对象中的状态。"
+
+msgid "Maximum parallelism"
+msgstr "最大并行度"
+
+msgid ""
+"The fixed number of key groups configured by `state.keyed.max-"
+"parallelism`. It bounds keyed operator parallelism and is checkpoint "
+"compatibility metadata."
+msgstr "由 `state.keyed.max-parallelism` 配置的固定键组数量。它限制键控算子的并行度，也是检查点兼容性元数据。"
+
+msgid "Micro-batch"
+msgstr "微批"
+
+msgid ""
+"A bounded group of logical records transferred together in the native "
+"streaming data plane. It reduces RPC overhead without changing record-"
+"level operator semantics."
+msgstr "在原生流处理数据平面中一同传输的一组有界逻辑记录。它在不改变记录级算子语义的情况下减少 RPC 开销。"
+
+msgid "Namespace"
+msgstr "命名空间"
+
+msgid ""
+"The Ray namespace containing a streaming job's named actors. An explicit "
+"`job.namespace` is useful for operations; otherwise Klein creates a "
+"unique `klein-<job>-<id>` value."
+msgstr ""
+"包含流作业具名 actor 的 Ray 命名空间。显式 `job.namespace` 对运维很有用；否则 Klein 会创建唯一的 "
+"`klein-<job>-<id>` 值。"
+
+msgid "Object Store"
+msgstr "Object Store"
+
+msgid ""
+"Ray's distributed shared-memory store for immutable objects. Klein can "
+"cache large snapshot fragments there for fast recovery, but the Object "
+"Store is not durable checkpoint storage."
+msgstr "Ray 用于不可变对象的分布式共享内存存储。Klein 可以在其中缓存大型快照片段以加快恢复，但 Object Store 不是持久检查点存储。"
+
+msgid "Operator"
+msgstr "算子"
+
+msgid ""
+"A logical transformation or source/sink stage. Chaining can place several"
+" logical functions in one physical operator."
+msgstr "逻辑转换或数据源/Sink 阶段。算子链可以将多个逻辑函数放在一个物理算子中。"
+
+msgid "Operator parallelism"
+msgstr "算子并行度"
+
+msgid ""
+"The number of physical subtasks executing an operator. It is distinct "
+"from Ray cluster node count and from `DataStream.rescale()` partition "
+"routing."
+msgstr "执行一个算子的物理子任务数量。它不同于 Ray 集群节点数量，也不同于 `DataStream.rescale()` 的分区路由。"
+
+msgid "Partitioner"
+msgstr "分区器"
+
+msgid ""
+"The routing policy from an upstream operator to downstream subtasks. "
+"Built-in policies include forward, round-robin, rescale, broadcast, key, "
+"and adaptive routing."
+msgstr ""
+"从上游算子到下游子任务的路由策略。内置策略包括 forward、round-robin、rescale、broadcast、key 和 "
+"adaptive 路由。"
+
+msgid "Processing time"
+msgstr "处理时间"
+
+msgid ""
+"Time from the task process's clock. It can drive processing-time timers "
+"but does not describe when an event occurred at the source."
+msgstr "来自任务进程时钟的时间。它可以驱动处理时间定时器，但不表示事件在数据源处发生的时间。"
+
+msgid "Replay buffer"
+msgstr "重放缓冲区"
+
+msgid ""
+"Bounded upstream data retained until downstream progress acknowledges it."
+" It supports single-task at-least-once recovery and fails fast at its "
+"configured byte limit."
+msgstr "在下游进度确认数据前保留的有界上游数据。它支持单任务至少一次恢复，并在达到配置的字节限制时快速失败。"
+
+msgid "Resource plan"
+msgstr "资源计划"
+
+msgid ""
+"The compiled description of operator concurrency, CPU/GPU requests, and "
+"graph edges returned by `explain()` and optionally persisted for "
+"inspection or override."
+msgstr "由 `explain()` 返回的算子并发度、CPU/GPU 请求和图边的编译后描述，可选择将其持久化以供检查或覆盖。"
+
+msgid "Restore path"
+msgstr "恢复路径"
+
+msgid ""
+"The completed checkpoint URI supplied through `execution.savepoint.path` "
+"when resubmitting a job. Despite the option name, Klein does not yet "
+"create a separately managed Flink-style savepoint."
+msgstr ""
+"重新提交作业时通过 `execution.savepoint.path` 提供的已完成检查点 URI。尽管选项名称如此，Klein "
+"尚不能创建单独管理的 Flink 风格 savepoint。"
+
+msgid "Row kind"
+msgstr "行类型"
+
+msgid ""
+"The change operation attached to a changelog row: insert, update-before, "
+"update-after, or delete."
+msgstr "附加到 changelog 行的变更操作：插入、更新前、更新后或删除。"
+
+msgid "Sink"
+msgstr "Sink"
+
+msgid ""
+"A terminal operator that publishes or collects a stream. Creating one "
+"registers it for the next execution; passing sink roots to `execute()` "
+"can select a subset explicitly. The older interactive terminal behavior "
+"is deprecated."
+msgstr "发布或收集数据流的终结算子。创建终结算子会将其注册到下一次执行；向 `execute()` 传入 sink 根节点可显式选择其中一部分。旧版交互式终结行为已弃用。"
+
+msgid "Source"
+msgstr "数据源"
+
+msgid ""
+"An operator that introduces records and source progress into a graph. A "
+"source is bounded or unbounded and can participate in checkpoint "
+"recovery."
+msgstr "将记录和数据源进度引入图中的算子。数据源可以有界或无界，也可以参与检查点恢复。"
+
+msgid "State backend"
+msgstr "状态后端"
+
+msgid ""
+"The worker-local implementation of managed state. Klein currently "
+"provides memory and optional RocksDB backends; both rely on durable "
+"checkpoints for recovery across worker or cluster loss."
+msgstr "托管状态在 worker 本地的实现。Klein 当前提供内存和可选 RocksDB 后端；两者都依赖持久检查点从 worker 或集群丢失中恢复。"
+
+msgid "State TTL"
+msgstr "状态 TTL"
+
+msgid ""
+"A policy that expires keyed state after an idle duration according to its"
+" update and visibility rules. TTL bounds storage at the cost of "
+"forgetting old relationships."
+msgstr "一种策略：按照更新和可见性规则，在键控状态空闲一段时间后将其过期。TTL 以遗忘旧关系为代价限制存储。"
+
+msgid "Streaming execution"
+msgstr "流处理执行"
+
+msgid ""
+"Klein's native long-running actor runtime with ordered transport, managed"
+" state, watermarks, checkpoints, replay, and recovery."
+msgstr "Klein 的原生长时间运行 actor 运行时，具有有序传输、托管状态、水位线、检查点、重放和恢复能力。"
+
+msgid "Subtask"
+msgstr "子任务"
+
+msgid ""
+"One physical parallel instance of an operator, identified by a zero-based"
+" subtask index."
+msgstr "一个算子的单个物理并行实例，由从零开始的子任务索引标识。"
+
+msgid "Timer"
+msgstr "定时器"
+
+msgid ""
+"A keyed callback registered for a processing-time or event-time timestamp"
+" and included in managed state snapshots."
+msgstr "为处理时间或事件时间时间戳注册的键控回调，会包含在托管状态快照中。"
+
+msgid "Two-phase commit"
+msgstr "两阶段提交"
+
+msgid ""
+"A sink protocol that prepares output during processing and publishes it "
+"only after checkpoint durability. Commit and abort operations must be "
+"idempotent."
+msgstr "一种 Sink 协议：在处理期间预备输出，仅在检查点持久化后发布。提交和中止操作必须幂等。"
+
+msgid "Unbounded source"
+msgstr "无界数据源"
+
+msgid ""
+"A source that can continue producing records indefinitely and therefore "
+"selects native streaming execution in `auto` mode."
+msgstr "可以无限期持续生成记录的数据源，因此在 `auto` 模式下会选择原生流处理执行。"
+
+msgid "Watermark"
+msgstr "水位线"
+
+msgid ""
+"An event-time progress statement. A multi-input operator uses the minimum"
+" watermark of all active inputs, and an idle input does not hold back "
+"that minimum."
+msgstr "事件时间进度声明。多输入算子使用所有活动输入水位线的最小值；空闲输入不会阻碍该最小值推进。"
+
+msgid "Window"
+msgstr "窗口"
+
+msgid ""
+"A finite event-time grouping assigned per key. Klein supports tumbling, "
+"sliding, and session window assigners through the native API."
+msgstr "按键分配的有限事件时间分组。Klein 通过原生 API 支持滚动、滑动和会话窗口分配器。"

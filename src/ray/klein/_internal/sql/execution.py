@@ -10,10 +10,17 @@ from sqlglot import exp
 from ray.klein._internal.frozen_mapping import FrozenMapping
 from ray.klein._internal.sql.expression import evaluate_expression
 from ray.klein._internal.sql.ray_data_expression import to_ray_data_expression
+from ray.klein._internal.sql.scalar_function_registry import ScalarFunction
 from ray.klein.api.sql_query_error import SQLQueryError
 
 if TYPE_CHECKING:
     from ray.data import Dataset
+
+
+def _function_options(
+    functions: Mapping[str, ScalarFunction] | None,
+) -> dict[str, Mapping[str, ScalarFunction]]:
+    return {"functions": functions} if functions else {}
 
 
 class _QualifyRow:
@@ -25,16 +32,26 @@ class _QualifyRow:
 
 
 class _FilterRow:
-    def __init__(self, expression: exp.Expression) -> None:
+    def __init__(
+        self,
+        expression: exp.Expression,
+        functions: Mapping[str, ScalarFunction] | None = None,
+    ) -> None:
         self._expression = expression
+        self._functions = FrozenMapping(functions or {})
 
     def __call__(self, row: dict[str, Any]) -> bool:
-        return evaluate_expression(self._expression, row) is True
+        return evaluate_expression(self._expression, row, self._functions) is True
 
 
 class _ProjectRow:
-    def __init__(self, projections: Sequence[exp.Expression]) -> None:
+    def __init__(
+        self,
+        projections: Sequence[exp.Expression],
+        functions: Mapping[str, ScalarFunction] | None = None,
+    ) -> None:
         self._projections = tuple(projections)
+        self._functions = FrozenMapping(functions or {})
 
     def __call__(self, row: dict[str, Any]) -> dict[str, Any]:
         from sqlglot import exp
@@ -51,7 +68,7 @@ class _ProjectRow:
             name = projection.alias_or_name or projection.sql()
             if name in result:
                 raise SQLQueryError(f"Duplicate SQL output column {name!r}; add an explicit alias")
-            result[name] = evaluate_expression(value_expression, row)
+            result[name] = evaluate_expression(value_expression, row, self._functions)
         return result
 
     @staticmethod
@@ -88,13 +105,18 @@ class _FinalizeProjection:
 
 
 class _AddExpressions:
-    def __init__(self, expressions: Sequence[tuple[str, exp.Expression]]) -> None:
+    def __init__(
+        self,
+        expressions: Sequence[tuple[str, exp.Expression]],
+        functions: Mapping[str, ScalarFunction] | None = None,
+    ) -> None:
         self._expressions = tuple(expressions)
+        self._functions = FrozenMapping(functions or {})
 
     def __call__(self, row: dict[str, Any]) -> dict[str, Any]:
         result = dict(row)
         for name, expression in self._expressions:
-            result[name] = evaluate_expression(expression, row)
+            result[name] = evaluate_expression(expression, row, self._functions)
         return result
 
 
@@ -397,6 +419,7 @@ def _aggregate_select(
     aliases: Sequence[str],
     input_blocks: int | None,
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     group = select.args.get("group")
     group_expressions = tuple(group.expressions) if group is not None else ()
@@ -408,6 +431,7 @@ def _aggregate_select(
             computed,
             aliases=aliases,
             num_cpus=num_cpus,
+            **_function_options(functions),
         )
     grouped = dataset.groupby(
         _group_key(group_fields),
@@ -431,6 +455,7 @@ def _add_sql_expressions(
     *,
     aliases: Sequence[str],
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     fallback: list[tuple[str, exp.Expression]] = []
     for name, expression in expressions:
@@ -440,7 +465,7 @@ def _add_sql_expressions(
         else:
             dataset = dataset.with_column(name, ray_expression, num_cpus=num_cpus)
     if fallback:
-        dataset = dataset.map(_AddExpressions(fallback), num_cpus=num_cpus)
+        dataset = dataset.map(_AddExpressions(fallback, functions), num_cpus=num_cpus)
     return dataset
 
 
@@ -450,6 +475,7 @@ def _project_select(
     *,
     aliases: Sequence[str],
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     computed: list[tuple[str, exp.Expression]] = []
     fields: list[tuple[str | None, str | None]] = []
@@ -476,8 +502,21 @@ def _project_select(
         computed,
         aliases=aliases,
         num_cpus=num_cpus,
+        **_function_options(functions),
     )
     return dataset.map(_FinalizeProjection(fields), num_cpus=num_cpus)
+
+
+def _parse_limit_literal(expression: exp.Expression) -> int:
+    if not isinstance(expression, exp.Literal) or expression.is_string:
+        raise SQLQueryError("LIMIT must be a non-negative integer literal")
+    try:
+        value = int(expression.this)
+    except (TypeError, ValueError) as error:
+        raise SQLQueryError("LIMIT must be a non-negative integer literal") from error
+    if value < 0:
+        raise SQLQueryError("LIMIT must be a non-negative integer literal")
+    return value
 
 
 def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
@@ -499,13 +538,7 @@ def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
 
     limit = select.args.get("limit")
     if limit is not None:
-        expression = limit.expression
-        if not isinstance(expression, exp.Literal) or expression.is_string:
-            raise SQLQueryError("LIMIT must be a non-negative integer literal")
-        value = int(expression.this)
-        if value < 0:
-            raise SQLQueryError("LIMIT must be a non-negative integer literal")
-        dataset = dataset.limit(value)
+        dataset = dataset.limit(_parse_limit_literal(limit.expression))
     return dataset
 
 
@@ -515,6 +548,7 @@ def _execute_select(
     inherited_ctes: Mapping[str, Dataset],
     *,
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     import ray.data
 
@@ -550,7 +584,7 @@ def _execute_select(
     if where is not None:
         predicate = to_ray_data_expression(where.this, aliases, predicate=True)
         if predicate is None:
-            dataset = dataset.filter(_FilterRow(where.this), num_cpus=num_cpus)
+            dataset = dataset.filter(_FilterRow(where.this, functions), num_cpus=num_cpus)
         else:
             dataset = dataset.filter(expr=predicate, num_cpus=num_cpus)
     if select.args.get("having") is not None:
@@ -565,6 +599,7 @@ def _execute_select(
             aliases=aliases,
             input_blocks=input_blocks,
             num_cpus=num_cpus,
+            **_function_options(functions),
         )
     else:
         dataset = _project_select(
@@ -572,6 +607,7 @@ def _execute_select(
             dataset,
             aliases=aliases,
             num_cpus=num_cpus,
+            **_function_options(functions),
         )
     return _apply_order_and_limit(select, dataset)
 
@@ -582,6 +618,7 @@ def _execute_query_ast(
     ctes: Mapping[str, Dataset],
     *,
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     from sqlglot import exp
 
@@ -596,18 +633,19 @@ def _execute_query_ast(
                 datasets,
                 nested_ctes,
                 num_cpus=num_cpus,
+                **_function_options(functions),
             )
         query = query.copy()
         query.set("with_", None)
         ctes = nested_ctes
 
     if isinstance(query, exp.Select):
-        return _execute_select(query, datasets, ctes, num_cpus=num_cpus)
+        return _execute_select(query, datasets, ctes, num_cpus=num_cpus, **_function_options(functions))
     if isinstance(query, exp.Union):
         if query.args.get("distinct") is not False:
             raise SQLQueryError("UNION DISTINCT is not supported yet; use UNION ALL")
-        left = _execute_query_ast(query.this, datasets, ctes, num_cpus=num_cpus)
-        right = _execute_query_ast(query.expression, datasets, ctes, num_cpus=num_cpus)
+        left = _execute_query_ast(query.this, datasets, ctes, num_cpus=num_cpus, **_function_options(functions))
+        right = _execute_query_ast(query.expression, datasets, ctes, num_cpus=num_cpus, **_function_options(functions))
         return left.union(right)
     raise SQLQueryError(f"Unsupported SQL query form: {query.key.upper()}")
 
@@ -618,6 +656,7 @@ def execute_sql_query(
     datasets: Sequence[Dataset],
     *,
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     """Lower a SQLGlot query AST to a native, lazy Ray Dataset DAG."""
 
@@ -631,11 +670,17 @@ def execute_sql_query(
         dict(zip(table_names, datasets, strict=True)),
         {},
         num_cpus=num_cpus,
+        **_function_options(functions),
     )
 
 
-def sql_source(query: str, *, num_cpus: float) -> Dataset:
-    return execute_sql_query(query, (), (), num_cpus=num_cpus)
+def sql_source(
+    query: str,
+    *,
+    num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
+) -> Dataset:
+    return execute_sql_query(query, (), (), num_cpus=num_cpus, **_function_options(functions))
 
 
 def sql_transform(
@@ -644,10 +689,12 @@ def sql_transform(
     table_names: Sequence[str],
     *other_datasets: Dataset,
     num_cpus: float,
+    functions: Mapping[str, ScalarFunction] | None = None,
 ) -> Dataset:
     return execute_sql_query(
         query,
         table_names,
         (primary, *other_datasets),
         num_cpus=num_cpus,
+        **_function_options(functions),
     )

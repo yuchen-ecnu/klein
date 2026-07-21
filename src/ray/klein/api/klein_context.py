@@ -3,7 +3,10 @@ import inspect
 import random
 import string
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+import warnings
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from threading import RLock
 from typing import (
@@ -21,6 +24,7 @@ from ray.klein.api.data_stream import DataStream
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.job_client import JobClient
 from ray.klein.api.job_handle import JobHandle
+from ray.klein.api.node_type import NodeType
 from ray.klein.api.ray_data import (
     RayDataCall,
     RayDataContextAdapter,
@@ -34,8 +38,10 @@ from ray.klein.runtime.backend.collection_source import CollectionSource
 from ray.klein.runtime.resources import Resources
 
 if TYPE_CHECKING:
+    from ray.klein._internal.sql.scalar_function_registry import ScalarFunction
     from ray.klein.api.row_kind import RowKind
     from ray.klein.api.sql_session import SQLSession
+    from ray.klein.api.table_factory import TableFactory
 
 
 logger = get_logger(__name__)
@@ -83,18 +89,24 @@ def _rocketmq_source_class() -> type[SourceFunction]:
 
 
 class KleinContext:
-    """Configuration and graph builder for one Klein pipeline.
+    """Advanced configuration and graph owner for one isolated pipeline.
 
-    ``current()``, ``install()``, and ``reset()`` back the concise module-level
-    API while direct construction provides isolated pipeline contexts.
+    Ordinary applications use the module-level source, terminal, and
+    :func:`execute` APIs. Direct construction remains available when one
+    process must build explicitly isolated pipelines.
     """
 
     _current: ClassVar["KleinContext | None"] = None
+    _scoped_current: ClassVar[ContextVar["KleinContext | None"]] = ContextVar(
+        "ray_klein_scoped_context",
+        default=None,
+    )
     _lock: ClassVar[RLock] = RLock()
 
     def __init__(self, configuration: ConfigInput = None) -> None:
         self._config = configuration if isinstance(configuration, Configuration) else Configuration(configuration)
         self._sinks: list[StreamSink] = []
+        self._inflight_sink_ids: set[int] = set()
         self._last_stream_id = 0
         self.interactive_mode_enabled = False
         self._sql_session = None
@@ -105,6 +117,9 @@ class KleinContext:
 
     @classmethod
     def current(cls) -> "KleinContext":
+        scoped = cls._scoped_current.get()
+        if scoped is not None:
+            return scoped
         with cls._lock:
             if cls._current is None:
                 cls._current = cls()
@@ -114,15 +129,34 @@ class KleinContext:
     def install(cls, context: "KleinContext") -> "KleinContext":
         if not isinstance(context, cls):
             raise TypeError(f"context must be {cls.__name__}, got {type(context).__name__}")
+        if cls._scoped_current.get() is not None:
+            cls._scoped_current.set(context)
+            return context
         with cls._lock:
             cls._current = context
         return context
 
     @classmethod
     def reset(cls, configuration: ConfigInput = None) -> "KleinContext":
+        if cls._scoped_current.get() is not None:
+            context = cls(configuration)
+            cls._scoped_current.set(context)
+            return context
         with cls._lock:
             cls._current = cls(configuration)
             return cls._current
+
+    @classmethod
+    @contextmanager
+    def _isolated(cls, configuration: ConfigInput = None) -> Iterator["KleinContext"]:
+        """Temporarily route module-level APIs to a fresh context in this execution scope."""
+
+        context = cls(configuration)
+        token = cls._scoped_current.set(context)
+        try:
+            yield context
+        finally:
+            cls._scoped_current.reset(token)
 
     @property
     def config(self) -> Configuration:
@@ -134,7 +168,8 @@ class KleinContext:
     def sinks(self) -> tuple[StreamSink, ...]:
         """Terminal streams registered with this context."""
 
-        return tuple(self._sinks)
+        with self._lock:
+            return tuple(self._sinks)
 
     def configure(self, options: ConfigInput = None) -> "KleinContext":
         """Overlay explicit code configuration and return this context."""
@@ -164,12 +199,15 @@ class KleinContext:
         /,
         *,
         tables: Mapping[str, "DataStream"] | None = None,
+        functions: Mapping[str, "ScalarFunction"] | None = None,
         num_cpus: float = 1.0,
     ) -> "DataStream":
-        """Build lazy SQL over bounded DataStreams in this context.
+        """Build lazy SQL over DataStreams in this context.
 
         When ``tables`` is omitted, named DataStream variables in the caller's
-        scope are discovered in the same style as ``daft.sql``.
+        scope are discovered. Bounded inputs use the batch SQL planner; an
+        unbounded input or explicit streaming mode uses the supported
+        continuous SQL subset.
         """
 
         if tables is None:
@@ -184,6 +222,7 @@ class KleinContext:
         return self.sql_session.sql(
             query,
             tables=tables,
+            functions=functions,
             num_cpus=num_cpus,
         )
 
@@ -207,21 +246,19 @@ class KleinContext:
         """
         Enable interactive mode for the data stream context.
 
-        Examples:
-
-            .. testcode::
-
-                from ray.klein.api.klein_context import KleinContext
-
-                ctx = KleinContext()
-                ctx.enable_interactive_mode()
-                stream = ctx.data.read_tfrecords("s3://bucket/path")
-                stream.data.schema()  # Evaluated immediately without ctx.execute().
-                stream.data.take(1)
+        .. deprecated:: 0.1
+           Build terminal operations lazily and call :func:`ray.klein.execute`
+           once instead. This compatibility mode will be removed.
 
         Args:
             enable: True to turn interactive mode on (default), False to disable.
         """
+        warnings.warn(
+            "enable_interactive_mode() is deprecated; terminal operations are lazy by default. "
+            "Call ray.klein.execute(...) after building them.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.interactive_mode_enabled = enable
         return self
 
@@ -533,7 +570,13 @@ class KleinContext:
         stream = self.source(
             CollectionSource,
             fn_constructor_args=[values],
+            lowering=RayDataCall.source_callable(
+                ray.data.from_items,
+                (list(values),),
+                {},
+            ),
             name=name,
+            bounded=True,
         )
         from ray.klein.api.changelog_row import row_kind_of
 
@@ -600,28 +643,82 @@ class KleinContext:
             raise ValueError("changelog_mode must contain one or more RowKind values")
         return stream._set_changelog_mode(declared)
 
-    def execute(self, job_name: str | None = None) -> "JobHandle":
+    def execute(
+        self,
+        job_name: str | None = None,
+        *,
+        sinks: Sequence[StreamSink] | None = None,
+    ) -> "JobHandle":
         """
-        Execute the job.
+        Execute pending terminal sinks, or an explicitly selected subset.
 
         Args:
             job_name: name of the job
+            sinks: Advanced explicit sink selection. By default, submit every
+                pending terminal sink registered with this pipeline.
 
         Returns:
             A :class:`JobHandle` for the submitted (or already-finished) job.
         """
+        if job_name is not None and not isinstance(job_name, str):
+            raise TypeError("job_name must be a string or None")
+        with self._lock:
+            selected_sinks = self._select_sinks(sinks)
+            selected_ids = {id(sink) for sink in selected_sinks}
+            if selected_ids & self._inflight_sink_ids:
+                raise RuntimeError("one or more selected terminal operations are already being submitted")
+            self._inflight_sink_ids.update(selected_ids)
         job_name = job_name or ("klein-" + "".join(random.choices(string.ascii_letters + string.digits, k=8)))
         client = JobClient(self._config)
-        return client.execute(job_name, self._sinks)
+        try:
+            handle = client.execute(job_name, selected_sinks)
+        except BaseException:
+            with self._lock:
+                self._inflight_sink_ids.difference_update(selected_ids)
+            raise
+        with self._lock:
+            self._sinks = [sink for sink in self._sinks if id(sink) not in selected_ids]
+            self._inflight_sink_ids.difference_update(selected_ids)
+        return handle
 
-    def explain(self, job_name: str | None = None) -> str:
+    def explain(
+        self,
+        job_name: str | None = None,
+        *,
+        sinks: Sequence[StreamSink] | None = None,
+    ) -> str:
         """Get the execution plan of the data stream"""
+        if job_name is not None and not isinstance(job_name, str):
+            raise TypeError("job_name must be a string or None")
         client = JobClient(self._config)
         job_name = job_name or f"job_{uuid.uuid4()}"
-        return client.explain(job_name, self._sinks)
+        with self._lock:
+            selected_sinks = self._select_sinks(sinks)
+        return client.explain(job_name, selected_sinks)
+
+    def _select_sinks(self, sinks: Sequence[StreamSink] | None) -> tuple[StreamSink, ...]:
+        selected = tuple(self._sinks if sinks is None else sinks)
+        if any(not isinstance(sink, StreamSink) for sink in selected):
+            raise TypeError("sinks must contain only StreamSink terminal operations")
+        if any(sink.context is not self for sink in selected):
+            raise ValueError("all sinks must belong to the same Klein pipeline")
+        if sinks is not None:
+            selected_ids = tuple(id(sink) for sink in selected)
+            if len(set(selected_ids)) != len(selected_ids):
+                raise ValueError("each terminal operation may be selected only once")
+            pending_ids = {id(sink) for sink in self._sinks}
+            if any(sink_id not in pending_ids for sink_id in selected_ids):
+                raise ValueError("explicit terminal operations must still be pending")
+        collecting = tuple(sink for sink in selected if sink.node_type is NodeType.TAKE)
+        if len(collecting) > 1:
+            raise ValueError("only one take() or take_all() result may be executed at a time")
+        if collecting and len(selected) > 1:
+            raise ValueError("take() or take_all() cannot be combined with other terminal operations")
+        return selected
 
     def add_sink(self, sink: StreamSink) -> None:
-        self._sinks.append(sink)
+        with self._lock:
+            self._sinks.append(sink)
 
 
 def current_context() -> KleinContext:
@@ -633,22 +730,79 @@ def install_context(context: KleinContext) -> KleinContext:
 
 
 def reset_context(configuration: ConfigInput = None) -> KleinContext:
+    warnings.warn(
+        "reset_context() is deprecated; use configure(...) and finish the pending pipeline with execute(...).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return KleinContext.reset(configuration)
 
 
-def configure(options: ConfigInput = None) -> KleinContext:
-    """Overlay the current process-global context configuration."""
+def configure(options: ConfigInput = None) -> Configuration:
+    """Configure subsequent graph construction and return the effective config."""
 
-    return KleinContext.current().configure(options)
-
-
-def execute(job_name: str | None = None) -> JobHandle:
-    return KleinContext.current().execute(job_name)
+    return KleinContext.current().configure(options).config
 
 
-def explain(job_name: str | None = None) -> str:
-    return KleinContext.current().explain(job_name)
+def get_config() -> Configuration:
+    """Return the configuration used by the current module-level pipeline."""
+
+    return KleinContext.current().config
+
+
+def execute(
+    job_name: str | None = None,
+    *,
+    sinks: Sequence[StreamSink] | None = None,
+) -> JobHandle:
+    """Execute terminal operations registered on the module-level pipeline.
+
+    ``execute("name")`` submits all pending terminals and is the normal form.
+    The keyword-only ``sinks`` argument is an advanced option for selecting a
+    subset from one pipeline.
+    """
+
+    if sinks is None:
+        return KleinContext.current().execute(job_name)
+    selected_sinks = tuple(sinks)
+    if any(not isinstance(sink, StreamSink) for sink in selected_sinks):
+        raise TypeError("sinks must contain only StreamSink terminal operations")
+    context = selected_sinks[0].context if selected_sinks else KleinContext.current()
+    return context.execute(job_name, sinks=selected_sinks)
+
+
+def explain(
+    job_name: str | None = None,
+    *,
+    sinks: Sequence[StreamSink] | None = None,
+) -> str:
+    """Explain pending terminals, or explicit roots, without executing them."""
+
+    if sinks is None:
+        return KleinContext.current().explain(job_name)
+    selected_sinks = tuple(sinks)
+    if any(not isinstance(sink, StreamSink) for sink in selected_sinks):
+        raise TypeError("sinks must contain only StreamSink terminal operations")
+    context = selected_sinks[0].context if selected_sinks else KleinContext.current()
+    return context.explain(job_name, sinks=selected_sinks)
 
 
 def execute_sql(statement: str, /, *, num_cpus: float = 1.0) -> Any:
     return KleinContext.current().execute_sql(statement, num_cpus=num_cpus)
+
+
+def register_table_factory(factory: "TableFactory", *, replace: bool = False) -> None:
+    """Register a Table DDL connector on the current pipeline session."""
+
+    KleinContext.current().sql_session.register_table_factory(factory, replace=replace)
+
+
+def register_scalar_function(
+    name: str,
+    function: "ScalarFunction",
+    *,
+    replace: bool = False,
+) -> None:
+    """Register a Python scalar function on the current pipeline SQL session."""
+
+    KleinContext.current().sql_session.register_scalar_function(name, function, replace=replace)
