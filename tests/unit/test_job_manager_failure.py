@@ -117,6 +117,18 @@ async def test_late_status_report_is_ignored_after_lifecycle_teardown_starts() -
 
 
 @pytest.mark.asyncio
+async def test_lifecycle_fence_stops_supervisor_instead_of_busy_looping() -> None:
+    manager = JobManager(Configuration(), namespace="job-a")
+    manager._lifecycle_stop_requested = True
+    try:
+        await manager._run()
+
+        assert manager._stopping is True
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
 async def test_permanent_failure_fences_status_reports_before_teardown() -> None:
     manager = JobManager(Configuration(), namespace="job-a")
     manager._job_status = JobStatus.RUNNING

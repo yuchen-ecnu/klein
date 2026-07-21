@@ -1222,6 +1222,12 @@ class JobManager(AsyncWorker):
         # attempt; the JobMaster owns HOW (the execution-graph writes).
         async with self._lifecycle_lock:
             if self._lifecycle_stop_requested:
+                # ``AsyncWorker._loop`` immediately invokes ``_run`` again.
+                # Merely returning here therefore creates a no-await busy loop:
+                # acquiring an unlocked asyncio.Lock completes synchronously and
+                # can starve the completion task that is waiting to tear the job
+                # down.  End this supervisor loop at the lifecycle fence.
+                self._stopping = True
                 return
             await self._failover_supervisor().tick()
 
