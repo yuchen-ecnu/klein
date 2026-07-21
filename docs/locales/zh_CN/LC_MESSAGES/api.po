@@ -582,6 +582,12 @@ msgstr "解释待处理的终端操作或显式指定的根节点，而不执行
 msgid ":py:obj:`execute_sql <ray.klein.execute_sql>`"
 msgstr ":py:obj:`execute_sql <ray.klein.execute_sql>`"
 
+msgid ":py:obj:`register_scalar_function <ray.klein.register_scalar_function>`"
+msgstr ":py:obj:`register_scalar_function <ray.klein.register_scalar_function>`"
+
+msgid "Register a Python scalar function on the current pipeline SQL session."
+msgstr "在当前管道的 SQL 会话中注册 Python 标量函数。"
+
 msgid ":py:obj:`register_table_factory <ray.klein.register_table_factory>`"
 msgstr ":py:obj:`register_table_factory <ray.klein.register_table_factory>`"
 
@@ -2019,6 +2025,12 @@ msgstr ":py:obj:`SQLSession <ray.klein.SQLSession>`"
 
 msgid "A scoped catalog and planner for lazy, Ray-native SQL operations."
 msgstr "用于惰性 Ray 原生 SQL 操作的作用域化目录和规划器。"
+
+msgid "Register a session-local Python scalar function for SQL queries."
+msgstr "为 SQL 查询注册会话本地的 Python 标量函数。"
+
+msgid "Remove a session-local SQL scalar function."
+msgstr "移除会话本地的 SQL 标量函数。"
 
 msgid ":py:obj:`ChangelogRow <ray.klein.ChangelogRow>`"
 msgstr ":py:obj:`ChangelogRow <ray.klein.ChangelogRow>`"

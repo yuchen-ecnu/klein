@@ -40,9 +40,86 @@ def test_evaluate_expression_resolves_qualified_columns() -> None:
         evaluate_expression(parse_one("id"), {"orders.id": 1, "customers.id": 2})
 
 
+def test_evaluate_expression_calls_klein_scalar_functions_case_insensitively() -> None:
+    expression = parse_one("ADD_SUFFIX(name, '!')")
+
+    assert (
+        evaluate_expression(
+            expression,
+            {"name": "Ada"},
+            {"add_suffix": lambda value, suffix: value.lower() + suffix},
+        )
+        == "ada!"
+    )
+
+
+def test_evaluate_expression_passes_nulls_to_scalar_functions() -> None:
+    seen = []
+
+    result = evaluate_expression(
+        parse_one("FILL(value)"),
+        {"value": None},
+        {"fill": lambda value: seen.append(value) or "missing"},
+    )
+
+    assert result == "missing"
+    assert seen == [None]
+
+
+def test_evaluate_expression_adds_scalar_function_failure_context() -> None:
+    def fail(_value):
+        raise ValueError("invalid model output")
+
+    with pytest.raises(SQLQueryError, match="SQL scalar function 'FAIL' failed: invalid model output"):
+        evaluate_expression(parse_one("FAIL(value)"), {"value": 1}, {"fail": fail})
+
+
+def test_evaluate_expression_rejects_dynamically_returned_awaitable() -> None:
+    async def result():
+        return 1
+
+    with pytest.raises(SQLQueryError, match=r"returned an awaitable.*must be synchronous"):
+        evaluate_expression(parse_one("ASYNC_RESULT(value)"), {"value": 1}, {"async_result": lambda _value: result()})
+
+
+def test_evaluate_expression_rejects_dynamically_returned_async_iterator() -> None:
+    async def results():
+        yield 1
+
+    with pytest.raises(SQLQueryError, match=r"returned an async iterator.*synchronous scalar values"):
+        evaluate_expression(
+            parse_one("ASYNC_RESULTS(value)"),
+            {"value": 1},
+            {"async_results": lambda _value: results()},
+        )
+
+
+@pytest.mark.parametrize(
+    ("sql", "value", "expected"),
+    [
+        ("ABS(IDENTITY(value))", -2, 2),
+        ("IDENTITY(ABS(value))", -2, 2),
+        ("POWER(IDENTITY(value), 2)", -2, 4),
+        ("LOG(10, IDENTITY(value))", 100, 2),
+        ("COS(IDENTITY(value))", 0, 1),
+        ("SIGN(IDENTITY(value))", -2, -1),
+    ],
+)
+def test_evaluate_expression_composes_scalar_functions_with_numeric_builtins(sql, value, expected) -> None:
+    result = evaluate_expression(parse_one(sql), {"value": value}, {"identity": lambda item: item})
+
+    assert result == pytest.approx(expected)
+
+
+def test_numeric_builtin_propagates_null_returned_by_scalar_function() -> None:
+    assert (
+        evaluate_expression(parse_one("ABS(IDENTITY(value))"), {"value": None}, {"identity": lambda item: item}) is None
+    )
+
+
 def test_evaluate_expression_rejects_unsupported_forms() -> None:
     with pytest.raises(SQLQueryError, match="Unsupported SQL expression"):
-        evaluate_expression(parse_one("ABS(-1)"), {})
+        evaluate_expression(parse_one("SQRT(4)"), {})
 
     with pytest.raises(SQLQueryError, match="IN subqueries"):
         evaluate_expression(parse_one("1 IN (SELECT 1)"), {})

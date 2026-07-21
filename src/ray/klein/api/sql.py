@@ -11,6 +11,7 @@ from ray.klein.api.sql_query_error import SQLQueryError
 from ray.klein.api.sql_session import SQLSession
 
 if TYPE_CHECKING:
+    from ray.klein._internal.sql.scalar_function_registry import ScalarFunction
     from ray.klein.api.data_stream import DataStream
     from ray.klein.api.klein_context import KleinContext
 
@@ -20,6 +21,7 @@ def sql(
     /,
     *,
     tables: Mapping[str, DataStream] | None = None,
+    functions: Mapping[str, ScalarFunction] | None = None,
     context: KleinContext | None = None,
     num_cpus: float = 1.0,
 ) -> DataStream:
@@ -33,9 +35,13 @@ def sql(
 
     context = _resolve_context(context, tables)
 
-    return SQLSession(context).sql(
+    session = SQLSession(context)
+    for name, function in context.sql_session._scalar_function_bindings().items():
+        session.register_scalar_function(name, function)
+    return session.sql(
         query,
         tables=tables,
+        functions=functions,
         num_cpus=num_cpus,
     )
 

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from ray.data.expressions import col, download
 
+from ray.klein.api.changelog_row import ChangelogRow
 from ray.klein.api.collect_function import CollectFunction
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.node_type import NodeType
@@ -8,6 +9,18 @@ from ray.klein.api.row_kind import RowKind
 from ray.klein.config.configuration import Configuration
 from tests.support.streaming import LoopSourceFunction
 from tests.support.terminal import execute_terminal
+
+
+def _add_offset(value, offset):
+    return None if value is None else value + offset
+
+
+def _bucket(value):
+    return value // 10
+
+
+def _twice(value):
+    return value * 2
 
 
 def test_join_group_expression_uses_ray_native_operators() -> None:
@@ -86,6 +99,93 @@ def test_ray_data_scalar_expressions_execute_natively() -> None:
     assert all(0 <= row["sample"] < 1 for row in result)
     assert len({row["uid"] for row in result}) == 2
     assert len({row["mid"] for row in result}) == 2
+
+
+def test_klein_scalar_function_executes_in_batch_sql() -> None:
+    context = KleinContext()
+    offset = 2
+
+    def add_offset(value):
+        return None if value is None else value + offset
+
+    rows = context.data.from_items(
+        [
+            {"id": 1, "value": 1},
+            {"id": 2, "value": 3},
+            {"id": 3, "value": None},
+        ]
+    )
+
+    result = context.sql(
+        "SELECT id, ABS(ADD_OFFSET(value) - 6) AS distance FROM rows WHERE ADD_OFFSET(value) >= 5",
+        tables={"rows": rows},
+        functions={"add_offset": add_offset},
+    )
+
+    assert execute_terminal(result.data.take_all(), job_name="sql-scalar-udf") == [{"id": 2, "distance": 1}]
+
+
+def test_klein_scalar_functions_execute_in_batch_group_and_aggregate_inputs() -> None:
+    context = KleinContext()
+    rows = context.data.from_items([{"amount": 12}, {"amount": 18}, {"amount": 25}])
+
+    result = context.sql(
+        "SELECT BUCKET(amount) AS bucket, SUM(TWICE(amount)) AS total FROM rows GROUP BY BUCKET(amount)",
+        tables={"rows": rows},
+        functions={"bucket": _bucket, "twice": _twice},
+    )
+
+    assert sorted(
+        execute_terminal(result.data.take_all(), job_name="sql-scalar-udf-aggregate"), key=lambda row: row["bucket"]
+    ) == [
+        {"bucket": 1, "total": 60},
+        {"bucket": 2, "total": 50},
+    ]
+
+
+def test_klein_scalar_function_executes_in_streaming_sql(ray_cluster) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    rows = context.from_values({"id": 1, "value": 1}, {"id": 2, "value": 3})
+    context.sql_session.register_scalar_function("add_offset", _add_offset)
+    result = context.sql(
+        "SELECT id, ABS(ADD_OFFSET(value, -4)) AS distance FROM rows",
+        tables={"rows": rows},
+    )
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLScalarUDF")
+
+    handle = context.execute("streaming-sql-scalar-udf", sinks=(sink,))
+    handle.wait()
+
+    assert sorted(handle.get(), key=lambda row: row["id"]) == [
+        {"id": 1, "distance": 3},
+        {"id": 2, "distance": 1},
+    ]
+
+
+def test_streaming_scalar_functions_preserve_aggregate_retractions(ray_cluster) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    rows = context.from_values(
+        ChangelogRow.insert({"amount": 12}),
+        ChangelogRow.insert({"amount": 18}),
+        ChangelogRow.delete({"amount": 12}),
+    )
+    result = context.sql(
+        "SELECT BUCKET(amount) AS bucket, SUM(TWICE(amount)) AS total FROM rows GROUP BY BUCKET(amount)",
+        tables={"rows": rows},
+        functions={"bucket": _bucket, "twice": _twice},
+    )
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLScalarUDFAggregate")
+
+    handle = context.execute("streaming-sql-scalar-udf-aggregate", sinks=(sink,))
+    handle.wait()
+
+    assert [(row.row_kind, dict(row)) for row in handle.get()] == [
+        (RowKind.INSERT, {"bucket": 1, "total": 24}),
+        (RowKind.UPDATE_BEFORE, {"bucket": 1, "total": 24}),
+        (RowKind.UPDATE_AFTER, {"bucket": 1, "total": 60}),
+        (RowKind.UPDATE_BEFORE, {"bucket": 1, "total": 60}),
+        (RowKind.UPDATE_AFTER, {"bucket": 1, "total": 36}),
+    ]
 
 
 def test_streaming_sql_executes_download_and_synthetic_expressions(ray_cluster, tmp_path) -> None:

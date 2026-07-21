@@ -5,9 +5,12 @@ import pytest
 from sqlglot import parse_one
 
 from ray.klein import ChangelogRow, KleinContext, RowKind, SQLQueryError
+from ray.klein._internal.sql.execution import _FilterRow
 from ray.klein._internal.sql.streaming import (
+    _AddStreamingExpressions,
     _AsyncAddStreamingExpressions,
     _AsyncRayProjectChangelogRow,
+    _ProjectChangelogRow,
     _RayProjectChangelogRow,
 )
 from ray.klein.api.collector import Collector
@@ -216,6 +219,31 @@ def test_streaming_aggregate_precomputes_download_inputs_asynchronously() -> Non
     logical = logical_function_of(inputs)
     assert logical.function is _AsyncAddStreamingExpressions
     assert logical.runtime_info.async_buffer_size == 32
+
+
+def test_streaming_sql_plans_klein_scalar_function_projection_and_filter() -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    rows = context.from_items([{"value": 2}])
+    context.sql_session.register_scalar_function("twice", lambda value: value * 2)
+    context.sql_session.register_scalar_function("positive", lambda value: value > 0)
+
+    projected = context.sql("SELECT TWICE(value) AS value FROM rows", tables={"rows": rows})
+    filtered = context.sql("SELECT * FROM rows WHERE POSITIVE(value)", tables={"rows": rows})
+
+    assert logical_function_of(projected).function is _ProjectChangelogRow
+    assert logical_function_of(filtered.input_streams[0]).function is _FilterRow
+
+
+def test_streaming_aggregate_precomputes_klein_scalar_function_inputs() -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    rows = context.from_items([{"amount": 2}])
+    context.sql_session.register_scalar_function("twice", lambda value: value * 2)
+
+    result = context.sql("SELECT SUM(TWICE(amount)) AS total FROM rows", tables={"rows": rows})
+
+    assert isinstance(result.stream_operator, SQLAggregateOperator)
+    logical = logical_function_of(result.input_streams[0])
+    assert logical.function is _AddStreamingExpressions
 
 
 def test_streaming_top_n_emits_retractions_when_rank_changes() -> None:

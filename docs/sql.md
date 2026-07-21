@@ -23,7 +23,8 @@ does not embed DuckDB.
 
 Use `ray.klein.execute_sql()` for a catalog workflow. The top-level
 `ray.klein.sql()` creates a fresh session for its one query, so it does not see
-tables previously created through `execute_sql()`.
+tables previously created through `execute_sql()`. It does inherit scalar
+functions registered on the current context.
 
 ## Query DataStreams from Python
 
@@ -64,6 +65,57 @@ relation:
 ```python
 filtered = orders.sql("SELECT * FROM self WHERE amount > 10")
 ```
+
+## Register Python scalar functions
+
+Klein SQL scalar functions use ordinary Python values and do not expose a Ray
+Data expression contract. Register a function, then call it from SQL with an
+unquoted, case-insensitive name:
+
+```python
+def normalize_prompt(value, prefix):
+    if value is None:
+        return None
+    return prefix + value.strip().lower()
+
+ray.klein.register_scalar_function("normalize_prompt", normalize_prompt)
+prepared = ray.klein.sql(
+    "SELECT id, NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
+    tables={"inputs": inputs},
+)
+```
+
+For an explicitly isolated `KleinContext`, register through
+`context.sql_session.register_scalar_function()` instead.
+
+For a one-off `ray.klein.sql()` query, pass query-local bindings. They override
+same-named session functions without changing the session:
+
+```python
+prepared = ray.klein.sql(
+    "SELECT NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
+    tables={"inputs": inputs},
+    functions={"normalize_prompt": normalize_prompt},
+)
+```
+
+Arguments are evaluated with SQL semantics and passed as Python scalars. SQL
+`NULL` is passed as `None`; the function decides whether to propagate or replace
+it. Functions work in projections, predicates, grouping expressions, and
+built-in aggregate inputs. Registration validates the name and callable;
+query planning validates call arity and rejects unknown functions before workers
+run. Built-in SQL/Klein function names cannot be replaced.
+
+The function and its closure are serialized with the query graph. Install its
+dependencies on every worker and treat it as trusted application code. Scalar
+functions are synchronous, share the enclosing SQL operator's resources, and
+run row by row. For model initialization, GPU allocation, vectorized inference,
+external-service concurrency, or explicit batching, use `map_batches()` (or an
+async `map`) before SQL and query the produced columns. Aggregate UDFs are not
+supported. In streaming changelog or recoverable queries, functions must also
+be deterministic and side-effect-free: the same arguments must always produce
+the same result so retractions remain correct, and retries may invoke a function
+more than once. Materialize nondeterministic or external results before SQL.
 
 ## Run a continuous query
 
@@ -224,7 +276,7 @@ The two planners intentionally have different feature sets:
 
 | Query form | Batch | Streaming |
 |---|---|---|
-| Projection, supported scalar expressions, and `WHERE` | Yes | Yes |
+| Projection, supported scalar expressions, registered scalar UDFs, and `WHERE` | Yes | Yes |
 | Inner equality join | Yes | Yes |
 | Left, right, or full outer equality join | Yes | No |
 | `CROSS JOIN` | Yes | No |

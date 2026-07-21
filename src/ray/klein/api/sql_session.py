@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from ray.klein._internal.sql.catalog_parser import parse_catalog_table
 from ray.klein._internal.sql.execution import sql_source, sql_transform
+from ray.klein._internal.sql.scalar_function_registry import ScalarFunction, ScalarFunctionRegistry
 from ray.klein._internal.sql.table_factory_registry import TableFactoryRegistry
 from ray.klein._internal.sql.validation import (
     SQL_DIALECT,
@@ -35,6 +36,7 @@ class SQLSession:
         self._views: OrderedDict[str, DataStream] = OrderedDict()
         self._tables: OrderedDict[str, CatalogTable] = OrderedDict()
         self._table_factories = TableFactoryRegistry.with_defaults()
+        self._scalar_functions = ScalarFunctionRegistry()
 
     def create_temp_view(self, name: str, dataframe: DataStream) -> DataStream:
         """Create or replace a named, non-materialized DataStream view."""
@@ -57,6 +59,31 @@ class SQLSession:
         """Register a session-local table factory."""
 
         self._table_factories.register(factory, replace=replace)
+
+    def register_scalar_function(
+        self,
+        name: str,
+        function: ScalarFunction,
+        *,
+        replace: bool = False,
+    ) -> None:
+        """Register a session-local Python scalar function for SQL queries."""
+
+        self._scalar_functions.register(name, function, replace=replace)
+
+    def drop_scalar_function(self, name: str) -> None:
+        """Remove a session-local SQL scalar function."""
+
+        self._scalar_functions.drop(name)
+
+    @property
+    def scalar_functions(self) -> tuple[str, ...]:
+        return self._scalar_functions.identifiers
+
+    def _scalar_function_bindings(self) -> Mapping[str, ScalarFunction]:
+        """Return an immutable snapshot for a one-query child session."""
+
+        return self._scalar_functions.snapshot()
 
     @property
     def table_factories(self) -> tuple[str, ...]:
@@ -99,24 +126,26 @@ class SQLSession:
         query: str,
         *,
         tables: Mapping[str, DataStream] | None = None,
+        functions: Mapping[str, ScalarFunction] | None = None,
         num_cpus: float = 1.0,
     ) -> DataStream:
         """Build a lazy, bounded DataStream from one Ray-native SQL query."""
 
-        validate_read_query(query)
+        statement = validate_read_query(query)
         if not isinstance(num_cpus, (int, float)) or num_cpus <= 0:
             raise SQLQueryError("num_cpus must be positive")
+        scalar_functions = self._scalar_functions.bind(statement, functions)
 
         bindings: dict[str, DataStream] = dict(self._views)
         for name, dataframe in (tables or {}).items():
             self._validate_binding(name, dataframe)
             bindings[name] = dataframe
 
-        referenced = referenced_table_names(query)
+        referenced = referenced_table_names(statement)
         unknown = referenced - bindings.keys() - self._tables.keys()
         if unknown:
-            names = ", ".join(sorted(unknown))
-            raise SQLQueryError(f"SQL query references unbound table(s): {names}")
+            unknown_names = ", ".join(sorted(unknown))
+            raise SQLQueryError(f"SQL query references unbound table(s): {unknown_names}")
         for name in referenced - bindings.keys():
             table = self._tables[name]
             factory = self._table_factories.get(table.connector)
@@ -137,21 +166,32 @@ class SQLSession:
                 self._context,
                 query,
                 bindings,
+                functions=scalar_functions,
                 num_cpus=num_cpus,
             )
 
         if not bindings:
-            return self._context.data.source(sql_source, query, num_cpus=num_cpus)
+            options: dict[str, Any] = {"num_cpus": num_cpus}
+            if scalar_functions:
+                options["functions"] = scalar_functions
+            return self._context.data.source(
+                sql_source,
+                query,
+                **options,
+            )
 
-        names = tuple(bindings)
+        table_names = tuple(bindings)
         dataframes = tuple(bindings.values())
         primary, others = dataframes[0], dataframes[1:]
+        options = {"num_cpus": num_cpus}
+        if scalar_functions:
+            options["functions"] = scalar_functions
         return primary.data.transform(
             sql_transform,
             query,
-            names,
+            table_names,
             *others,
-            num_cpus=num_cpus,
+            **options,
         )
 
     def _create_table(self, statement) -> CatalogTable:

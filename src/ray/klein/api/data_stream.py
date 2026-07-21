@@ -141,6 +141,7 @@ class DataStream(Stream):
         *,
         table_name: str = "self",
         tables: Mapping[str, "DataStream"] | None = None,
+        functions: Mapping[str, Callable[..., Any]] | None = None,
         num_cpus: float = 1.0,
     ) -> "DataStream":
         """Build lazy SQL with this bounded stream registered as ``self`` by default."""
@@ -152,6 +153,7 @@ class DataStream(Stream):
         return self.context.sql_session.sql(
             query,
             tables=bindings,
+            functions=functions,
             num_cpus=num_cpus,
         )
 

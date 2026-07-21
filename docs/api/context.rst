@@ -42,6 +42,7 @@ section of :doc:`../job-lifecycle`.
    execute
    explain
    execute_sql
+   register_scalar_function
    register_table_factory
    from_items
    from_values

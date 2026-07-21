@@ -45,6 +45,7 @@ _EXPORTS = {
     "WindowAssigner": ("ray.klein.api.window_assigner", "WindowAssigner"),
     "WindowedStream": ("ray.klein.api.windowed_stream", "WindowedStream"),
     "get_config": ("ray.klein.api.klein_context", "get_config"),
+    "register_scalar_function": ("ray.klein.api.klein_context", "register_scalar_function"),
     "register_table_factory": ("ray.klein.api.klein_context", "register_table_factory"),
     "sql": ("ray.klein.api.sql", "sql"),
 }

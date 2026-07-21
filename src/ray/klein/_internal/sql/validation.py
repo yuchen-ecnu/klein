@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SQL_DIALECT = "spark"
+BUILTIN_ANONYMOUS_FUNCTIONS = frozenset({"download", "monotonically_increasing_id"})
 
 
 def validate_table_name(name: str) -> None:
@@ -18,6 +19,28 @@ def validate_table_name(name: str) -> None:
         raise SQLQueryError(
             f"Invalid SQL table name {name!r}; use an unquoted identifier containing letters, numbers, and underscores"
         )
+
+
+def validate_scalar_function_name(name: str) -> None:
+    """Validate one unquoted, non-built-in SQL scalar-function name."""
+
+    if not isinstance(name, str) or not _IDENTIFIER.fullmatch(name):
+        raise SQLQueryError(
+            f"Invalid SQL scalar function name {name!r}; use an unquoted identifier "
+            "containing letters, numbers, and underscores"
+        )
+    if name.casefold() in BUILTIN_ANONYMOUS_FUNCTIONS:
+        raise SQLQueryError(f"SQL scalar function name {name!r} is reserved by Klein")
+
+    from sqlglot import exp
+
+    try:
+        parsed = parse_statement(f"SELECT {name}(_klein_argument)")
+    except SQLQueryError as error:
+        raise SQLQueryError(f"SQL scalar function name {name!r} is reserved by the SQL dialect") from error
+    value = parsed.expressions[0] if isinstance(parsed, exp.Select) else None
+    if not isinstance(value, exp.Anonymous):
+        raise SQLQueryError(f"SQL scalar function name {name!r} is reserved by the SQL dialect")
 
 
 def parse_statement(sql: str) -> exp.Expression:
@@ -62,3 +85,19 @@ def referenced_table_names(query: str | exp.Expression) -> set[str]:
         validate_table_name(table.name)
         names.add(table.name)
     return names
+
+
+def referenced_scalar_function_calls(query: str | exp.Expression) -> tuple[exp.Anonymous, ...]:
+    """Return user-defined scalar calls, excluding Klein built-ins and hints."""
+
+    from sqlglot import exp
+
+    statement = parse_statement(query) if isinstance(query, str) else query
+    calls = []
+    for function in statement.find_all(exp.Anonymous):
+        if function.find_ancestor(exp.Hint) is not None:
+            continue
+        if function.name.casefold() in BUILTIN_ANONYMOUS_FUNCTIONS:
+            continue
+        calls.append(function)
+    return tuple(calls)

@@ -38,6 +38,7 @@ from ray.klein.runtime.backend.collection_source import CollectionSource
 from ray.klein.runtime.resources import Resources
 
 if TYPE_CHECKING:
+    from ray.klein._internal.sql.scalar_function_registry import ScalarFunction
     from ray.klein.api.row_kind import RowKind
     from ray.klein.api.sql_session import SQLSession
     from ray.klein.api.table_factory import TableFactory
@@ -198,6 +199,7 @@ class KleinContext:
         /,
         *,
         tables: Mapping[str, "DataStream"] | None = None,
+        functions: Mapping[str, "ScalarFunction"] | None = None,
         num_cpus: float = 1.0,
     ) -> "DataStream":
         """Build lazy SQL over DataStreams in this context.
@@ -220,6 +222,7 @@ class KleinContext:
         return self.sql_session.sql(
             query,
             tables=tables,
+            functions=functions,
             num_cpus=num_cpus,
         )
 
@@ -792,3 +795,14 @@ def register_table_factory(factory: "TableFactory", *, replace: bool = False) ->
     """Register a Table DDL connector on the current pipeline session."""
 
     KleinContext.current().sql_session.register_table_factory(factory, replace=replace)
+
+
+def register_scalar_function(
+    name: str,
+    function: "ScalarFunction",
+    *,
+    replace: bool = False,
+) -> None:
+    """Register a Python scalar function on the current pipeline SQL session."""
+
+    KleinContext.current().sql_session.register_scalar_function(name, function, replace=replace)
