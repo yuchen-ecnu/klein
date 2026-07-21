@@ -211,6 +211,51 @@ async def test_fatal_error_cancels_queued_computes_and_unblocks_barrier():
 
 
 @pytest.mark.asyncio
+async def test_shutdown_waits_for_queued_compute_cancellation_cleanup():
+    fatal = asyncio.Event()
+    release_failure = asyncio.Event()
+    pending_started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    cleanup_release = asyncio.Event()
+
+    async def boom():
+        await release_failure.wait()
+        raise RuntimeError("compute failed")
+
+    async def pending():
+        try:
+            pending_started.set()
+            await asyncio.Event().wait()
+            return []
+        finally:
+            cleanup_started.set()
+            await cleanup_release.wait()
+
+    runner = AsyncOrderedRunner(
+        capacity=2,
+        on_result=lambda recs: _noop(),
+        on_fatal=lambda error: fatal.set(),
+        task_name="t",
+    )
+    runner.start()
+    await runner.submit_compute(boom())
+    await runner.submit_compute(pending())
+    await asyncio.wait_for(pending_started.wait(), timeout=1)
+
+    release_failure.set()
+    await asyncio.wait_for(fatal.wait(), timeout=1)
+    shutdown = asyncio.create_task(runner.shutdown(timeout=1))
+    try:
+        await asyncio.wait_for(cleanup_started.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert not shutdown.done()
+    finally:
+        cleanup_release.set()
+
+    await asyncio.wait_for(shutdown, timeout=1)
+
+
+@pytest.mark.asyncio
 async def test_fatal_error_releases_blocked_submitter():
     fatal = asyncio.Event()
     release_failure = asyncio.Event()

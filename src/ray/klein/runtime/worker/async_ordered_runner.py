@@ -95,6 +95,12 @@ class AsyncOrderedRunner:
         self._shutdown_requested = False
         self._abort_requested = False
         self._fatal_error: Exception | None = None
+        # Queued compute tasks are cancelled synchronously when the consumer
+        # fails, but asyncio may run their cancellation handlers on a later
+        # loop turn. Keep them reachable so shutdown can settle that cleanup
+        # within its existing time budget instead of returning with owned
+        # tasks still pending.
+        self._cancelling_futures: set[asyncio.Future] = set()
 
     def start(self) -> None:
         """Launch the FIFO consumer task (idempotent)."""
@@ -152,8 +158,7 @@ class AsyncOrderedRunner:
             if not slot_state_known:
                 acquired = slot_waiter.done() and not slot_waiter.cancelled() and slot_waiter.exception() is None
             if future is not None:
-                future.cancel()
-                future.add_done_callback(self._silence_future)
+                self._cancel_future(future)
             if acquired:
                 self._slots.release()
             if coro_owned:
@@ -245,8 +250,7 @@ class AsyncOrderedRunner:
                 break
             try:
                 if isinstance(item, _Compute):
-                    item.future.cancel()
-                    item.future.add_done_callback(self._silence_future)
+                    self._cancel_future(item.future)
                     self._slots.release()
                 elif item is _SHUTDOWN and keep_shutdown:
                     restore_shutdown = True
@@ -259,6 +263,24 @@ class AsyncOrderedRunner:
     def _silence_future(future: asyncio.Future) -> None:
         with suppress(BaseException):
             future.exception()
+
+    def _cancel_future(self, future: asyncio.Future) -> None:
+        self._cancelling_futures.add(future)
+        future.cancel()
+        future.add_done_callback(self._finish_cancelled_future)
+
+    def _finish_cancelled_future(self, future: asyncio.Future) -> None:
+        self._silence_future(future)
+        self._cancelling_futures.discard(future)
+
+    async def _settle_cancelled_futures(self, timeout: float) -> None:
+        pending = tuple(self._cancelling_futures)
+        if not pending or timeout <= 0:
+            return
+        # ``asyncio.wait`` observes completion without issuing another cancel
+        # when the budget expires; a cancellation-resistant user coroutine
+        # therefore cannot make shutdown exceed its documented bound.
+        await asyncio.wait(pending, timeout=timeout)
 
     @staticmethod
     def _discard_awaitable(awaitable: Awaitable[list[Record]]) -> None:
@@ -298,12 +320,16 @@ class AsyncOrderedRunner:
         exceed ``timeout``.
         """
         self._seal()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + max(0.0, timeout)
         consumer = self._consumer
         if consumer is None:
             self._cancel_queued()
+            await self._settle_cancelled_futures(max(0.0, deadline - loop.time()))
             return
         if consumer.done():
             self._cancel_queued()
+            await self._settle_cancelled_futures(max(0.0, deadline - loop.time()))
             return
         if not self._shutdown_requested:
             self._shutdown_requested = True
@@ -328,3 +354,4 @@ class AsyncOrderedRunner:
             logger.exception("Async ordered consumer of %s failed during shutdown", self._task_name)
         finally:
             self._cancel_queued(keep_shutdown=timed_out and not consumer.done())
+            await self._settle_cancelled_futures(max(0.0, deadline - loop.time()))
