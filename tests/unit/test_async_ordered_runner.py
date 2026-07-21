@@ -166,6 +166,7 @@ async def test_fatal_error_cancels_queued_computes_and_unblocks_barrier():
     fatal = asyncio.Event()
     release_failure = asyncio.Event()
     never = asyncio.Event()
+    pending_started = {index: asyncio.Event() for index in (1, 2)}
     cancelled = []
 
     async def boom():
@@ -174,6 +175,7 @@ async def test_fatal_error_cancels_queued_computes_and_unblocks_barrier():
 
     async def pending(index):
         try:
+            pending_started[index].set()
             await never.wait()
             return [_rec(index)]
         finally:
@@ -189,6 +191,15 @@ async def test_fatal_error_cancels_queued_computes_and_unblocks_barrier():
     await runner.submit_compute(boom())
     await runner.submit_compute(pending(1))
     await runner.submit_compute(pending(2))
+
+    # A task cancelled before its first event-loop step never enters the
+    # coroutine body, so its ``finally`` block cannot observe cancellation.
+    # Synchronize explicitly to test cancellation of genuinely in-flight work
+    # instead of relying on version-dependent asyncio scheduling order.
+    await asyncio.wait_for(
+        asyncio.gather(*(started.wait() for started in pending_started.values())),
+        timeout=1,
+    )
 
     release_failure.set()
     await asyncio.wait_for(fatal.wait(), timeout=1)
