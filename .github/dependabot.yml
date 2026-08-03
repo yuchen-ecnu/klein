@@ -3,6 +3,8 @@ version: 2
 updates:
   - package-ecosystem: pip
     directory: "/"
+    exclude-paths:
+      - "requirements/minimum-constraints.txt"
     schedule:
       interval: weekly
   - package-ecosystem: github-actions
