@@ -33,7 +33,7 @@ ray==2.56.1
 redis==8.1.0
 redislite==6.2.912183
 reuse==6.2.0
-rich==14.3.4
+rich==15.0.0
 rocksdict==0.3.29
 rocketmq-client-python==2.0.0
 ruff==0.16.1
