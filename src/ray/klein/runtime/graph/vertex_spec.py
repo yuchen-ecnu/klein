@@ -33,7 +33,7 @@ class VertexSpec:
         return self.operator.runtime_info.batch_size
 
     @property
-    def batch_timeout(self) -> int | None:
+    def batch_timeout(self) -> float | None:
         return self.operator.runtime_info.batch_timeout
 
     @property

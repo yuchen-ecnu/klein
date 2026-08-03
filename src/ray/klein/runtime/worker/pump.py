@@ -23,7 +23,7 @@ thread for the sync path so the coordinator ``klein.get`` stays off the loop.
 
 import asyncio
 from collections import Counter, deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -88,11 +88,16 @@ class InboxPump:
         inbox_timeout: float = 3.0,
         input_vertex_ids: tuple[ExecutionVertexId, ...] = (),
         input_channels: tuple[DeliveryChannel, ...] | None = None,
+        input_buffer_observer: Callable[[], object] | None = None,
     ) -> None:
         self._task = task
         self._state = state
         self._watermark = watermark
         self._emit = emit_pipeline
+        self._input_buffer_observer = input_buffer_observer
+        self._inflight_input_bytes = 0
+        self._inflight_envelopes: dict[int, int] = {}
+        self._processing_accumulator_bytes = 0
         self._inbox_timeout = inbox_timeout
         self._checkpoint_expected_inputs = Counter(input_vertex_ids)
         self._checkpoint_barrier_id: int | None = None
@@ -111,9 +116,26 @@ class InboxPump:
         self._checkpoint_input_channels: frozenset[DeliveryChannel] | None = None
         self._retired_checkpoint_input_channels: set[DeliveryChannel] = set()
         self._install_checkpoint_inputs(input_vertex_ids, input_channels)
+        inbox = getattr(state, "inbox", None)
+        bind_reservation = getattr(inbox, "bind_external_byte_reservation", None)
+        if callable(bind_reservation):
+            bind_reservation(self._reserved_input_bytes, self._reserve_input_envelope)
 
     async def run_once(self) -> None:
         """One pump iteration (the body of the AsyncWorker loop)."""
+        try:
+            await self._run_once()
+        finally:
+            inbox = getattr(self._state, "inbox", None)
+            wake_waiters = getattr(inbox, "wake_waiters", None)
+            if callable(wake_waiters):
+                await wake_waiters()
+            if self._input_buffer_observer is not None:
+                self._input_buffer_observer()
+
+    async def _run_once(self) -> None:
+        """Consume one envelope while ``run_once`` publishes retained sizes."""
+
         loop = asyncio.get_running_loop()
         try:
             envelope = await asyncio.wait_for(
@@ -122,19 +144,38 @@ class InboxPump:
             )
         except asyncio.TimeoutError:
             if self._state.is_async_operator:
-                await self._idle_flush_async()
+                self._reserve_accumulator_processing()
+                try:
+                    await self._idle_flush_async()
+                finally:
+                    self._release_accumulator_processing()
                 return
-            await loop.run_in_executor(self._state.executor, self._idle_flush)
-            await self._emit.drain_pending()
-            # Idle: force a watermark flush so a low-rate stream still releases
-            # the upstream's replay buffer instead of pinning it indefinitely.
-            await self._watermark.advance()
+            self._reserve_accumulator_processing()
+            try:
+                await loop.run_in_executor(self._state.executor, self._idle_flush)
+                await self._emit.drain_pending()
+                # Idle: force a watermark flush so a low-rate stream still releases
+                # the upstream's replay buffer instead of pinning it indefinitely.
+                await self._watermark.advance()
+            finally:
+                self._release_accumulator_processing()
             return
 
-        payload = envelope.payload
         if self._hold_for_coordinated_checkpoint(envelope):
             self._checkpoint_held.append(envelope)
             return
+        self._reserve_accumulator_processing()
+        try:
+            await self._process_envelope(envelope)
+        finally:
+            self._release_accumulator_processing()
+            self._release_input_envelope(envelope)
+
+    async def _process_envelope(self, envelope: InboxEnvelope) -> None:
+        """Process a dequeued envelope before releasing its byte reservation."""
+
+        loop = asyncio.get_running_loop()
+        payload = envelope.payload
         checkpoint_aligned = self._observe_coordinated_barrier(envelope)
         if isinstance(payload, RescaleBarrier):
             await self._task.handle_rescale_barrier(payload, envelope.sender_vertex_id)
@@ -182,6 +223,40 @@ class InboxPump:
         if checkpoint_aligned:
             self._finish_coordinated_checkpoint(payload.id)
         await self._check_eof_and_stop()
+
+    def _reserved_input_bytes(self) -> int:
+        # Accumulator bytes are snapshotted while one envelope is dispatched.
+        # The deliberate temporary double count closes the executor hand-off
+        # gap: admission stays blocked until the records have reached the
+        # operator/async runner. Retention after that boundary is governed by
+        # operator output and async-concurrency budgets, not the input buffer.
+        return self._inflight_input_bytes + self._processing_accumulator_bytes + self._accumulator_buffered_bytes()
+
+    def _reserve_accumulator_processing(self) -> None:
+        if self._processing_accumulator_bytes:
+            raise RuntimeError("input accumulator processing reservation is already active")
+        self._processing_accumulator_bytes = self._accumulator_buffered_bytes()
+
+    def _release_accumulator_processing(self) -> None:
+        self._processing_accumulator_bytes = 0
+
+    def _accumulator_buffered_bytes(self) -> int:
+        input_batches = getattr(self._state, "input_batches", None)
+        value = getattr(input_batches, "buffered_bytes", 0)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+    def _reserve_input_envelope(self, envelope: InboxEnvelope, size_bytes: int) -> None:
+        identity = id(envelope)
+        if identity in self._inflight_envelopes:
+            raise RuntimeError("input envelope already owns an in-flight byte reservation")
+        self._inflight_envelopes[identity] = size_bytes
+        self._inflight_input_bytes += size_bytes
+
+    def _release_input_envelope(self, envelope: InboxEnvelope) -> None:
+        size_bytes = self._inflight_envelopes.pop(id(envelope), None)
+        if size_bytes is None:
+            return
+        self._inflight_input_bytes -= size_bytes
 
     async def _next_envelope(self) -> InboxEnvelope:
         if self._checkpoint_ready:
@@ -661,7 +736,14 @@ class InboxPump:
         tracker = self._state.event_time_tracker
         if tracker is None:
             return
-        outputs = tracker.on_control(sender_vertex_id, control)
+        self.apply_event_time_controls(tracker.on_control(sender_vertex_id, control))
+
+    def apply_event_time_controls(self, outputs: Sequence[StreamControl]) -> None:
+        """Apply already-aggregated controls at an ordered processing boundary."""
+
+        tracker = self._state.event_time_tracker
+        if tracker is None:
+            return
         for output in outputs:
             if isinstance(output, Watermark):
                 self._state.operator.on_event_time_watermark(output.timestamp)

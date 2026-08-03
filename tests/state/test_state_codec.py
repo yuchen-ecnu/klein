@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import pickle
+import struct
+from decimal import Decimal
 
 import pytest
 
@@ -39,6 +42,33 @@ def test_state_key_round_trip_preserves_typed_components(logical_key, namespace)
     assert decode_state_key(encoded) == (descriptor.name, logical_key, namespace)
     assert decode_state_namespace(encoded) == namespace
     assert encoded.startswith(state_key_prefix(descriptor, logical_key))
+
+
+def test_equal_keys_and_namespaces_have_identical_physical_state_keys() -> None:
+    descriptor = ValueStateDescriptor("value")
+
+    assert encode_state_key(descriptor, 1, {"end": 2, "start": 1}) == encode_state_key(
+        descriptor,
+        1.0,
+        {"start": True, "end": Decimal("2")},
+    )
+
+
+def test_state_key_decoder_remains_compatible_with_legacy_pickle_components() -> None:
+    descriptor = ValueStateDescriptor("value")
+
+    def component(value: bytes) -> bytes:
+        return struct.pack(">I", len(value)) + value
+
+    legacy = b"".join(
+        (
+            component(descriptor.name.encode()),
+            component(pickle.dumps({"b": 2, "a": 1}, protocol=pickle.HIGHEST_PROTOCOL)),
+            component(pickle.dumps(None, protocol=pickle.HIGHEST_PROTOCOL)),
+        )
+    )
+
+    assert decode_state_key(legacy) == (descriptor.name, {"a": 1, "b": 2}, None)
 
 
 @pytest.mark.parametrize("suffix", [b"\x00", b"trailing"])

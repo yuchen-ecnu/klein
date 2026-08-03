@@ -85,12 +85,24 @@ class RecordRouter:
             indices = self._validate_row_indices(row_indices, num_rows, target_index)
             covered_rows.update(indices)
             sub_block = slice_block_rows(record.block, indices)
-            yield target_index, Record(sub_block, num_rows=len(indices))
+            routed = Record(sub_block, num_rows=len(indices))
+            self._inherit_slice_metadata(routed, record, indices)
+            yield target_index, routed
 
         if not covers_all_rows and len(covered_rows) != num_rows:
             expected_rows = set(range(num_rows))
             missing = sorted(expected_rows - covered_rows)
             raise ValueError(f"{self._partitioner} did not route columnar rows {missing[:10]}")
+
+    @staticmethod
+    def _inherit_slice_metadata(routed: Record, source: Record, indices: list[int]) -> None:
+        routed.sender = source.sender
+        routed.input_tag = source.input_tag
+        routed.timestamp = source.timestamp
+        if source.row_kinds is not None:
+            routed.row_kinds = tuple(source.row_kinds[index] for index in indices)
+        if source.row_timestamps is not None:
+            routed.row_timestamps = tuple(source.row_timestamps[index] for index in indices)
 
     def retry_ring(self, initial_target: int) -> tuple[int, ...]:
         """Freeze and validate a partitioner's retry decision on this thread."""

@@ -21,6 +21,7 @@ const colorMap: Record<string, Record<string, string>> = {
     running: blue[500],
     recovering: orange,
     finished: green[500],
+    cancelled: grey,
     failed: red[500],
   },
   kleinCheckpoint: {

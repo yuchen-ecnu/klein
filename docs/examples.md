@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Runnable Klein for Ray examples for bounded pipelines, streaming state, SQL, and event time."
+    description: "Runnable Klein examples for bounded pipelines, streaming state, SQL, and event time."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

@@ -16,6 +16,8 @@ from sqlglot import parse_one
 
 from ray.klein._compat import ray_data_expression
 from ray.klein._internal import streaming_expression
+from ray.klein._internal.sql import download_runtime
+from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy
 from ray.klein._internal.sql.ray_data_expression import to_ray_data_expression
 from ray.klein._internal.streaming_expression import (
     AsyncStreamingWithColumn,
@@ -129,7 +131,11 @@ async def test_download_expression_is_offloaded_with_uri_and_filesystem(monkeypa
 
     assert evaluator.is_async is True
     assert await evaluator.evaluate_async({"uri": "memory://payload"}) == b"body"
-    assert offloads == [(downloaded, ("memory://payload", filesystem, "uri"))]
+    assert len(offloads) == 1
+    assert offloads[0][0] is downloaded
+    uri, resolved_filesystem, column, policy = offloads[0][1]
+    assert (uri, resolved_filesystem, column) == ("memory://payload", filesystem, "uri")
+    assert policy.max_bytes == 64 * 1024 * 1024
 
     with pytest.raises(TypeError, match=r"requires evaluate_async\(\)"):
         evaluator.evaluate({"uri": "memory://payload"})
@@ -209,6 +215,7 @@ def _configure_download_filesystem(monkeypatch, *, paths, resolved_filesystem):
     filesystem = object()
     validated = object()
     retrying = Mock()
+    retrying.get_file_info.return_value = SimpleNamespace(size=None)
     retrying_errors = [OSError]
     monkeypatch.setattr(ray_data_expression, "_validate_and_wrap_filesystem", Mock(return_value=validated))
     resolve = Mock(return_value=(paths, resolved_filesystem))
@@ -266,7 +273,15 @@ def test_download_uri_returns_none_when_resolution_has_no_readable_target(
 def test_download_uri_soft_fails_and_logs_by_error_type(monkeypatch, error: Exception, log_method: str) -> None:
     logger_method = Mock()
     monkeypatch.setattr(ray_data_expression, "_validate_and_wrap_filesystem", Mock(side_effect=error))
-    monkeypatch.setattr(streaming_expression.logger, log_method, logger_method)
+    monkeypatch.setattr(download_runtime.logger, log_method, logger_method)
 
-    assert streaming_expression._download_uri("bad://uri", None, "uri") is None
+    assert (
+        streaming_expression._download_uri(
+            "bad://uri",
+            None,
+            "uri",
+            SQLDownloadPolicy(allowed_schemes=("bad",)),
+        )
+        is None
+    )
     logger_method.assert_called_once()

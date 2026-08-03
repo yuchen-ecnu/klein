@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import ray.cloudpickle as cloudpickle
 
-from ray.klein._internal.block import slice_block_rows
+from ray.klein._internal.block import concat_blocks, slice_block_rows, to_arrow_record_batch
 from ray.klein.runtime.collector.delivery_command import DataCommand
 from ray.klein.runtime.collector.delivery_journal import DeliveryJournal
 from ray.klein.runtime.collector.edge_output import EdgeOutput
@@ -128,6 +128,21 @@ def _source_batch_serialization(rows: int, repeats: int) -> Result:
     return Result("Kafka poll serialization", baseline, optimized, f"{rows}:1 transport calls")
 
 
+def _arrow_wire_microbatch(rows: int, repeats: int) -> Result:
+    records = tuple(Record({"id": index, "name": f"user-{index % 17}", "payload": b"x" * 128}) for index in range(rows))
+
+    def per_row_then_concat() -> object:
+        batches = [to_arrow_record_batch(record.block, expected_rows=1, row_shaped=True) for record in records]
+        return concat_blocks(batches)
+
+    return Result(
+        "Arrow wire micro-batch build",
+        _median_ms(per_row_then_concat, repeats),
+        _median_ms(lambda: EdgeOutput._pack_wire_records(records), repeats),
+        f"{rows} rows -> 1 RecordBatch",
+    )
+
+
 class _SleepingEdge(EdgeOutput):
     def __init__(self, latency: float) -> None:
         self._latency = latency
@@ -178,6 +193,7 @@ def main() -> None:
         _whole_block_validation(repeats),
         _replay_accounting(2_000, 2 if args.quick else 5),
         _source_batch_serialization(1_000, 2 if args.quick else 10),
+        _arrow_wire_microbatch(1_000, repeats),
         _target_lanes(2 if args.quick else 5),
     ]
     print(f"{'benchmark':36} {'baseline ms':>12} {'optimized ms':>13} {'speedup':>9}  detail")

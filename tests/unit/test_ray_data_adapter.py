@@ -3,6 +3,7 @@
 
 import inspect
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 import ray.data
@@ -100,26 +101,69 @@ def test_names_are_resolved_at_execution_and_arguments_are_forwarded_verbatim(mo
     ]
 
 
-def test_ray_data_expression_is_forwarded_without_wrapping(monkeypatch) -> None:
+def test_download_expression_batch_lowering_uses_the_klein_policy(monkeypatch) -> None:
+    dataset = FakeDataset()
+    context = KleinContext({"sql.download.max-bytes": 123})
+    stream = context.data.source(lambda: dataset)
+    expression = download("uri")
+    apply_downloads = Mock(return_value=dataset)
+
+    transformed = stream.data.with_column("body", expression, num_cpus=0.5)
+    monkeypatch.setattr(
+        "ray.klein._internal.sql.download_runtime.apply_batch_downloads",
+        apply_downloads,
+    )
+
+    assert logical_function_of(transformed).to_batch([dataset]) is dataset
+    assert apply_downloads.call_args.args == (dataset, (("body", "uri", None),))
+    assert apply_downloads.call_args.kwargs["policy"].max_bytes == 123
+    assert apply_downloads.call_args.kwargs["num_cpus"] == 0.5
+
+
+def test_keyword_download_expression_batch_lowering_does_not_forward_expression_arguments(
+    monkeypatch,
+) -> None:
     dataset = FakeDataset()
     stream = KleinContext().data.source(lambda: dataset)
     expression = download("uri")
-    captured = []
+    apply_downloads = Mock(return_value=dataset)
 
-    def replacement_with_column(dataset, name, expr, **kwargs):
-        captured.append((dataset, name, expr, kwargs))
-        return dataset
-
-    transformed = stream.data.with_column("body", expression, num_cpus=0.5)
-    monkeypatch.setattr(Dataset, "with_column", replacement_with_column)
+    transformed = stream.data.with_column(
+        column_name="body",
+        expr=expression,
+        num_cpus=0.5,
+    )
+    monkeypatch.setattr(
+        "ray.klein._internal.sql.download_runtime.apply_batch_downloads",
+        apply_downloads,
+    )
 
     assert logical_function_of(transformed).to_batch([dataset]) is dataset
-    assert len(captured) == 1
-    captured_dataset, captured_name, captured_expression, captured_options = captured[0]
-    assert captured_dataset is dataset
-    assert captured_name == "body"
-    assert captured_expression is expression
-    assert captured_options == {"num_cpus": 0.5}
+    assert apply_downloads.call_args.args == (dataset, (("body", "uri", None),))
+    assert apply_downloads.call_args.kwargs["num_cpus"] == 0.5
+
+
+@pytest.mark.parametrize("mode", ["batch", "streaming"])
+@pytest.mark.parametrize("method", ["with_column", "filter"])
+def test_composed_download_expressions_are_rejected_before_ray_lowering(
+    mode: str,
+    method: str,
+) -> None:
+    stream = KleinContext({"execution.runtime.mode": mode}).data.source(lambda: FakeDataset())
+    expression = download("uri").is_null()
+
+    with pytest.raises(ValueError, match=r"supported only as the direct expr.*with_column"):
+        if method == "with_column":
+            stream.data.with_column("missing", expression)
+        else:
+            stream.data.filter(expr=expression)
+
+
+def test_download_expression_rejects_invalid_output_name_before_ray_lowering() -> None:
+    stream = KleinContext().data.source(lambda: FakeDataset())
+
+    with pytest.raises(TypeError, match="column_name must be a string"):
+        stream.data.with_column(123, download("uri"))
 
 
 def test_ray_data_expression_transforms_have_streaming_implementations() -> None:
@@ -131,7 +175,7 @@ def test_ray_data_expression_transforms_have_streaming_implementations() -> None
 
     assert logical_function_of(computed).function is StreamingWithColumn
     assert logical_function_of(downloaded).function is AsyncStreamingWithColumn
-    assert logical_function_of(downloaded).runtime_info.async_buffer_size == 32
+    assert logical_function_of(downloaded).runtime_info.async_buffer_size == 1
     assert logical_function_of(filtered).function is StreamingExpressionFilter
 
 

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import hashlib
+import pickle
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -15,6 +16,7 @@ from ray.klein.runtime.coordinator.checkpoint import Checkpoint
 from ray.klein.runtime.coordinator.checkpoint_coordinator import CheckpointCoordinator
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.state.checkpoint_file_system import CheckpointFileSystem
+from ray.klein.state.checkpoint_layout import CheckpointLayout
 from ray.klein.state.sink_committable_checkpoint_entry import SinkCommittableCheckpointEntry
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
@@ -67,6 +69,37 @@ async def test_coordinator_discovers_latest_checkpoint_for_its_job(tmp_path: Pat
     assert coordinator.latest_checkpoint_path() == checkpoint_path
     assert await coordinator.source_state(ExecutionVertexId(11, 0)) == expected_state
     assert coordinator.barrier_epoch_floor() > 41
+
+
+@pytest.mark.asyncio
+async def test_coordinator_fails_fast_when_only_legacy_checkpoint_exists(tmp_path: Path):
+    root_uri = tmp_path.as_uri()
+    filesystem = CheckpointFileSystem(root_uri)
+    layout = CheckpointLayout("job-a")
+    filesystem.write_bytes(
+        layout.metadata_path(1),
+        pickle.dumps(
+            {
+                "version": 3,
+                "metadata_revision": 1,
+                "source_states": (),
+                "barrier_high_water": 1,
+                "operator_states": (),
+                "sink_committables": (),
+            }
+        ),
+    )
+    config = Configuration()
+    config.set(CheckpointOptions.DIRECTORY, root_uri)
+    coordinator = CheckpointCoordinator(config, job_id="job-a")
+    execution_graph = Mock()
+    execution_graph.execution_vertices = []
+    execution_graph.barrier_splits = {}
+    execution_graph.sink_execution_vertices = []
+    execution_graph.source_execution_vertices = []
+
+    with pytest.raises(ValueError, match=r"none has readable v4 metadata.*legacy pickle"):
+        await coordinator.open(execution_graph, restore_path=None)
 
 
 @pytest.mark.asyncio
@@ -274,13 +307,13 @@ def test_dashboard_snapshot_includes_per_operator_checkpoint_metrics(tmp_path: P
         (CheckpointOptions.MAX_CONCURRENT, 0, "max-concurrent-checkpoints"),
         (CheckpointOptions.TIMEOUT, -1, "checkpointing.timeout"),
         (CheckpointOptions.HISTORY_SIZE, 0, "max-history-size"),
-        (CheckpointOptions.MAX_CONCURRENT, True, "must be an integer"),
+        (CheckpointOptions.MAX_CONCURRENT, True, "expected int"),
     ],
 )
 def test_coordinator_rejects_invalid_checkpoint_limits(tmp_path: Path, option, value, message: str):
     config = Configuration()
     config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
-    config.set(option, value)
 
     with pytest.raises((TypeError, ValueError), match=message):
+        config.set(option, value)
         CheckpointCoordinator(config, job_id="job-a")

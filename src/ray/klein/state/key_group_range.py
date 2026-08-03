@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import hashlib
-import pickle
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
+
+from ray.klein.state.key_encoding import encode_key
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -62,21 +63,20 @@ def key_group_owner(key_group: int, max_parallelism: int, parallelism: int) -> i
 
 
 def key_group_for_key(key: Any, max_parallelism: int) -> int:
-    """Hash an arbitrary Python key into a process-independent key group.
+    """Hash a supported Python key into a process-independent key group.
 
     Python's built-in ``hash`` is salted per process and therefore cannot be
-    used for distributed state ownership. A fixed pickle protocol plus BLAKE2b
-    gives Klein deterministic routing across Ray workers and restarts.
+    used for distributed state ownership. Equality-preserving canonical bytes
+    plus BLAKE2b give Klein deterministic routing across workers and restarts.
+    Custom objects use their pickle representation and must provide stable
+    serialization; custom ``__eq__`` semantics are not inferred.
     """
 
     if isinstance(max_parallelism, bool) or not isinstance(max_parallelism, int):
         raise TypeError("max_parallelism must be an integer")
     if max_parallelism < 1:
         raise ValueError("max_parallelism must be at least 1")
-    try:
-        encoded = pickle.dumps(key, protocol=4)
-    except (pickle.PickleError, TypeError, AttributeError) as exc:
-        raise TypeError("keyed stream keys must be pickle-serializable") from exc
+    encoded = encode_key(key, protocol=4)
     digest = hashlib.blake2b(encoded, digest_size=8, person=b"ray.klein").digest()
     return int.from_bytes(digest, byteorder="big", signed=False) % max_parallelism
 

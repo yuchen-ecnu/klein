@@ -40,7 +40,28 @@ class WeightedQueue(Generic[T]):
         self._items: deque[tuple[T, int, int]] = deque()
         self._weight = 0
         self._bytes = 0
+        self._external_bytes: Callable[[], int] | None = None
+        self._on_take: Callable[[T, int], None] | None = None
         self._condition = asyncio.Condition()
+
+    def bind_external_byte_reservation(
+        self,
+        external_bytes: Callable[[], int],
+        on_take: Callable[[T, int], None],
+    ) -> None:
+        """Include accumulator/in-flight retention in byte admission.
+
+        The dequeue callback runs under the queue condition before queued bytes
+        are released, allowing the consumer to transfer them into an in-flight
+        reservation without opening an admission gap.
+        """
+
+        if self._max_bytes is None:
+            return
+        if self._external_bytes is not None or self._on_take is not None:
+            raise RuntimeError("weighted queue byte reservation is already bound")
+        self._external_bytes = external_bytes
+        self._on_take = on_take
 
     async def put(self, item: T) -> None:
         weight, size_bytes = self._measure(item)
@@ -111,12 +132,21 @@ class WeightedQueue(Generic[T]):
         return weight, size_bytes
 
     def _can_admit(self, weight: int, size_bytes: int) -> bool:
-        if not self._items:
+        external_bytes = self._external_byte_size()
+        if not self._items and external_bytes == 0:
             # One oversized item is exclusive so the queue always makes progress.
             return True
         if self._weight + weight > self._max_weight:
             return False
-        return self._max_bytes is None or self._bytes + size_bytes <= self._max_bytes
+        return self._max_bytes is None or self._bytes + external_bytes + size_bytes <= self._max_bytes
+
+    def _external_byte_size(self) -> int:
+        if self._external_bytes is None:
+            return 0
+        size_bytes = self._external_bytes()
+        if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes < 0:
+            raise RuntimeError(f"external queue byte reservation must be a non-negative integer, got {size_bytes!r}")
+        return size_bytes
 
     def _admit(self, item: T, weight: int, size_bytes: int) -> None:
         self._items.append((item, weight, size_bytes))
@@ -126,6 +156,8 @@ class WeightedQueue(Generic[T]):
 
     def _take(self, index: int) -> T:
         item, weight, size_bytes = self._items[index]
+        if self._on_take is not None:
+            self._on_take(item, size_bytes)
         del self._items[index]
         self._weight -= weight
         self._bytes -= size_bytes
@@ -139,6 +171,12 @@ class WeightedQueue(Generic[T]):
     @property
     def byte_size(self) -> int:
         return self._bytes
+
+    @property
+    def retained_byte_size(self) -> int:
+        """Bytes queued or reserved by the bound downstream accumulator."""
+
+        return self._bytes + self._external_byte_size()
 
     @property
     def envelope_count(self) -> int:

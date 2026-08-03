@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Use public Ray Data readers, transforms, consumers, and writers through Klein for Ray."
+    description: "Use public Ray Data readers, transforms, consumers, and writers through Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -16,9 +16,10 @@ expose it without a Klein wrapper release.
 
 Ray Data sources, general `stream.data` transforms, and `stream.data` consumers
 are batch-only. The expression forms `stream.data.with_column(name, expr)` and
-`stream.data.filter(expr=expr)` are dual-mode: batch execution delegates to Ray
-Data unchanged, while streaming execution uses Klein's native expression
-operator. `download()` runs with bounded ordered concurrency and backpressure.
+`stream.data.filter(expr=expr)` are dual-mode: streaming execution uses Klein's
+native expression operator. Non-download batch expressions delegate to Ray Data;
+`download()` uses Klein's shared `sql.download.*` network and byte policy in
+both modes, with one in-flight streaming request per task.
 
 Check availability before relying on an API that differs across Ray versions:
 

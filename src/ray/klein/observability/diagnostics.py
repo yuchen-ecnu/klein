@@ -30,7 +30,7 @@ def truncate_diagnostic(message: str, max_length: int = _MAX_LOG_MESSAGE_LENGTH)
     """Bound diagnostic payloads without depending on a private backend."""
     if len(message) <= max_length:
         return message
-    suffix = "\n... [truncated by Klein for Ray]"
+    suffix = "\n... [truncated by Klein]"
     return message[: max_length - len(suffix)] + suffix
 
 

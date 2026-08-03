@@ -20,6 +20,7 @@ _EXPORTS = {
     "ObservabilityOptions": ("ray.klein.config.observability_options", "ObservabilityOptions"),
     "RuntimeExecutionMode": ("ray.klein.config.runtime_execution_mode", "RuntimeExecutionMode"),
     "ServeOptions": ("ray.klein.config.serve_options", "ServeOptions"),
+    "SQLDownloadOptions": ("ray.klein.config.sql_download_options", "SQLDownloadOptions"),
     "StateOptions": ("ray.klein.config.state_options", "StateOptions"),
     "UDFOptions": ("ray.klein.config.udf_options", "UDFOptions"),
 }

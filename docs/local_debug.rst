@@ -10,7 +10,7 @@ Streaming execution calls ``ray.init()`` when no Ray runtime is active. This
 starts a local cluster whose lifetime follows the Python process. You can also
 start Ray first and attach to it. Pre-initialize Ray in the application when
 you need custom dashboard, metrics-export, address, or resource settings;
-Klein for Ray will reuse the active runtime:
+Klein will reuse the active runtime:
 
 .. code-block:: bash
 

@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Frequently asked questions about choosing, installing, developing, deploying, and operating Klein for Ray."
+    description: "Frequently asked questions about choosing, installing, developing, deploying, and operating Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -102,7 +102,7 @@ Selection is job-wide, not branch-by-branch. See
 Yes, set `execution.runtime.mode` to `batch` or `streaming` before execution.
 An incompatible graph fails instead of silently changing an operator's
 semantics. See [Configuration](configuration.md) and its
-[reference](configuration-reference.md#execution-recovery-and-checkpointing).
+[reference](configuration-reference.md#execution-mode-and-task-deployment).
 
 ### How does `auto` handle a bounded custom source?
 

@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Contributing to Klein for Ray
+# Contributing to Klein
 
-Thank you for helping improve Klein for Ray. By participating, you agree to follow
+Thank you for helping improve Klein. By participating, you agree to follow
 the [Code of Conduct](CODE_OF_CONDUCT.md), and you certify each contribution
 under the Developer Certificate of Origin described below.
 
@@ -34,7 +34,7 @@ Run `make integration` before changing streaming runtime behavior and
 `make external` before changing Kafka, Redis, or other service integrations.
 See the [testing guide](docs/testing.md) for fixture and test-writing rules.
 
-The project enforces a 68% branch-coverage floor. New and changed behavior must
+The project enforces a 78% combined line-and-branch coverage floor. New and changed behavior must
 have focused tests; do not weaken the threshold or add exclusions to land a
 change.
 

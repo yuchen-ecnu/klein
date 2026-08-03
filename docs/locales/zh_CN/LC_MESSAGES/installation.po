@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -20,12 +20,12 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Install Klein for Ray from source, select optional integrations, and keep"
+"Install Klein from source, select optional integrations, and keep"
 " every Ray worker on a compatible environment."
-msgstr "从源码安装 Klein for Ray、选择可选集成，并确保每个 Ray worker 使用兼容的运行环境。"
+msgstr "从源码安装 Klein、选择可选集成，并确保每个 Ray worker 使用兼容的运行环境。"
 
-msgid "Install Klein for Ray"
-msgstr "安装 Klein for Ray"
+msgid "Install Klein"
+msgstr "安装 Klein"
 
 msgid ""
 "Klein is currently alpha software. This guide installs it from a source "
@@ -190,6 +190,15 @@ msgid ""
 "specific dependencies may still be required."
 msgstr "Iceberg catalog 访问，以及批处理或基于 checkpoint 的追加输出。可能仍需安装特定 catalog 的依赖。"
 
+msgid "`media`"
+msgstr "`media`"
+
+msgid "`pyvips[binary]>=3,<4`, `Pillow>=10,<13`, `pypdf>=5,<7`, and `pypdfium2>=4.30,<6`"
+msgstr "`pyvips[binary]>=3,<4`、`Pillow>=10,<13`、`pypdf>=5,<7` 和 `pypdfium2>=4.30,<6`"
+
+msgid "SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering."
+msgstr "SQL 图像与 PDF 函数：优先使用原生 libvips 处理，并以 Pillow 作为兼容回退；同时支持 PDF 拆分与 PDFium 渲染。"
+
 msgid "`rocketmq`"
 msgstr "`rocketmq`"
 
@@ -265,6 +274,23 @@ msgstr "`all`、`docs`、`test`、pre-commit 和 Ruff"
 
 msgid "Full contributor setup."
 msgstr "完整的贡献者环境。"
+
+msgid ""
+"Install `ray-klein[media]` on every worker that executes an image or PDF SQL "
+"function. The prebuilt libvips package provides the preferred native, "
+"parallel image path; Pillow is retained as a compatibility fallback. Supported "
+"input formats follow the loaders exposed by the libvips and Pillow builds in "
+"the worker image. `IMAGE_RESIZE` uses the output allowlist documented in the "
+"[SQL guide](sql.md), with actual codec availability varying by platform. A "
+"custom system libvips build can add codecs absent from the bundled binary. PDF "
+"page splitting uses pypdf, while rendering uses the separately bundled PDFium "
+"runtime from pypdfium2."
+msgstr ""
+"请在每个执行图像或 PDF SQL 函数的 worker 上安装 `ray-klein[media]`。预编译 "
+"libvips 包提供首选的原生并行图像路径；Pillow 保留为兼容回退。输入格式取决于 worker 镜像中 "
+"libvips 和 Pillow 构建所暴露的加载器。`IMAGE_RESIZE` 使用 [SQL 指南](sql.md)中记录的输出"
+"白名单，实际编解码器可用性因平台而异。自定义 libvips 系统构建可添加预编译二进制中缺失的"
+"编解码器。PDF 分页使用 pypdf，渲染使用 pypdfium2 单独捆绑的 PDFium 运行时。"
 
 msgid ""
 "The [connector catalog](connectors/index.md) gives each connector's "

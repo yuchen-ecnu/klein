@@ -12,6 +12,24 @@ export default defineConfig({
     outDir: fileURLToPath(
       new URL("../src/ray/klein/observability/dashboard/static", import.meta.url),
     ),
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "react-vendor",
+              priority: 40,
+              test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/,
+            },
+            {
+              name: "mui-vendor",
+              priority: 30,
+              test: /node_modules[\\/](@emotion|@mui|@popperjs|react-transition-group)[\\/]/,
+            },
+          ],
+        },
+      },
+    },
     sourcemap: false,
   },
 });

@@ -1,13 +1,13 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray source layout, package ownership rules, public API boundaries, and architecture checks."
+    description: "Klein source layout, package ownership rules, public API boundaries, and architecture checks."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Package structure
 
-Klein for Ray uses a conventional `src` layout. The importable package is under
+Klein uses a conventional `src` layout. The importable package is under
 `src/ray/klein`; tests, examples, and documentation do not live inside the
 runtime package.
 

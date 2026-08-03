@@ -88,6 +88,16 @@ Pipeline options
 
    PipelineOptions
 
+SQL download options
+--------------------
+
+.. currentmodule:: ray.klein.config.sql_download_options
+
+.. autosummary::
+   :nosignatures:
+
+   SQLDownloadOptions
+
 Restart strategy options
 ------------------------
 

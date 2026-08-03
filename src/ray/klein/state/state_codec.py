@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 import hashlib
+import pickle
 import struct
 from typing import Any, cast
 
+from ray.klein.state.key_encoding import decode_key, encode_key
 from ray.klein.state.pickle_state_serializer import PickleStateSerializer
 from ray.klein.state.state_descriptor import StateDescriptor
 from ray.klein.state.timer_domain import TimerDomain
@@ -15,14 +17,14 @@ def encode_state_key(descriptor: StateDescriptor, key: Any, namespace: Any) -> b
     return b"".join(
         (
             _component(descriptor.name.encode("utf-8")),
-            _component(_KEY_SERIALIZER.dumps(key)),
-            _component(_KEY_SERIALIZER.dumps(namespace)),
+            _component(encode_key(key, protocol=pickle.HIGHEST_PROTOCOL)),
+            _component(encode_key(namespace, protocol=pickle.HIGHEST_PROTOCOL)),
         )
     )
 
 
 def state_key_prefix(descriptor: StateDescriptor, key: Any) -> bytes:
-    return _component(descriptor.name.encode("utf-8")) + _component(_KEY_SERIALIZER.dumps(key))
+    return _component(descriptor.name.encode("utf-8")) + _component(encode_key(key, protocol=pickle.HIGHEST_PROTOCOL))
 
 
 def decode_state_namespace(encoded: bytes) -> Any:
@@ -31,7 +33,7 @@ def decode_state_namespace(encoded: bytes) -> Any:
     namespace, offset = _read_component(encoded, offset)
     if offset != len(encoded):
         raise ValueError("managed state key contains trailing bytes")
-    return _KEY_SERIALIZER.loads(namespace)
+    return decode_key(namespace)
 
 
 def decode_state_key(encoded: bytes) -> tuple[str, Any, Any]:
@@ -44,8 +46,8 @@ def decode_state_key(encoded: bytes) -> tuple[str, Any, Any]:
         raise ValueError("managed state key contains trailing bytes")
     return (
         name.decode("utf-8"),
-        _KEY_SERIALIZER.loads(key),
-        _KEY_SERIALIZER.loads(namespace),
+        decode_key(key),
+        decode_key(namespace),
     )
 
 
@@ -72,7 +74,7 @@ def decode_expiry_key(encoded: bytes) -> tuple[int, bytes]:
 
 
 def encode_timer_key(timestamp: int, key: Any, namespace: Any, domain: TimerDomain) -> bytes:
-    payload = _KEY_SERIALIZER.dumps((key, namespace))
+    payload = encode_key((key, namespace), protocol=pickle.HIGHEST_PROTOCOL)
     domain_prefix = b"e" if domain == TimerDomain.EVENT_TIME else b"p"
     return domain_prefix + struct.pack(">Q", timestamp) + hashlib.sha256(payload).digest()
 

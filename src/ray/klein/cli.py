@@ -297,6 +297,7 @@ def klein_dashboard(
             port,
             ray_dashboard_url=ray_dashboard_url,
             frontend_url=frontend_url,
+            allow_unauthenticated=allow_unauthenticated,
         )
     except (OSError, TypeError, ValueError) as error:
         raise click.ClickException(f"Cannot start the Klein Dashboard on {host}:{port}: {error}") from error
@@ -414,6 +415,7 @@ def _render_job_status(snapshot: dict[str, Any], namespace: str) -> None:
             "running": "cyan",
             "finished": "green",
             "recovering": "yellow",
+            "cancelled": "bright_black",
             "failed": "red",
         }.get(operator_status, "white")
         backpressure = operator.get("backpressure_percent")

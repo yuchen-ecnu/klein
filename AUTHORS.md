@@ -2,7 +2,7 @@
 
 # Authors
 
-Klein for Ray is maintained by its contributors. The original internal history
+Klein is maintained by its contributors. The original internal history
 records contributions under the following author identities:
 
 - Yu Chen / chenyu

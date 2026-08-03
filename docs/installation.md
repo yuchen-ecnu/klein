@@ -1,12 +1,12 @@
 ---
 myst:
   html_meta:
-    description: "Install Klein for Ray from source, select optional integrations, and keep every Ray worker on a compatible environment."
+    description: "Install Klein from source, select optional integrations, and keep every Ray worker on a compatible environment."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-installation)=
-# Install Klein for Ray
+# Install Klein
 
 Klein is currently alpha software. This guide installs it from a source
 checkout or from an artifact that you build from that checkout; it does not
@@ -107,6 +107,7 @@ checkout.
 | --- | --- | --- |
 | `kafka` | `confluent-kafka>=2.3,<3` | Bounded or continuous Kafka input and Kafka output. |
 | `iceberg` | `pyiceberg>=0.11.1,<0.12` | Iceberg catalog access and batch or checkpointed append output. Catalog-specific dependencies may still be required. |
+| `media` | `pyvips[binary]>=3,<4`, `Pillow>=10,<13`, `pypdf>=5,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
 | `rocketmq` | `rocketmq-client-python>=2,<3` | Continuous RocketMQ input. A compatible native `librocketmq` is also required on every executing worker. |
 | `redis` | `redis>=5,<7` | Redis lookup, filtering, and output. |
 | `rocksdb` | `rocksdict>=0.3.29,<0.4` | The node-local RocksDB managed-state backend. |
@@ -115,6 +116,16 @@ checkout.
 | `test` | pytest, build/audit tools, testcontainers, and test-only Iceberg support | Running the repository test suites. |
 | `docs` | Sphinx, MyST, the PyData theme, copybutton, and sphinx-design | Building this documentation. |
 | `dev` | `all`, `docs`, `test`, pre-commit, and Ruff | Full contributor setup. |
+
+Install `ray-klein[media]` on every worker that executes an image or PDF SQL
+function. The prebuilt libvips package provides the preferred native,
+parallel image path; Pillow is retained as a compatibility fallback. Supported
+input formats follow the loaders exposed by the libvips and Pillow builds in
+the worker image. `IMAGE_RESIZE` uses the output allowlist documented in the
+[SQL guide](sql.md), with actual codec availability varying by platform. A
+custom system libvips build can add codecs absent from the bundled binary. PDF
+page splitting uses pypdf, while rendering uses the separately bundled PDFium
+runtime from pypdfium2.
 
 The [connector catalog](connectors/index.md) gives each connector's execution
 modes, data shape, configuration, and delivery guarantee. A connector may also

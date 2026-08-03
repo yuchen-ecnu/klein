@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -20,20 +20,20 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Klein for Ray API stability, compatibility, deprecation, and public-"
+"Klein API stability, compatibility, deprecation, and public-"
 "contract policy."
-msgstr "Klein for Ray API 稳定性、兼容性、弃用及公共契约政策。"
+msgstr "Klein API 稳定性、兼容性、弃用及公共契约政策。"
 
 msgid "API stability and compatibility"
 msgstr "API 稳定性与兼容性"
 
 msgid ""
-"Klein for Ray is an alpha project. The word **public** identifies an "
+"Klein is an alpha project. The word **public** identifies an "
 "intended application or extension boundary; it does not yet mean the 1.0 "
 "compatibility guarantee of a mature stable release. Pin the Klein and Ray"
 " versions used in production and read [CHANGELOG.md](https://github.com"
 "/yuchen-ecnu/klein/blob/main/CHANGELOG.md) before upgrading."
-msgstr "Klein for Ray 目前处于 alpha 阶段。**公共（public）** 表示预期供应用程序或扩展使用的边界，但尚不代表成熟稳定版所提供的 1.0 兼容性保证。请固定生产环境使用的 Klein 和 Ray 版本，并在升级前阅读 [CHANGELOG.md](https://github.com/yuchen-ecnu/klein/blob/main/CHANGELOG.md)。"
+msgstr "Klein 目前处于 alpha 阶段。**公共（public）** 表示预期供应用程序或扩展使用的边界，但尚不代表成熟稳定版所提供的 1.0 兼容性保证。请固定生产环境使用的 Klein 和 Ray 版本，并在升级前阅读 [CHANGELOG.md](https://github.com/yuchen-ecnu/klein/blob/main/CHANGELOG.md)。"
 
 msgid "Contract categories"
 msgstr "契约类别"

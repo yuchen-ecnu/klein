@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Compatibility, rehearsal, upgrade, validation, and rollback procedures for Klein for Ray jobs."
+    description: "Compatibility, rehearsal, upgrade, validation, and rollback procedures for Klein jobs."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -48,14 +48,22 @@ native-library behavior even when the Klein version does not change.
 
 The current restore implementation accepts only its current versioned
 checkpoint metadata and managed-state formats. It rejects an unknown format
-instead of guessing a migration. Checkpoint metadata and application state use
-pickle, so class/module availability is also part of compatibility.
+instead of guessing a migration. Version 4 metadata uses a safe JSON envelope,
+but source state, sink committables, custom keys, and serializer-owned values
+remain trusted application pickle payloads, so class/module availability is
+also part of compatibility.
+
+This release does not automatically restore version 3 or prefix-less pickle
+metadata: it rejects those bytes before invoking pickle. Keep such a job on the
+exact version that wrote its checkpoint, or start the current release from
+clean state. There is no supported stateful migration across this metadata
+boundary yet.
 
 Review every dimension below before attempting a stateful restore.
 
 | Dimension | Compatible requirement | Unsafe or unsupported change |
 | --- | --- | --- |
-| Completed checkpoint | Restore from the full URI of one `chk-N` directory whose `_metadata` is readable. Preserve every referenced state object in the job prefix. | An incomplete directory, only a copied `_metadata` file, edited pickle metadata, or an object whose checksum/size no longer matches. |
+| Completed checkpoint | Restore from the full URI of one `chk-N` directory whose version 4 `_metadata` is readable. Preserve every referenced state object in the job prefix. | An incomplete directory, only a copied `_metadata` file, edited metadata, legacy pickle metadata, or an object whose checksum/size no longer matches. |
 | Graph identity | Rebuild streams in the same construction order and preserve sources, stateful operators, sinks, names, partition edges, and chaining-sensitive layout. After registering the terminals, save and compare `ray.klein.explain("<job-name>")` output. | Adding, removing, or reordering even a stateless stream can shift downstream numeric operator IDs. A same-numbered but different operator can receive the wrong checkpoint entry. |
 | Managed state | Preserve `state.keyed.max-parallelism`, descriptor names, key type/serialization, value shape/serializer, namespaces, timer representation, and stateful operator meaning. | Changing max parallelism, renaming descriptors/classes/modules, incompatible value or key serialization, or assuming arbitrary Python objects will migrate automatically. |
 | State backend | Keep `state.backend.type` and its dependency unchanged for the upgrade unless a separately tested migration is provided. Node-local state remains disposable; durable checkpoint data is authoritative. | Treating a memory-to-RocksDB or RocksDB-to-memory change as a documented migration path. Klein does not currently promise cross-backend restore. |

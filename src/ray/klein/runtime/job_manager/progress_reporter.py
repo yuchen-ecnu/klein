@@ -13,6 +13,7 @@ from dataclasses import fields
 
 import ray.klein as klein
 from ray.klein._internal.logging import get_logger
+from ray.klein.api.job_status import JobStatus
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
@@ -50,11 +51,11 @@ class ProgressReporter:
     def __init__(
         self,
         execution_graph: ExecutionGraph,
-        is_job_running: Callable[[], bool],
+        job_status: Callable[[], JobStatus],
         restart_window: Callable[[], tuple[int, int, int]],
     ) -> None:
         self._execution_graph = execution_graph
-        self._is_job_running = is_job_running
+        self._job_status = job_status
         self._restart_window = restart_window
         # Last good per-subtask counts, keyed by stable physical identity. A subtask whose progress
         # RPC fails mid-restart falls back to these so its row holds its numbers
@@ -75,7 +76,7 @@ class ProgressReporter:
             return await self._snapshot()
 
     async def _snapshot(self) -> ProgressSnapshot:
-        job_running = self._is_job_running()
+        job_status = self._job_status()
         job_vertices = list(self._execution_graph.job_vertices.values())
         vertices_by_job_vertex = [list(job_vertex.execution_vertices.values()) for job_vertex in job_vertices]
         counts_by_vertex, failed_vertices = await self._probe_counts(vertices_by_job_vertex)
@@ -85,7 +86,7 @@ class ProgressReporter:
                 vertices,
                 counts_by_vertex,
                 failed_vertices,
-                job_running,
+                job_status,
             )
             for job_vertex, vertices in zip(
                 job_vertices,
@@ -165,7 +166,7 @@ class ProgressReporter:
         vertices,
         counts_by_vertex,
         failed_vertices,
-        job_running: bool,
+        job_status: JobStatus,
     ) -> OperatorProgress:
         statuses = [vertex.status for vertex in vertices]
         counts = [counts_by_vertex.get(vertex.id, SubtaskCounts()) for vertex in vertices]
@@ -175,14 +176,14 @@ class ProgressReporter:
         failed_progress_requests = sum(1 for vertex in vertices if vertex.id in failed_vertices)
         resources = job_vertex.resources
         subtasks = tuple(
-            self._subtask_progress(vertex, count, vertex.id in failed_vertices, job_running)
+            self._subtask_progress(vertex, count, vertex.id in failed_vertices, job_status)
             for vertex, count in zip(vertices, counts, strict=True)
         )
         return OperatorProgress(
             name=job_vertex.name,
             op_id=job_vertex.id,
             parallelism=job_vertex.concurrency,
-            status=self._aggregate_status(statuses, job_running, failed_progress_requests),
+            status=self._aggregate_status(statuses, job_status, failed_progress_requests),
             rows_in=totals.rows_in,
             rows_out=totals.rows_out,
             bytes_in=totals.bytes_in,
@@ -191,7 +192,7 @@ class ProgressReporter:
             capacity=totals.capacity,
             busy_ns=totals.busy_ns,
             backpressure_ns=totals.backpressure_ns,
-            instances=self._instance_counts(statuses, job_running, failed_progress_requests),
+            instances=self._instance_counts(statuses, job_status, failed_progress_requests),
             cpus=resources.cpus,
             gpus=resources.gpus,
             downstream=tuple(self._execution_graph.downstream_job_vertices(job_vertex.id)),
@@ -242,9 +243,9 @@ class ProgressReporter:
         vertex,
         counts: SubtaskCounts,
         progress_failed: bool,
-        job_running: bool,
+        job_status: JobStatus,
     ) -> SubtaskProgress:
-        status = cls._aggregate_status([vertex.status], job_running, int(progress_failed))
+        status = cls._aggregate_status([vertex.status], job_status, int(progress_failed))
         return SubtaskProgress(
             subtask_index=vertex.index,
             status=status,
@@ -260,7 +261,7 @@ class ProgressReporter:
             return 0, 0, 0
 
     @staticmethod
-    def _instance_counts(statuses, job_running: bool, failed_progress_requests: int = 0) -> InstanceCounts:
+    def _instance_counts(statuses, job_status: JobStatus, failed_progress_requests: int = 0) -> InstanceCounts:
         """Break an operator's subtask statuses into per-state counts.
 
         A FAILED subtask while the job is still RUNNING is Ray rebuilding it
@@ -269,17 +270,21 @@ class ProgressReporter:
         their cached status may still read RUNNING — reclassify those to
         restarting so recovery is visible immediately.
         """
-        running = pending = restarting = finished = failed = 0
+        job_running = job_status == JobStatus.RUNNING
+        job_cancelled = job_status == JobStatus.CANCELLED
+        running = pending = restarting = finished = cancelled = failed = 0
         for status in statuses:
-            if status == ExecutionVertexStatus.RUNNING:
-                running += 1
-            elif status == ExecutionVertexStatus.FINISHED:
+            if status == ExecutionVertexStatus.FINISHED:
                 finished += 1
             elif status == ExecutionVertexStatus.FAILED:
                 if job_running:
                     restarting += 1
                 else:
                     failed += 1
+            elif status == ExecutionVertexStatus.CANCELLED or job_cancelled:
+                cancelled += 1
+            elif status == ExecutionVertexStatus.RUNNING:
+                running += 1
             else:  # CREATED / DEPLOYED / CANCELLING — not yet processing
                 pending += 1
         reclassify = min(failed_progress_requests, running)
@@ -290,21 +295,33 @@ class ProgressReporter:
             pending=pending,
             restarting=restarting,
             finished=finished,
+            cancelled=cancelled,
             failed=failed,
         )
 
     @staticmethod
-    def _aggregate_status(statuses, job_running: bool, failed_progress_requests: int = 0) -> str:
+    def _aggregate_status(statuses, job_status: JobStatus, failed_progress_requests: int = 0) -> str:
         # A subtask FAILED while the job is still RUNNING means Ray is rebuilding
         # it / Tier-0 recovery is in flight — surface as "recovering". A FAILED
         # subtask once the job has left RUNNING is a genuine failure.
+        job_running = job_status == JobStatus.RUNNING
         status_set = set(statuses)
-        if job_running and (failed_progress_requests > 0 or ExecutionVertexStatus.FAILED in status_set):
+        if job_running and (
+            ExecutionVertexStatus.FAILED in status_set
+            or (failed_progress_requests > 0 and ExecutionVertexStatus.RUNNING in status_set)
+        ):
             return "recovering"
         if ExecutionVertexStatus.FAILED in status_set:
             return "failed"
         if statuses and status_set == {ExecutionVertexStatus.FINISHED}:
             return "finished"
+        # A successful job cancellation may leave never-deployed vertices in
+        # CREATED while the teardown reconciles deployed vertices to CANCELLED.
+        # Once the parent job is terminal, neither state is pending work.
+        if job_status == JobStatus.CANCELLED:
+            return "cancelled"
         if ExecutionVertexStatus.RUNNING in status_set:
             return "running"
+        if ExecutionVertexStatus.CANCELLED in status_set:
+            return "cancelled"
         return "pending"

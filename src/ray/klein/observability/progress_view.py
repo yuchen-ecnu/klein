@@ -32,6 +32,7 @@ _STATUS_STYLE = {
     "finished": ("✔", "green"),
     "failed": ("✖", "red"),
     "recovering": ("⟳", "yellow"),
+    "cancelled": ("■", "grey50"),
     "pending": ("·", "grey50"),
 }
 
@@ -240,8 +241,9 @@ class ProgressView:
         """Per-instance state breakdown: running / pending / restarting.
 
         The aggregate status collapses an operator to one label; this shows the
-        raw subtask counts so a partial recovery ("3 running, 1 restarting") is
-        visible. Only non-zero states are listed to keep the cell compact.
+        effective subtask counts so a partial recovery ("3 running, 1
+        restarting") is visible. Only non-zero states are listed to keep the
+        cell compact.
         """
         from rich.text import Text
 
@@ -255,6 +257,7 @@ class ProgressView:
             (inst.restarting, "restart", "bold yellow"),
             (inst.pending, "pend", "grey50"),
             (inst.finished, "done", "cyan"),
+            (inst.cancelled, "cancel", "grey50"),
             (inst.failed, "fail", "bold red"),
         ):
             if count > 0:

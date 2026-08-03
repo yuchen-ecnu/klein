@@ -1,50 +1,26 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray connector catalog for Ray Data, collections, Kafka, RocketMQ, filesystems, Redis, console, custom connectors, and Ray Serve."
+    description: "Klein connector catalog for Ray Data, collections, Kafka, RocketMQ, filesystems, Redis, console, custom connectors, and Ray Serve."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-connectors)=
-# Connectors
+# Overview
 
-This section is the complete catalog of inputs, outputs, lookup integrations,
-and execution integrations shipped with Klein. Start here when choosing how a
-dataflow enters or leaves Klein; each child page documents installation,
-supported execution modes, configuration, data shape, delivery guarantees, and
-operational constraints.
+This section catalogs the inputs, outputs, formats, and integrations shipped
+with Klein. Connector names stay short in the navigation; use the groups below
+to choose the right family before comparing detailed capabilities.
 
-```text
-connectors/
-├── index.md          # Catalog and capability matrix
-├── ray-data.md       # Dynamic Ray Data readers, transforms, and writers
-├── collections.md    # In-memory values and existing Ray Datasets
-├── kafka.md          # Bounded/continuous input and Kafka output
-├── rocketmq.md       # Continuous Apache RocketMQ input
-├── canal.md          # Canal JSON value format for Kafka input
-├── filesystem.md     # JSON, CSV, Parquet, and text files
-├── iceberg.md        # Apache Iceberg batch and checkpointed append output
-├── redis.md          # Lookups, missing-key filters, and output
-├── console.md        # Diagnostic stdout output
-├── custom.md         # SourceFunction, SinkFunction, and TableFactory
-└── ray-serve.md      # Optional Ray Serve execution integration
-```
+## Catalog
 
-```{toctree}
-:maxdepth: 1
-
-ray-data
-collections
-kafka
-rocketmq
-canal
-filesystem
-iceberg
-redis
-console
-custom
-ray-serve
-```
+| Group | Entries | Purpose |
+|---|---|---|
+| Native | [Ray Data](ray-data.md), [Collections](collections.md) | Ray-native and in-memory data |
+| Messaging | [Kafka](kafka.md), [RocketMQ](rocketmq.md), [Canal](canal.md) | Event streams and CDC records |
+| Storage | [Filesystem](filesystem.md), [Iceberg](iceberg.md) | Files and lakehouse tables |
+| Services | [Redis](redis.md), [Ray Serve](ray-serve.md) | External state and serving regions |
+| Development | [Console](console.md), [Custom](custom.md) | Debugging and extension points |
 
 ## Capability matrix
 
@@ -57,9 +33,9 @@ ray-serve
 | [Filesystem](filesystem.md) | Yes | Yes | Yes | Output only | Yes | Filesystem-specific dependencies |
 | [Iceberg](iceberg.md) | Via Ray Data | Yes | Yes | Append output | No | `iceberg` plus catalog-specific dependencies |
 | [Redis](redis.md) | Lookup/filter | Yes | Yes | Yes | No | `redis` |
+| [Ray Serve](ray-serve.md) | Execution region | Execution region | Yes | Yes | No | `serve` |
 | [Console](console.md) | No | Yes | Yes | Yes | Sink only | None |
 | [Custom](custom.md) | Yes | Yes | Depends on implementation | Yes | Optional | Connector-defined |
-| [Ray Serve](ray-serve.md) | Execution region | Execution region | Yes | Yes | No | `serve` |
 
 ### Matrix notes
 

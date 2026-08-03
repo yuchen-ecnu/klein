@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Standalone Sphinx configuration for the Klein for Ray documentation."""
+"""Standalone Sphinx configuration for the Klein documentation."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from html import escape, unescape
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-project = "Klein for Ray"
-author = "Klein for Ray Authors"
-copyright = "2024-2026, Klein for Ray Authors"
+project = "Klein"
+author = "Klein Authors"
+copyright = "2024-2026, Klein Authors"
 
 try:
     release = version("ray-klein")
@@ -54,12 +54,20 @@ source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 master_doc = "index"
 
 html_theme = "pydata_sphinx_theme"
-html_title = "Klein for Ray 中文文档" if language == "zh_CN" else "Klein for Ray"
-html_static_path: list[str] = []
+html_title = "Klein 中文文档" if language == "zh_CN" else "Klein"
+html_static_path = ["_static"]
+html_css_files = ["sidebar.css", "configuration.css"]
 html_theme_options = {
     "github_url": "https://github.com/yuchen-ecnu/klein",
+    "logo": {
+        "image_light": "_static/klein-logo.svg",
+        "image_dark": "_static/klein-logo-dark.svg",
+        "alt_text": "Klein",
+    },
+    "collapse_navigation": True,
     "show_nav_level": 2,
     "navigation_depth": 4,
+    "navbar_center": [],
     "navbar_end": ["language-switcher.html", "theme-switcher.html", "navbar-icon-links.html"],
     "secondary_sidebar_items": ["page-toc"] if language == "zh_CN" else ["page-toc", "edit-this-page"],
     "use_edit_page_button": True,
@@ -70,6 +78,7 @@ html_context = {
     "github_version": "main",
     "doc_path": "docs",
 }
+html_sidebars = {"**": ["global-sidebar.html"]}
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),

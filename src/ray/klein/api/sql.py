@@ -38,6 +38,7 @@ def sql(
     session = SQLSession(context)
     for name, function in context.sql_session._scalar_function_bindings().items():
         session.register_scalar_function(name, function)
+    session._inherit_ai_function_bindings(context.sql_session._ai_function_bindings())
     return session.sql(
         query,
         tables=tables,

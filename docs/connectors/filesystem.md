@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Read files with Ray Data and write checkpoint-transactional JSON, CSV, Parquet, and text files with Klein for Ray."
+    description: "Read files with Ray Data and write checkpoint-transactional JSON, CSV, Parquet, and text files with Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

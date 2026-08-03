@@ -14,7 +14,7 @@ import {
 } from "@mui/material";
 import React, { useState } from "react";
 import { RiCloseLine } from "react-icons/ri";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { formatDuration } from "../../common/formatUtils";
 import Loading from "../../components/Loading";
 import { StatusChip } from "../../components/StatusChip";

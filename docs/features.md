@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Explore Klein for Ray feature guides for hybrid execution, state, event time, SQL, recovery, live rescaling, detached jobs, and Ray Serve."
+    description: "Explore Klein feature guides for hybrid execution, state, event time, SQL, recovery, live rescaling, detached jobs, and Ray Serve."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

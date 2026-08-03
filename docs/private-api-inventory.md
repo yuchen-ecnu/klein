@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Inventory Klein for Ray dependencies on Ray private APIs and Developer APIs."
+    description: "Inventory Klein dependencies on Ray private APIs and Developer APIs."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

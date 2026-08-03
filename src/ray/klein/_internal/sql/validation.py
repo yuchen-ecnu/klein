@@ -11,7 +11,20 @@ if TYPE_CHECKING:
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SQL_DIALECT = "spark"
-BUILTIN_ANONYMOUS_FUNCTIONS = frozenset({"download", "monotonically_increasing_id"})
+BUILTIN_ANONYMOUS_FUNCTIONS = frozenset(
+    {
+        "download",
+        "image_format",
+        "image_height",
+        "image_resize",
+        "image_width",
+        "monotonically_increasing_id",
+        "pdf_page_count",
+        "pdf_render_page",
+        "pdf_split",
+        "pdf_to_images",
+    }
+)
 
 
 def validate_table_name(name: str) -> None:

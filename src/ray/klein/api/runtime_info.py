@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import math
 from dataclasses import dataclass
 
 
@@ -8,12 +9,12 @@ class RuntimeInfo:
 
     batch_size: int | None = None
     batch_format: str | None = None
-    batch_timeout: int | None = None
+    batch_timeout: float | None = None
     async_buffer_size: int | None = None
 
     def __post_init__(self) -> None:
         _validate_positive_integer(self.batch_size, "batch_size")
-        _validate_positive_integer(self.batch_timeout, "batch_timeout")
+        _validate_positive_number(self.batch_timeout, "batch_timeout")
         _validate_positive_integer(self.async_buffer_size, "async_buffer_size")
         if self.batch_format is not None and not isinstance(self.batch_format, str):
             raise TypeError("batch_format must be a string or None")
@@ -56,3 +57,12 @@ def _validate_positive_integer(value: int | None, name: str) -> None:
         raise TypeError(f"{name} must be an integer or None")
     if value <= 0:
         raise ValueError(f"{name} must be positive")
+
+
+def _validate_positive_number(value: float | None, name: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError(f"{name} must be a number or None")
+    if value <= 0 or (isinstance(value, float) and not math.isfinite(value)):
+        raise ValueError(f"{name} must be finite and positive")

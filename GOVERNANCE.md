@@ -2,7 +2,7 @@
 
 # Governance
 
-Klein for Ray is an independent project. This document does not claim
+Klein is an independent project. This document does not claim
 acceptance, affiliation, or endorsement by Ray's maintainers.
 
 ## Decision making

@@ -14,7 +14,7 @@ import {
   RiFileList3Line,
   RiSettings3Line,
 } from "react-icons/ri";
-import { type ReactNode, useEffect, useState } from "react";
+import { lazy, Suspense, type ReactNode, useEffect, useState } from "react";
 import {
   HashRouter,
   Link as RouterLink,
@@ -24,14 +24,31 @@ import {
   Route,
   Routes,
   useParams,
-} from "react-router-dom";
+} from "react-router";
 import KleinMark from "./assets/KleinMark.svg";
 import RayLogo from "./assets/RayLogo.svg";
-import { KleinCheckpointsPage } from "./pages/klein/KleinCheckpointsPage";
-import { KleinConfigurationPage } from "./pages/klein/KleinConfigurationPage";
-import { KleinJobOverviewPage } from "./pages/klein/KleinJobOverviewPage";
-import { KleinJobsPage } from "./pages/klein/KleinJobsPage";
 import { useKleinJob } from "./pages/klein/hook/useKleinJobs";
+
+const KleinJobsPage = lazy(() =>
+  import("./pages/klein/KleinJobsPage").then((module) => ({
+    default: module.KleinJobsPage,
+  })),
+);
+const KleinJobOverviewPage = lazy(() =>
+  import("./pages/klein/KleinJobOverviewPage").then((module) => ({
+    default: module.KleinJobOverviewPage,
+  })),
+);
+const KleinCheckpointsPage = lazy(() =>
+  import("./pages/klein/KleinCheckpointsPage").then((module) => ({
+    default: module.KleinCheckpointsPage,
+  })),
+);
+const KleinConfigurationPage = lazy(() =>
+  import("./pages/klein/KleinConfigurationPage").then((module) => ({
+    default: module.KleinConfigurationPage,
+  })),
+);
 
 const MAIN_NAV_HEIGHT = 56;
 const BREADCRUMBS_HEIGHT = 36;
@@ -49,18 +66,20 @@ const RAY_NAV_ITEMS = [
 
 export const App = () => (
   <HashRouter>
-    <Routes>
-      <Route element={<DashboardShell />} path="/">
-        <Route element={<Navigate replace to="/klein" />} index />
-        <Route element={<KleinJobsPage />} path="klein" />
-        <Route element={<KleinJobLayout />} path="klein/jobs/:jobId">
-          <Route element={<KleinJobOverviewPage />} index />
-          <Route element={<KleinCheckpointsPage />} path="checkpoints" />
-          <Route element={<KleinConfigurationPage />} path="configuration" />
+    <Suspense fallback={<Box aria-live="polite" role="status" sx={{ padding: 3 }}>Loading…</Box>}>
+      <Routes>
+        <Route element={<DashboardShell />} path="/">
+          <Route element={<Navigate replace to="/klein" />} index />
+          <Route element={<KleinJobsPage />} path="klein" />
+          <Route element={<KleinJobLayout />} path="klein/jobs/:jobId">
+            <Route element={<KleinJobOverviewPage />} index />
+            <Route element={<KleinCheckpointsPage />} path="checkpoints" />
+            <Route element={<KleinConfigurationPage />} path="configuration" />
+          </Route>
+          <Route element={<Navigate replace to="/klein" />} path="*" />
         </Route>
-        <Route element={<Navigate replace to="/klein" />} path="*" />
-      </Route>
-    </Routes>
+      </Routes>
+    </Suspense>
   </HashRouter>
 );
 

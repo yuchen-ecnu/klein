@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -21,8 +21,8 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-msgid "Klein for Ray API"
-msgstr "Klein for Ray API"
+msgid "Klein API"
+msgstr "Klein API"
 
 msgid "Configuration options API"
 msgstr "配置选项 API"
@@ -588,6 +588,12 @@ msgstr ":py:obj:`register_scalar_function <ray.klein.register_scalar_function>`"
 msgid "Register a Python scalar function on the current pipeline SQL session."
 msgstr "在当前管道的 SQL 会话中注册 Python 标量函数。"
 
+msgid ":py:obj:`register_ai_function <ray.klein.register_ai_function>`"
+msgstr ":py:obj:`register_ai_function <ray.klein.register_ai_function>`"
+
+msgid "Register a batched backend for ``AI_GENERATE`` or ``AI_EMBED``."
+msgstr "为 ``AI_GENERATE`` 或 ``AI_EMBED`` 注册批量后端。"
+
 msgid ":py:obj:`register_table_factory <ray.klein.register_table_factory>`"
 msgstr ":py:obj:`register_table_factory <ray.klein.register_table_factory>`"
 
@@ -1060,8 +1066,8 @@ msgstr ""
 msgid "Public exception types"
 msgstr "公共异常类型"
 
-msgid "Base exception for Klein for Ray failures."
-msgstr "Klein for Ray 故障的基础异常。"
+msgid "Base exception for Klein failures."
+msgstr "Klein 故障的基础异常。"
 
 msgid "Raised when a Klein SQL query or its table bindings are invalid."
 msgstr "Klein SQL 查询或其表绑定无效时引发。"
@@ -1135,11 +1141,11 @@ msgstr "``KleinError``"
 msgid ""
 "A submitted job reached a failure boundary. ``LiveJobHandle.wait()`` "
 "raises this with the retained job failure detail. The collection-specific"
-" ``get()`` path does not perform that explicit failed-status check; call "
-"``wait()`` or inspect ``status`` when failure propagation matters."
+" ``get()`` path also validates terminal status, raises for failed or "
+"cancelled jobs, and does not expose partial queued results."
 msgstr ""
 "已提交的作业到达失败边界。``LiveJobHandle.wait()`` 会抛出此异常，并附带保留的作业失败详情。面向收集的 "
-"``get()`` 路径不会执行该显式失败状态检查；当需要传播失败时，请调用 ``wait()`` 或检查 ``status``。"
+"``get()`` 路径也会校验终态，对失败或取消的作业抛出异常，并且不会暴露部分排队结果。"
 
 msgid "``TimeoutError``"
 msgstr "``TimeoutError``"
@@ -2029,8 +2035,14 @@ msgstr "用于惰性 Ray 原生 SQL 操作的作用域化目录和规划器。"
 msgid "Register a session-local Python scalar function for SQL queries."
 msgstr "为 SQL 查询注册会话本地的 Python 标量函数。"
 
+msgid "Register a provider-neutral batched backend for a built-in SQL AI function."
+msgstr "为内置 SQL AI 函数注册供应商中立的批量后端。"
+
 msgid "Remove a session-local SQL scalar function."
 msgstr "移除会话本地的 SQL 标量函数。"
+
+msgid "Remove a session-local SQL AI function backend."
+msgstr "移除会话本地的 SQL AI 函数后端。"
 
 msgid ":py:obj:`ChangelogRow <ray.klein.ChangelogRow>`"
 msgstr ":py:obj:`ChangelogRow <ray.klein.ChangelogRow>`"
@@ -2479,26 +2491,32 @@ msgid ""
 "deprecation policy, and operational-contract rules."
 msgstr "有关 alpha 兼容性类别、弃用政策和运维契约规则，请参阅 :doc:`../api-stability`。"
 
+msgid "Configuration and graph builder for one Klein pipeline."
+msgstr "一个 Klein 流水线的配置与图构建器。"
+
+msgid "``current()``, ``install()``, and ``reset()`` back the concise module-level API while direct construction provides isolated pipeline contexts."
+msgstr "``current()``、``install()`` 和 ``reset()`` 为简洁的模块级 API 提供支持；直接构造则可创建相互隔离的流水线上下文。"
+
+msgid "Build lazy SQL over bounded DataStreams in this context."
+msgstr "在此上下文中基于有界 DataStream 构建惰性 SQL。"
+
+msgid "Execute the job."
+msgstr "执行作业。"
+
+msgid "Overlay the current process-global context configuration."
+msgstr "叠加当前进程全局上下文配置。"
+
+msgid "Return all the rows in this :class:`DataStream`."
+msgstr "返回此 :class:`DataStream` 中的所有行。"
+
+msgid "Return up to ``limit`` rows from the :class:`DataStream`."
+msgstr "从此 :class:`DataStream` 返回最多 ``limit`` 行。"
+
+msgid "Block until finished, then return the collected result."
+msgstr "阻塞直到完成，然后返回收集到的结果。"
+
 #~ msgid "Klein context API"
 #~ msgstr "Klein 上下文 API"
-
-#~ msgid ""
-#~ "``current()``, ``install()``, and ``reset()`` "
-#~ "back the concise module-level API "
-#~ "while direct construction provides isolated"
-#~ " pipeline contexts."
-#~ msgstr ""
-#~ "``current()``、``install()`` 和 ``reset()`` 为简洁的模块级"
-#~ " API 提供支持；直接构造则可创建相互隔离的流水线上下文。"
-
-#~ msgid "Overlay the current process-global context configuration."
-#~ msgstr "叠加当前进程全局上下文的配置。"
-
-#~ msgid "Return all the rows in this :class:`DataStream`."
-#~ msgstr "返回此 :class:`DataStream` 中的所有行。"
-
-#~ msgid "Execute the job."
-#~ msgstr "执行作业。"
 
 #~ msgid "Execute one or more terminal sinks."
 #~ msgstr "执行一个或多个终端接收器。"
@@ -2510,9 +2528,6 @@ msgstr "有关 alpha 兼容性类别、弃用政策和运维契约规则，请�
 #~ " retained job failure detail."
 #~ msgstr "已提交作业到达故障边界。实时句柄会从 ``wait()`` 或 ``get()`` 抛出该异常，并附带保留的作业故障详情。"
 
-#~ msgid "Block until finished, then return the collected result."
-#~ msgstr "阻塞直到完成，然后返回收集到的结果。"
-
 #~ msgid ""
 #~ "A lazy terminal graph root passed "
 #~ "explicitly to :func:`ray.klein.execute`."
@@ -2520,3 +2535,9 @@ msgstr "有关 alpha 兼容性类别、弃用政策和运维契约规则，请�
 
 msgid "``list_job_snapshots()`` returns current jobs plus retained terminal history. ``get_job_snapshot(job_id)`` returns one snapshot or ``None``. ``rescale_operator(job_id, operator_id, parallelism, timeout=60)`` performs a local, barrier-aligned parallelism change when the operator supports it and returns a JSON-safe operation result whose status is ``COMPLETED``, ``NOOP``, ``REJECTED``, or ``FAILED``. The first version does not resize source operators, transactional sinks, collecting sinks, or lifecycle classes that have not explicitly opted into concurrent runtime handoff. Parallel and multiple source operators are supported when rescaling a downstream operator; their post-commit recovery point uses one shared, direct-input-aligned checkpoint epoch. See :doc:`../operator-rescaling` for prerequisites, result handling, state migration, and the stabilization checkpoint. ``cancel_job(job_id, timeout=60)`` addresses a published job by job ID, while the CLI ``stop`` command addresses its Ray namespace."
 msgstr "``list_job_snapshots()`` 返回当前作业及保留的终态历史；``get_job_snapshot(job_id)`` 返回一个快照或 ``None``。算子支持时，``rescale_operator(job_id, operator_id, parallelism, timeout=60)`` 会执行局部且与屏障对齐的并行度调整，并返回可安全进行 JSON 序列化的操作结果，其状态为 ``COMPLETED``、``NOOP``、``REJECTED`` 或 ``FAILED``。首个版本不调整源算子、事务型 Sink、收集型 Sink，以及未明确选择并发运行时切换的生命周期类。调整下游算子时支持并行源算子和多个源算子；提交后的恢复点使用一个共享且与直接输入对齐的检查点轮次。有关前置条件、结果处理、状态迁移和稳定化检查点，请参阅 :doc:`../operator-rescaling`。``cancel_job(job_id, timeout=60)`` 按作业 ID 定位已发布作业，而 CLI 的 ``stop`` 命令按 Ray 命名空间定位。"
+
+msgid "SQL download options"
+msgstr "SQL 下载选项"
+
+msgid ":py:obj:`SQLDownloadOptions <ray.klein.config.sql_download_options.SQLDownloadOptions>`"
+msgstr ":py:obj:`SQLDownloadOptions <ray.klein.config.sql_download_options.SQLDownloadOptions>`"

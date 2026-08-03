@@ -5,6 +5,8 @@ import unittest
 
 import numpy as np
 
+from ray.klein.api.changelog_row import ChangelogRow
+from ray.klein.api.row_kind import RowKind
 from ray.klein.runtime.message import KeyRecord, PutAck, Record
 
 
@@ -46,6 +48,15 @@ class RecordEqualityTest(unittest.TestCase):
     def test_records_are_unhashable_because_their_blocks_are_mutable(self):
         with self.assertRaises(TypeError):
             hash(Record({"id": 1}))
+
+    def test_fork_preserves_changelog_mapping_metadata(self):
+        original = Record(ChangelogRow({"id": 1}, row_kind=RowKind.UPDATE_AFTER))
+
+        forked = original.fork()
+
+        self.assertIsInstance(forked.block, ChangelogRow)
+        self.assertEqual(forked.block.row_kind, RowKind.UPDATE_AFTER)
+        self.assertIsNot(forked.block, original.block)
 
 
 class KeyRecordEqualityTest(unittest.TestCase):

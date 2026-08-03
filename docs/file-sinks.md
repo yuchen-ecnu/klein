@@ -2,7 +2,7 @@
 orphan: true
 myst:
   html_meta:
-    description: "Compatibility link to the Klein for Ray filesystem connector documentation."
+    description: "Compatibility link to the Klein filesystem connector documentation."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

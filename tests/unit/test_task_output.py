@@ -5,6 +5,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pyarrow as pa
 import pytest
 
 from ray.klein.runtime.collector.delivery_command import (
@@ -135,6 +136,22 @@ def test_downstream_batcher_flushes_wide_records_by_bytes() -> None:
     batcher.append(0, record)
 
     assert batcher.take_full(0) == (record,)
+
+
+def test_arrow_wire_packing_coalesces_and_preserves_per_row_timestamps() -> None:
+    first = Record({"id": 1})
+    second = Record({"id": 2})
+    third = Record({"id": 3})
+    first.timestamp = second.timestamp = 10
+    third.timestamp = 11
+
+    packed = EdgeOutput._pack_wire_records((first, second, third))
+
+    assert len(packed) == 1
+    assert all(isinstance(record.block, pa.RecordBatch) for record in packed)
+    assert packed[0].block.to_pydict() == {"id": [1, 2, 3]}
+    assert packed[0].timestamp is None
+    assert packed[0].row_timestamps == (10, 10, 11)
 
 
 def test_delivery_abort_releases_synchronous_backpressure() -> None:

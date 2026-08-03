@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024-2026 Klein for Ray Authors
+# SPDX-FileCopyrightText: 2024-2026 Klein Authors
 #
 # SPDX-License-Identifier: Apache-2.0
 """Small value helpers kept local to avoid depending on Ray private modules."""

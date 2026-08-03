@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Assign event timestamps and coordinate Klein for Ray watermarks across active and idle streaming inputs."
+    description: "Assign event timestamps and coordinate Klein watermarks across active and idle streaming inputs."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

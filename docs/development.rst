@@ -3,7 +3,7 @@
 Developing a pipeline
 =====================
 
-Klein for Ray builds one directed dataflow graph and chooses batch or streaming
+Klein builds one directed dataflow graph and chooses batch or streaming
 execution from its sources. Create sources directly from :mod:`ray.klein`, add
 transforms, attach at least one sink, and execute the current graph.
 

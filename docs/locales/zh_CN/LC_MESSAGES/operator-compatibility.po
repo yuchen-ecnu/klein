@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,9 +22,9 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Klein for Ray operator support matrix for batch and streaming execution, "
+"Klein operator support matrix for batch and streaming execution, "
 "ordering, state, and changelog behavior."
-msgstr "Klein for Ray 算子支持矩阵，涵盖批处理与流处理执行、顺序、状态和 changelog 行为。"
+msgstr "Klein 算子支持矩阵，涵盖批处理与流处理执行、顺序、状态和 changelog 行为。"
 
 msgid "Operator compatibility and execution semantics"
 msgstr "算子兼容性与执行语义"
@@ -423,3 +423,9 @@ msgstr ""
 "、update-after 和 delete 类型的 `ChangelogRow` 值。sink 或 Table "
 "工厂必须声明并验证其接受的行类型。文件系统、Redis、Kafka、SQL 和任意自定义 sink "
 "不会自动将撤回物化为最新表；消费更新查询时，请选择感知 upsert/撤回的 sink。"
+
+msgid "Ray Data; Klein-bounded batch for `download()`"
+msgstr "Ray Data；`download()` 使用 Klein 有界批处理"
+
+msgid "Streaming evaluates Ray expressions per record; `download()` uses the shared network policy and one in-flight request per task."
+msgstr "流式执行按 record 求值 Ray 表达式；`download()` 使用共享网络策略，每个 task 同时只保留一个进行中的请求。"

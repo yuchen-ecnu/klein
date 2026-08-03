@@ -10,6 +10,7 @@ SQL and table API
 
    sql
    register_scalar_function
+   register_ai_function
    SQLQueryError
    SQLSession
    ChangelogRow

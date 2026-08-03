@@ -25,4 +25,3 @@ calls ``open()``, restores source state when configured, and then calls
 ``close()`` releases resources once. Completed checkpoints invoke
 ``notify_checkpoint_complete()`` at least once, so external offset commits
 must be idempotent by checkpoint ID.
-

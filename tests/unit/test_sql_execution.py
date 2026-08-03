@@ -7,6 +7,7 @@ import pytest
 from sqlglot import exp, parse_one
 
 from ray.klein._internal.sql import execution
+from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy
 from ray.klein.api.sql_query_error import SQLQueryError
 
 
@@ -84,6 +85,26 @@ def test_row_adapters_preserve_sql_data_semantics() -> None:
     assert execution._FilterRow(parse_one("x > 1"))({"x": None}) is False
     assert execution._AddConstant("x", 3)({"x": 1, "y": 2}) == {"x": 3, "y": 2}
     assert execution._FinalizeAggregate((("total", "_sum"),))({"_sum": 7}) == {"total": 7}
+
+
+def test_sql_download_uses_the_bounded_batch_runtime(monkeypatch) -> None:
+    dataset = _Dataset()
+    policy = SQLDownloadPolicy(max_bytes=123)
+    apply_downloads = MagicMock(return_value=dataset)
+    monkeypatch.setattr(execution, "apply_batch_downloads", apply_downloads)
+
+    result = execution._add_sql_expressions(
+        dataset,
+        (("body", parse_one("DOWNLOAD(uri)")),),
+        aliases=("files",),
+        num_cpus=0.5,
+        download_policy=policy,
+    )
+
+    assert result is dataset
+    assert dataset.calls == []
+    assert apply_downloads.call_args.args == (dataset, [("body", "files.uri", None)])
+    assert apply_downloads.call_args.kwargs == {"policy": policy, "num_cpus": 0.5}
 
 
 def test_project_row_handles_aliases_stars_internal_fields_and_collisions() -> None:

@@ -20,6 +20,13 @@ from ray.klein.api.source_function import SourceFunction
 from ray.klein.runtime.resources import Resources
 
 
+class _Unset:
+    __slots__ = ()
+
+
+_UNSET = _Unset()
+
+
 class LogicalFunction:
     """Wraps a user fn and knows how to materialize it for stream or batch.
 
@@ -37,7 +44,7 @@ class LogicalFunction:
         lowering: Callable[[LoweringContext], Any] | None = None,
         resources: Resources | None = None,
         batch_size: int | None = None,
-        batch_timeout: int | None = None,
+        batch_timeout: float | None = None,
         batch_format: str = "default",
         async_buffer_size: int | None = None,
     ) -> None:
@@ -96,19 +103,20 @@ class LogicalFunction:
     def with_runtime_overrides(
         self,
         *,
-        batch_size: int | None = None,
-        async_buffer_size: int | None = None,
+        batch_size: int | None | _Unset = _UNSET,
+        async_buffer_size: int | None | _Unset = _UNSET,
     ) -> "LogicalFunction":
         """Return an independent function recipe with validated runtime tuning."""
 
-        changes: dict[str, int] = {}
-        if batch_size is not None:
-            changes["batch_size"] = batch_size
-        if async_buffer_size is not None:
-            changes["async_buffer_size"] = async_buffer_size
         cloned = copy(self)
-        if changes:
-            cloned._runtime_info = replace(self._runtime_info, **changes)
+        if not isinstance(batch_size, _Unset) or not isinstance(async_buffer_size, _Unset):
+            cloned._runtime_info = replace(
+                self._runtime_info,
+                batch_size=self._runtime_info.batch_size if isinstance(batch_size, _Unset) else batch_size,
+                async_buffer_size=(
+                    self._runtime_info.async_buffer_size if isinstance(async_buffer_size, _Unset) else async_buffer_size
+                ),
+            )
         return cloned
 
     def with_resources(self, resources: Resources) -> "LogicalFunction":
@@ -121,7 +129,7 @@ class LogicalFunction:
         return cloned
 
     @staticmethod
-    def _classify(fn) -> FunctionKind:
+    def _classify(fn: UserDefinedFunction | type[SinkFunction] | type[SourceFunction]) -> FunctionKind:
         if inspect.isfunction(fn):
             return FunctionKind.STATELESS
         if isinstance(fn, type) and issubclass(fn, CollectFunction):
@@ -131,7 +139,9 @@ class LogicalFunction:
         return FunctionKind.CALLABLE_CLASS
 
     @staticmethod
-    def _compute_needs_runtime_context(fn) -> bool:
+    def _compute_needs_runtime_context(
+        fn: UserDefinedFunction | type[SinkFunction] | type[SourceFunction],
+    ) -> bool:
         # Only meaningful for callable classes; computed once instead of per call.
         if inspect.isfunction(fn):
             return False

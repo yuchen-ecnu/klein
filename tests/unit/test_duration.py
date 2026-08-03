@@ -21,3 +21,9 @@ from ray.klein._internal.duration import parse_duration
 )
 def test_parse_duration(value: str, expected_seconds: float) -> None:
     assert parse_duration(value).total_seconds() == expected_seconds
+
+
+@pytest.mark.parametrize("value", [f"{'9' * 1000}s", f"-{'9' * 1000}w"])
+def test_parse_duration_rejects_out_of_range_values(value: str) -> None:
+    with pytest.raises(ValueError, match="out of range"):
+        parse_duration(value)

@@ -169,3 +169,141 @@ def test_configuration_rejects_none_values() -> None:
         config.set(ConfigurationTest.STATIC_USERNAME_CONFIG_OPTION, None)
     with pytest.raises(ValueError, match="cannot be None"):
         config.update({"username": None})
+
+
+@pytest.mark.parametrize("value", [True, False])
+@pytest.mark.parametrize("value_type", [int, float, timedelta])
+def test_numeric_configuration_values_reject_booleans(value_type: type, value: bool) -> None:
+    option = ConfigOption("numeric.value", None, value_type)
+
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"numeric.value": value}).get(option)
+    with pytest.raises(TypeError, match="wrong type"):
+        Configuration().set(option, value)
+    with pytest.raises(TypeError, match="wrong type"):
+        Configuration().get(option, value)
+    with pytest.raises(TypeError, match="must be an instance"):
+        ConfigOption("numeric.default", value, value_type)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        (1, True),
+        (0, False),
+        ("1", True),
+        ("0", False),
+    ],
+)
+def test_boolean_configuration_accepts_only_boolean_numbers(value: object, expected: bool) -> None:
+    option = ConfigOption("feature.enabled", None, bool)
+
+    assert Configuration({"feature.enabled": value}).get(option) is expected
+
+
+@pytest.mark.parametrize("value", [2, -1, 3])
+def test_boolean_configuration_rejects_other_integers(value: int) -> None:
+    option = ConfigOption("feature.enabled", None, bool)
+
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"feature.enabled": value}).get(option)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (3, 3),
+        ("3", 3),
+        (" +3 ", 3),
+        ("-2", -2),
+        ("003", 3),
+    ],
+)
+def test_integer_configuration_accepts_only_integers_and_integer_strings(value: object, expected: int) -> None:
+    option = ConfigOption("worker.count", None, int)
+
+    assert Configuration({"worker.count": value}).get(option) == expected
+
+
+@pytest.mark.parametrize("value", [3.0, 3.7, "3.0", "1e3"])
+def test_integer_configuration_does_not_truncate_or_parse_non_integer_values(value: object) -> None:
+    option = ConfigOption("worker.count", None, int)
+
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"worker.count": value}).get(option)
+
+
+def test_float_configuration_accepts_real_numbers_across_all_typed_paths() -> None:
+    option = ConfigOption("ratio", 1, float)
+    config = Configuration({"ratio": 2})
+
+    assert option.default == 1.0
+    assert config.get(option) == 2.0
+    assert isinstance(config.get(option), float)
+
+    config.set(option, 3)
+    assert config.get(option) == 3.0
+    assert config.to_dict()["ratio"] == 3.0
+
+    missing = Configuration()
+    assert missing.get(option, 4) == 4.0
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_float_configuration_rejects_non_finite_values_across_all_typed_paths(value: float) -> None:
+    option = ConfigOption("ratio", None, float)
+
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"ratio": value}).get(option)
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"ratio": str(value)}).get(option)
+    with pytest.raises(TypeError, match="finite float"):
+        Configuration().set(option, value)
+    with pytest.raises(TypeError, match="finite float"):
+        Configuration().get(option, value)
+    with pytest.raises(TypeError, match="must be an instance"):
+        ConfigOption("ratio.default", value, float)
+
+
+def test_numeric_configuration_normalizes_overflow_from_extreme_integers() -> None:
+    value = 10**400
+    float_option = ConfigOption("ratio", None, float)
+    duration_option = ConfigOption("request.timeout", None, timedelta)
+
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"ratio": value}).get(float_option)
+    with pytest.raises(TypeError, match="finite float"):
+        Configuration().set(float_option, value)
+    with pytest.raises(TypeError, match="must be an instance"):
+        ConfigOption("ratio.default", value, float)
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"request.timeout": value}).get(duration_option)
+
+
+def test_collection_configuration_requires_matching_json_shapes() -> None:
+    sequence = ConfigOption("download.hosts", None, tuple)
+    mapping = ConfigOption("storage.options", None, dict)
+
+    assert Configuration({"download.hosts": ["a.example", "b.example"]}).get(sequence) == (
+        "a.example",
+        "b.example",
+    )
+    assert Configuration({"download.hosts": '["a.example"]'}).get(sequence) == ("a.example",)
+    assert Configuration({"storage.options": '{"region":"us-east-1"}'}).get(mapping) == {"region": "us-east-1"}
+
+    for invalid in ({"host": "a.example"}, '{"host":"a.example"}', '"a.example"', 3):
+        with pytest.raises(ValueError, match="unable to convert"):
+            Configuration({"download.hosts": invalid}).get(sequence)
+    for invalid in ([["region", "us-east-1"]], '["region", "us-east-1"]'):
+        with pytest.raises(ValueError, match="unable to convert"):
+            Configuration({"storage.options": invalid}).get(mapping)
+
+
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan"), 1e300])
+def test_duration_configuration_normalizes_non_finite_and_overflow_errors(value: float) -> None:
+    option = ConfigOption("request.timeout", None, timedelta)
+
+    with pytest.raises(ValueError, match="unable to convert"):
+        Configuration({"request.timeout": value}).get(option)

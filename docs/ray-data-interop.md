@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Use Ray Data readers and Dataset operations from Klein for Ray without duplicating the installed Ray API."
+    description: "Use Ray Data readers and Dataset operations from Klein without duplicating the installed Ray API."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -10,7 +10,7 @@ myst:
 For a connector-oriented summary of readers, transforms, writers, execution
 modes, and guarantees, see the dedicated [Ray Data connector](connectors/ray-data.md).
 
-Klein for Ray does not copy Ray Data's loading APIs. Those signatures change
+Klein does not copy Ray Data's loading APIs. Those signatures change
 between Ray releases and duplicating them creates an immediately stale second
 API. Instead, source factories are exposed directly from `ray.klein`:
 
@@ -60,11 +60,12 @@ prepared = (
 This includes Ray 2.56's column/literal AST, arithmetic, comparison, boolean,
 null and membership operators, aliases, PyArrow and Python UDF expressions,
 string/list/array/map/struct/datetime namespaces, synthetic IDs/random/UUIDs,
-and the dedicated `download()` expression. In batch mode, `download()` is not
-converted to a row UDF: `Dataset.with_column()` retains Ray's URI partitioning
-and concurrent download plan. In streaming mode, Klein evaluates one URI per
-record in a bounded, order-preserving asynchronous window. A null or unreadable
-URI produces `None`, matching Ray 2.56's download operator.
+and the dedicated `download()` expression. In both modes Klein routes
+`DownloadExpr` through the same `sql.download.*` URI, SSRF, redirect, timeout,
+and byte policy used by SQL. Batch mode uses one-row download batches; streaming
+keeps one request in flight per task so a completed-response limit cannot be
+multiplied by a count-only async window. A null, rejected, or unreadable URI
+produces `None`, matching Ray's soft-failure contract.
 
 ## Choose Klein or Ray Data operations
 

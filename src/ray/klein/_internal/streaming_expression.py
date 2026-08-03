@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -12,20 +13,22 @@ import pandas as pd
 import pyarrow as pa
 from ray.data.expressions import DownloadExpr, Expr
 
-from ray.klein._compat.ray_data_expression import RayDataExpressionRuntime, read_uri
-from ray.klein._internal.logging import get_logger
+from ray.klein._compat.ray_data_expression import RayDataExpressionRuntime
+from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy, download_uri_soft
 from ray.klein.api.changelog_row import ChangelogRow, row_kind_of
 
 if TYPE_CHECKING:
     from ray.klein.api.runtime_context import RuntimeContext
 
 
-logger = get_logger(__name__)
-
 # A streaming expression has one request per input record. This bounds both the
 # number of worker threads occupied by DOWNLOAD and the number of completed
 # values retained while ordered emission waits for an earlier request.
-DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE = 32
+# Each completed DOWNLOAD result can retain ``sql.download.max-bytes`` before
+# ordered emission. Keep one request in flight so the per-response limit is
+# also the task-local completed-result bound; higher fan-out belongs behind an
+# explicitly budgeted download service rather than a count-only queue.
+DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE = 1
 
 
 class StreamingExpressionEvaluator:
@@ -40,10 +43,21 @@ class StreamingExpressionEvaluator:
             task_index=runtime_context.task_index,
             task_name=runtime_context.task_name,
         )
+        self._download_policy = SQLDownloadPolicy.from_configuration(
+            getattr(runtime_context, "config", None),
+        )
 
     @property
     def is_async(self) -> bool:
         return isinstance(self._expression, DownloadExpr)
+
+    @property
+    def download_max_bytes(self) -> int:
+        """Return the configured byte budget for a download expression."""
+
+        if not self.is_async:
+            raise TypeError("Only DownloadExpr has a download byte budget")
+        return self._download_policy.max_bytes
 
     def evaluate(self, row: Mapping[str, Any]) -> Any:
         """Evaluate a non-download expression against one logical row."""
@@ -54,7 +68,12 @@ class StreamingExpressionEvaluator:
         result = self._runtime.evaluate(block)
         return _first_value(result)
 
-    async def evaluate_async(self, row: Mapping[str, Any]) -> Any:
+    async def evaluate_async(
+        self,
+        row: Mapping[str, Any],
+        *,
+        max_bytes: int | None = None,
+    ) -> Any:
         """Evaluate an expression without blocking the streaming actor loop."""
 
         if not isinstance(self._expression, DownloadExpr):
@@ -65,13 +84,19 @@ class StreamingExpressionEvaluator:
             raise KeyError(
                 f"DownloadExpr references missing URI column {self._expression.uri_column_name!r}"
             ) from error
-        if uri is None:
+        if uri is None or (max_bytes is not None and max_bytes <= 0):
             return None
+        policy = (
+            self._download_policy
+            if max_bytes is None or max_bytes == self._download_policy.max_bytes
+            else replace(self._download_policy, max_bytes=max_bytes)
+        )
         return await asyncio.to_thread(
             _download_uri,
             uri,
             self._expression.filesystem,
             self._expression.uri_column_name,
+            policy,
         )
 
 
@@ -130,13 +155,12 @@ def _first_value(value: Any) -> Any:
     return value
 
 
-def _download_uri(uri: Any, filesystem: Any, column_name: str) -> bytes | None:
+def _download_uri(
+    uri: Any,
+    filesystem: Any,
+    column_name: str,
+    policy: SQLDownloadPolicy | None = None,
+) -> bytes | None:
     """Read one URI with the same soft-failure contract as Ray's Download op."""
 
-    try:
-        return read_uri(str(uri), filesystem)
-    except OSError:
-        logger.debug("OSError reading URI %r from column %r", uri, column_name, exc_info=True)
-    except Exception:
-        logger.warning("Unexpected error reading URI %r from column %r", uri, column_name, exc_info=True)
-    return None
+    return download_uri_soft(uri, filesystem, column_name, policy or SQLDownloadPolicy())

@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -21,21 +21,21 @@ msgstr ""
 
 msgid ""
 "Known limitations, unsupported combinations, and non-goals for the "
-"current Klein for Ray alpha release."
-msgstr "当前 Klein for Ray alpha 版本的已知限制、不受支持的组合和非目标。"
+"current Klein alpha release."
+msgstr "当前 Klein alpha 版本的已知限制、不受支持的组合和非目标。"
 
 msgid "Known limitations and non-goals"
 msgstr "已知限制和非目标"
 
 msgid ""
-"Klein for Ray is alpha software. This page collects the boundaries that "
+"Klein is alpha software. This page collects the boundaries that "
 "are otherwise easy to miss in feature-specific guides. Treat an item as "
 "unsupported unless the documentation for the installed release explicitly"
 " says otherwise. An unsupported combination can fail during planning, "
 "fail when workers start, or run with weaker recovery semantics than the "
 "application expects."
 msgstr ""
-"Klein for Ray 是 alpha "
+"Klein 是 alpha "
 "软件。本页汇总在特定功能指南中容易忽略的边界。除非所安装版本的文档明确说明支持，否则请将相应项目视为不受支持。不受支持的组合可能在规划期间失败、在"
 " worker 启动时失败，或以弱于应用预期的恢复语义运行。"
 

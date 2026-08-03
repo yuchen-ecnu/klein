@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -19,19 +19,19 @@ msgstr ""
 "Language: zh_CN\n"
 
 msgid ""
-"Run and write Klein for Ray unit, state, architecture, integration, and "
+"Run and write Klein unit, state, architecture, integration, and "
 "external-service tests."
-msgstr "运行和编写 Klein for Ray 单元、状态、架构、集成及外部服务测试。"
+msgstr "运行和编写 Klein 单元、状态、架构、集成及外部服务测试。"
 
 msgid "Testing"
 msgstr "测试"
 
 msgid ""
-"Klein for Ray uses pytest with a `src` layout and importlib import mode. "
+"Klein uses pytest with a `src` layout and importlib import mode. "
 "Tests are classified on two independent axes: a **tier** describes the "
 "dependency boundary the test crosses, while a **component** identifies the "
 "subsystem that owns it."
-msgstr "Klein for Ray 使用 pytest，并采用 `src` 布局和 importlib 导入模式。测试按两个相互独立的维度分类：**层级**描述测试跨越的依赖边界，**组件**标识测试所属的子系统。"
+msgstr "Klein 使用 pytest，并采用 `src` 布局和 importlib 导入模式。测试按两个相互独立的维度分类：**层级**描述测试跨越的依赖边界，**组件**标识测试所属的子系统。"
 
 msgid "Tier"
 msgstr "层级"
@@ -279,5 +279,5 @@ msgstr "CI 还会在 Python 3.10 和 Python 3.12 上解析精确的最低受支�
 msgid "Nightly CI runs the real-Ray integration graph, a ten-minute unbounded backpressure soak, and machine-readable data-plane regression benchmarks. The weekly/manual reliability workflow uses a two-hour default soak; its duration can be changed through the workflow input without changing test code."
 msgstr "夜间 CI 会运行真实 Ray 集成图、十分钟无界反压浸泡测试，以及机器可读的数据平面回归基准。每周或手动可靠性工作流默认浸泡两小时；无需修改测试代码，即可通过工作流输入调整持续时间。"
 
-msgid "The combined line-and-branch gate is 68%. Risk-based component floors protect state, configuration, connectors, checkpoint coordination, event time, partitioning, and observability independently so growth in unrelated modules cannot hide a regression in recovery-critical code."
-msgstr "行覆盖率与分支覆盖率的综合门禁为 68%。基于风险设置的组件下限会分别保护状态、配置、连接器、检查点协调、事件时间、分区和可观测性模块，避免无关模块的代码增长掩盖恢复关键代码中的回归。"
+msgid "The combined line-and-branch gate is 78%. Risk-based component floors protect state, configuration, connectors, checkpoint coordination, event time, partitioning, and observability independently so growth in unrelated modules cannot hide a regression in recovery-critical code."
+msgstr "行覆盖率与分支覆盖率的综合门禁为 78%。基于风险设置的组件下限会分别保护状态、配置、连接器、检查点协调、事件时间、分区和可观测性模块，避免无关模块的代码增长掩盖恢复关键代码中的回归。"
