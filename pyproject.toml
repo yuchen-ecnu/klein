@@ -33,7 +33,7 @@ dependencies = [
   "numpy>=1.26.2,<3; python_version >= '3.12'",
   "pandas>=2.2.3,<3",
   "pyarrow>=23.0.1",
-  "protobuf>=5.29.6,<7",
+  "protobuf>=5.29.6,<8",
   "PyYAML>=6; python_version < '3.12'",
   "PyYAML>=6.0.1; python_version >= '3.12'",
   "ray[data]>=2.56.1,<2.57",
@@ -88,7 +88,7 @@ test = [
   "setuptools>=83,<84",
   "testcontainers[kafka,redis]>=4.13,<5",
   "tomli>=2.4.1; python_version < '3.11'",
-  "twine>=5,<7",
+  "twine>=5,<8",
 ]
 dev = [
   "ray-klein[all,docs,test]",
