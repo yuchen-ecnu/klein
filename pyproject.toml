@@ -51,7 +51,7 @@ media = [
   "pyvips[binary]>=3,<4",
 ]
 rocketmq = ["rocketmq-client-python==2.0.0"]
-redis = ["redis>=5,<7"]
+redis = ["redis>=5,<9"]
 rocksdb = ["rocksdict>=0.3.29,<0.4"]
 serve = [
   "httpx>=0.28.1,<1",
@@ -68,7 +68,7 @@ all = [
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
   "ray[serve]>=2.56.1,<2.57",
-  "redis>=5,<7",
+  "redis>=5,<9",
   "rocksdict>=0.3.29,<0.4",
   "rocketmq-client-python==2.0.0",
 ]
