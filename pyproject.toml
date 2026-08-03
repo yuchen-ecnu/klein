@@ -44,7 +44,7 @@ dependencies = [
 kafka = ["confluent-kafka>=2.3,<3"]
 iceberg = ["pyiceberg>=0.11.1,<0.12"]
 media = [
-  "Pillow>=10,<13",
+  "Pillow>=12.3.0,<13",
   "pypdf>=5,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
@@ -61,7 +61,7 @@ all = [
   "confluent-kafka>=2.3,<3",
   "httpx>=0.28.1,<1",
   "orjson>=3.11.6",
-  "Pillow>=10,<13",
+  "Pillow>=12.3.0,<13",
   "pyiceberg>=0.11.1,<0.12",
   "pypdf>=5,<7",
   "pypdfium2>=4.30,<6",
