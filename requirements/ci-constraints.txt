@@ -36,7 +36,7 @@ reuse==6.2.0
 rich==14.3.4
 rocksdict==0.3.29
 rocketmq-client-python==2.0.0
-ruff==0.15.22
+ruff==0.16.1
 setuptools==83.0.0
 sqlglot==30.14.0
 testcontainers==4.13.3

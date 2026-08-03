@@ -93,7 +93,7 @@ test = [
 dev = [
   "ray-klein[all,docs,test]",
   "pre-commit>=3.7",
-  "ruff>=0.15.22,<0.16",
+  "ruff>=0.15.22,<0.17",
 ]
 docs = [
   "myst-parser==4.0.1",
