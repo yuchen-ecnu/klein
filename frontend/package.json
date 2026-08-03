@@ -18,7 +18,7 @@
     "@emotion/styled": "^11.11.0",
     "@mui/material": "^5.15.5",
     "@xyflow/react": "12.11.2",
-    "axios": "1.18.1",
+    "axios": "1.19.0",
     "dayjs": "^1.9.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -29,10 +29,10 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.12",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "typescript": "^5.5.4",
-    "vite": "^8.1.5"
+    "vite": "^8.2.0"
   }
 }
