@@ -72,7 +72,7 @@ export const KleinOperatorsTable = ({
               <Typography color="text.secondary" variant="caption">
                 ID {operator.op_id} · {operator.cpus} CPU · {operator.gpus} GPU
               </Typography>
-              <Typography display="block" variant="caption">
+              <Typography sx={{ display: "block" }} variant="caption">
                 <OperatorActorsLink
                   onOpenDetails={() => onSelectOperator(operator.op_id)}
                   operator={operator}

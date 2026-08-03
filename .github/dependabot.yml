@@ -5,20 +5,14 @@ updates:
     directory: "/"
     exclude-paths:
       - "requirements/minimum-constraints.txt"
-    allow:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
     schedule:
       interval: weekly
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: github-actions
     directory: "/"
-    allow:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
     schedule:
       interval: weekly
     groups:
@@ -26,13 +20,11 @@ updates:
         patterns: ["github/codeql-action/*"]
   - package-ecosystem: npm
     directory: "/frontend"
-    allow:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "@types/node"
+        versions: [">=23"]
     groups:
       frontend-dependencies:
         patterns: ["*"]

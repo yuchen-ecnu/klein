@@ -177,10 +177,7 @@ ray.klein.configure(
     {
         "execution.runtime.mode": "streaming",
         "execution.checkpointing.dir": "s3://platform/klein-checkpoints",
-        "execution.savepoint.path": (
-            "s3://platform/klein-checkpoints/"
-            "orders-production/chk-42"
-        ),
+        "execution.savepoint.path": ("s3://platform/klein-checkpoints/orders-production/chk-42"),
         "state.keyed.max-parallelism": 128,
         "job.namespace": "orders-production-v2",
     }

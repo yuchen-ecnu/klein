@@ -46,6 +46,20 @@ def _install_client(monkeypatch):
     return client, pipeline, factory
 
 
+def _assert_retry_budget(monkeypatch, retry, expected_retries: int) -> None:
+    attempts = 0
+
+    def always_fail():
+        nonlocal attempts
+        attempts += 1
+        raise RedisError("unavailable")
+
+    monkeypatch.setattr("redis.retry.sleep", lambda _delay: None)
+    with pytest.raises(RedisError, match="unavailable"):
+        retry.call_with_retry(always_fail, lambda _error: None)
+    assert attempts == expected_retries + 1
+
+
 def _runtime_context(*, batch: bool, batch_format: str = "native"):
     duration = MagicMock(name="lookup-duration")
     batch_size = MagicMock(name="lookup-batch-size")
@@ -208,7 +222,7 @@ def test_connection_config_creates_pool_with_canonical_options(monkeypatch) -> N
         "socket_connect_timeout": 2.0,
         "retry": options["retry"],
     }
-    assert options["retry"].get_retries() == 2
+    _assert_retry_budget(monkeypatch, options["retry"], 2)
     assert "secret" not in repr(config)
     with pytest.raises(TypeError):
         config.connection_options["new"] = "value"
@@ -226,7 +240,7 @@ def test_connection_config_uses_default_retry_count(monkeypatch) -> None:
 
     config.create_pool()
 
-    assert pool_factory.call_args.kwargs["retry"].get_retries() == 3
+    _assert_retry_budget(monkeypatch, pool_factory.call_args.kwargs["retry"], 3)
 
 
 def test_lookup_client_and_value_lookup_validate_configuration() -> None:

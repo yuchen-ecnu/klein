@@ -36,7 +36,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[dev]"
       - run: ruff format --check .
       - run: ruff check .
@@ -84,7 +84,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: Core component tests
         run: >-
@@ -110,7 +110,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: Runtime component tests
         run: >-
@@ -136,7 +136,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: State component tests
         run: >-
@@ -162,7 +162,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: SQL component tests
         run: >-
@@ -188,7 +188,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: Connector component tests
         run: >-
@@ -218,7 +218,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: All unit components
         run: >-
@@ -256,7 +256,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - name: Install the minimum supported dependency set
         if: matrix.constraint == 'minimum'
         run: python -m pip install --constraint requirements/minimum-constraints.txt -e ".[all,test]"
@@ -270,6 +270,9 @@ jobs:
           tests/unit/test_configuration_properties.py
           tests/unit/test_compatibility_policy.py
           tests/unit/test_dashboard_server.py
+          tests/unit/test_redis_lookup.py
+          tests/unit/test_redis_sink.py
+          tests/unit/test_redis_writer.py
           tests/unit/test_state_codec_properties.py
           tests/unit/integrations/test_kafka_contract.py
           tests/unit/integrations/test_rocketmq_contract.py
@@ -289,7 +292,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: >-
           pytest tests/unit tests/state tests/architecture -m "not slow"
@@ -322,7 +325,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: python -m pip install "ray[data,serve]==2.56.1"
       - run: >-
@@ -349,7 +352,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: python -m pip install "ray[data,serve]==2.56.1"
       - run: >-
@@ -375,7 +378,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: python -m pip install "ray[data,serve]==2.56.1"
       - run: >-
@@ -401,7 +404,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: python -m pip install "ray[data,serve]==2.56.1"
       - run: >-
@@ -427,7 +430,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: >-
           pytest tests/integration/external
@@ -452,7 +455,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,docs]"
       - run: make docs
         env:
@@ -470,7 +473,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: pip-audit --local --skip-editable --progress-spinner off
       - run: python scripts/check_dependency_licenses.py
@@ -491,7 +494,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.1.2"
+      - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt "build==1.5.0" "twine==6.2.0"
       - run: python -m build
       - run: python -m twine check dist/*
@@ -499,7 +502,7 @@ jobs:
       - name: Verify wheel in a clean environment
         run: |
           python -m venv /tmp/ray-klein-wheel-test
-          /tmp/ray-klein-wheel-test/bin/python -m pip install "pip==26.1.2"
+          /tmp/ray-klein-wheel-test/bin/python -m pip install "pip==26.2"
           /tmp/ray-klein-wheel-test/bin/pip install --constraint requirements/ci-constraints.txt dist/*.whl
           /tmp/ray-klein-wheel-test/bin/python -c "import ray, ray.klein; assert callable(ray.klein.from_items)"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

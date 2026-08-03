@@ -213,8 +213,8 @@ msgstr "连续 RocketMQ 输入。每个执行任务的 worker 还需要兼容的
 msgid "`redis`"
 msgstr "`redis`"
 
-msgid "`redis>=5,<7`"
-msgstr "`redis>=5,<7`"
+msgid "`redis>=5,<9`"
+msgstr "`redis>=5,<9`"
 
 msgid "Redis lookup, filtering, and output."
 msgstr "Redis 查找、过滤和输出。"

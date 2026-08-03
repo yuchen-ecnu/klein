@@ -35,13 +35,10 @@ from datetime import timedelta
 import ray
 import ray.klein
 
-strategy = (
-    ray.klein.WatermarkStrategy.for_bounded_out_of_orderness(
-        timedelta(seconds=5),
-        lambda row: row["event_time_ms"],
-    )
-    .with_idleness(timedelta(seconds=30))
-)
+strategy = ray.klein.WatermarkStrategy.for_bounded_out_of_orderness(
+    timedelta(seconds=5),
+    lambda row: row["event_time_ms"],
+).with_idleness(timedelta(seconds=30))
 
 events = ray.klein.read_kafka(...).assign_timestamps_and_watermarks(strategy)
 ```

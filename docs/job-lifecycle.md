@@ -201,10 +201,12 @@ with the same `job_name` coexist safely.
 Set `job.namespace` only when operations tooling needs a stable identifier:
 
 ```python
-ray.klein.configure({
-    "job.namespace": "orders-production",
-    "execution.runtime.mode": "streaming",
-})
+ray.klein.configure(
+    {
+        "job.namespace": "orders-production",
+        "execution.runtime.mode": "streaming",
+    }
+)
 ```
 
 An explicit non-empty namespace is used verbatim. Do not reuse it while an old

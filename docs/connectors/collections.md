@@ -31,10 +31,12 @@ runtime, where values must be mappings because the native
 import ray
 import ray.klein
 
-stream = ray.klein.from_items([
-    {"id": 1, "status": "new"},
-    {"id": 2, "status": "ready"},
-])
+stream = ray.klein.from_items(
+    [
+        {"id": 1, "status": "new"},
+        {"id": 2, "status": "ready"},
+    ]
+)
 stream.show()
 ray.klein.execute("collection-example").wait()
 ```

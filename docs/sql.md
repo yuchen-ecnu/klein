@@ -147,6 +147,7 @@ def normalize_prompt(value, prefix):
         return None
     return prefix + value.strip().lower()
 
+
 ray.klein.register_scalar_function("normalize_prompt", normalize_prompt)
 prepared = ray.klein.sql(
     "SELECT id, NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
@@ -265,16 +266,21 @@ import ray
 import ray.klein
 
 ray.klein.configure("execution.runtime.mode=streaming")
-orders = ray.klein.from_items([
-    {"name": "Ada", "amount": 10},
-    {"name": "Ada", "amount": 15},
-])
+orders = ray.klein.from_items(
+    [
+        {"name": "Ada", "amount": 10},
+        {"name": "Ada", "amount": 15},
+    ]
+)
 
-changes = ray.klein.sql("""
+changes = ray.klein.sql(
+    """
     SELECT name, SUM(amount) AS total
     FROM orders
     GROUP BY name
-""", tables={"orders": orders})
+""",
+    tables={"orders": orders},
+)
 
 changes.take_all()
 for row in ray.klein.execute("streaming-sql").get():

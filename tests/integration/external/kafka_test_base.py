@@ -79,7 +79,11 @@ def _create_kafka_container():
 
     from testcontainers.core.container import DockerContainer
     from testcontainers.core.wait_strategies import LogMessageWaitStrategy
-    from testcontainers.kafka import KafkaContainer
+
+    try:
+        from testcontainers.community.kafka import KafkaContainer
+    except ModuleNotFoundError:
+        from testcontainers.kafka import KafkaContainer
 
     class StructuredKafkaContainer(KafkaContainer):
         def start(self, timeout: int = 30) -> "StructuredKafkaContainer":
