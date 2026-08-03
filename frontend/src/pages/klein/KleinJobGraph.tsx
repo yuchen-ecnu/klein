@@ -318,7 +318,7 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
         />
       </Box>
       <Box sx={{ padding: 1.1, paddingBottom: 0.65 }}>
-        <Stack direction="row" justifyContent="space-between">
+        <Stack direction="row" sx={{ justifyContent: "space-between" }}>
           <Typography variant="caption">
             {role.toUpperCase()} · P{operator.parallelism}
           </Typography>
@@ -333,10 +333,12 @@ function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
           <Metric label="BACKPRESSURE" value={`${backpressure.toFixed(1)}%`} />
         </Stack>
         <Stack
-          alignItems="center"
           direction="row"
-          justifyContent="space-between"
-          sx={{ marginTop: 0.45 }}
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: 0.45,
+          }}
         >
           <Typography
             title="Estimated logical payload output rate"
@@ -436,8 +438,7 @@ const RoleIcon = ({ role }: { role: OperatorRole }) => {
 const Metric = ({ label, value }: { label: string; value: string }) => (
   <Box sx={{ minWidth: 0 }}>
     <Typography
-      display="block"
-      sx={{ fontSize: 9, letterSpacing: 0.25 }}
+      sx={{ display: "block", fontSize: 9, letterSpacing: 0.25 }}
     >
       {label}
     </Typography>

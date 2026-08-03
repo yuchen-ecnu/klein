@@ -43,7 +43,7 @@ export const KleinJobsPage = () => {
           Unable to load Klein jobs: {String(error)}
         </Alert>
       )}
-      <Stack direction="row" flexWrap="wrap" gap={2} sx={{ marginTop: 3 }}>
+      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 2, marginTop: 3 }}>
         <KleinStatCard label="Running jobs" value={running} />
         <KleinStatCard
           label="Task instances"
@@ -92,8 +92,8 @@ export const KleinJobsPage = () => {
                       </Link>
                       <Typography
                         color="text.secondary"
+                        sx={{ display: "block" }}
                         variant="caption"
-                        display="block"
                       >
                         {job.job_id}
                       </Typography>

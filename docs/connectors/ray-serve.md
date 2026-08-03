@@ -28,10 +28,8 @@ async or generator callables, and pandas/Arrow batches are rejected while the
 logical graph is built:
 
 ```python
-served = (
-    stream
-    .map_batches(preprocess, ray_serve_enabled=True)
-    .map_batches(predict, ray_serve_enabled=True, batch_size=16)
+served = stream.map_batches(preprocess, ray_serve_enabled=True).map_batches(
+    predict, ray_serve_enabled=True, batch_size=16
 )
 served.write_parquet("s3://warehouse/predictions/")
 ray.klein.execute("served-inference").wait()

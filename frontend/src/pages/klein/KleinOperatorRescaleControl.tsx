@@ -89,9 +89,8 @@ export const KleinOperatorRescaleControl = ({
       }}
     >
       <Stack
-        alignItems={{ sm: "flex-start", md: "center" }}
         direction={{ xs: "column", md: "row" }}
-        gap={2}
+        sx={{ alignItems: { sm: "flex-start", md: "center" }, gap: 2 }}
       >
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ fontWeight: 600 }} variant="subtitle2">
@@ -105,13 +104,13 @@ export const KleinOperatorRescaleControl = ({
           disabled={!operator.can_rescale || isRescaling}
           error={!unavailableReason && invalidParallelism}
           helperText={helperText}
-          inputProps={{ min: 1, step: 1 }}
           label="Parallelism"
           onChange={(event) => {
             clearFeedback();
             setParallelismInput(event.target.value);
           }}
           sx={{ minWidth: 280 }}
+          slotProps={{ htmlInput: { min: 1, step: 1 } }}
           type="number"
           value={parallelismInput}
         />

@@ -46,10 +46,7 @@ class Enrich:
 
 ray.klein.configure({"execution.runtime.mode": "batch"})
 
-stream = (
-    ray.klein.from_items([{"value": 10}, {"value": 30}])
-    .map(Enrich, concurrency=(2, 8), num_cpus=1)
-)
+stream = ray.klein.from_items([{"value": 10}, {"value": 30}]).map(Enrich, concurrency=(2, 8), num_cpus=1)
 stream.take_all()
 rows = ray.klein.execute("batch-enrichment").get()
 ```
@@ -83,11 +80,13 @@ The request is accepted only when all of these conditions hold:
 Set `state.keyed.max-parallelism` before the first checkpoint and keep it stable:
 
 ```python
-ray.klein.configure({
-    "execution.runtime.mode": "streaming",
-    "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
-    "state.keyed.max-parallelism": 128,
-})
+ray.klein.configure(
+    {
+        "execution.runtime.mode": "streaming",
+        "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
+        "state.keyed.max-parallelism": 128,
+    }
+)
 ```
 
 The Dashboard and stable state API require job snapshot publication through
@@ -165,11 +164,7 @@ for operator in job["operators"]:
 
 target_name = "Enrich"
 target = next(
-    (
-        operator
-        for operator in job["operators"]
-        if operator["name"] == target_name and operator["can_rescale"]
-    ),
+    (operator for operator in job["operators"] if operator["name"] == target_name and operator["can_rescale"]),
     None,
 )
 if target is None:

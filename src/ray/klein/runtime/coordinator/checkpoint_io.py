@@ -643,13 +643,13 @@ def _require_format_version(value: Any, *, expected: int, context: str) -> None:
 def _validate_size(value: Any, *, context: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{context} must be a non-negative integer")
-    return cast(int, value)
+    return int(value)
 
 
 def _validate_checkpoint_id(name: str, value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"checkpoint {name} must be a non-negative integer")
-    return cast(int, value)
+    return int(value)
 
 
 def _validate_source_states(source_states: Any) -> None:

@@ -36,16 +36,15 @@ import ray
 import ray.klein
 
 # Set options from a mapping.
-ray.klein.configure({
-    "execution.runtime.mode": "streaming",
-    "state.backend.type": "rocksdb",
-})
+ray.klein.configure(
+    {
+        "execution.runtime.mode": "streaming",
+        "state.backend.type": "rocksdb",
+    }
+)
 
 # Separate key=value pairs with commas, semicolons, or whitespace.
-ray.klein.configure(
-    "execution.checkpointing.timeout=300; "
-    "pipeline.operator-chaining.enabled=false"
-)
+ray.klein.configure("execution.checkpointing.timeout=300; pipeline.operator-chaining.enabled=false")
 ```
 
 Use a JSON object string when values contain dictionaries or lists:

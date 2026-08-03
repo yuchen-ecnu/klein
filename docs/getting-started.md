@@ -37,15 +37,12 @@ A terminal operation such as `take_all()` registers a sink. Call
 import ray
 import ray.klein
 
-stream = (
-    ray.klein.from_items(
-        [
-            {"name": "Ada", "amount": 4},
-            {"name": "Grace", "amount": 7},
-        ]
-    )
-    .map(lambda row: {**row, "amount": row["amount"] * 2})
-)
+stream = ray.klein.from_items(
+    [
+        {"name": "Ada", "amount": 4},
+        {"name": "Grace", "amount": 7},
+    ]
+).map(lambda row: {**row, "amount": row["amount"] * 2})
 stream.take_all()
 rows = ray.klein.execute("quick-start").get()
 

@@ -60,9 +60,9 @@ export const KleinJobOverviewPage = () => {
   };
   return (
     <Box sx={{ padding: 3 }}>
-      <Stack alignItems="center" direction="row" spacing={2}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
         <Box sx={{ flex: 1 }}>
-          <Stack alignItems="center" direction="row" spacing={1.5}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
             <Typography sx={{ fontWeight: 500 }} variant="h4">
               {job.job_name}
             </Typography>
@@ -103,7 +103,7 @@ export const KleinJobOverviewPage = () => {
           Unable to cancel job: {String(cancelError)}
         </Alert>
       )}
-      <Stack direction="row" flexWrap="wrap" gap={2} sx={{ marginTop: 3 }}>
+      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 2, marginTop: 3 }}>
         <KleinStatCard
           label="Records in / out"
           value={`${formatCount(job.overview.rows_in)} / ${formatCount(
@@ -152,18 +152,20 @@ export const KleinJobOverviewPage = () => {
         ModalProps={{ keepMounted: true }}
         onClose={() => setDetailsOperatorId(undefined)}
         open={Boolean(selectedOperator)}
-        PaperProps={{
-          sx: {
-            maxWidth: "calc(100vw - 64px)",
-            width: { xs: "100%", md: 880 },
+        slotProps={{
+          paper: {
+            sx: {
+              maxWidth: "calc(100vw - 64px)",
+              width: { xs: "100%", md: 880 },
+            },
           },
         }}
       >
         <Box sx={{ minHeight: "100%" }}>
           <Stack
-            alignItems="center"
             direction="row"
             sx={{
+              alignItems: "center",
               backgroundColor: "background.paper",
               borderBottom: "1px solid",
               borderColor: "divider",

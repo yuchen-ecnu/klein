@@ -26,10 +26,7 @@ the docstring come from that same Ray installation.
 import ray
 import ray.klein
 
-stream = (
-    ray.klein.read_csv("s3://bucket/input")
-    .data.random_shuffle(seed=7)
-)
+stream = ray.klein.read_csv("s3://bucket/input").data.random_shuffle(seed=7)
 stream.data.take(10)
 rows = ray.klein.execute("ray-data-read").get()
 ```
@@ -94,9 +91,7 @@ explicit forms cover third-party connectors and multi-step Ray objects such as
 ```python
 source = ray.klein.source(my_dataset_factory, config)
 
-aggregated = source.data.transform(
-    lambda ds: ds.groupby("customer_id").mean("amount")
-)
+aggregated = source.data.transform(lambda ds: ds.groupby("customer_id").mean("amount"))
 
 aggregated.data.consume(lambda ds: ds.summary())
 summary = ray.klein.execute("customer-summary").get()

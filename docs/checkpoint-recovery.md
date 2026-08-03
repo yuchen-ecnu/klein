@@ -31,12 +31,14 @@ an important job:
 import ray
 import ray.klein
 
-ray.klein.configure({
-    "execution.runtime.mode": "streaming",
-    "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
-    "execution.checkpointing.num-retained": 3,
-    "state.keyed.max-parallelism": 32768,
-})
+ray.klein.configure(
+    {
+        "execution.runtime.mode": "streaming",
+        "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
+        "execution.checkpointing.num-retained": 3,
+        "state.keyed.max-parallelism": 32768,
+    }
+)
 ```
 
 Keep the following with the deployment definition:
@@ -82,15 +84,14 @@ import ray
 import ray.klein
 
 ray.init(address="auto")
-ray.klein.configure({
-    "execution.runtime.mode": "streaming",
-    "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
-    "execution.savepoint.path": (
-        "s3://data-platform/klein-checkpoints/"
-        "klein-orders-0123abcd/chk-42"
-    ),
-    "state.keyed.max-parallelism": 32768,
-})
+ray.klein.configure(
+    {
+        "execution.runtime.mode": "streaming",
+        "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
+        "execution.savepoint.path": ("s3://data-platform/klein-checkpoints/klein-orders-0123abcd/chk-42"),
+        "state.keyed.max-parallelism": 32768,
+    }
+)
 
 # Build the same sources, transforms, operator names, and terminal sinks here.
 build_pipeline()

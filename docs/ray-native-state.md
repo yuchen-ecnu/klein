@@ -189,11 +189,13 @@ hourly = (
         timestamp_selector=lambda row: row["event_time_ms"],
         state_ttl=timedelta(days=1),
     )
-    .reduce(lambda left, right: {
-        "customer_id": left["customer_id"],
-        "amount": left["amount"] + right["amount"],
-        "event_time_ms": right["event_time_ms"],
-    })
+    .reduce(
+        lambda left, right: {
+            "customer_id": left["customer_id"],
+            "amount": left["amount"] + right["amount"],
+            "event_time_ms": right["event_time_ms"],
+        }
+    )
 )
 ```
 

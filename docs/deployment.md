@@ -47,10 +47,12 @@ import ray.klein
 
 ray.init(address="auto")
 
-ray.klein.configure({
-    "job.namespace": "orders-production",
-    "execution.checkpointing.dir": "s3://platform-checkpoints/klein",
-})
+ray.klein.configure(
+    {
+        "job.namespace": "orders-production",
+        "execution.checkpointing.dir": "s3://platform-checkpoints/klein",
+    }
+)
 
 # Application code builds sources and transforms and registers terminal sinks.
 build_pipeline()
