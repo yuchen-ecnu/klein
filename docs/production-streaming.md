@@ -184,11 +184,7 @@ s3://platform/klein-checkpoints/orders-production/chk-42
 Add it to the same graph configuration before `execute()`:
 
 ```python
-ray.klein.configure({
-    "execution.savepoint.path": (
-        "s3://platform/klein-checkpoints/orders-production/chk-42"
-    )
-})
+ray.klein.configure({"execution.savepoint.path": ("s3://platform/klein-checkpoints/orders-production/chk-42")})
 ```
 
 Keep the graph, operator names, state descriptors, serializers, and

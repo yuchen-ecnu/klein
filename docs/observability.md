@@ -54,10 +54,12 @@ Configure publication and retention with:
 import ray
 import ray.klein
 
-ray.klein.configure({
-    "observability.dashboard.enabled": True,
-    "observability.dashboard.history-size": 100,
-})
+ray.klein.configure(
+    {
+        "observability.dashboard.enabled": True,
+        "observability.dashboard.history-size": 100,
+    }
+)
 ```
 
 Disabling state publication doesn't disable Ray logs, Ray metrics, or

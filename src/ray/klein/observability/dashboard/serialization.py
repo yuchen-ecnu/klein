@@ -8,7 +8,7 @@ import enum
 import re
 from collections.abc import Mapping
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from ray.klein.config.configuration import Configuration
 
@@ -23,8 +23,10 @@ _SECRET_KEY = re.compile(
 def dashboard_value(value: Any) -> Any:
     """Convert runtime values to JSON-compatible primitives."""
 
-    if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {key: dashboard_value(item) for key, item in dataclasses.asdict(value).items()}
+    if isinstance(value, type):
+        return str(value)
+    if dataclasses.is_dataclass(value):
+        return {key: dashboard_value(item) for key, item in dataclasses.asdict(cast(Any, value)).items()}
     if isinstance(value, enum.Enum):
         return value.name
     if isinstance(value, timedelta):
@@ -49,8 +51,10 @@ def safe_configuration(config: Configuration | None) -> dict[str, Any]:
 def _safe_value(key: object, value: Any) -> Any:
     if _SECRET_KEY.search(str(key)):
         return "<redacted>"
-    if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        value = dataclasses.asdict(value)
+    if isinstance(value, type):
+        return dashboard_value(value)
+    if dataclasses.is_dataclass(value):
+        value = dataclasses.asdict(cast(Any, value))
     if isinstance(value, Mapping):
         return {str(nested_key): _safe_value(nested_key, item) for nested_key, item in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):

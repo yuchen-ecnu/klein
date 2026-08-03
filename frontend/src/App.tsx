@@ -8,7 +8,7 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  RiBookMarkLine,
+  RiBookMarkedLine,
   RiDashboardLine,
   RiFeedbackLine,
   RiFileList3Line,
@@ -165,7 +165,7 @@ const MainNav = () => {
           sx={{ color: "#5F6469" }}
           target="_blank"
         >
-          <RiBookMarkLine />
+          <RiBookMarkedLine />
         </IconButton>
       </Tooltip>
       <Tooltip title="Leave feedback">

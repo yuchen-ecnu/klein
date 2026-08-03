@@ -109,7 +109,7 @@ checkout.
 | `iceberg` | `pyiceberg>=0.11.1,<0.12` | Iceberg catalog access and batch or checkpointed append output. Catalog-specific dependencies may still be required. |
 | `media` | `pyvips[binary]>=3,<4`, `Pillow>=10,<13`, `pypdf>=5,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
 | `rocketmq` | `rocketmq-client-python>=2,<3` | Continuous RocketMQ input. A compatible native `librocketmq` is also required on every executing worker. |
-| `redis` | `redis>=5,<7` | Redis lookup, filtering, and output. |
+| `redis` | `redis>=5,<9` | Redis lookup, filtering, and output. |
 | `rocksdb` | `rocksdict>=0.3.29,<0.4` | The node-local RocksDB managed-state backend. |
 | `serve` | `aiohttp>=3.13.3`, `orjson>=3.9`, and compatible `ray[serve]` | Ray Serve execution regions and the embedded proxy client. |
 | `all` | All runtime integrations above | An integration-development environment; it does not include test or documentation tools. |

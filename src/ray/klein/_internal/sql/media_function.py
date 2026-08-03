@@ -165,10 +165,13 @@ def _nearest_media_ancestor(expression: exp.Expression) -> exp.Anonymous | None:
 
 
 def _belongs_to_projection(call: exp.Expression, select: exp.Select) -> bool:
+    projections = select.expressions
     child = call
-    while child.parent is not None and child.parent is not select:
-        child = child.parent
-    return child.parent is select and any(child is projection for projection in select.expressions)
+    parent = child.parent
+    while parent is not None and parent is not select:
+        child = parent
+        parent = child.parent
+    return parent is select and any(child is projection for projection in projections)
 
 
 def _is_direct_projection(call: exp.Expression, select: exp.Select) -> bool:

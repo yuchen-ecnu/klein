@@ -280,7 +280,10 @@ class InputBatchAccumulator:
                 f"{InputBatchAccumulator._record_rows(record)} logical rows"
             )
         row_kind = record.row_kinds[index]
-        return ChangelogRow(row, row_kind=row_kind) if row_kind is not None else dict(row)
+        if row_kind is None:
+            return dict(row)
+        changelog_row: dict[str, Any] = ChangelogRow(row, row_kind=row_kind)
+        return changelog_row
 
     @staticmethod
     def _same_columnar_schema(records: Sequence[Record]) -> bool:
@@ -310,7 +313,7 @@ class InputBatchAccumulator:
         rows = 1 if record.num_rows is None else record.num_rows
         if isinstance(rows, bool) or not isinstance(rows, int) or rows < 0:
             raise ValueError(f"record has invalid row count: {rows!r}")
-        return rows
+        return int(rows)
 
     def _timed_out(self) -> bool:
         timeout = self._runtime_info.batch_timeout

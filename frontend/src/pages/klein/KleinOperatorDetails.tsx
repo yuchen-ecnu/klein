@@ -57,7 +57,7 @@ export const KleinOperatorDetails = ({
         padding: inDrawer ? 3 : 2,
       }}
     >
-      <Stack alignItems="center" direction="row" spacing={1.5}>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
         <Box sx={{ flex: 1 }}>
           <Typography sx={{ fontWeight: 600 }} variant="h6">
             {operator.name}
@@ -78,7 +78,7 @@ export const KleinOperatorDetails = ({
         onRefresh={onRefresh}
         operator={operator}
       />
-      <Stack direction="row" flexWrap="wrap" gap={2} sx={{ marginTop: 2 }}>
+      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 2, marginTop: 2 }}>
         <KleinStatCard
           label="Records in / out"
           value={`${formatCount(operator.rows_in)} / ${formatCount(
@@ -182,7 +182,7 @@ export const KleinOperatorDetails = ({
                       : "-"}
                     <Typography
                       color="text.secondary"
-                      display="block"
+                      sx={{ display: "block" }}
                       variant="caption"
                     >
                       {formatBytes(subtask.checkpoint_state_size_bytes ?? 0)} ·{" "}
@@ -259,7 +259,7 @@ const DrawerTaskInstances = ({ operator }: { operator: KleinOperator }) => (
               </Typography>
               <Typography
                 color="text.secondary"
-                display="block"
+                sx={{ display: "block" }}
                 variant="caption"
               >
                 {formatByteRate(subtask.bytes_in_per_second)} /{" "}
@@ -282,7 +282,7 @@ const DrawerTaskInstances = ({ operator }: { operator: KleinOperator }) => (
                 : "-"}
               <Typography
                 color="text.secondary"
-                display="block"
+                sx={{ display: "block" }}
                 variant="caption"
               >
                 {formatBytes(subtask.checkpoint_state_size_bytes ?? 0)} ·{" "}
@@ -311,7 +311,7 @@ const CompactPercentage = ({
   value: number;
 }) => (
   <Box sx={{ marginTop: 0.5 }}>
-    <Stack direction="row" justifyContent="space-between">
+    <Stack direction="row" sx={{ justifyContent: "space-between" }}>
       <Typography color="text.secondary" variant="caption">
         {label}
       </Typography>

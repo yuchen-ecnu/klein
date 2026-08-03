@@ -211,7 +211,7 @@ export const KleinCheckpointsPage = () => {
           {job.checkpoints.error}
         </Alert>
       )}
-      <Stack direction="row" flexWrap="wrap" gap={2} sx={{ marginTop: 3 }}>
+      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 2, marginTop: 3 }}>
         <KleinStatCard label="Completed" value={summary.completed} />
         <KleinStatCard label="In progress" value={summary.in_progress} />
         <KleinStatCard label="Failed" value={summary.failed} />
@@ -449,7 +449,7 @@ const CheckpointDetails = ({ checkpoint }: { checkpoint: KleinCheckpoint }) => {
 
   return (
     <Box sx={{ backgroundColor: "#F7FAFC", margin: 1, padding: 2 }}>
-      <Stack alignItems="baseline" direction="row" spacing={2}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: "baseline" }}>
         <Typography sx={{ fontWeight: 600 }} variant="subtitle1">
           Operator checkpoint details
         </Typography>

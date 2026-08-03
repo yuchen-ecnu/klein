@@ -143,20 +143,17 @@ def add_tax(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     }
 
 
-stream = (
-    ray.klein.from_items(
-        [
-            {"event_id": "e-17", "amount": 12.5},
-            {"event_id": "e-18", "amount": 9.0},
-        ]
-    )
-    .map_batches(
-        add_tax,
-        batch_size=256,
-        batch_timeout=timedelta(seconds=2),
-        batch_format="numpy",
-        name="AddTax",
-    )
+stream = ray.klein.from_items(
+    [
+        {"event_id": "e-17", "amount": 12.5},
+        {"event_id": "e-18", "amount": 9.0},
+    ]
+).map_batches(
+    add_tax,
+    batch_size=256,
+    batch_timeout=timedelta(seconds=2),
+    batch_format="numpy",
+    name="AddTax",
 )
 stream.take_all()
 rows = ray.klein.execute("add-tax").get()
@@ -264,9 +261,7 @@ def expand(document):
 def embed(batch):
     return {
         "document_id": batch["document_id"],
-        "embedding": np.asarray(
-            [[len(sentence)] for sentence in batch["sentence"]]
-        ),
+        "embedding": np.asarray([[len(sentence)] for sentence in batch["sentence"]]),
     }
 
 
