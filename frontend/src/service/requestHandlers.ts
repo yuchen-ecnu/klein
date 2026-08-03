@@ -1,14 +1,14 @@
-import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
+import axios, { type AxiosPromise, type AxiosRequestConfig } from "axios";
 
 const formatUrl = (url: string) => (url.startsWith("/") ? url.slice(1) : url);
 
-export const get = <T = unknown, R = AxiosResponse<T>>(
+export const get = <T = unknown>(
   url: string,
   config?: AxiosRequestConfig,
-): Promise<R> => axios.get<T, R>(formatUrl(url), config);
+): AxiosPromise<T> => axios.get<T>(formatUrl(url), config);
 
-export const post = <T = unknown, R = AxiosResponse<T>>(
+export const post = <T = unknown>(
   url: string,
   data?: unknown,
   config?: AxiosRequestConfig,
-): Promise<R> => axios.post<T, R>(formatUrl(url), data, config);
+): AxiosPromise<T> => axios.post<T>(formatUrl(url), data, config);
