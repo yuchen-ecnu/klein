@@ -27,8 +27,14 @@ msgstr "Klein Arrow-first 跨任务数据面在 SQL、批 UDF、embedding、图�
 msgid "Arrow-first data-plane evaluation"
 msgstr "Arrow-first 数据面评测"
 
-msgid "**Evaluation date:** 2026-07-21   **Historical baseline:** clean checkout of `cca02fe`   **Candidate:** the source revision containing this report, with Arrow transport enabled by default"
-msgstr "**评测日期：** 2026-07-21   **历史基线：** `cca02fe` 的干净检出   **候选版本：** 包含本报告的源代码版本，默认启用 Arrow 传输"
+msgid "**Evaluation date:** 2026-07-21"
+msgstr "**评测日期：** 2026-07-21"
+
+msgid "**Historical baseline:** clean checkout of `cca02fe`"
+msgstr "**历史基线：** `cca02fe` 的干净检出"
+
+msgid "**Candidate:** the source revision containing this report, with Arrow transport enabled by default"
+msgstr "**候选版本：** 包含本报告的源代码版本，默认启用 Arrow 传输"
 
 msgid "Executive result"
 msgstr "结论摘要"
