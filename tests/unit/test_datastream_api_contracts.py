@@ -149,6 +149,22 @@ def test_elementwise_api_forwards_runtime_and_resource_parameters(method, operat
     assert function.batch_lowering is not None
 
 
+def test_elementwise_api_preserves_subsecond_batch_timeout() -> None:
+    stream = (
+        KleinContext()
+        .from_values({"key": "a"})
+        .map_batches(
+            lambda batch: batch,
+            batch_size=2,
+            batch_timeout=timedelta(milliseconds=500),
+        )
+    )
+
+    function = stream.stream_operator.logical_function
+    assert function is not None
+    assert function.runtime_info.batch_timeout == 0.5
+
+
 def test_source_and_sink_api_forward_lifecycle_parameters() -> None:
     context = KleinContext()
     source = context.source(

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -20,8 +20,8 @@ msgstr ""
 
 msgid ""
 "Build, run, observe, stop, and restore a production-shaped Kafka streaming "
-"pipeline with Klein for Ray."
-msgstr "使用 Klein for Ray 构建、运行、观测、停止并恢复接近生产形态的 Kafka 流处理流水线。"
+"pipeline with Klein."
+msgstr "使用 Klein 构建、运行、观测、停止并恢复接近生产形态的 Kafka 流处理流水线。"
 
 msgid "Production streaming walkthrough"
 msgstr "生产流处理实战"

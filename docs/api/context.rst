@@ -43,6 +43,7 @@ section of :doc:`../job-lifecycle`.
    explain
    execute_sql
    register_scalar_function
+   register_ai_function
    register_table_factory
    from_items
    from_values

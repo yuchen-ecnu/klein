@@ -1,13 +1,13 @@
 ---
 myst:
   html_meta:
-    description: "Run and write Klein for Ray unit, state, architecture, integration, and external-service tests."
+    description: "Run and write Klein unit, state, architecture, integration, and external-service tests."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Testing
 
-Klein for Ray uses pytest with a `src` layout and importlib import mode. Tests are
+Klein uses pytest with a `src` layout and importlib import mode. Tests are
 classified on two independent axes: a **tier** describes the dependency boundary
 the test crosses, while a **component** identifies the subsystem that owns it.
 
@@ -78,7 +78,7 @@ and requires the JobManager to replace it while keeping the job running.
 Per-test timeouts, strict marker/config validation, strict expected failures,
 and warnings-as-errors are enabled globally in `pyproject.toml`.
 
-The combined line-and-branch gate is 68%. Risk-based component floors protect
+The combined line-and-branch gate is 78%. Risk-based component floors protect
 state, configuration, connectors, checkpoint coordination, event time,
 partitioning, and observability independently so growth in unrelated modules
 cannot hide a regression in recovery-critical code.

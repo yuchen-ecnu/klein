@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Use Klein for Ray Redis value lookups, missing-key filters, and buffered output."
+    description: "Use Klein Redis value lookups, missing-key filters, and buffered output."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

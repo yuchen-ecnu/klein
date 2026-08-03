@@ -41,7 +41,7 @@ from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.job_manager.job_manager import JobManager, _format_rescale_error
 from ray.klein.runtime.job_manager.progress import OperatorProgress, ProgressSnapshot
-from ray.klein.runtime.message import Barrier, DeliveryChannel, Record, RescaleBarrier
+from ray.klein.runtime.message import Barrier, DeliveryChannel, Record, RescaleBarrier, Watermark
 from ray.klein.runtime.operator.operator import StreamOperator
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.operator.operator_type import OperatorType
@@ -60,6 +60,7 @@ from ray.klein.runtime.scheduler.rescale_plan import (
 )
 from ray.klein.runtime.worker.source_stream_task import SourceStreamTask
 from ray.klein.runtime.worker.stream_task import StreamTask
+from ray.klein.state.key_encoding import KEY_ENCODING_VERSION
 from ray.klein.state.key_group_range import KeyGroupRange
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
@@ -136,6 +137,9 @@ def _bare_rescale_task(name: str = "task") -> StreamTask:
     task._topology_pending_descriptor = None
     task._topology_active = False
     task._topology_commit_tombstones = []
+    task._topology_event_time_snapshot = None
+    task._topology_event_time_controls = None
+    task._committed_event_time_controls = None
     return task
 
 
@@ -148,6 +152,7 @@ def _managed_state_reference(
     payload = pickle.dumps(
         {
             "format_version": 2,
+            "key_encoding_version": KEY_ENCODING_VERSION,
             "max_parallelism": max_parallelism,
             "key_group_range": KeyGroupRange(0, max_parallelism - 1),
             "key_groups": key_groups or {},
@@ -1456,6 +1461,8 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
     checkpoint = MagicMock()
     pump = MagicMock()
     tracker = MagicMock()
+    tracker.snapshot_state.return_value = "watermark-snapshot"
+    tracker.reconfigure_inputs.return_value = (Watermark(100),)
     task = _bare_rescale_task("target")
     task._descriptor = previous
     task._vertex_id = previous.vertex_id
@@ -1469,6 +1476,7 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
         event_time_tracker=tracker,
         metrics=MagicMock(),
         pipelined=False,
+        executor=None,
     )
     task._build_output_edge = MagicMock(return_value="replacement")
     task._configure_output_replay = MagicMock()
@@ -1494,9 +1502,16 @@ async def test_topology_transaction_commits_once_and_rejects_conflicting_prepare
         pending.input_channels,
     )
     tracker.reconfigure_inputs.assert_called_once_with(pending.input_vertex_ids)
+    pump.apply_event_time_controls.assert_not_called()
 
     assert task.commit_topology_reconfiguration("resize-1") is True
     assert task.commit_topology_reconfiguration("resize-1") is True
+    assert task._committed_event_time_controls == (Watermark(100),)
+    task._emit = AsyncMock()
+    await task._apply_committed_event_time_controls()
+    pump.apply_event_time_controls.assert_called_once_with((Watermark(100),))
+    task._emit.drain_pending.assert_awaited_once_with()
+    assert task._committed_event_time_controls is None
     assert task.rollback_topology_reconfiguration("resize-1") is False
     output.commit_edge_swap.assert_called_once_with("resize-1")
 
@@ -1772,7 +1787,8 @@ def test_actor_topology_activation_failure_restores_every_local_component() -> N
     checkpoint = MagicMock()
     pump = MagicMock()
     tracker = MagicMock()
-    tracker.reconfigure_inputs.side_effect = [RuntimeError("tracker failed"), None]
+    tracker.snapshot_state.return_value = "watermark-snapshot"
+    tracker.reconfigure_inputs.side_effect = RuntimeError("tracker failed")
     task = object.__new__(StreamTask)
     task._descriptor = previous
     task._state = SimpleNamespace(
@@ -1800,10 +1816,8 @@ def test_actor_topology_activation_failure_restores_every_local_component() -> N
         ((dict(pending.barrier_split), pending.input_vertex_ids, pending.input_channels),),
         ((dict(previous.barrier_split), previous.input_vertex_ids, previous.input_channels),),
     ]
-    assert tracker.reconfigure_inputs.call_args_list == [
-        ((pending.input_vertex_ids,),),
-        ((previous.input_vertex_ids,),),
-    ]
+    tracker.reconfigure_inputs.assert_called_once_with(pending.input_vertex_ids)
+    tracker.restore_state.assert_called_once_with("watermark-snapshot")
     assert pump.reconfigure_checkpoint_inputs.call_args_list == [
         ((pending.input_vertex_ids, pending.input_channels),),
         ((previous.input_vertex_ids, previous.input_channels),),

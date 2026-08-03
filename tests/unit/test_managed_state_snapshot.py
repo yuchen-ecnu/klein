@@ -1,10 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
+import os
 import pickle
 
 import pytest
 
+from ray.klein.state.key_encoding import KEY_ENCODING_VERSION
 from ray.klein.state.key_group_range import KeyGroupRange, assign_key_group_range, key_group_owner
-from ray.klein.state.managed_state_snapshot import repartition_managed_state_snapshots
+from ray.klein.state.managed_state_snapshot import (
+    decode_managed_state_snapshot,
+    repartition_managed_state_snapshots,
+)
+
+
+class _SnapshotGadget:
+    def __reduce__(self):
+        return (
+            eval,
+            ("__import__('os').environ.__setitem__('KLEIN_SNAPSHOT_GADGET_EXECUTED', '1')",),
+        )
 
 
 def _snapshot(
@@ -16,6 +29,7 @@ def _snapshot(
     return pickle.dumps(
         {
             "format_version": 2,
+            "key_encoding_version": KEY_ENCODING_VERSION,
             "max_parallelism": max_parallelism,
             "key_group_range": KeyGroupRange(0, max_parallelism - 1),
             "key_groups": key_groups,
@@ -23,6 +37,45 @@ def _snapshot(
         },
         protocol=pickle.HIGHEST_PROTOCOL,
     )
+
+
+def test_legacy_managed_snapshot_is_rejected_explicitly() -> None:
+    legacy = pickle.loads(_snapshot({}))
+    legacy.pop("key_encoding_version")
+
+    with pytest.raises(ValueError, match="legacy key encoding"):
+        decode_managed_state_snapshot(pickle.dumps(legacy))
+
+
+def test_managed_snapshot_rejects_pickle_globals_without_executing_them(monkeypatch) -> None:
+    monkeypatch.delenv("KLEIN_SNAPSHOT_GADGET_EXECUTED", raising=False)
+
+    with pytest.raises(pickle.UnpicklingError, match=r"builtins\.eval is not allowed"):
+        decode_managed_state_snapshot(pickle.dumps(_SnapshotGadget()))
+
+    assert "KLEIN_SNAPSHOT_GADGET_EXECUTED" not in os.environ
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (-1, 0),
+        (2, 1),
+        (True, 1),
+        (0, False),
+        ("0", 1),
+        (0, "1"),
+    ],
+)
+def test_managed_snapshot_revalidates_unpickled_key_group_range_fields(start: object, end: object) -> None:
+    key_group_range = object.__new__(KeyGroupRange)
+    object.__setattr__(key_group_range, "start", start)
+    object.__setattr__(key_group_range, "end", end)
+    payload = pickle.loads(_snapshot({}))
+    payload["key_group_range"] = key_group_range
+
+    with pytest.raises(ValueError, match="invalid key_group_range"):
+        decode_managed_state_snapshot(pickle.dumps(payload))
 
 
 def test_repartition_decodes_old_fragments_once_and_assigns_each_group_to_one_target() -> None:

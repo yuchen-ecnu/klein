@@ -13,6 +13,10 @@ from typing import Any
 
 from sqlglot import exp
 
+from ray.klein._internal.sql.builtin_expression import (
+    UnsupportedBuiltinExpressionError,
+    evaluate_builtin_expression,
+)
 from ray.klein._internal.sql.scalar_function_registry import ScalarFunction
 from ray.klein.api.sql_query_error import SQLQueryError
 
@@ -30,10 +34,13 @@ def evaluate_expression(
 @singledispatch
 def _evaluate(
     expression: exp.Expression,
-    _row: Mapping[str, Any],
-    _functions: Mapping[str, ScalarFunction],
+    row: Mapping[str, Any],
+    functions: Mapping[str, ScalarFunction],
 ) -> Any:
-    raise SQLQueryError(f"Unsupported SQL expression: {expression.sql()}")
+    try:
+        return evaluate_builtin_expression(expression, lambda argument: _evaluate(argument, row, functions))
+    except UnsupportedBuiltinExpressionError as error:
+        raise SQLQueryError(f"Unsupported SQL expression: {expression.sql()}") from error
 
 
 @_evaluate.register(exp.Alias)
@@ -316,7 +323,6 @@ _NUMERIC_OPERATIONS: dict[type[exp.Expression], Callable[[Any], Any]] = {
     exp.Exp: math.exp,
     exp.Floor: math.floor,
     exp.Ln: math.log,
-    exp.Round: round,
     exp.Sign: _sign,
     exp.Sin: math.sin,
     exp.Tan: math.tan,
@@ -415,6 +421,10 @@ def _evaluate_scalar_function(
     row: Mapping[str, Any],
     functions: Mapping[str, ScalarFunction],
 ) -> Any:
+    try:
+        return evaluate_builtin_expression(expression, lambda argument: _evaluate(argument, row, functions))
+    except UnsupportedBuiltinExpressionError:
+        pass
     try:
         function = functions[expression.name.casefold()]
     except KeyError as error:

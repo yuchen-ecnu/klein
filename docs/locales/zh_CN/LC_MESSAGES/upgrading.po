@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -21,8 +21,8 @@ msgstr ""
 
 msgid ""
 "Compatibility, rehearsal, upgrade, validation, and rollback procedures "
-"for Klein for Ray jobs."
-msgstr "Klein for Ray 作业的兼容性、演练、升级、验证和回滚流程。"
+"for Klein jobs."
+msgstr "Klein 作业的兼容性、演练、升级、验证和回滚流程。"
 
 msgid "Upgrade Klein jobs"
 msgstr "升级 Klein 作业"
@@ -656,3 +656,15 @@ msgstr ""
 "恢复机制请参阅[检查点恢复](checkpoint-recovery.md)，外部副作用请参阅[交付保证](delivery-"
 "semantics.md)，受信任检查点处理请参阅[安全](security.md)，发布门槛请参阅[生产就绪检查清单](production-"
 "readiness.md)。"
+
+msgid "The current restore implementation accepts only its current versioned checkpoint metadata and managed-state formats. It rejects an unknown format instead of guessing a migration. Version 4 metadata uses a safe JSON envelope, but source state, sink committables, custom keys, and serializer-owned values remain trusted application pickle payloads, so class/module availability is also part of compatibility."
+msgstr "当前恢复实现只接受当前版本的 checkpoint 元数据和托管状态格式。它会拒绝未知格式，而不会猜测迁移方式。版本 4 元数据使用安全 JSON 信封，但 source 状态、sink committable、自定义 key 和 serializer 自有值仍是可信应用 pickle 负载，因此 class/module 的可用性也是兼容性的一部分。"
+
+msgid "This release does not automatically restore version 3 or prefix-less pickle metadata: it rejects those bytes before invoking pickle. Keep such a job on the exact version that wrote its checkpoint, or start the current release from clean state. There is no supported stateful migration across this metadata boundary yet."
+msgstr "此版本不会自动恢复版本 3 或无前缀的 pickle 元数据：它会在调用 pickle 前拒绝这些字节。请让此类作业继续使用写入 checkpoint 的确切版本，或让当前版本从干净状态启动。目前尚不支持跨越此元数据边界的有状态迁移。"
+
+msgid "Restore from the full URI of one `chk-N` directory whose version 4 `_metadata` is readable. Preserve every referenced state object in the job prefix."
+msgstr "从某个版本 4 `_metadata` 可读的 `chk-N` 目录完整 URI 恢复。保留作业前缀中引用的每个状态对象。"
+
+msgid "An incomplete directory, only a copied `_metadata` file, edited metadata, legacy pickle metadata, or an object whose checksum/size no longer matches."
+msgstr "未完成的目录、仅复制的 `_metadata` 文件、经过编辑的元数据、旧版 pickle 元数据，或校验和/大小不再匹配的对象。"

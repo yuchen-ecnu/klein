@@ -100,6 +100,22 @@ async def test_finished_teardown_failure_is_reported_as_job_failure() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stop_job_propagates_writer_queue_timeout() -> None:
+    manager = JobManager(Configuration(), namespace="job-a")
+    manager.job_name = "orders"
+    manager.job_master = Mock()
+    manager.stop = AsyncMock()
+    manager.run_exclusive = AsyncMock(side_effect=asyncio.TimeoutError)
+    try:
+        with pytest.raises(asyncio.TimeoutError):
+            await manager._stop_job(timeout=1)
+
+        manager.run_exclusive.assert_awaited_once()
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
 async def test_late_status_report_is_ignored_after_lifecycle_teardown_starts() -> None:
     manager = JobManager(Configuration(), namespace="job-a")
     manager.job_master = Mock()
@@ -249,5 +265,37 @@ async def test_submit_retains_deployment_error_when_cleanup_also_fails() -> None
             assert detail is not None
             assert detail.startswith("ValueError: invalid placement")
             assert "Deployment teardown failed: RuntimeError: actor survived teardown" in detail
+        finally:
+            manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_submit_does_not_start_supervisor_after_cancellation_fence() -> None:
+    manager = JobManager(Configuration(), namespace="job-a")
+    logical_graph = Mock()
+
+    async def schedule_then_observe_cancel(*_args) -> None:
+        manager._lifecycle_stop_requested = True
+
+    manager.run_exclusive = AsyncMock(side_effect=schedule_then_observe_cancel)
+    manager.start_job_supervisor = AsyncMock()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "ray.klein.runtime.job_manager.job_manager.LogicalOptimizer.optimize",
+            Mock(return_value=Mock()),
+        )
+        monkeypatch.setattr(
+            "ray.klein.runtime.job_manager.job_manager.ExecutionGraph.expand",
+            Mock(return_value=Mock()),
+        )
+        monkeypatch.setattr(
+            "ray.klein.runtime.job_manager.job_manager.JobMaster",
+            Mock(return_value=Mock()),
+        )
+        try:
+            assert await manager.submit("orders", logical_graph) is False
+
+            manager.start_job_supervisor.assert_not_awaited()
+            assert manager.job_status() is JobStatus.SUBMITTING
         finally:
             manager._writer.shutdown(wait=False)

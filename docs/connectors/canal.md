@@ -6,7 +6,7 @@ myst:
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-canal-json-format)=
-# Canal JSON format
+# Canal
 
 Klein consumes MySQL binlog changes that Canal Server publishes to Kafka in
 FlatMessage JSON format. Canal JSON is a Kafka value format rather than a

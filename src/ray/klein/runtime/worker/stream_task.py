@@ -313,6 +313,9 @@ class StreamTask(AsyncWorker):
         self._topology_pending_descriptor: TaskDeploymentDescriptor | None = None
         self._topology_active = False
         self._topology_commit_tombstones: list[str] = []
+        self._topology_event_time_snapshot: object | None = None
+        self._topology_event_time_controls: tuple[StreamControl, ...] | None = None
+        self._committed_event_time_controls: tuple[StreamControl, ...] | None = None
         self._checkpoint_input_gates: dict[object, tuple[int, asyncio.Event]] = {}
         self._checkpoint_gate_loop: asyncio.AbstractEventLoop | None = None
         self._checkpoint_gate_resolved_through = -1
@@ -388,6 +391,10 @@ class StreamTask(AsyncWorker):
             operator.open(output, runtime_context)
             input_buffer_max_bytes = runtime_context.config.get(PipelineOptions.INPUT_BUFFER_MAX_BYTES)
             emit_queue_max_batches = descriptor.config.get(PipelineOptions.EMIT_QUEUE_MAX_BATCHES)
+            input_batches = InputBatchAccumulator(
+                runtime_context.runtime_info,
+                max_bytes=input_buffer_max_bytes,
+            )
             inbox = WeightedQueue(
                 descriptor.input_buffer_size,
                 inbox_envelope_rows,
@@ -408,7 +415,7 @@ class StreamTask(AsyncWorker):
                 operator=operator,
                 output=output,
                 executor=executor,
-                input_batches=InputBatchAccumulator(runtime_context.runtime_info),
+                input_batches=input_batches,
                 checkpoint_strategy=runtime_context.checkpoint_strategy,
                 is_async_operator=runtime_context.runtime_info.async_enabled,
                 pipelined=delivery_mode is DeliveryMode.PIPELINED,
@@ -452,6 +459,7 @@ class StreamTask(AsyncWorker):
                 inbox_timeout=idle_check_interval.total_seconds(),
                 input_vertex_ids=descriptor.input_vertex_ids,
                 input_channels=getattr(descriptor, "input_channels", None),
+                input_buffer_observer=self._update_buffer_size_metrics,
             )
             watermark.bind(
                 output,
@@ -970,6 +978,7 @@ class StreamTask(AsyncWorker):
         await self.prepare_topology_reconfiguration(operation_id, descriptor, timeout)
         self.activate_topology_reconfiguration(operation_id)
         self.commit_topology_reconfiguration(operation_id)
+        await self._apply_committed_event_time_controls()
 
     async def prepare_topology_reconfiguration(
         self,
@@ -1050,7 +1059,10 @@ class StreamTask(AsyncWorker):
                     getattr(descriptor, "input_channels", None),
                 )
             if state.event_time_tracker is not None:
-                state.event_time_tracker.reconfigure_inputs(descriptor.input_vertex_ids)
+                self._topology_event_time_snapshot = state.event_time_tracker.snapshot_state()
+                self._topology_event_time_controls = state.event_time_tracker.reconfigure_inputs(
+                    descriptor.input_vertex_ids
+                )
             self._descriptor = descriptor
             self._topology_active = True
             return True
@@ -1090,7 +1102,11 @@ class StreamTask(AsyncWorker):
             if state.output is None:
                 raise RuntimeError("a terminal task cannot commit output edges")
             state.output.commit_edge_swap(operation_id)
+        controls = self._topology_event_time_controls
         self._clear_topology_transaction()
+        if controls:
+            pending = self._committed_event_time_controls or ()
+            self._committed_event_time_controls = (*pending, *controls)
         self._topology_commit_tombstones.append(operation_id)
         del self._topology_commit_tombstones[:-16]
         return True
@@ -1127,7 +1143,11 @@ class StreamTask(AsyncWorker):
                 logger.exception("Failed to restore checkpoint input gates after topology rollback")
         if state.event_time_tracker is not None:
             try:
-                state.event_time_tracker.reconfigure_inputs(previous.input_vertex_ids)
+                snapshot = self._topology_event_time_snapshot
+                if snapshot is None:
+                    state.event_time_tracker.reconfigure_inputs(previous.input_vertex_ids)
+                else:
+                    state.event_time_tracker.restore_state(snapshot)
             except Exception as error:
                 failures.append(error)
                 logger.exception("Failed to restore watermark inputs after topology rollback")
@@ -1162,6 +1182,8 @@ class StreamTask(AsyncWorker):
         self._topology_previous_descriptor = None
         self._topology_pending_descriptor = None
         self._topology_active = False
+        self._topology_event_time_snapshot = None
+        self._topology_event_time_controls = None
 
     def _validate_topology_reconfiguration(self, descriptor: "TaskDeploymentDescriptor") -> None:
         if self._state is None or not self._running:
@@ -1210,7 +1232,32 @@ class StreamTask(AsyncWorker):
         if self._rescale_role in {"upstream", "target", "downstream"} and self._rescale_ready.is_set():
             await self._rescale_resume.wait()
             return
+        if self._committed_event_time_controls is not None:
+            await self._apply_committed_event_time_controls()
+            return
         await self._pump.run_once()
+
+    async def _apply_committed_event_time_controls(self) -> None:
+        """Forward topology-released progress before post-commit input."""
+
+        controls = self._committed_event_time_controls
+        if controls is None:
+            return
+        state = self._runtime_state
+        pump = self._pump
+        if pump is None:
+            if controls:
+                raise RuntimeError("watermark progress cannot be forwarded without an input pump")
+            self._committed_event_time_controls = None
+            return
+        await asyncio.get_running_loop().run_in_executor(
+            state.executor,
+            pump.apply_event_time_controls,
+            controls,
+        )
+        if self._emit is not None:
+            await self._emit.drain_pending()
+        self._committed_event_time_controls = None
 
     @property
     def _rescale_ready(self) -> asyncio.Event:
@@ -2048,14 +2095,35 @@ class StreamTask(AsyncWorker):
         return self._watermark.forwarded_sequence_for(sender_vertex_id) if self._watermark is not None else -1
 
     def _update_buffer_size_metrics(self) -> int:
-        current_buffer_size = self._state.inbox.qsize()
-        self._state.metrics.update_input_buffer(
-            current_buffer_size,
+        state = self._state
+        if state is None:
+            return 0
+        queued_buffer_size = state.inbox.qsize()
+        retained_buffer_size = queued_buffer_size + self._accumulated_input_rows()
+        state.metrics.update_input_buffer(
+            retained_buffer_size,
             self._descriptor.input_buffer_size,
-            self._state.inbox.byte_size,
+            self._retained_input_bytes(),
             self._descriptor.config.get(PipelineOptions.INPUT_BUFFER_MAX_BYTES),
         )
-        return current_buffer_size
+        # PutAck.buffer_size remains the queued-row load-balancing signal.
+        return queued_buffer_size
+
+    def _accumulated_input_rows(self) -> int:
+        input_batches = getattr(self._state, "input_batches", None)
+        value = getattr(input_batches, "buffered_rows", 0)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+    def _accumulated_input_bytes(self) -> int:
+        input_batches = getattr(self._state, "input_batches", None)
+        value = getattr(input_batches, "buffered_bytes", 0)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+
+    def _retained_input_bytes(self) -> int:
+        retained = getattr(self._state.inbox, "retained_byte_size", None)
+        if isinstance(retained, int) and not isinstance(retained, bool) and retained >= 0:
+            return retained
+        return self._state.inbox.byte_size + self._accumulated_input_bytes()
 
     def progress_counts(self) -> "SubtaskCounts":
         """This subtask's throughput counters for the CLI progress view.
@@ -2073,7 +2141,7 @@ class StreamTask(AsyncWorker):
             rows_out=cumulative.rows_out + self._state.operator.records_out,
             bytes_in=cumulative.bytes_in + self._state.operator.bytes_in,
             bytes_out=cumulative.bytes_out + self._state.operator.bytes_out,
-            queued=self._state.inbox.qsize(),
+            queued=self._state.inbox.qsize() + self._accumulated_input_rows(),
             capacity=self._descriptor.input_buffer_size,
             busy_ns=cumulative.busy_ns + self._state.operator.processing_duration_ns,
             backpressure_ns=cumulative.backpressure_ns

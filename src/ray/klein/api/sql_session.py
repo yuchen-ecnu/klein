@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from ray.klein._internal.sql.ai_function_registry import AIFunctionRegistry, AIFunctionSpec
 from ray.klein._internal.sql.catalog_parser import parse_catalog_table
+from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy
 from ray.klein._internal.sql.execution import sql_source, sql_transform
+from ray.klein._internal.sql.media_function import validate_media_function_calls
 from ray.klein._internal.sql.scalar_function_registry import ScalarFunction, ScalarFunctionRegistry
 from ray.klein._internal.sql.table_factory_registry import TableFactoryRegistry
 from ray.klein._internal.sql.validation import (
@@ -28,6 +32,28 @@ if TYPE_CHECKING:
     from ray.klein.api.table_factory import TableFactory
 
 
+def _sql_execution_options(
+    num_cpus: float,
+    scalar_functions: Mapping[str, ScalarFunction],
+    ai_functions: Mapping[str, AIFunctionSpec],
+    download_policy: SQLDownloadPolicy | None = None,
+) -> dict[str, Any]:
+    options: dict[str, Any] = {"num_cpus": num_cpus}
+    if scalar_functions:
+        options["functions"] = scalar_functions
+    if ai_functions:
+        options["ai_functions"] = ai_functions
+    if download_policy is not None:
+        options["download_policy"] = download_policy
+    return options
+
+
+def _contains_download(statement: Any) -> bool:
+    from sqlglot import exp
+
+    return any(isinstance(node, exp.Anonymous) and node.name.casefold() == "download" for node in statement.walk())
+
+
 class SQLSession:
     """A scoped catalog and planner for lazy, Ray-native SQL operations."""
 
@@ -37,6 +63,7 @@ class SQLSession:
         self._tables: OrderedDict[str, CatalogTable] = OrderedDict()
         self._table_factories = TableFactoryRegistry.with_defaults()
         self._scalar_functions = ScalarFunctionRegistry()
+        self._ai_functions = AIFunctionRegistry()
 
     def create_temp_view(self, name: str, dataframe: DataStream) -> DataStream:
         """Create or replace a named, non-materialized DataStream view."""
@@ -85,6 +112,52 @@ class SQLSession:
 
         return self._scalar_functions.snapshot()
 
+    def register_ai_function(
+        self,
+        name: str,
+        function: Any,
+        *,
+        fn_constructor_args: Iterable[Any] | None = None,
+        fn_constructor_kwargs: Mapping[str, Any] | None = None,
+        num_cpus: float | None = None,
+        num_gpus: float | None = None,
+        concurrency: int | tuple[int, int] | None = None,
+        batch_size: int = 32,
+        batch_timeout: timedelta = timedelta(seconds=3),
+        async_buffer_size: int | None = None,
+        replace: bool = False,
+    ) -> None:
+        """Register a provider-neutral batched backend for a built-in SQL AI function."""
+
+        self._ai_functions.register(
+            name,
+            function,
+            fn_constructor_args=fn_constructor_args,
+            fn_constructor_kwargs=fn_constructor_kwargs,
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+            concurrency=concurrency,
+            batch_size=batch_size,
+            batch_timeout=batch_timeout,
+            async_buffer_size=async_buffer_size,
+            replace=replace,
+        )
+
+    def drop_ai_function(self, name: str) -> None:
+        """Remove a session-local SQL AI function backend."""
+
+        self._ai_functions.drop(name)
+
+    @property
+    def ai_functions(self) -> tuple[str, ...]:
+        return self._ai_functions.identifiers
+
+    def _ai_function_bindings(self) -> Mapping[str, AIFunctionSpec]:
+        return self._ai_functions.snapshot()
+
+    def _inherit_ai_function_bindings(self, functions: Mapping[str, AIFunctionSpec]) -> None:
+        self._ai_functions.inherit(functions)
+
     @property
     def table_factories(self) -> tuple[str, ...]:
         return self._table_factories.identifiers
@@ -132,9 +205,11 @@ class SQLSession:
         """Build a lazy, bounded DataStream from one Ray-native SQL query."""
 
         statement = validate_read_query(query)
+        validate_media_function_calls(statement)
         if not isinstance(num_cpus, (int, float)) or num_cpus <= 0:
             raise SQLQueryError("num_cpus must be positive")
         scalar_functions = self._scalar_functions.bind(statement, functions)
+        ai_functions = self._ai_functions.bind(statement)
 
         bindings: dict[str, DataStream] = dict(self._views)
         for name, dataframe in (tables or {}).items():
@@ -159,6 +234,11 @@ class SQLSession:
         if mode == RuntimeExecutionMode.BATCH and has_unbounded_input:
             raise SQLQueryError("Batch SQL cannot consume an unbounded table; use execution.runtime.mode=streaming")
         use_streaming = mode == RuntimeExecutionMode.STREAMING or has_unbounded_input
+        if not use_streaming and any(spec.is_async for spec in ai_functions.values()):
+            raise SQLQueryError("Async SQL AI function backends require streaming execution mode")
+        download_policy = (
+            SQLDownloadPolicy.from_configuration(self._context.config) if _contains_download(statement) else None
+        )
         if use_streaming:
             from ray.klein._internal.sql.streaming import build_streaming_query
 
@@ -167,13 +247,17 @@ class SQLSession:
                 query,
                 bindings,
                 functions=scalar_functions,
+                ai_functions=ai_functions,
                 num_cpus=num_cpus,
             )
 
+        options = _sql_execution_options(
+            num_cpus,
+            scalar_functions,
+            ai_functions,
+            download_policy,
+        )
         if not bindings:
-            options: dict[str, Any] = {"num_cpus": num_cpus}
-            if scalar_functions:
-                options["functions"] = scalar_functions
             return self._context.data.source(
                 sql_source,
                 query,
@@ -183,9 +267,6 @@ class SQLSession:
         table_names = tuple(bindings)
         dataframes = tuple(bindings.values())
         primary, others = dataframes[0], dataframes[1:]
-        options = {"num_cpus": num_cpus}
-        if scalar_functions:
-            options["functions"] = scalar_functions
         return primary.data.transform(
             sql_transform,
             query,

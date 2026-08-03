@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Restore, resubmit, and rescale Klein for Ray jobs from durable checkpoints."
+    description: "Restore, resubmit, and rescale Klein jobs from durable checkpoints."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -66,7 +66,9 @@ s3://data-platform/klein-checkpoints/
 Prefer the newest `chk-N` whose `_metadata` is readable. `_latest` is only an
 optimization; Klein falls back to scanning completed checkpoint directories
 when the pointer is missing, stale, or corrupt. Do not select an incomplete
-directory that lacks `_metadata`.
+directory that lacks `_metadata`. If completed directories exist but none has
+readable version 4 metadata, automatic discovery fails explicitly instead of
+starting the job from empty state.
 
 Job snapshots and checkpoint logs expose recent completion and failure history.
 They do not copy durable checkpoint payloads into the state actor.
@@ -148,7 +150,8 @@ Use `ray-klein status <namespace>` for a summary and
 | Symptom | Likely cause | Action |
 |---|---|---|
 | `_metadata` missing | Incomplete checkpoint publication | Select an earlier completed `chk-N`. |
-| Unsupported checkpoint format | Code and checkpoint schema are incompatible | Run the matching Klein version or a deliberate migration tool; do not edit pickled metadata. |
+| Missing safe-v4 prefix or legacy pickle metadata | The checkpoint predates the version 4 JSON envelope | Run the exact Klein version that wrote it, or restart the current version from clean state. The current reader deliberately does not unpickle or migrate the old metadata. |
+| Unsupported checkpoint format | Code and checkpoint schema are incompatible | Run the matching Klein version or a deliberate migration tool; do not edit checkpoint metadata. |
 | State checksum/size mismatch | Missing or corrupt state object | Verify object-store consistency and restore an earlier retained checkpoint. |
 | Missing operator state | Graph identity or operator construction order changed | Rebuild the original logical graph and stable names. |
 | Max-parallelism mismatch | `state.keyed.max-parallelism` changed | Restore with the original value. |

@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Read continuous Apache RocketMQ topics with Klein for Ray."
+    description: "Read continuous Apache RocketMQ topics with Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

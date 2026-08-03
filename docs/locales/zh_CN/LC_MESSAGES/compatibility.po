@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -19,18 +19,18 @@ msgstr ""
 "Language: zh_CN\n"
 
 msgid ""
-"Klein for Ray compatibility policy for Python, Ray, Ray Data extension APIs, "
+"Klein compatibility policy for Python, Ray, Ray Data extension APIs, "
 "and package namespaces."
-msgstr "Klein for Ray 针对 Python、Ray、Ray Data 扩展 API 和包命名空间的兼容性策略。"
+msgstr "Klein 针对 Python、Ray、Ray Data 扩展 API 和包命名空间的兼容性策略。"
 
 msgid "Compatibility policy"
 msgstr "兼容性策略"
 
 msgid ""
-"Klein for Ray 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The "
+"Klein 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The "
 "upper bound is intentional: several Ray Data extension points used by the "
 "current code are DeveloperAPI and can change between Ray minors."
-msgstr "Klein for Ray 0.1 支持 Python 3.10–3.12 和 `ray>=2.56.1,<2.57`。设置上限是有意为之：当前代码使用的若干 Ray Data 扩展点属于 DeveloperAPI，可能在不同 Ray 次版本之间发生变化。"
+msgstr "Klein 0.1 支持 Python 3.10–3.12 和 `ray>=2.56.1,<2.57`。设置上限是有意为之：当前代码使用的若干 Ray Data 扩展点属于 DeveloperAPI，可能在不同 Ray 次版本之间发生变化。"
 
 msgid ""
 "Every supported Python version is tested against the latest compatible Ray "
@@ -57,9 +57,9 @@ msgstr "Ray Data 桥接层在运行时发现 Dataset 工厂和方法，而不维
 
 msgid ""
 "Supported Ray Serve releases still read the protobuf `FieldDescriptor.label` "
-"attribute, which protobuf 7 removed. Klein for Ray therefore constrains "
+"attribute, which protobuf 7 removed. Klein therefore constrains "
 "`protobuf<7` until that incompatibility is fixed upstream."
-msgstr "受支持的 Ray Serve 版本仍会读取 protobuf 的 `FieldDescriptor.label` 属性，而 protobuf 7 已移除该属性。因此，在上游修复此不兼容问题前，Klein for Ray 将依赖约束为 `protobuf<7`。"
+msgstr "受支持的 Ray Serve 版本仍会读取 protobuf 的 `FieldDescriptor.label` 属性，而 protobuf 7 已移除该属性。因此，在上游修复此不兼容问题前，Klein 将依赖约束为 `protobuf<7`。"
 
 msgid "The distributed package keeps its small set of unavoidable Ray Data private imports inside `ray.klein._compat`. New private imports are compatibility debt and require an exact inventory entry, an isolated adapter, and tests against the supported Ray line. Normal Klein modules are forbidden from importing them. See [the inventory](private-api-inventory.md)."
 msgstr "分发包将少量不可避免的 Ray Data 私有导入集中在 `ray.klein._compat` 中。新增私有导入属于兼容性债务，必须提供精确的清单条目、隔离的适配器，并针对受支持的 Ray 版本系列进行测试。普通 Klein 模块禁止导入这些符号。请参阅[私有 API 清单](private-api-inventory.md)。"

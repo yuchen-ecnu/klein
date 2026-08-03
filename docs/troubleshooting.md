@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Troubleshoot Klein for Ray installation, execution-mode, connector, checkpoint, watermark, backpressure, and CLI problems."
+    description: "Troubleshoot Klein installation, execution-mode, connector, checkpoint, watermark, backpressure, and CLI problems."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

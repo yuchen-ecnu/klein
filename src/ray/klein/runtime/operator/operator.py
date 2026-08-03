@@ -6,7 +6,9 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from ray.klein._internal.block import block_num_rows
+import pyarrow as pa
+
+from ray.klein._internal.block import block_num_rows, block_row_dict
 from ray.klein._internal.memory import estimate_retained_size
 from ray.klein._internal.values import is_valid_column_values, truncated_repr
 from ray.klein.api.collector import Collector
@@ -187,11 +189,11 @@ class StreamOperator(Operator, ABC):
         elif self._columnar_passthrough:
             self._collect_columnar(record)
         else:
-            for item in self._expand(record.block):
-                self._collector.collect(Record(item))
+            for index in range(block_num_rows(record.block)):
+                self._collector.collect(Record(block_row_dict(record.block, index)))
 
     def _validate_record(self, record: Record) -> None:
-        if isinstance(record, Barrier) or isinstance(record.block, collections.abc.Mapping):
+        if isinstance(record, Barrier) or isinstance(record.block, collections.abc.Mapping | pa.RecordBatch | pa.Table):
             return
         function_name = self._function.__class__.__name__ if self._function is not None else "the operator"
         raise ValueError(
@@ -202,7 +204,8 @@ class StreamOperator(Operator, ABC):
         )
 
     def _collect_columnar(self, record: Record) -> None:
-        self._validate_columns(record.block)
+        if not isinstance(record.block, pa.RecordBatch | pa.Table):
+            self._validate_columns(record.block)
         num_rows = block_num_rows(record.block)
         if num_rows > 0 and self._collector is not None:
             self._collector.collect(Record(record.block, num_rows=num_rows))

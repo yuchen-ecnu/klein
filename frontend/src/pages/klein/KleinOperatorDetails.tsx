@@ -14,7 +14,7 @@ import {
 } from "@mui/material";
 import React from "react";
 import { RiExternalLinkLine } from "react-icons/ri";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink } from "react-router";
 import { generateActorLink } from "../../common/links";
 import { StatusChip } from "../../components/StatusChip";
 import { KleinOperator } from "../../type/klein";

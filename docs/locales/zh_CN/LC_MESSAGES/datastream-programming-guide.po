@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -20,12 +20,12 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Build Klein for Ray DataStream programs with precise record, UDF, "
-"batching, async, partitioning, and failure semantics."
-msgstr "使用精确的记录、UDF、批处理、异步、分区和故障语义构建 Klein for Ray DataStream 程序。"
+"Build Klein DataStream programs with precise record, UDF, batching, "
+"async, partitioning, and failure semantics."
+msgstr "使用精确的记录、UDF、批处理、异步、分区和故障语义构建 Klein DataStream 程序。"
 
-msgid "DataStream programming guide"
-msgstr "DataStream 编程指南"
+msgid "DataStream API"
+msgstr "DataStream API"
 
 msgid ""
 "Klein programs build a lazy graph of sources, transformations, and "
@@ -519,9 +519,8 @@ msgid ""
 "policy does not provide the same per-record continuation and Klein metric"
 " semantics."
 msgstr ""
-"在 `auto` 模式下，即使有界图原本可以完全下沉为批处理，启用此设置也会选择"
-"原生流处理。Ray Data 的块级错误策略无法提供相同的逐记录继续处理语义和 "
-"Klein 指标语义。"
+"在 `auto` 模式下，即使有界图原本可以完全下沉为批处理，启用此设置也会选择原生流处理。Ray Data "
+"的块级错误策略无法提供相同的逐记录继续处理语义和 Klein 指标语义。"
 
 msgid ""
 "This is an explicit data-loss policy, not a dead-letter queue. A failed "
@@ -646,3 +645,6 @@ msgid ""
 "[Job lifecycle](job-lifecycle.md) explains sinks, execution, handles, "
 "cancellation, and cleanup."
 msgstr "[作业生命周期](job-lifecycle.md)说明接收器、执行、句柄、取消和清理。"
+
+#~ msgid "DataStream programming guide"
+#~ msgstr "DataStream 编程指南"

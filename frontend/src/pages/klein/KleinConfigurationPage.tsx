@@ -11,7 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { formatDateFromTimeMs } from "../../common/formatUtils";
 import Loading from "../../components/Loading";
 import { useKleinJob } from "./hook/useKleinJobs";

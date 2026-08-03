@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024-2026 Klein for Ray Authors
+# SPDX-FileCopyrightText: 2024-2026 Klein Authors
 # SPDX-License-Identifier: Apache-2.0
 # Lowest direct dependency versions supported by pyproject.toml.
 build==1.2.1
@@ -12,14 +12,18 @@ numpy==1.24.0; python_version < "3.12"
 numpy==1.26.2; python_version >= "3.12"
 orjson==3.11.6
 pandas==2.2.3
+Pillow==10.0.0
 pip-audit==2.7.0
 protobuf==5.29.6
 pyarrow==23.0.1
 pyiceberg==0.11.1
+pypdf==5.0.0
+pypdfium2==4.30.0
 pytest==9.0.3
 pytest-asyncio==1.4.0
 pytest-cov==5.0.0
 pytest-timeout==2.3.1
+pyvips==3.0.0
 PyYAML==6.0; python_version < "3.12"
 PyYAML==6.0.1; python_version >= "3.12"
 ray==2.56.1

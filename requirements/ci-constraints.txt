@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024-2026 Klein for Ray Authors
+# SPDX-FileCopyrightText: 2024-2026 Klein Authors
 # SPDX-License-Identifier: Apache-2.0
 # Direct CI and release dependencies are pinned for reproducible resolution.
 # Dependabot updates this file; the supported lower-bound job is intentionally
@@ -13,16 +13,20 @@ mypy==1.18.2
 numpy==2.2.6
 orjson==3.11.9
 pandas==2.3.3
+Pillow==12.3.0
 pip==26.1.2
 pip-audit==2.10.1
 pre-commit==4.6.0
 protobuf==6.33.6
 pyarrow==23.0.1
 pyiceberg==0.11.1
+pypdf==6.14.2
+pypdfium2==5.12.1
 pytest==9.1.1
 pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 pytest-timeout==2.4.0
+pyvips==3.1.1
 PyYAML==6.0.3
 ray==2.56.1
 redis==6.4.0

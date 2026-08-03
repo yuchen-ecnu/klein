@@ -2,7 +2,7 @@
 
 # Provenance
 
-Klein for Ray was extracted from the Apache-2.0-licensed Red-Ray fork of Ray.
+Klein was extracted from the Apache-2.0-licensed Red-Ray fork of Ray.
 Development of the extracted code occurred from 2024 through 2026 before the
 standalone repository was created.
 

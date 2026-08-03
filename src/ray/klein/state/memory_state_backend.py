@@ -4,8 +4,10 @@ import time
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
+from ray.klein.state.key_encoding import KEY_ENCODING_VERSION, require_key_encoding_version
 from ray.klein.state.key_group_range import key_group_for_key
 from ray.klein.state.managed_state_backend import ManagedStateBackend
+from ray.klein.state.restricted_pickle import restricted_pickle_loads
 from ray.klein.state.state_codec import (
     decode_expiry_key,
     decode_state_key,
@@ -76,12 +78,22 @@ class MemoryStateBackend(ManagedStateBackend):
     def put(self, descriptor: StateDescriptor, value: Any, namespace: Any = None) -> None:
         state_key = self._state_key(descriptor, namespace)
         expires_at = self._expiry_for(descriptor)
+        previous = self._state.get(state_key)
+        if previous is not None:
+            previous_expiry, _payload = decode_state_value(previous)
+            if previous_expiry is not None:
+                self._expiry.pop(encode_expiry_key(previous_expiry, state_key), None)
         self._state[state_key] = encode_state_value(descriptor.serializer.dumps(value), expires_at)
         if expires_at is not None:
             self._expiry[encode_expiry_key(expires_at, state_key)] = b""
 
     def delete(self, descriptor: StateDescriptor, namespace: Any = None) -> None:
-        self._state.pop(self._state_key(descriptor, namespace), None)
+        state_key = self._state_key(descriptor, namespace)
+        encoded = self._state.pop(state_key, None)
+        if encoded is not None:
+            expires_at, _payload = decode_state_value(encoded)
+            if expires_at is not None:
+                self._expiry.pop(encode_expiry_key(expires_at, state_key), None)
 
     def namespaces(self, descriptor: StateDescriptor) -> tuple[Any, ...]:
         prefix = state_key_prefix(descriptor, self.current_key)
@@ -120,9 +132,9 @@ class MemoryStateBackend(ManagedStateBackend):
     def cleanup_expired(self, now_ms: int | None = None, limit: int | None = None) -> int:
         now_ms = self._clock() if now_ms is None else now_ms
         removed = 0
-        for expiry_key in sorted(self._expiry):
+        for processed, expiry_key in enumerate(sorted(self._expiry)):
             expires_at, state_key = decode_expiry_key(expiry_key)
-            if expires_at > now_ms or (limit is not None and removed >= limit):
+            if expires_at > now_ms or (limit is not None and processed >= limit):
                 break
             encoded = self._state.get(state_key)
             if encoded is not None and decode_state_value(encoded)[0] == expires_at:
@@ -132,13 +144,31 @@ class MemoryStateBackend(ManagedStateBackend):
         return removed
 
     def snapshot(self) -> bytes:
-        return pickle.dumps((self._state, self._expiry, self._timers), protocol=pickle.HIGHEST_PROTOCOL)
+        return pickle.dumps(
+            {
+                "format_version": 2,
+                "key_encoding_version": KEY_ENCODING_VERSION,
+                "state": self._state,
+                "expiry": self._expiry,
+                "timers": self._timers,
+            },
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
 
     def restore(self, snapshot: bytes) -> None:
-        state, expiry, timers = pickle.loads(snapshot)
-        self._state = dict(state)
-        self._expiry = dict(expiry)
-        self._timers = dict(timers)
+        payload = restricted_pickle_loads(snapshot)
+        if not isinstance(payload, dict) or payload.get("format_version") != 2:
+            require_key_encoding_version(None, context="memory state snapshot")
+        require_key_encoding_version(
+            payload.get("key_encoding_version"),
+            context="memory state snapshot",
+        )
+        state = dict(payload["state"])
+        expiry = dict(payload["expiry"])
+        timers = dict(payload["timers"])
+        self._state = state
+        self._expiry = expiry
+        self._timers = timers
 
     def snapshot_key_groups(
         self,
@@ -173,23 +203,40 @@ class MemoryStateBackend(ManagedStateBackend):
 
         return {
             key_group: pickle.dumps(
-                {"format_version": 1, **contents},
+                {
+                    "format_version": 2,
+                    "key_encoding_version": KEY_ENCODING_VERSION,
+                    **contents,
+                },
                 protocol=pickle.HIGHEST_PROTOCOL,
             )
             for key_group, contents in buckets.items()
         }
 
     def restore_key_groups(self, snapshots: Mapping[int, bytes]) -> None:
-        self._state = {}
-        self._expiry = {}
-        self._timers = {}
+        payloads = []
         for snapshot in snapshots.values():
-            payload = pickle.loads(snapshot)
-            if payload.get("format_version") != 1:
-                raise ValueError("unsupported memory key-group state format")
-            self._state.update(payload["state"])
-            self._expiry.update(payload["expiry"])
-            self._timers.update(payload["timers"])
+            payload = restricted_pickle_loads(snapshot)
+            if not isinstance(payload, dict) or payload.get("format_version") != 2:
+                require_key_encoding_version(None, context="memory key-group snapshot")
+            require_key_encoding_version(
+                payload.get("key_encoding_version"),
+                context="memory key-group snapshot",
+            )
+            payloads.append(payload)
+        state: dict[bytes, bytes] = {}
+        expiry: dict[bytes, bytes] = {}
+        timers: dict[bytes, bytes] = {}
+        for payload in payloads:
+            try:
+                state.update(payload["state"])
+                expiry.update(payload["expiry"])
+                timers.update(payload["timers"])
+            except KeyError as error:
+                raise ValueError("unsupported memory key-group state format") from error
+        self._state = state
+        self._expiry = expiry
+        self._timers = timers
 
     def close(self) -> None:
         return None

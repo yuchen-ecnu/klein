@@ -15,6 +15,13 @@ class _InputState:
     idle: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class _TrackerState:
+    inputs: tuple[tuple[Hashable, int | None, bool], ...]
+    output_watermark: int
+    output_idle: bool
+
+
 class InputWatermarkTracker:
     """Combine physical-input progress into one monotonic output protocol."""
 
@@ -35,15 +42,45 @@ class InputWatermarkTracker:
     def idle_input_count(self) -> int:
         return sum(1 for state in self._inputs.values() if state.idle)
 
-    def reconfigure_inputs(self, input_ids: Iterable[Hashable]) -> None:
+    def snapshot_state(self) -> _TrackerState:
+        """Capture an actor-local topology transaction savepoint."""
+
+        return _TrackerState(
+            tuple((input_id, state.watermark, state.idle) for input_id, state in self._inputs.items()),
+            self._output_watermark,
+            self._output_idle,
+        )
+
+    def restore_state(self, snapshot: object) -> None:
+        """Restore a savepoint after a topology transaction rolls back."""
+
+        if not isinstance(snapshot, _TrackerState):
+            raise TypeError("watermark tracker snapshot has an invalid type")
+        self._inputs = {input_id: _InputState(watermark, idle) for input_id, watermark, idle in snapshot.inputs}
+        self._output_watermark = snapshot.output_watermark
+        self._output_idle = snapshot.output_idle
+
+    def reconfigure_inputs(self, input_ids: Iterable[Hashable]) -> tuple[StreamControl, ...]:
         """Replace physical inputs while preserving progress for surviving ids.
 
         New inputs intentionally start without a watermark and therefore hold
         back the aggregate until they report progress. Removed inputs stop
-        pinning the minimum immediately.
+        pinning the minimum immediately. Any progress released by removing an
+        input is returned so the caller can forward it at the ordered topology
+        boundary.
         """
 
         self._inputs = {input_id: self._inputs.get(input_id, _InputState()) for input_id in input_ids}
+        if not self._inputs:
+            return ()
+        if all(state.idle for state in self._inputs.values()):
+            if self._output_idle:
+                return ()
+            self._output_idle = True
+            return (InputIdle(),)
+        output = self._reactivate_output(self._output_idle)
+        output.extend(self._advance())
+        return tuple(output)
 
     def on_control(
         self,

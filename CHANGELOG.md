@@ -8,8 +8,66 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+### Added
+
+- SQL now supports registered `AI_GENERATE` and `AI_EMBED` backends with
+  resource-aware batch and ordered streaming execution.
+- Built-in image and PDF SQL functions execute in one fused media stage with
+  bounded decoding, rendering, and cumulative binary-memory limits.
+- `DOWNLOAD` has an explicit SSRF-aware policy for schemes, hosts, address
+  ranges, redirects, response sizes, and total request deadlines.
+
+### Fixed
+
+- Unsupported `DOWNLOAD` compositions now fail during graph construction;
+  redirects are revalidated, request budgets are cumulative, and private
+  destinations remain denied unless explicitly allowlisted.
+- SQL media execution preserves binary NULL values and embedded NUL bytes
+  across Arrow and NumPy boundaries instead of rejecting NULLs or truncating
+  formats such as PNG.
+- Configuration parsing now rejects booleans as numeric values, lossy integer
+  coercion, non-finite floats and durations, and mismatched collection shapes.
+- Dashboard proxying now validates request provenance, bounds upstream
+  responses, closes failed responses, and avoids caching control-plane data.
+- Checkpoint restore now validates a safe metadata envelope, every embedded
+  payload size, and SHA-256 digest before entering the trusted application
+  deserialization boundary. Framework-owned managed-state envelopes reject
+  arbitrary pickle globals, and unreadable completed checkpoints can no longer
+  silently restart a job from empty state.
+- Equal built-in Python keys now share one deterministic key group, managed
+  state key, namespace, and timer identity regardless of numeric representation,
+  mapping order, or set hash seed.
+- Submission and teardown timeouts can no longer leave an unowned detached job
+  or report a successful terminal state; failed and cancelled `get()` calls no
+  longer return partial results. Interrupted `wait()` and `get()` calls attempt
+  cancellation, and queue-cleanup failures no longer hide completed results.
+- Input-topology changes immediately release watermarks pinned by removed
+  inputs, while commit and rollback preserve ordered event-time semantics.
+- Subsecond batch timeouts are retained instead of being truncated to zero;
+  resource plans can explicitly clear runtime batching overrides.
+- TTL renewal replaces stale expiry indexes and incremental cleanup now bounds
+  scanned entries as well as deletions.
+- Inbox, dequeue handoff, and input batching now share one byte budget; a
+  single oversized record is admitted only when it can make exclusive progress.
+
 ### Changed
 
+- SQL media batches are materialized one row at a time before validation to
+  keep peak input memory within the per-asset safety boundary.
+- Dashboard routes are lazy-loaded into deterministic vendor chunks, only the
+  used Roboto weights are packaged, and hashed static assets use immutable
+  caching while HTML and API navigation remain uncached.
+- Checkpoint metadata is now explicit format version 4 with a prefixed JSON
+  envelope. Legacy prefix-less/version 3 pickle metadata fails before
+  deserialization; resume it with the writing Klein version or restart from
+  clean state.
+- New keyed-state checkpoints carry key-encoding version 2. Checkpoints written
+  without that marker are rejected before state is mutated; resume them with
+  the writing Klein version or restart from clean state.
+- The Dashboard now uses React 19 and React Router 8, and its lock file resolves
+  exclusively through the public npm registry. Frontend audit, typecheck,
+  reproducible build, Dependabot, and JavaScript/TypeScript CodeQL checks are
+  part of CI.
 - The embedded Ray Serve proxy client now uses HTTPX instead of aiohttp while
   preserving total request timeouts and per-host connection limits.
 - Dashboard JobGraph nodes now use Flink-style whole-node coloring, blending

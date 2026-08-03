@@ -2,7 +2,7 @@
 
 # Code of Conduct
 
-Klein for Ray is committed to a welcoming, safe, and constructive community.
+Klein is committed to a welcoming, safe, and constructive community.
 Participants must be respectful, assume good intent, give actionable feedback,
 and avoid harassment, discrimination, threats, doxxing, or sustained disruption.
 

@@ -87,16 +87,58 @@ def test_completed_job_handle_exposes_in_memory_result() -> None:
 
 def test_live_job_handle_drains_output_and_delegates_control(monkeypatch) -> None:
     manager = _JobManager()
-    handle, _ = _live_handle(manager)
+    handle, lineage = _live_handle(manager)
     monkeypatch.setattr(klein, "get", lambda value, **_kwargs: value)
 
-    assert handle.get() == [{"id": 1}, {"id": 2}]
+    result = handle.get()
+    assert result == [{"id": 1}, {"id": 2}]
+    assert handle.get() is result
     assert manager.queue.shutdown_args == [True]
+    lineage.report_complete.assert_called_once()
     assert handle.status is JobStatus.FINISHED
     assert handle.cancel(timeout=7) is True
     assert manager.cancel_timeouts == [7]
     assert handle._progress_snapshot() == "snapshot"
     assert handle.namespace == "klein-orders"
+
+
+def test_live_job_handle_cleanup_failure_does_not_hide_completed_result(monkeypatch) -> None:
+    manager = _JobManager()
+    manager.queue.shutdown = Mock(side_effect=RuntimeError("queue unavailable"))
+    handle, lineage = _live_handle(manager)
+    monkeypatch.setattr(klein, "get", lambda value, **_kwargs: value)
+
+    result = handle.get()
+
+    assert result == [{"id": 1}, {"id": 2}]
+    assert handle.get() is result
+    manager.queue.shutdown.assert_called_once_with(force=True)
+    lineage.report_complete.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("status", "message", "lineage_method"),
+    [
+        (JobStatus.FAILED, "worker exploded", "report_fail"),
+        (JobStatus.CANCELLED, "Job was cancelled", "report_cancel"),
+    ],
+)
+def test_live_job_handle_get_rejects_partial_terminal_results(
+    monkeypatch,
+    status: JobStatus,
+    message: str,
+    lineage_method: str,
+) -> None:
+    manager = _JobManager(status)
+    handle, lineage = _live_handle(manager)
+    monkeypatch.setattr(klein, "get", lambda value, **_kwargs: value)
+
+    with pytest.raises(KleinError, match=message):
+        handle.get()
+
+    assert manager.queue.qsize() == 2
+    assert manager.queue.shutdown_args == [True]
+    getattr(lineage, lineage_method).assert_called_once()
 
 
 @pytest.mark.parametrize(
@@ -117,6 +159,35 @@ def test_wait_reports_terminal_lineage(monkeypatch, status: JobStatus, lineage_m
     getattr(lineage, lineage_method).assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("status", "lineage_method"),
+    [
+        (JobStatus.FINISHED, "report_complete"),
+        (JobStatus.CANCELLED, "report_cancel"),
+    ],
+)
+def test_wait_then_get_reports_terminal_lineage_once(
+    monkeypatch,
+    status: JobStatus,
+    lineage_method: str,
+) -> None:
+    manager = _JobManager(status)
+    handle, lineage = _live_handle(manager)
+    monkeypatch.setattr(klein, "get", lambda value, **_kwargs: value)
+    monkeypatch.setattr(progress_view, "is_interactive", lambda: False)
+
+    handle.wait()
+    if status is JobStatus.CANCELLED:
+        with pytest.raises(KleinError, match="cancelled"):
+            handle.get()
+    else:
+        result = handle.get()
+        assert result == [{"id": 1}, {"id": 2}]
+        assert handle.get() is result
+
+    getattr(lineage, lineage_method).assert_called_once()
+
+
 def test_wait_raises_job_failure_with_diagnostic(monkeypatch) -> None:
     manager = _JobManager(JobStatus.FAILED)
     handle, lineage = _live_handle(manager)
@@ -132,6 +203,25 @@ def test_wait_raises_job_failure_with_diagnostic(monkeypatch) -> None:
     lineage.report_fail.assert_called_once()
 
 
+def test_failed_wait_then_get_reuses_terminal_error_and_reports_once(monkeypatch) -> None:
+    manager = _JobManager(JobStatus.FAILED)
+    handle, lineage = _live_handle(manager)
+    diagnostic = Mock()
+    monkeypatch.setattr(klein, "get", lambda value, **_kwargs: value)
+    monkeypatch.setattr(progress_view, "is_interactive", lambda: False)
+    monkeypatch.setattr("ray.klein.api.live_job_handle.report_diagnostic", diagnostic)
+
+    with pytest.raises(KleinError, match="worker exploded") as wait_error:
+        handle.wait()
+    with pytest.raises(KleinError, match="worker exploded") as get_error:
+        handle.get()
+
+    assert get_error.value is wait_error.value
+    assert manager.queue.shutdown_args == [True]
+    diagnostic.assert_called_once()
+    lineage.report_fail.assert_called_once()
+
+
 def test_wait_cancels_job_when_driver_is_interrupted(monkeypatch) -> None:
     manager = _JobManager()
     manager.wait_error = KeyboardInterrupt("stop")
@@ -143,6 +233,20 @@ def test_wait_cancels_job_when_driver_is_interrupted(monkeypatch) -> None:
         handle.wait()
 
     assert manager.cancel_timeouts == [5]
+    lineage.report_cancel.assert_called_once()
+
+
+def test_get_cancels_job_when_driver_is_interrupted(monkeypatch) -> None:
+    manager = _JobManager()
+    manager.wait_error = KeyboardInterrupt("stop")
+    handle, lineage = _live_handle(manager)
+    monkeypatch.setattr(klein, "get", lambda value, **_kwargs: value)
+
+    with pytest.raises(KeyboardInterrupt, match="stop"):
+        handle.get()
+
+    assert manager.cancel_timeouts == [5]
+    assert manager.queue.shutdown_args == []
     lineage.report_cancel.assert_called_once()
 
 

@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Understand the Klein for Ray architecture, planning pipeline, streaming data plane, checkpoint protocol, and extension boundaries."
+    description: "Understand the Klein architecture, planning pipeline, streaming data plane, checkpoint protocol, and extension boundaries."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

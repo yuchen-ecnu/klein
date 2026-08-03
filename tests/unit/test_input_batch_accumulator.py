@@ -5,7 +5,10 @@ import numpy as np
 import pyarrow
 import pytest
 
+from ray.klein.api.changelog_row import ChangelogRow
+from ray.klein.api.row_kind import RowKind
 from ray.klein.api.runtime_info import RuntimeInfo
+from ray.klein.runtime.collector.edge_output import EdgeOutput
 from ray.klein.runtime.message import Barrier, Record, Watermark
 from ray.klein.runtime.worker.input_batch_accumulator import InputBatchAccumulator
 
@@ -23,6 +26,7 @@ def make_batcher(
     batch_size: int | None,
     batch_timeout: int = 300,
     batch_format: str = "native",
+    max_bytes: int | None = None,
 ) -> InputBatchAccumulator:
     del output_buffer
     return InputBatchAccumulator(
@@ -30,7 +34,8 @@ def make_batcher(
             batch_size=batch_size,
             batch_timeout=batch_timeout,
             batch_format=batch_format,
-        )
+        ),
+        max_bytes=max_bytes,
     )
 
 
@@ -310,3 +315,95 @@ def test_input_tags_are_never_merged_across_two_input_sides(output_buffer: list[
 
     assert [record.block for record in output_buffer] == [{"id": [0]}, {"id": [1, 2, 3]}]
     assert [record.input_tag for record in output_buffer] == [0, 1]
+
+
+def test_changelog_row_kinds_survive_arrow_transport_and_unbatch(output_buffer: list[Record]) -> None:
+    packed = EdgeOutput._pack_wire_records(
+        (
+            Record(ChangelogRow.insert({"id": 1})),
+            Record(ChangelogRow.update_before({"id": 1})),
+            Record(ChangelogRow.update_after({"id": 1})),
+        )
+    )
+
+    assert len(packed) == 1
+    assert isinstance(packed[0].block, pyarrow.RecordBatch)
+    assert packed[0].row_kinds == (
+        RowKind.INSERT,
+        RowKind.UPDATE_BEFORE,
+        RowKind.UPDATE_AFTER,
+    )
+
+    push(make_batcher(output_buffer, batch_size=None), output_buffer, packed[0])
+
+    assert [type(record.block) for record in output_buffer] == [ChangelogRow] * 3
+    assert [record.block.row_kind for record in output_buffer] == [
+        RowKind.INSERT,
+        RowKind.UPDATE_BEFORE,
+        RowKind.UPDATE_AFTER,
+    ]
+
+
+def test_changelog_row_kinds_follow_columnar_batch_slices(output_buffer: list[Record]) -> None:
+    record = Record(pyarrow.record_batch({"id": [1, 2, 3]}), num_rows=3)
+    record.row_kinds = (RowKind.INSERT, RowKind.UPDATE_BEFORE, RowKind.UPDATE_AFTER)
+    batcher = make_batcher(output_buffer, batch_size=2)
+
+    push(batcher, output_buffer, record)
+    output_buffer.extend(batcher.flush(force=True))
+
+    assert [output.row_kinds for output in output_buffer] == [
+        (RowKind.INSERT, RowKind.UPDATE_BEFORE),
+        (RowKind.UPDATE_AFTER,),
+    ]
+
+
+def test_per_row_timestamps_survive_arrow_unbatch(output_buffer: list[Record]) -> None:
+    record = Record(pyarrow.record_batch({"id": [1, 2, 3]}), num_rows=3)
+    record.row_timestamps = (100, 200, None)
+
+    push(make_batcher(output_buffer, batch_size=None), output_buffer, record)
+
+    assert [output.timestamp for output in output_buffer] == [100, 200, None]
+
+
+def test_byte_budget_flushes_existing_partial_batch_before_overflow(
+    output_buffer: list[Record],
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "ray.klein.runtime.worker.input_batch_accumulator.estimate_retained_size",
+        lambda record: record.block["size"],
+    )
+    batcher = make_batcher(output_buffer, batch_size=10, max_bytes=100)
+
+    push(batcher, output_buffer, Record({"id": 1, "size": 60}))
+    assert batcher.buffered_rows == 1
+    assert batcher.buffered_bytes == 60
+
+    push(batcher, output_buffer, Record({"id": 2, "size": 60}))
+
+    assert [record.block["id"] for record in output_buffer] == [[1]]
+    assert batcher.buffered_rows == 1
+    assert batcher.buffered_bytes == 60
+
+
+def test_single_oversized_record_is_flushed_exclusively_and_makes_progress(
+    output_buffer: list[Record],
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "ray.klein.runtime.worker.input_batch_accumulator.estimate_retained_size",
+        lambda record: record.block["size"],
+    )
+    batcher = make_batcher(output_buffer, batch_size=10, max_bytes=100)
+
+    push(batcher, output_buffer, Record({"id": 1, "size": 150}))
+
+    assert [record.block["id"] for record in output_buffer] == [[1]]
+    assert batcher.buffered_rows == 0
+    assert batcher.buffered_bytes == 0
+
+    push(batcher, output_buffer, Record({"id": 2, "size": 40}))
+    assert batcher.buffered_rows == 1
+    assert batcher.buffered_bytes == 40

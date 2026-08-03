@@ -5,10 +5,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ray.data.expressions import DownloadExpr
 from sqlglot import exp
 
 from ray.klein._internal.frozen_mapping import FrozenMapping
+from ray.klein._internal.sql.ai_function_execution import apply_batch_ai_projections
+from ray.klein._internal.sql.ai_function_registry import AIFunctionSpec
+from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy, apply_batch_downloads
 from ray.klein._internal.sql.expression import evaluate_expression
+from ray.klein._internal.sql.media_function import plan_media_projections, validate_media_function_calls
+from ray.klein._internal.sql.media_function_execution import apply_batch_media_computations
 from ray.klein._internal.sql.ray_data_expression import to_ray_data_expression
 from ray.klein._internal.sql.scalar_function_registry import ScalarFunction
 from ray.klein.api.sql_query_error import SQLQueryError
@@ -19,8 +25,20 @@ if TYPE_CHECKING:
 
 def _function_options(
     functions: Mapping[str, ScalarFunction] | None,
-) -> dict[str, Mapping[str, ScalarFunction]]:
+) -> dict[str, Any]:
     return {"functions": functions} if functions else {}
+
+
+def _ai_function_options(
+    ai_functions: Mapping[str, AIFunctionSpec] | None,
+) -> dict[str, Any]:
+    return {"ai_functions": ai_functions} if ai_functions else {}
+
+
+def _download_policy_options(
+    download_policy: SQLDownloadPolicy | None,
+) -> dict[str, Any]:
+    return {"download_policy": download_policy} if download_policy is not None else {}
 
 
 class _QualifyRow:
@@ -420,6 +438,7 @@ def _aggregate_select(
     input_blocks: int | None,
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
     group = select.args.get("group")
     group_expressions = tuple(group.expressions) if group is not None else ()
@@ -432,6 +451,7 @@ def _aggregate_select(
             aliases=aliases,
             num_cpus=num_cpus,
             **_function_options(functions),
+            **_download_policy_options(download_policy),
         )
     grouped = dataset.groupby(
         _group_key(group_fields),
@@ -456,14 +476,25 @@ def _add_sql_expressions(
     aliases: Sequence[str],
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
     fallback: list[tuple[str, exp.Expression]] = []
+    downloads: list[tuple[str, str, Any]] = []
     for name, expression in expressions:
         ray_expression = to_ray_data_expression(expression, aliases)
         if ray_expression is None:
             fallback.append((name, expression))
+        elif isinstance(ray_expression, DownloadExpr):
+            downloads.append((name, ray_expression.uri_column_name, ray_expression.filesystem))
         else:
             dataset = dataset.with_column(name, ray_expression, num_cpus=num_cpus)
+    if downloads:
+        dataset = apply_batch_downloads(
+            dataset,
+            downloads,
+            policy=download_policy or SQLDownloadPolicy(),
+            num_cpus=num_cpus,
+        )
     if fallback:
         dataset = dataset.map(_AddExpressions(fallback, functions), num_cpus=num_cpus)
     return dataset
@@ -476,7 +507,32 @@ def _project_select(
     aliases: Sequence[str],
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
+    media_plan = plan_media_projections(projections)
+    if media_plan.downloads:
+        dataset = _add_sql_expressions(
+            dataset,
+            media_plan.downloads,
+            aliases=aliases,
+            num_cpus=num_cpus,
+            **_function_options(functions),
+            **_download_policy_options(download_policy),
+        )
+    dataset = apply_batch_media_computations(
+        dataset,
+        media_plan.computations,
+        functions=functions or {},
+        num_cpus=num_cpus,
+    )
+    projections = media_plan.projections
+    dataset, projections = apply_batch_ai_projections(
+        dataset,
+        projections,
+        functions=functions or {},
+        ai_functions=ai_functions or {},
+    )
     computed: list[tuple[str, exp.Expression]] = []
     fields: list[tuple[str | None, str | None]] = []
     output_names: set[str] = set()
@@ -503,6 +559,7 @@ def _project_select(
         aliases=aliases,
         num_cpus=num_cpus,
         **_function_options(functions),
+        **_download_policy_options(download_policy),
     )
     return dataset.map(_FinalizeProjection(fields), num_cpus=num_cpus)
 
@@ -549,6 +606,8 @@ def _execute_select(
     *,
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
     import ray.data
 
@@ -600,6 +659,7 @@ def _execute_select(
             input_blocks=input_blocks,
             num_cpus=num_cpus,
             **_function_options(functions),
+            **_download_policy_options(download_policy),
         )
     else:
         dataset = _project_select(
@@ -608,6 +668,8 @@ def _execute_select(
             aliases=aliases,
             num_cpus=num_cpus,
             **_function_options(functions),
+            **_ai_function_options(ai_functions),
+            **_download_policy_options(download_policy),
         )
     return _apply_order_and_limit(select, dataset)
 
@@ -619,6 +681,8 @@ def _execute_query_ast(
     *,
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
     from sqlglot import exp
 
@@ -634,18 +698,44 @@ def _execute_query_ast(
                 nested_ctes,
                 num_cpus=num_cpus,
                 **_function_options(functions),
+                **_ai_function_options(ai_functions),
+                **_download_policy_options(download_policy),
             )
         query = query.copy()
         query.set("with_", None)
         ctes = nested_ctes
 
     if isinstance(query, exp.Select):
-        return _execute_select(query, datasets, ctes, num_cpus=num_cpus, **_function_options(functions))
+        return _execute_select(
+            query,
+            datasets,
+            ctes,
+            num_cpus=num_cpus,
+            **_function_options(functions),
+            **_ai_function_options(ai_functions),
+            **_download_policy_options(download_policy),
+        )
     if isinstance(query, exp.Union):
         if query.args.get("distinct") is not False:
             raise SQLQueryError("UNION DISTINCT is not supported yet; use UNION ALL")
-        left = _execute_query_ast(query.this, datasets, ctes, num_cpus=num_cpus, **_function_options(functions))
-        right = _execute_query_ast(query.expression, datasets, ctes, num_cpus=num_cpus, **_function_options(functions))
+        left = _execute_query_ast(
+            query.this,
+            datasets,
+            ctes,
+            num_cpus=num_cpus,
+            **_function_options(functions),
+            **_ai_function_options(ai_functions),
+            **_download_policy_options(download_policy),
+        )
+        right = _execute_query_ast(
+            query.expression,
+            datasets,
+            ctes,
+            num_cpus=num_cpus,
+            **_function_options(functions),
+            **_ai_function_options(ai_functions),
+            **_download_policy_options(download_policy),
+        )
         return left.union(right)
     raise SQLQueryError(f"Unsupported SQL query form: {query.key.upper()}")
 
@@ -657,12 +747,15 @@ def execute_sql_query(
     *,
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
     """Lower a SQLGlot query AST to a native, lazy Ray Dataset DAG."""
 
     from ray.klein._internal.sql.validation import validate_read_query
 
     statement = validate_read_query(query)
+    validate_media_function_calls(statement)
     if len(table_names) != len(datasets):
         raise ValueError(f"SQL has {len(table_names)} table names but {len(datasets)} input datasets")
     return _execute_query_ast(
@@ -671,6 +764,8 @@ def execute_sql_query(
         {},
         num_cpus=num_cpus,
         **_function_options(functions),
+        **_ai_function_options(ai_functions),
+        **_download_policy_options(download_policy),
     )
 
 
@@ -679,8 +774,18 @@ def sql_source(
     *,
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
-    return execute_sql_query(query, (), (), num_cpus=num_cpus, **_function_options(functions))
+    return execute_sql_query(
+        query,
+        (),
+        (),
+        num_cpus=num_cpus,
+        **_function_options(functions),
+        **_ai_function_options(ai_functions),
+        **_download_policy_options(download_policy),
+    )
 
 
 def sql_transform(
@@ -690,6 +795,8 @@ def sql_transform(
     *other_datasets: Dataset,
     num_cpus: float,
     functions: Mapping[str, ScalarFunction] | None = None,
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
+    download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
     return execute_sql_query(
         query,
@@ -697,4 +804,6 @@ def sql_transform(
         (primary, *other_datasets),
         num_cpus=num_cpus,
         **_function_options(functions),
+        **_ai_function_options(ai_functions),
+        **_download_policy_options(download_policy),
     )

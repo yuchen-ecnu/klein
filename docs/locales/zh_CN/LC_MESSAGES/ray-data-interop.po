@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,9 +22,9 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Use Ray Data readers and Dataset operations from Klein for Ray without "
+"Use Ray Data readers and Dataset operations from Klein without "
 "duplicating the installed Ray API."
-msgstr "在 Klein for Ray 中使用 Ray Data reader 和 Dataset 操作，而不重复定义已安装的 Ray API。"
+msgstr "在 Klein 中使用 Ray Data reader 和 Dataset 操作，而不重复定义已安装的 Ray API。"
 
 msgid "Ray Data interoperability"
 msgstr "Ray Data 互操作"
@@ -38,12 +38,12 @@ msgstr ""
 "data.md)。"
 
 msgid ""
-"Klein for Ray does not copy Ray Data's loading APIs. Those signatures "
+"Klein does not copy Ray Data's loading APIs. Those signatures "
 "change between Ray releases and duplicating them creates an immediately "
 "stale second API. Instead, source factories are exposed directly from "
 "`ray.klein`:"
 msgstr ""
-"Klein for Ray 不复制 Ray Data 的加载 API。这些签名会随 Ray 版本变化，复制它们会立即形成过时的第二套 "
+"Klein 不复制 Ray Data 的加载 API。这些签名会随 Ray 版本变化，复制它们会立即形成过时的第二套 "
 "API。数据源工厂会直接从 `ray.klein` 公开："
 
 msgid ""
@@ -187,3 +187,6 @@ msgstr ""
 " `stream.data.random_shuffle(...)`。文档中稳定的 Sink 入口点属于例外，包括 "
 "`stream.write_sql(...)`：它在批处理模式下使用 Ray Data，在流处理模式下使用 Klein 的至少一次 DB-API "
 "Sink。"
+
+msgid "This includes Ray 2.56's column/literal AST, arithmetic, comparison, boolean, null and membership operators, aliases, PyArrow and Python UDF expressions, string/list/array/map/struct/datetime namespaces, synthetic IDs/random/UUIDs, and the dedicated `download()` expression. In both modes Klein routes `DownloadExpr` through the same `sql.download.*` URI, SSRF, redirect, timeout, and byte policy used by SQL. Batch mode uses one-row download batches; streaming keeps one request in flight per task so a completed-response limit cannot be multiplied by a count-only async window. A null, rejected, or unreadable URI produces `None`, matching Ray's soft-failure contract."
+msgstr "这包括 Ray 2.56 的列/字面量 AST、算术、比较、布尔、null 和成员关系运算符、别名、PyArrow 与 Python UDF 表达式、string/list/array/map/struct/datetime 命名空间、合成 ID/随机数/UUID，以及专用 `download()` 表达式。在两种模式中，Klein 都让 `DownloadExpr` 使用与 SQL 相同的 `sql.download.*` URI、SSRF、重定向、超时和字节策略。批处理模式使用单行下载批次；流式模式每个 task 只保留一个进行中的请求，避免仅按数量限制的异步窗口放大已完成响应的上限。空、被拒绝或不可读的 URI 会产生 `None`，与 Ray 的软失败约定一致。"

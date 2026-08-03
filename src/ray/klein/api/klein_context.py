@@ -7,7 +7,7 @@ import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import RLock
 from typing import (
     TYPE_CHECKING,
@@ -806,3 +806,34 @@ def register_scalar_function(
     """Register a Python scalar function on the current pipeline SQL session."""
 
     KleinContext.current().sql_session.register_scalar_function(name, function, replace=replace)
+
+
+def register_ai_function(
+    name: str,
+    function: Any,
+    *,
+    fn_constructor_args: Iterable[Any] | None = None,
+    fn_constructor_kwargs: Mapping[str, Any] | None = None,
+    num_cpus: float | None = None,
+    num_gpus: float | None = None,
+    concurrency: int | tuple[int, int] | None = None,
+    batch_size: int = 32,
+    batch_timeout: timedelta = timedelta(seconds=3),
+    async_buffer_size: int | None = None,
+    replace: bool = False,
+) -> None:
+    """Register a batched backend for ``AI_GENERATE`` or ``AI_EMBED``."""
+
+    KleinContext.current().sql_session.register_ai_function(
+        name,
+        function,
+        fn_constructor_args=fn_constructor_args,
+        fn_constructor_kwargs=fn_constructor_kwargs,
+        num_cpus=num_cpus,
+        num_gpus=num_gpus,
+        concurrency=concurrency,
+        batch_size=batch_size,
+        batch_timeout=batch_timeout,
+        async_buffer_size=async_buffer_size,
+        replace=replace,
+    )

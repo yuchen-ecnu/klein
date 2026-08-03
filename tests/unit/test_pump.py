@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
+from ray.klein.api.runtime_info import RuntimeInfo
 from ray.klein.runtime.message import (
     Barrier,
     DeliveryChannel,
@@ -19,18 +21,30 @@ from ray.klein.runtime.message import (
     RescaleBarrier,
     Watermark,
 )
+from ray.klein.runtime.worker.input_batch_accumulator import InputBatchAccumulator
 from ray.klein.runtime.worker.pump import (
     InboxEnvelope,
     InboxPump,
     inbox_envelope_bytes,
     inbox_envelope_rows,
 )
+from ray.klein.runtime.worker.weighted_queue import WeightedQueue
 
 
-def _runtime(*, async_operator: bool = False, inbox_timeout: float = 0.01):
-    input_batches = MagicMock()
-    input_batches.accept.side_effect = lambda record: (record,)
-    input_batches.flush.return_value = ()
+def _runtime(
+    *,
+    async_operator: bool = False,
+    inbox_timeout: float = 0.01,
+    input_buffer_observer=None,
+    inbox=None,
+    input_batches=None,
+):
+    if input_batches is None:
+        input_batches = MagicMock()
+        input_batches.accept.side_effect = lambda record: (record,)
+        input_batches.flush.return_value = ()
+    if inbox is None:
+        inbox = asyncio.Queue()
     operator = MagicMock()
     runner = MagicMock()
     runner.process_async = AsyncMock(return_value=())
@@ -47,7 +61,7 @@ def _runtime(*, async_operator: bool = False, inbox_timeout: float = 0.01):
     strategy = MagicMock()
     strategy.last_alignment_is_terminal = False
     state = SimpleNamespace(
-        inbox=asyncio.Queue(),
+        inbox=inbox,
         executor=None,
         is_async_operator=async_operator,
         input_batches=input_batches,
@@ -73,7 +87,14 @@ def _runtime(*, async_operator: bool = False, inbox_timeout: float = 0.01):
     )
     watermark = SimpleNamespace(note_processed=MagicMock(return_value=False), advance=AsyncMock())
     emit = SimpleNamespace(drain_pending=AsyncMock())
-    pump = InboxPump(task, state, watermark, emit, inbox_timeout=inbox_timeout)
+    pump = InboxPump(
+        task,
+        state,
+        watermark,
+        emit,
+        inbox_timeout=inbox_timeout,
+        input_buffer_observer=input_buffer_observer,
+    )
     return pump, task, state, watermark, emit
 
 
@@ -108,6 +129,94 @@ async def test_idle_iteration_flushes_batches_output_and_watermark() -> None:
     emit.drain_pending.assert_awaited_once_with()
     watermark.advance.assert_awaited_once_with()
     task._check_end_of_stream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_iteration_publishes_inbox_and_accumulator_retention() -> None:
+    observer = MagicMock()
+    pump, _, state, _, _ = _runtime(input_buffer_observer=observer)
+    await state.inbox.put(InboxEnvelope(Record({"id": 1})))
+
+    await pump.run_once()
+
+    observer.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_inbox_and_accumulator_share_one_byte_admission_budget(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "ray.klein.runtime.worker.input_batch_accumulator.estimate_retained_size",
+        lambda record: record.block["size"],
+    )
+    input_batches = InputBatchAccumulator(
+        RuntimeInfo(batch_size=10, batch_timeout=30, batch_format="native"),
+        max_bytes=100,
+    )
+    assert input_batches.accept(Record({"id": 1, "size": 60})) == ()
+    inbox = WeightedQueue(
+        10,
+        inbox_envelope_rows,
+        max_bytes=100,
+        size_bytes=lambda envelope: envelope.payload.block["size"],
+    )
+    pump, _, state, _, _ = _runtime(
+        inbox=inbox,
+        input_batches=input_batches,
+    )
+    await inbox.put(InboxEnvelope(Record({"id": 2, "size": 40})))
+    blocked = asyncio.create_task(inbox.put(InboxEnvelope(Record({"id": 3, "size": 1}))))
+    await asyncio.sleep(0)
+    assert not blocked.done()
+    assert inbox.retained_byte_size == 100
+
+    processing_started = threading.Event()
+    release_processing = threading.Event()
+
+    def hold_processing(_record) -> None:
+        processing_started.set()
+        assert release_processing.wait(timeout=1)
+
+    state.runner.process.side_effect = hold_processing
+    running = asyncio.create_task(pump.run_once())
+    assert await asyncio.to_thread(processing_started.wait, 1)
+    await asyncio.sleep(0)
+    assert not blocked.done()
+
+    release_processing.set()
+    await running
+    await blocked
+
+    assert input_batches.buffered_bytes == 0
+    assert inbox.retained_byte_size == 1
+    state.runner.process.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_oversized_envelope_requires_queue_and_accumulator_to_be_empty(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "ray.klein.runtime.worker.input_batch_accumulator.estimate_retained_size",
+        lambda record: record.block["size"],
+    )
+    input_batches = InputBatchAccumulator(
+        RuntimeInfo(batch_size=10, batch_timeout=30, batch_format="native"),
+        max_bytes=100,
+    )
+    input_batches.accept(Record({"id": 1, "size": 40}))
+    inbox = WeightedQueue(
+        10,
+        inbox_envelope_rows,
+        max_bytes=100,
+        size_bytes=lambda envelope: envelope.payload.block["size"],
+    )
+    _runtime(inbox=inbox, input_batches=input_batches)
+    oversized = InboxEnvelope(Record({"id": 2, "size": 150}))
+
+    assert not await inbox.try_put(oversized)
+
+    input_batches.flush(force=True)
+    await inbox.wake_waiters()
+    assert await inbox.try_put(oversized)
+    assert inbox.retained_byte_size == 150
 
 
 @pytest.mark.asyncio

@@ -1,13 +1,13 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray compatibility policy for Python, Ray, Ray Data extension APIs, and package namespaces."
+    description: "Klein compatibility policy for Python, Ray, Ray Data extension APIs, and package namespaces."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Compatibility policy
 
-Klein for Ray 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The upper
+Klein 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The upper
 bound is intentional: several Ray Data extension points used by the current
 code are DeveloperAPI and can change between Ray minors.
 
@@ -28,5 +28,5 @@ execution boundary. Compatibility tests enumerate every public API exported by
 the pinned Ray version so newly added methods cannot be silently hidden.
 
 Supported Ray Serve releases still read the protobuf `FieldDescriptor.label`
-attribute, which protobuf 7 removed. Klein for Ray therefore constrains
+attribute, which protobuf 7 removed. Klein therefore constrains
 `protobuf<7` until that incompatibility is fixed upstream.

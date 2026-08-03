@@ -11,8 +11,10 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ray.klein.state.key_encoding import KEY_ENCODING_VERSION, require_key_encoding_version
 from ray.klein.state.key_group_range import key_group_for_key
 from ray.klein.state.managed_state_backend import ManagedStateBackend
+from ray.klein.state.restricted_pickle import restricted_pickle_loads
 from ray.klein.state.state_codec import (
     decode_expiry_key,
     decode_state_key,
@@ -34,6 +36,7 @@ from ray.klein.state.timer_domain import TimerDomain
 from ray.klein.state.timer_event import TimerEvent
 
 _COLUMN_FAMILIES = ("state", "expiry", "timers", "metadata")
+_KEY_ENCODING_METADATA_KEY = b"key-encoding-version"
 
 
 class RocksDBStateBackend(ManagedStateBackend):
@@ -105,6 +108,11 @@ class RocksDBStateBackend(ManagedStateBackend):
         expires_at = self._expiry_for(descriptor)
         encoded = encode_state_value(descriptor.serializer.dumps(value), expires_at)
         batch = WriteBatch(raw_mode=True)
+        previous = self._families["state"].get(state_key)
+        if previous is not None:
+            previous_expiry, _payload = decode_state_value(previous)
+            if previous_expiry is not None:
+                batch.delete(encode_expiry_key(previous_expiry, state_key), self._handles["expiry"])
         batch.put(state_key, encoded, self._handles["state"])
         if expires_at is not None:
             batch.put(encode_expiry_key(expires_at, state_key), b"", self._handles["expiry"])
@@ -204,6 +212,8 @@ class RocksDBStateBackend(ManagedStateBackend):
             with tarfile.open(fileobj=io.BytesIO(snapshot), mode="r:") as archive:
                 _extract_checkpoint_archive(archive, staged_path)
 
+            staged_backend = RocksDBStateBackend(str(staged_path))
+            staged_backend.close()
             self._close_db()
             _remove_tree_if_present(self._path)
             shutil.move(str(staged_path), self._path)
@@ -242,7 +252,11 @@ class RocksDBStateBackend(ManagedStateBackend):
 
         return {
             key_group: pickle.dumps(
-                {"format_version": 1, **contents},
+                {
+                    "format_version": 2,
+                    "key_encoding_version": KEY_ENCODING_VERSION,
+                    **contents,
+                },
                 protocol=pickle.HIGHEST_PROTOCOL,
             )
             for key_group, contents in buckets.items()
@@ -251,19 +265,24 @@ class RocksDBStateBackend(ManagedStateBackend):
     def restore_key_groups(self, snapshots: Mapping[int, bytes]) -> None:
         from rocksdict import WriteBatch
 
+        payloads = []
+        for snapshot in snapshots.values():
+            payload = restricted_pickle_loads(snapshot)
+            if not isinstance(payload, dict) or payload.get("format_version") != 2:
+                require_key_encoding_version(None, context="RocksDB key-group snapshot")
+            require_key_encoding_version(
+                payload.get("key_encoding_version"),
+                context="RocksDB key-group snapshot",
+            )
+            payloads.append(payload)
+        entries = _validated_key_group_entries(payloads)
+
         self._close_db()
         _remove_tree_if_present(self._path)
         self._open_db()
         batch = WriteBatch(raw_mode=True)
-        entries = 0
-        for snapshot in snapshots.values():
-            payload = pickle.loads(snapshot)
-            if payload.get("format_version") != 1:
-                raise ValueError("unsupported RocksDB key-group state format")
-            for family in _COLUMN_FAMILIES:
-                for encoded_key, encoded_value in payload.get(family, ()):
-                    batch.put(encoded_key, encoded_value, self._handles[family])
-                    entries += 1
+        for family, encoded_key, encoded_value in entries:
+            batch.put(encoded_key, encoded_value, self._handles[family])
         if entries:
             self._db.write(batch)
 
@@ -289,6 +308,21 @@ class RocksDBStateBackend(ManagedStateBackend):
             self._db = Rdict(self._path, options)
             self._families = {name: self._db.create_column_family(name, self._options()) for name in _COLUMN_FAMILIES}
         self._handles = {name: self._db.get_column_family_handle(name) for name in _COLUMN_FAMILIES}
+        encoded_version = self._families["metadata"].get(_KEY_ENCODING_METADATA_KEY)
+        if encoded_version is None and not existing:
+            self._families["metadata"][_KEY_ENCODING_METADATA_KEY] = str(KEY_ENCODING_VERSION).encode()
+        else:
+            version = None
+            if encoded_version is not None:
+                try:
+                    version = int(encoded_version)
+                except ValueError:
+                    version = encoded_version
+            try:
+                require_key_encoding_version(version, context="RocksDB managed state")
+            except ValueError:
+                self._close_db()
+                raise
 
     @staticmethod
     def _options() -> Any:
@@ -309,7 +343,16 @@ class RocksDBStateBackend(ManagedStateBackend):
             self._db = None
 
     def _delete_state_key(self, state_key: bytes) -> None:
-        self._delete_cf_key("state", state_key)
+        from rocksdict import WriteBatch
+
+        encoded = self._families["state"].get(state_key)
+        batch = WriteBatch(raw_mode=True)
+        batch.delete(state_key, self._handles["state"])
+        if encoded is not None:
+            expires_at, _payload = decode_state_value(encoded)
+            if expires_at is not None:
+                batch.delete(encode_expiry_key(expires_at, state_key), self._handles["expiry"])
+        self._db.write(batch)
 
     def _delete_cf_key(self, family: str, encoded_key: bytes) -> None:
         from rocksdict import WriteBatch
@@ -338,6 +381,66 @@ def _remove_tree_if_present(path: str) -> None:
         shutil.rmtree(path)
     except FileNotFoundError:
         return
+
+
+def _validated_key_group_entries(
+    payloads: Iterable[dict[str, Any]],
+) -> tuple[tuple[str, bytes, bytes], ...]:
+    """Validate every staged entry before replacing the active database."""
+
+    entries: list[tuple[str, bytes, bytes]] = []
+    seen: dict[tuple[str, bytes], bytes] = {}
+    for payload in payloads:
+        for family in _COLUMN_FAMILIES:
+            if family not in payload:
+                raise ValueError(f"RocksDB key-group snapshot is missing {family!r} entries")
+            family_entries = payload[family]
+            if not isinstance(family_entries, (list, tuple)):
+                raise ValueError(f"RocksDB key-group snapshot {family!r} entries must be a sequence")
+            for entry in family_entries:
+                if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+                    raise ValueError(f"RocksDB key-group snapshot {family!r} entry must contain key and value")
+                encoded_key, encoded_value = entry
+                if not isinstance(encoded_key, bytes) or not isinstance(encoded_value, bytes):
+                    raise ValueError(f"RocksDB key-group snapshot {family!r} entries must contain bytes")
+                _validate_key_group_entry(family, encoded_key, encoded_value)
+                identity = (family, encoded_key)
+                previous = seen.get(identity)
+                if identity in seen:
+                    if previous != encoded_value:
+                        raise ValueError(f"RocksDB key-group snapshot contains conflicting {family!r} entry")
+                    continue
+                seen[identity] = encoded_value
+                entries.append((family, encoded_key, encoded_value))
+    return tuple(entries)
+
+
+def _validate_key_group_entry(family: str, encoded_key: bytes, encoded_value: bytes) -> None:
+    try:
+        if family == "state":
+            decode_state_key(encoded_key)
+            decode_state_value(encoded_value)
+        elif family == "expiry":
+            _expires_at, state_key = decode_expiry_key(encoded_key)
+            decode_state_key(state_key)
+            if encoded_value:
+                raise ValueError("expiry index values must be empty")
+        elif family == "timers":
+            prefix = encoded_key[:1]
+            if prefix not in {b"e", b"p"}:
+                raise ValueError("timer key has an invalid domain")
+            timestamp, key, namespace = decode_timer(encoded_key, encoded_value)
+            domain = TimerDomain.EVENT_TIME if prefix == b"e" else TimerDomain.PROCESSING_TIME
+            if encode_timer_key(timestamp, key, namespace, domain) != encoded_key:
+                raise ValueError("timer key does not match its payload")
+        elif family == "metadata" and encoded_key == _KEY_ENCODING_METADATA_KEY:
+            try:
+                version: Any = int(encoded_value)
+            except ValueError:
+                version = encoded_value
+            require_key_encoding_version(version, context="RocksDB key-group metadata")
+    except Exception as error:
+        raise ValueError(f"RocksDB key-group snapshot contains an invalid {family!r} entry") from error
 
 
 def _extract_checkpoint_archive(

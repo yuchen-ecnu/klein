@@ -12,11 +12,15 @@ import numpy as np
 import pyarrow as pa
 
 from ray.klein._internal.block import (
+    arrow_block_to_mapping,
     block_num_rows,
     block_row_dict,
     concat_blocks,
     slice_block_rows,
+    to_arrow_record_batch,
+    wrapper_batch_data,
 )
+from ray.klein.api.row_kind import RowKind
 from ray.klein.config.configuration import Configuration
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.partitioning import (
@@ -46,6 +50,7 @@ class BlockHelpersTest(unittest.TestCase):
         self.assertEqual(block_num_rows({"a": pa.array([1, 2])}), 2)
         self.assertEqual(block_num_rows({}), 0)
         self.assertEqual(block_num_rows(None), 0)
+        self.assertEqual(block_num_rows(pa.record_batch({"a": [1, 2, 3]})), 3)
 
     def test_slice_rows_list(self):
         out = slice_block_rows({"a": [10, 11, 12, 13], "b": ["x", "y", "z", "w"]}, [1, 3])
@@ -77,6 +82,65 @@ class BlockHelpersTest(unittest.TestCase):
     def test_concat_pyarrow(self):
         out = concat_blocks([{"a": pa.array([1])}, {"a": pa.array([2, 3])}])
         self.assertEqual(out["a"].to_pylist(), [1, 2, 3])
+
+    def test_arrow_record_batch_slice_row_and_concat(self):
+        first = pa.record_batch({"a": [1, 2], "b": [b"x", b"y"]})
+        second = pa.record_batch({"a": [3], "b": [b"z"]})
+
+        sliced = slice_block_rows(first, [1])
+        combined = concat_blocks([sliced, second])
+
+        self.assertIsInstance(combined, pa.RecordBatch)
+        self.assertEqual(combined.to_pydict(), {"a": [2, 3], "b": [b"y", b"z"]})
+        self.assertEqual(block_row_dict(combined, 1), {"a": 3, "b": b"z"})
+
+    def test_fixed_shape_numpy_tensor_round_trips_at_udf_boundary(self):
+        values = np.arange(24, dtype=np.uint8).reshape(3, 2, 4)
+
+        batch = to_arrow_record_batch({"image": values}, expected_rows=3)
+        restored = arrow_block_to_mapping(batch, "numpy")
+
+        self.assertIsInstance(batch.column(0), pa.FixedShapeTensorArray)
+        np.testing.assert_array_equal(restored["image"], values)
+
+    def test_binary_with_embedded_nulls_round_trips_through_numpy_boundary(self):
+        payload = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+
+        batch = to_arrow_record_batch({"image": [payload, payload]}, expected_rows=2)
+        restored = arrow_block_to_mapping(batch, "numpy")
+        repacked = to_arrow_record_batch(restored, expected_rows=2)
+
+        self.assertEqual(restored["image"].dtype, object)
+        self.assertEqual(repacked.column("image").to_pylist(), [payload, payload])
+
+    def test_numpy_batch_keeps_binary_as_objects_including_trailing_nulls(self):
+        payload = b"binary\x00\x00"
+
+        wrapped = wrapper_batch_data([payload], "numpy")
+
+        self.assertEqual(wrapped.dtype, object)
+        self.assertEqual(wrapped.tolist(), [payload])
+
+    def test_fixed_width_numpy_binary_preserves_embedded_nulls(self):
+        payload = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+        values = np.asarray([payload, payload])
+
+        batch = to_arrow_record_batch({"image": values}, expected_rows=2)
+
+        self.assertEqual(batch.column("image").to_pylist(), [payload, payload])
+
+    def test_nested_binary_list_stays_a_list_column_across_numpy_boundary(self):
+        page = b"%PDF\x00page"
+        values = [[page, page], [page, page]]
+        batch = to_arrow_record_batch({"pages": values}, expected_rows=2)
+
+        restored = arrow_block_to_mapping(batch, "numpy")
+        repacked = to_arrow_record_batch(restored, expected_rows=2)
+
+        self.assertEqual(restored["pages"].dtype, object)
+        self.assertEqual(restored["pages"].shape, (2,))
+        self.assertTrue(pa.types.is_list(repacked.column("pages").type))
+        self.assertEqual(repacked.column("pages").to_pylist(), values)
 
 
 class ContentIndependentRoutingTest(unittest.TestCase):
@@ -169,7 +233,8 @@ class CollectorColumnarRoutingTest(unittest.TestCase):
         self.assertEqual(len(d.received), 1)
         emitted = d.received[0]
         self.assertEqual(len(emitted), 1)
-        self.assertEqual(emitted[0].block, {"id": [1, 2, 3]})
+        self.assertIsInstance(emitted[0].block, pa.RecordBatch)
+        self.assertEqual(emitted[0].block.to_pydict(), {"id": [1, 2, 3]})
         self.assertEqual(emitted[0].num_rows, 3)
 
     def test_keyby_columnar_splits_per_target(self):
@@ -187,7 +252,108 @@ class CollectorColumnarRoutingTest(unittest.TestCase):
                 for kv in rec.block["k"]:
                     from ray.klein.state.key_group_range import key_group_for_key, key_group_owner
 
-                    self.assertEqual(key_group_owner(key_group_for_key(kv, 128), 128, 4), i)
+                    self.assertEqual(key_group_owner(key_group_for_key(kv.as_py(), 128), 128, 4), i)
         # Every input row delivered exactly once.
         total = sum(r.num_rows for d in targets for e in d.received for r in e)
         self.assertEqual(total, 4)
+
+    def test_columnar_route_slices_changelog_sidecar_with_its_rows(self):
+        even, odd = _CapturingDownstream(), _CapturingDownstream()
+        collector = self._collector(
+            [even, odd],
+            ["even", "odd"],
+            _open(SimplePartitioner(lambda record, _count: [record.block["id"] % 2]), 2),
+        )
+        record = Record({"id": [0, 1, 2, 3]}, num_rows=4)
+        record.row_kinds = (
+            RowKind.INSERT,
+            RowKind.DELETE,
+            RowKind.UPDATE_BEFORE,
+            RowKind.UPDATE_AFTER,
+        )
+
+        collector.collect(record)
+
+        even_record = even.received[0][0]
+        odd_record = odd.received[0][0]
+        self.assertEqual(even_record.block.column("id").to_pylist(), [0, 2])
+        self.assertEqual(even_record.row_kinds, (RowKind.INSERT, RowKind.UPDATE_BEFORE))
+        self.assertEqual(odd_record.block.column("id").to_pylist(), [1, 3])
+        self.assertEqual(odd_record.row_kinds, (RowKind.DELETE, RowKind.UPDATE_AFTER))
+
+    def test_row_transport_is_promoted_to_one_row_arrow_batch(self):
+        downstream = _CapturingDownstream()
+        collector = self._collector([downstream], ["d0"], _open(ForwardPartitioner(), 1))
+
+        collector.collect(Record({"id": 1, "name": "Ada"}))
+
+        emitted = downstream.received[0][0]
+        self.assertIsInstance(emitted.block, pa.RecordBatch)
+        self.assertEqual(emitted.block.to_pydict(), {"id": [1], "name": ["Ada"]})
+        self.assertEqual(emitted.num_rows, 1)
+
+    def test_row_microbatch_is_built_as_one_arrow_record_batch(self):
+        downstream = _CapturingDownstream()
+        collector = open_task_output(
+            [downstream],
+            ForwardPartitioner(),
+            (0,),
+            ["d0"],
+            config_values={"pipeline.internal.batch-size": 3},
+        )
+
+        collector.collect(Record({"id": 1, "name": "Ada"}))
+        collector.collect(Record({"id": 2, "name": "Linus"}))
+        collector.collect(Record({"id": 3, "name": "Grace"}))
+
+        self.assertEqual(len(downstream.received), 1)
+        self.assertEqual(len(downstream.received[0]), 1)
+        emitted = downstream.received[0][0]
+        self.assertIsInstance(emitted.block, pa.RecordBatch)
+        self.assertEqual(
+            emitted.block.to_pydict(),
+            {"id": [1, 2, 3], "name": ["Ada", "Linus", "Grace"]},
+        )
+        self.assertEqual(emitted.num_rows, 3)
+
+    def test_arrow_incompatible_python_value_uses_compatibility_path(self):
+        downstream = _CapturingDownstream()
+        collector = self._collector([downstream], ["d0"], _open(ForwardPartitioner(), 1))
+        value = object()
+
+        collector.collect(Record({"value": value}))
+
+        emitted = downstream.received[0][0]
+        self.assertIs(emitted.block["value"], value)
+        self.assertIsNone(emitted.num_rows)
+
+    def test_unknown_mapping_subclass_keeps_python_semantics(self):
+        class SemanticRow(dict):
+            pass
+
+        downstream = _CapturingDownstream()
+        collector = self._collector([downstream], ["d0"], _open(ForwardPartitioner(), 1))
+        row = SemanticRow(id=1)
+        row.marker = "keep"
+
+        collector.collect(Record(row))
+
+        emitted = downstream.received[0][0]
+        self.assertIs(emitted.block, row)
+        self.assertEqual(emitted.block.marker, "keep")
+
+    def test_columnar_passthrough_switch_keeps_legacy_row_wire(self):
+        downstream = _CapturingDownstream()
+        collector = open_task_output(
+            [downstream],
+            ForwardPartitioner(),
+            (0,),
+            ["d0"],
+            config_values={"pipeline.columnar-passthrough.enabled": False},
+        )
+
+        collector.collect(Record({"id": 1}))
+
+        emitted = downstream.received[0][0]
+        self.assertEqual(emitted.block, {"id": 1})
+        self.assertIsNone(emitted.num_rows)

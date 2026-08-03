@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray delivery guarantees across sources, checkpoints, state, replay, and sinks."
+    description: "Klein delivery guarantees across sources, checkpoints, state, replay, and sinks."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

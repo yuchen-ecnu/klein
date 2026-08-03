@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Use Klein for Ray managed keyed state, RocksDB, key-group rescaling, TTL, timers, and Object Store checkpoint acceleration."
+    description: "Use Klein managed keyed state, RocksDB, key-group rescaling, TTL, timers, and Object Store checkpoint acceleration."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

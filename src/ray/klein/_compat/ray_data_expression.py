@@ -44,8 +44,16 @@ class RayDataExpressionRuntime:
             return eval_expr(self._expression, block)
 
 
-def read_uri(uri: str, filesystem: Any) -> bytes | None:
-    """Read one URI using Ray Data's filesystem resolution and retry policy."""
+def read_uri(uri: str, filesystem: Any, *, max_bytes: int | None = None) -> bytes | None:
+    """Read one URI using Ray Data's filesystem resolution and retry policy.
+
+    ``max_bytes`` bounds both the read request and retained result. Filesystems
+    that expose metadata are rejected before opening an already-oversized
+    object; unknown-size streams are read only through ``max_bytes + 1``.
+    """
+
+    if max_bytes is not None and (type(max_bytes) is not int or max_bytes <= 0):
+        raise ValueError("max_bytes must be a positive integer or None")
 
     resolved_filesystem = _validate_and_wrap_filesystem(filesystem)
     paths, resolved_filesystem = _resolve_paths_and_filesystem(
@@ -58,5 +66,13 @@ def read_uri(uri: str, filesystem: Any) -> bytes | None:
         resolved_filesystem,
         retryable_errors=DataContext.get_current().retried_io_errors,
     )
-    with retrying_filesystem.open_input_stream(paths[0]) as stream:
-        return cast(bytes, stream.read())
+    path = paths[0]
+    if max_bytes is not None:
+        file_info = retrying_filesystem.get_file_info(path)
+        if file_info.size is not None and file_info.size > max_bytes:
+            raise OSError("DOWNLOAD object exceeds sql.download.max-bytes")
+    with retrying_filesystem.open_input_stream(path) as stream:
+        payload = cast(bytes, stream.read() if max_bytes is None else stream.read(max_bytes + 1))
+    if max_bytes is not None and len(payload) > max_bytes:
+        raise OSError("DOWNLOAD object exceeds sql.download.max-bytes")
+    return payload

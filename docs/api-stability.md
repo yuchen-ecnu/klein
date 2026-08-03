@@ -1,14 +1,14 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray API stability, compatibility, deprecation, and public-contract policy."
+    description: "Klein API stability, compatibility, deprecation, and public-contract policy."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-api-stability)=
 # API stability and compatibility
 
-Klein for Ray is an alpha project. The word **public** identifies an intended
+Klein is an alpha project. The word **public** identifies an intended
 application or extension boundary; it does not yet mean the 1.0 compatibility
 guarantee of a mature stable release. Pin the Klein and Ray versions used in
 production and read [CHANGELOG.md](https://github.com/yuchen-ecnu/klein/blob/main/CHANGELOG.md)

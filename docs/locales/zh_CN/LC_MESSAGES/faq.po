@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -21,8 +21,8 @@ msgstr ""
 
 msgid ""
 "Frequently asked questions about choosing, installing, developing, "
-"deploying, and operating Klein for Ray."
-msgstr "关于选择、安装、开发、部署和运维 Klein for Ray 的常见问题。"
+"deploying, and operating Klein."
+msgstr "关于选择、安装、开发、部署和运维 Klein 的常见问题。"
 
 msgid "Frequently asked questions"
 msgstr "常见问题"
@@ -192,8 +192,9 @@ msgid ""
 "batch. Selection is job-wide, not branch-by-branch. See [operator "
 "compatibility](operator-compatibility.md)."
 msgstr ""
-"存在无界数据源、任一计算图顶点缺少批处理下沉实现，或设置 `udf.ignore-exception=true` 时，整个作业都会选择原生流处理。只有计算图有界、可完全下沉为批处理，且该策略已禁用时，才会选择批处理。该选择作用于整个作业，而不是逐分支进行。请参阅[算子兼容性](operator-"
-"compatibility.md)。"
+"存在无界数据源、任一计算图顶点缺少批处理下沉实现，或设置 `udf.ignore-exception=true` "
+"时，整个作业都会选择原生流处理。只有计算图有界、可完全下沉为批处理，且该策略已禁用时，才会选择批处理。该选择作用于整个作业，而不是逐分支进行。请参阅[算子兼容性"
+"](operator-compatibility.md)。"
 
 msgid "Can I force batch or streaming mode?"
 msgstr "可以强制使用批处理或流处理模式吗？"
@@ -202,12 +203,9 @@ msgid ""
 "Yes, set `execution.runtime.mode` to `batch` or `streaming` before "
 "execution. An incompatible graph fails instead of silently changing an "
 "operator's semantics. See [Configuration](configuration.md) and its "
-"[reference](configuration-reference.md#execution-recovery-and-"
-"checkpointing)."
-msgstr ""
-"可以，在执行前将 `execution.runtime.mode` 设置为 `batch` 或 "
-"`streaming`。不兼容的计算图会失败，而不会悄然更改算子语义。请参阅[配置](configuration.md)及其[参考"
-"](configuration-reference.md#execution-recovery-and-checkpointing)。"
+"[reference](configuration-reference.md#execution-mode-and-task-"
+"deployment)."
+msgstr "可以。在执行前将 `execution.runtime.mode` 设置为 `batch` 或 `streaming`。不兼容的计算图会失败，而不会悄悄改变算子语义。请参阅[配置](configuration.md)及其[参考](configuration-reference.md#execution-mode-and-task-deployment)。"
 
 msgid "How does `auto` handle a bounded custom source?"
 msgstr "`auto` 如何处理有界的自定义数据源？"
@@ -581,3 +579,18 @@ msgstr ""
 
 #~ msgid "Why must a bounded custom source sometimes select streaming explicitly?"
 #~ msgstr "为什么有界自定义 source 有时必须显式选择流处理？"
+
+#~ msgid ""
+#~ "Yes, set `execution.runtime.mode` to `batch`"
+#~ " or `streaming` before execution. An "
+#~ "incompatible graph fails instead of "
+#~ "silently changing an operator's semantics. "
+#~ "See [Configuration](configuration.md) and its "
+#~ "[reference](configuration-reference.md#execution-"
+#~ "recovery-and-checkpointing)."
+#~ msgstr ""
+#~ "可以，在执行前将 `execution.runtime.mode` 设置为 `batch` "
+#~ "或 "
+#~ "`streaming`。不兼容的计算图会失败，而不会悄然更改算子语义。请参阅[配置](configuration.md)及其[参考"
+#~ "](configuration-reference.md#execution-recovery-and-"
+#~ "checkpointing)。"

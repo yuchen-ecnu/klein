@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Operational checklist for taking a Klein for Ray streaming job to production safely."
+    description: "Operational checklist for taking a Klein streaming job to production safely."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

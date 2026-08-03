@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Observe Klein for Ray jobs with structured logs, metrics, checkpoints, CLI attach, and a cluster state API."
+    description: "Observe Klein jobs with structured logs, metrics, checkpoints, CLI attach, and a cluster state API."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

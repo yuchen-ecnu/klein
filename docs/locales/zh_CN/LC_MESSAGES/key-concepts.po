@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,18 +22,18 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Learn the Klein for Ray execution model, DataStream abstraction, keyed "
+"Learn the Klein execution model, DataStream abstraction, keyed "
 "state, event time, and checkpoint recovery."
-msgstr "了解 Klein for Ray 的执行模型、DataStream 抽象、键控状态、事件时间和检查点恢复。"
+msgstr "了解 Klein 的执行模型、DataStream 抽象、键控状态、事件时间和检查点恢复。"
 
 msgid "Key concepts"
 msgstr "核心概念"
 
 msgid ""
-"Klein for Ray represents a pipeline as a lazy dataflow graph. Sources "
+"Klein represents a pipeline as a lazy dataflow graph. Sources "
 "produce records, transformations create new streams, partitioners route "
 "data, and sinks trigger execution."
-msgstr "Klein for Ray 将管道表示为惰性数据流图。源生成记录，转换创建新数据流，分区器路由数据，而 sink 触发执行。"
+msgstr "Klein 将管道表示为惰性数据流图。源生成记录，转换创建新数据流，分区器路由数据，而 sink 触发执行。"
 
 msgid ""
 "![A Klein DataStream pipeline running on Ray](_static/key-concepts-"

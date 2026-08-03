@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Configure Klein for Ray with typed options, mappings, strings, global context settings, and environment variables."
+    description: "Configure Klein with typed options, mappings, strings, global context settings, and environment variables."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -91,7 +91,10 @@ Accepted Boolean strings are `true`, `false`, `1`, `0`, `yes`, `no`, `on`, and
 `s`, `min`, `h`, `d`, or `w`; examples include `250ms`, `30s`, and `1.5h`.
 Unquoted numeric values in mappings or `key=value` input are seconds;
 environment-variable durations are strings and therefore need a unit. Enum
-names and values are case-insensitive.
+names and values are case-insensitive. Numeric conversion is lossless: integer
+options reject floats and Booleans, float options reject Booleans and
+non-finite values, and numeric Boolean input accepts only `0` or `1`. Durations
+reject non-finite and out-of-range values.
 
 ## Advanced: isolate a context
 

@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Understand Klein for Ray graph contexts, sinks, execution handles, job states, identifiers, cancellation, failures, resource plans, and cleanup."
+    description: "Understand Klein graph contexts, sinks, execution handles, job states, identifiers, cancellation, failures, resource plans, and cleanup."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -127,7 +127,7 @@ The two handle types intentionally have different meanings:
 |---|---|---|
 | `status` | Always `JobStatus.FINISHED`. | RPC to the job's `JobManager`. |
 | `wait()` | Returns immediately. | Blocks without polling until a terminal state; raises `KleinError` for `FAILED`. |
-| `get()` | Returns the in-memory batch result or compile-only logical graph. | Waits for terminal state and drains one collecting sink's output queue. |
+| `get()` | Returns the in-memory batch result or compile-only logical graph. | Waits for terminal state; drains one collecting sink only after `FINISHED`, and raises `KleinError` for `FAILED` or `CANCELLED`. |
 | `cancel(timeout=60)` | Returns `True`; there is no live work to stop. | Requests coordinated teardown and returns whether cancellation completed. |
 | `namespace` | `None`. | The Ray namespace/job identifier. |
 
@@ -140,14 +140,15 @@ for one or more side-effect terminals. Batch errors have already been raised by
 Use `wait()` for ordinary streaming sink jobs. `LiveJobHandle.get()` is a
 special collection boundary: the graph must contain exactly one collecting
 operator such as `take()` or `take_all()`. It is not a general way to retrieve
-file, Kafka, SQL, or custom sink results. It also drains after terminal status
-without performing `wait()`'s explicit failed-status check, so use `wait()` or
-check `status` when failure propagation matters.
+file, Kafka, SQL, or custom sink results. It validates the terminal status
+before accessing the queue: a failed or cancelled job raises `KleinError` and
+does not expose partial queued results.
 
-If `LiveJobHandle.wait()` receives `KeyboardInterrupt` or `SystemExit`, it
-attempts a five-second cancellation and then re-raises the signal exception.
-Simply allowing the submitting process to exit without waiting is different:
-the detached streaming job continues on the Ray cluster.
+If either `LiveJobHandle.wait()` or `LiveJobHandle.get()` receives
+`KeyboardInterrupt` or `SystemExit`, it attempts a five-second cancellation
+and then re-raises the signal exception. Simply allowing the submitting
+process to exit without waiting is different: the detached streaming job
+continues on the Ray cluster.
 
 ## Job states
 
@@ -306,8 +307,8 @@ The native streaming `JobManager` is a named, detached Ray actor. The process
 that called `execute()` may exit or crash without cancelling the dataflow.
 Connect another driver to the same cluster and use the recorded namespace to
 inspect or cancel it. This does not apply when the first driver is inside
-`handle.wait()` and receives an interrupt, because `wait()` deliberately tries
-to cancel.
+`handle.wait()` or `handle.get()` and receives an interrupt, because both
+methods deliberately try to cancel.
 
 ### JobManager failure
 

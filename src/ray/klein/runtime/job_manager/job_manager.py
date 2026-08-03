@@ -270,6 +270,11 @@ class JobManager(AsyncWorker):
             finally:
                 self._update_job_status(JobStatus.FAILED)
             return False
+        # A client may time out while schedule() is still running and issue a
+        # concurrent cancellation RPC. Do not revive that fenced submission as
+        # RUNNING after the blocking scheduler call eventually returns.
+        if self._lifecycle_stop_requested:
+            return False
         await self.start_job_supervisor()
         self._update_job_status(JobStatus.RUNNING)
         return True
@@ -968,6 +973,7 @@ class JobManager(AsyncWorker):
                     job_id=self.namespace,
                     job_name=self.job_name,
                 )
+                raise
 
     async def output_queue(self) -> Queue:
         take_list = self.logical_graph.take_vertices
@@ -1016,7 +1022,7 @@ class JobManager(AsyncWorker):
         if self._progress_reporter is None:
             self._progress_reporter = ProgressReporter(
                 self.execution_graph,
-                is_job_running=lambda: self._job_status == JobStatus.RUNNING,
+                job_status=lambda: self._job_status,
                 restart_window=self._restart_window,
             )
         return await self._progress_reporter.snapshot()

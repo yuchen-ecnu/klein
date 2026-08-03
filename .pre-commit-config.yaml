@@ -16,6 +16,7 @@ repos:
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
+        exclude: ^src/ray/klein/observability/dashboard/static/
       - id: mixed-line-ending
       - id: trailing-whitespace
   - repo: local

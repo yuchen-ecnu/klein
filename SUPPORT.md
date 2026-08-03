@@ -7,5 +7,5 @@
 - Use the private process in `SECURITY.md` for vulnerabilities.
 
 This project is community supported and provided without warranty under the
-Apache License 2.0. Please include Klein for Ray, Ray, Python, and operating-system
+Apache License 2.0. Please include Klein, Ray, Python, and operating-system
 versions with logs and a minimal reproducer.

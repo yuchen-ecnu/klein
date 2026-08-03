@@ -1,14 +1,14 @@
 ---
 myst:
   html_meta:
-    description: "Known limitations, unsupported combinations, and non-goals for the current Klein for Ray alpha release."
+    description: "Known limitations, unsupported combinations, and non-goals for the current Klein alpha release."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-limitations)=
 # Known limitations and non-goals
 
-Klein for Ray is alpha software. This page collects the boundaries that are
+Klein is alpha software. This page collects the boundaries that are
 otherwise easy to miss in feature-specific guides. Treat an item as unsupported
 unless the documentation for the installed release explicitly says otherwise.
 An unsupported combination can fail during planning, fail when workers start,

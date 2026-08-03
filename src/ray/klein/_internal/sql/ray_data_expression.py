@@ -41,7 +41,7 @@ def to_ray_data_expression(
 def is_ray_data_only_expression(expression: exp.Expression) -> bool:
     """Whether ``expression`` needs a Ray Data execution operator."""
 
-    return any(_is_ray_data_only_node(node) for node in expression.walk())
+    return any(is_ray_data_only_node(node) for node in expression.walk())
 
 
 @singledispatch
@@ -234,12 +234,15 @@ def _translate_anonymous(expression: exp.Anonymous, aliases: tuple[str, ...]) ->
 
 
 def _column_name(column: exp.Column, aliases: tuple[str, ...]) -> str | None:
+    name = str(column.name)
     if column.table:
-        return f"{column.table}.{column.name}"
+        return f"{column.table}.{name}"
+    if name.startswith("_klein_"):
+        return name
     if len(aliases) == 1:
-        return f"{aliases[0]}.{column.name}"
+        return f"{aliases[0]}.{name}"
     if not aliases:
-        return column.name
+        return name
     return None
 
 
@@ -274,7 +277,9 @@ def _is_download_call(expression: exp.Expression) -> bool:
     return isinstance(expression, exp.Anonymous) and expression.name.upper() == "DOWNLOAD"
 
 
-def _is_ray_data_only_node(expression: exp.Expression) -> bool:
+def is_ray_data_only_node(expression: exp.Expression) -> bool:
+    """Whether one AST node requires a dedicated Ray-native operator."""
+
     return (
         _is_download_call(expression)
         or isinstance(expression, (exp.Rand, exp.Uuid))
@@ -306,7 +311,6 @@ _UNARY_METHODS = {
     exp.Exp: "exp",
     exp.Floor: "floor",
     exp.Ln: "ln",
-    exp.Round: "round",
     exp.Sign: "sign",
     exp.Sin: "sin",
     exp.Tan: "tan",

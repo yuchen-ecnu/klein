@@ -1,12 +1,12 @@
 ---
 myst:
   html_meta:
-    description: "Write Ray Data batches or checkpoint-transactional streaming appends to Apache Iceberg with Klein for Ray."
+    description: "Write Ray Data batches or checkpoint-transactional streaming appends to Apache Iceberg with Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-iceberg-connector)=
-# Apache Iceberg
+# Iceberg
 
 Install the Iceberg extra on the driver and every streaming worker:
 

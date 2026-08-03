@@ -135,15 +135,38 @@ class JobClient:
 
         lineage_tracker.report_start()
         submit_timeout = self._config.get(JobManagerOptions.SCHEDULER_START_TIMEOUT)
-        submit_result: bool = klein.get(
-            jobmanager.submit(job_name, logical_graph, config=self._config),
-            timeout=submit_timeout,
-        )
+        try:
+            submit_result: bool = klein.get(
+                jobmanager.submit(job_name, logical_graph, config=self._config),
+                timeout=submit_timeout,
+            )
+        except TimeoutError as timeout_error:
+            # JobManager is detached, so timing out the driver-side wait does
+            # not cancel the in-flight submit RPC. First give the manager its
+            # normal teardown budget, then always terminate the detached actor
+            # so it cannot finish scheduling later without a returned handle.
+            stop_timeout = self._config.get(JobManagerOptions.STOP_TIMEOUT)
+            try:
+                klein.get(
+                    jobmanager.cancel(stop_timeout),
+                    timeout=stop_timeout,
+                )
+            except Exception:
+                logger.warning(
+                    "Timed-out submission cleanup did not complete for job %s in namespace %s",
+                    job_name,
+                    namespace,
+                    exc_info=True,
+                )
+            finally:
+                klein.kill(jobmanager, timeout=stop_timeout)
+            lineage_tracker.report_fail(timeout_error)
+            raise
         if submit_result is False:
             detail = klein.get(jobmanager.failure_detail())
-            error = ValueError(f"Job submit failed: {detail or 'unknown scheduling error'}")
-            lineage_tracker.report_fail(error)
-            raise error
+            submission_error = ValueError(f"Job submit failed: {detail or 'unknown scheduling error'}")
+            lineage_tracker.report_fail(submission_error)
+            raise submission_error
         if not klein.is_debug_mode():
             from ray.klein.observability.dashboard import register_job
 

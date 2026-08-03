@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from sqlglot import parse_one
 
@@ -184,7 +186,7 @@ def test_streaming_top_n_rejects_non_integer_limits(literal: str) -> None:
 @pytest.mark.parametrize(
     ("expression", "function", "async_buffer_size"),
     [
-        ("DOWNLOAD(uri)", _AsyncRayProjectChangelogRow, 32),
+        ("DOWNLOAD(uri)", _AsyncRayProjectChangelogRow, 1),
         ("RANDOM()", _RayProjectChangelogRow, None),
         ("UUID()", _RayProjectChangelogRow, None),
         ("MONOTONICALLY_INCREASING_ID()", _RayProjectChangelogRow, None),
@@ -205,6 +207,39 @@ def test_streaming_sql_plans_ray_data_expressions(
     assert logical.runtime_info.async_buffer_size == async_buffer_size
 
 
+@pytest.mark.asyncio
+async def test_streaming_sql_downloads_share_one_row_byte_budget(monkeypatch) -> None:
+    statement = parse_one("SELECT DOWNLOAD(first_uri) AS first, DOWNLOAD(second_uri) AS second")
+    configuration = Configuration({"sql.download.max-bytes": 4})
+    runtime_context = SimpleNamespace(
+        task_index=0,
+        task_name="SQLProject",
+        config=configuration,
+    )
+    limits = []
+
+    def downloaded(uri, _filesystem, _column, policy):
+        limits.append(policy.max_bytes)
+        payload = b"abc" if uri == "memory://first" else b"xy"
+        return payload if len(payload) <= policy.max_bytes else None
+
+    monkeypatch.setattr(
+        "ray.klein._internal.streaming_expression._download_uri",
+        downloaded,
+    )
+    projection = _AsyncRayProjectChangelogRow(
+        statement.expressions,
+        (),
+        {},
+        runtime_context,
+    )
+
+    result = await projection({"first_uri": "memory://first", "second_uri": "memory://second"})
+
+    assert result == {"first": b"abc", "second": None}
+    assert limits == [4, 1]
+
+
 def test_streaming_aggregate_precomputes_download_inputs_asynchronously() -> None:
     context = KleinContext(Configuration("execution.runtime.mode=streaming"))
     files = context.from_items([{"uri": "local:///tmp/file"}])
@@ -218,7 +253,7 @@ def test_streaming_aggregate_precomputes_download_inputs_asynchronously() -> Non
     inputs = result.input_streams[0]
     logical = logical_function_of(inputs)
     assert logical.function is _AsyncAddStreamingExpressions
-    assert logical.runtime_info.async_buffer_size == 32
+    assert logical.runtime_info.async_buffer_size == 1
 
 
 def test_streaming_sql_plans_klein_scalar_function_projection_and_filter() -> None:

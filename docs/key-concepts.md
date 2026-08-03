@@ -1,14 +1,14 @@
 ---
 myst:
   html_meta:
-    description: "Learn the Klein for Ray execution model, DataStream abstraction, keyed state, event time, and checkpoint recovery."
+    description: "Learn the Klein execution model, DataStream abstraction, keyed state, event time, and checkpoint recovery."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-key-concepts)=
 # Key concepts
 
-Klein for Ray represents a pipeline as a lazy dataflow graph. Sources produce records, transformations create new streams, partitioners route data, and sinks trigger execution.
+Klein represents a pipeline as a lazy dataflow graph. Sources produce records, transformations create new streams, partitioners route data, and sinks trigger execution.
 
 ![A Klein DataStream pipeline running on Ray](_static/key-concepts-pipeline.png)
 

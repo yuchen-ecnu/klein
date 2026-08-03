@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray operator support matrix for batch and streaming execution, ordering, state, and changelog behavior."
+    description: "Klein operator support matrix for batch and streaming execution, ordering, state, and changelog behavior."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -29,7 +29,7 @@ owned by the installed compatible Ray Data version.
 | `read_canal()` | No | Yes | Continuous Kafka input decoded to changelog rows. |
 | `read_rocketmq()` | No | Yes | Broker-managed consumer progress; not checkpoint-aligned. |
 | `ray.klein.source()` | No by default | Yes | A custom source needs an explicit batch lowering to run in batch; the public helper currently builds native sources. |
-| `stream.data.with_column(name, expr)` | Ray Data | Yes | Streaming evaluates Ray expressions per record; `download()` uses bounded ordered async I/O. |
+| `stream.data.with_column(name, expr)` | Ray Data; Klein-bounded batch for `download()` | Yes | Streaming evaluates Ray expressions per record; `download()` uses the shared network policy and one in-flight request per task. |
 | `stream.data.filter(expr=expr)` | Ray Data | Yes | Supports Ray Data expression predicates in both modes. |
 | Other `stream.data.*` | Ray Data | No | Other Dataset transforms and terminal consumers remain batch-only. |
 

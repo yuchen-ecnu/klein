@@ -109,6 +109,21 @@ def test_batch_size_override_reaches_runtime_info(resource_plan_case) -> None:
     assert graph.get(VertexId("batch-override", 2)).operator.logical_function.runtime_info.batch_size is None
 
 
+def test_resource_plan_can_clear_runtime_override(resource_plan_case) -> None:
+    context, _, _ = resource_plan_case
+    graph = LogicalGraph.from_sinks(context.sinks, "clear-override", Configuration())
+    plan = graph.build_resource_plan()
+    plan.update_node("TestInfer[2]", batch_size=64)
+    tuned_graph = graph.with_resource_plan(plan)
+    clear_plan = tuned_graph.build_resource_plan()
+    clear_plan.update_node("TestInfer[2]", batch_size=None)
+
+    cleared_graph = tuned_graph.with_resource_plan(clear_plan)
+
+    assert cleared_graph.get(VertexId("clear-override", 2)).operator.logical_function.runtime_info.batch_size is None
+    assert tuned_graph.get(VertexId("clear-override", 2)).operator.logical_function.runtime_info.batch_size == 64
+
+
 def test_resource_plan_updates_revalidate_immutable_nodes(resource_plan_case) -> None:
     context, _, _ = resource_plan_case
     graph = LogicalGraph.from_sinks(context.sinks, "validated-override", Configuration())

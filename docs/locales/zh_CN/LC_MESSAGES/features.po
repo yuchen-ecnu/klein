@@ -1,16 +1,16 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: 2026-07-21 01:20+0800\n"
-"Last-Translator: Klein for Ray Authors\n"
+"Last-Translator: Klein Authors\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -20,9 +20,9 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Explore Klein for Ray feature guides for hybrid execution, state, event "
+"Explore Klein feature guides for hybrid execution, state, event "
 "time, SQL, recovery, live rescaling, detached jobs, and Ray Serve."
-msgstr "浏览 Klein for Ray 的特色功能指南，了解混合执行、状态、事件时间、SQL、恢复、在线扩缩容、分离式作业和 Ray Serve。"
+msgstr "浏览 Klein 的特色功能指南，了解混合执行、状态、事件时间、SQL、恢复、在线扩缩容、分离式作业和 Ray Serve。"
 
 msgid "Feature highlights"
 msgstr "特色功能"

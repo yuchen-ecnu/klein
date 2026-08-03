@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -29,8 +29,8 @@ msgid ""
 "starts a local cluster whose lifetime follows the Python process. You can "
 "also start Ray first and attach to it. Pre-initialize Ray in the application "
 "when you need custom dashboard, metrics-export, address, or resource "
-"settings; Klein for Ray will reuse the active runtime:"
-msgstr "当没有活动的 Ray 运行时，流处理执行会调用 ``ray.init()``。这将启动一个生命周期与 Python 进程一致的本地集群。你也可以先启动 Ray，再连接到它。需要自定义仪表板、指标导出、地址或资源设置时，请在应用中预先初始化 Ray；Klein for Ray 会复用活动的运行时："
+"settings; Klein will reuse the active runtime:"
+msgstr "当没有活动的 Ray 运行时，流处理执行会调用 ``ray.init()``。这将启动一个生命周期与 Python 进程一致的本地集群。你也可以先启动 Ray，再连接到它。需要自定义仪表板、指标导出、地址或资源设置时，请在应用中预先初始化 Ray；Klein 会复用活动的运行时："
 
 msgid ""
 "Use ``ray stop --force`` after interrupted local integration tests if Ray "

@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Deploy Klein for Ray applications to an existing Ray cluster, Ray Jobs, containers, and KubeRay."
+    description: "Deploy Klein applications to an existing Ray cluster, Ray Jobs, containers, and KubeRay."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

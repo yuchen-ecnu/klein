@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Measure and tune Klein for Ray concurrency, batching, partitioning, buffers, replay, state, checkpoints, and placement."
+    description: "Measure and tune Klein concurrency, batching, partitioning, buffers, replay, state, checkpoints, and placement."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -11,6 +11,10 @@ Tune from measurements, one boundary at a time. Increasing concurrency or
 buffer capacity can move a bottleneck downstream, increase checkpoint
 alignment time, and enlarge the replay window without increasing end-to-end
 throughput.
+
+Published, versioned benchmark results live in [Evaluation](evaluation/index.md).
+This page describes how to tune a workload; evaluation reports record the
+exact baseline, environment, samples, negative results, and release decision.
 
 ## Establish a baseline
 
@@ -88,11 +92,16 @@ forward edge, matching resource/runtime contracts, no managed state, and no
 async execution. Disable `pipeline.operator-chaining.enabled` when isolating a
 hot operator, debugging lifecycle behavior, or assigning different resources.
 
-`pipeline.columnar-passthrough.enabled` is on by default and keeps compatible
-batches column-oriented across an edge. It removes column-to-row-to-column
-conversion for batch-heavy UDFs; keyed/custom partitioning still performs
-row-level slicing. Large duplicated broadcast batches are placed in Ray's
-Object Store once after `pipeline.transport.object-store-threshold-bytes`.
+`pipeline.columnar-passthrough.enabled` is on by default. Compatible data is
+coalesced into Arrow `RecordBatch` objects at an inter-task edge, while a
+chained operator stays in its native in-process representation. Downstream
+conversion happens only at the declared UDF batch-format boundary. Keyed and
+custom partitioning slice Arrow batches by row; SQL changelog kinds and
+per-row event timestamps remain sidecar metadata rather than user columns.
+Unsupported Python mapping subclasses use the compatibility path. Large
+duplicated broadcast batches are placed in Ray's Object Store once after
+`pipeline.transport.object-store-threshold-bytes`. Disable the option only for
+the legacy row-oriented wire shape.
 
 ## Partitioning and skew
 
@@ -137,10 +146,11 @@ drop. `pipeline.replay-buffer.max-bytes` is a hard guard: exceeding it fails the
 task into normal recovery before process OOM. Raising it should be the last step
 after fixing stalled acknowledgements and verifying node memory.
 
-`pipeline.input-buffer.size` and `pipeline.input-buffer.max-bytes` bound logical
-rows and estimated payload bytes. One oversized columnar block is admitted only
-into an otherwise empty inbox. The same dual bound applies to output buffering,
-so wide records cannot bypass a row-only limit.
+`pipeline.input-buffer.size` bounds logical rows in the inbox, while
+`pipeline.input-buffer.max-bytes` is shared by the inbox, dequeue handoff, and
+input batcher. One oversized columnar block is admitted only when all three are
+otherwise empty. The same dual bound applies to output buffering, so wide
+records cannot bypass a row-only limit.
 
 After every change, compare throughput, tail latency, checkpoint duration,
 failure recovery time, and peak memory. Keep the change only when the full job,

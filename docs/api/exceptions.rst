@@ -54,8 +54,8 @@ Common exception families
 ``KleinError``
    A submitted job reached a failure boundary. ``LiveJobHandle.wait()`` raises
    this with the retained job failure detail. The collection-specific
-   ``get()`` path does not perform that explicit failed-status check; call
-   ``wait()`` or inspect ``status`` when failure propagation matters.
+   ``get()`` path also validates terminal status, raises for failed or
+   cancelled jobs, and does not expose partial queued results.
 
 ``TimeoutError``
    A client wait, deployment, data-plane drain, or control operation exceeded

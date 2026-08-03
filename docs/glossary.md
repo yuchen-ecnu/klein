@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Definitions of Klein for Ray streaming, state, checkpoint, SQL, scheduling, and operations terminology."
+    description: "Definitions of Klein streaming, state, checkpoint, SQL, scheduling, and operations terminology."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

@@ -1,12 +1,12 @@
 ---
 myst:
   html_meta:
-    description: "Implement custom Klein for Ray SourceFunction, SinkFunction, two-phase-commit sink, and TableFactory connectors."
+    description: "Implement custom Klein SourceFunction, SinkFunction, two-phase-commit sink, and TableFactory connectors."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-custom-connectors)=
-# Custom connectors
+# Custom
 
 Use a custom connector when an external system has no public Ray Data adapter
 and no built-in Klein integration. Native `SourceFunction` and `SinkFunction`

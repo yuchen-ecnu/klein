@@ -3,7 +3,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/_static/klein-logo-dark.svg">
-    <img alt="Klein" src="docs/_static/klein-logo.svg" width="720">
+    <img alt="Klein" src="docs/_static/klein-logo.svg" width="440">
   </picture>
 </p>
 
@@ -17,16 +17,16 @@
   <a href="LICENSE"><img alt="Apache License 2.0" src="https://img.shields.io/badge/license-Apache--2.0-3DA639"></a>
 </p>
 
-Klein for Ray is a stateful stream-processing library built on Ray. A single
+Klein is a stateful stream-processing library built on Ray. A single
 `DataStream` API handles bounded Ray Data inputs and long-running streams, with
 event time, managed keyed state, checkpoint recovery, and SQL and Table APIs.
 
 > [!WARNING]
-> Klein for Ray is independent alpha software. It is not affiliated with,
+> Klein is independent alpha software. It is not affiliated with,
 > endorsed by, or maintained by the Ray project. The `ray.klein` namespace is
 > retained as a technical integration point, not as a claim of official status.
 
-## Why Klein for Ray?
+## Why Klein?
 
 Klein is for Ray applications that need record-oriented processing and state
 that survives task failures or parallelism changes. Use
@@ -61,7 +61,7 @@ status.
 | Ray Data | Executes bounded sources, transformations, shuffles, and sinks. |
 | Ray Object Store | Can cache sufficiently large immutable checkpoint fragments to accelerate recovery. |
 
-![Klein for Ray component architecture](docs/_static/architecture-overview.png)
+![Klein component architecture](docs/_static/architecture-overview.png)
 
 The same lazy graph therefore has two execution paths: bounded-compatible work
 lowers to Ray Data, while continuous work expands into long-lived Ray actors.
@@ -75,33 +75,34 @@ not install `ray/__init__.py` or replace files owned by Ray.
 
 ## Installation
 
-Klein for Ray currently targets Python 3.10–3.12 and Ray 2.56.x
-(`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:
+Klein currently targets Python 3.10–3.12 and Ray 2.56.x
+(`ray[data]>=2.56.1,<2.57`). The Alpha is currently installed from a source
+checkout or a wheel built from that checkout:
 
 ```bash
+git clone https://github.com/yuchen-ecnu/klein.git
+cd klein
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "ray-klein==0.1.0a1"
+python -m pip install .
 ```
 
 Install connector dependencies only when needed:
 
 ```bash
-python -m pip install "ray-klein[kafka]==0.1.0a1"   # continuous Kafka source/sink
-python -m pip install "ray-klein[iceberg]==0.1.0a1" # Iceberg catalog and output
-python -m pip install "ray-klein[rocketmq]==0.1.0a1" # continuous RocketMQ source
-python -m pip install "ray-klein[redis]==0.1.0a1"   # Redis lookup/sink
-python -m pip install "ray-klein[rocksdb]==0.1.0a1" # local RocksDB state backend
-python -m pip install "ray-klein[serve]==0.1.0a1"   # Ray Serve bridge
+python -m pip install ".[kafka]"   # continuous Kafka source/sink
+python -m pip install ".[iceberg]" # Iceberg catalog and output
+python -m pip install ".[media]"   # image, PDF, and media SQL functions
+python -m pip install ".[rocketmq]" # continuous RocketMQ source
+python -m pip install ".[redis]"   # Redis lookup/sink
+python -m pip install ".[rocksdb]" # local RocksDB state backend
+python -m pip install ".[serve]"   # Ray Serve bridge
 ```
 
-For development, clone the repository and install the test, documentation, and
-tooling dependencies:
+For development, install the test, documentation, and tooling dependencies:
 
 ```bash
-git clone https://github.com/yuchen-ecnu/klein.git
-cd klein
 python -m pip install -e ".[dev]"
 pre-commit install --hook-type pre-commit --hook-type commit-msg
 ```
@@ -223,6 +224,6 @@ in [CHANGELOG.md](CHANGELOG.md), and research users can cite the metadata in
 
 ## License
 
-Klein for Ray is licensed under the [Apache License 2.0](LICENSE). See
+Klein is licensed under the [Apache License 2.0](LICENSE). See
 [NOTICE](NOTICE), [PROVENANCE.md](PROVENANCE.md), and
 [TRADEMARKS.md](TRADEMARKS.md) for attribution and project identity.
