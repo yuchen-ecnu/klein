@@ -16,7 +16,8 @@ class PipelineOptions:
         "pipeline.input-buffer.max-bytes",
         64 * 1024 * 1024,
         int,
-        description="Maximum estimated bytes retained in each task input buffer; an oversized block is exclusive.",
+        description="Maximum estimated bytes shared by each task inbox, dequeue handoff, and input batcher; "
+        "an oversized block is exclusive.",
     )
 
     PLACEMENT_GROUP_ENABLED = ConfigOption(

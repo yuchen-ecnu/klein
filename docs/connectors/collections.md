@@ -1,11 +1,11 @@
 ---
 myst:
   html_meta:
-    description: "Create Klein for Ray inputs from Python collections, values, and existing Ray Datasets."
+    description: "Create Klein inputs from Python collections, values, and existing Ray Datasets."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Collections and existing Datasets
+# Collections
 
 Collection sources are useful for examples, tests, small control inputs, and
 adapting an existing Ray Dataset. They are finite; they are not a distributed

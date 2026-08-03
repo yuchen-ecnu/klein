@@ -176,11 +176,12 @@ def test_progress_cells_have_stable_plain_text() -> None:
         parallelism=2,
         cpus=0.5,
         gpus=1.0,
-        instances=InstanceCounts(running=1, restarting=1, failed=1),
+        instances=InstanceCounts(running=1, restarting=1, cancelled=1, failed=1),
     )
 
     assert isinstance(view._status_cell("running"), Spinner)
     assert isinstance(view._status_cell("recovering"), Spinner)
+    assert view._status_cell("cancelled").plain == "■"
     assert view._status_cell("unknown").plain == "·"
     assert view._pct_cell(None, (0.5, 0.8)).plain == "-"
     assert view._pct_cell(0.1, (0.5, 0.8)).plain == "● 10%"
@@ -190,7 +191,7 @@ def test_progress_cells_have_stable_plain_text() -> None:
     assert view._backlog_cell(_operator(2, queued=1, capacity=10)).plain == "10% (1)"
     assert view._backlog_cell(_operator(2, queued=6, capacity=10)).plain == "60% (6)"
     assert view._backlog_cell(detailed).plain == "80% (8)"
-    assert view._instances_cell(detailed).plain == "1 run · 1 restart · 1 fail"
+    assert view._instances_cell(detailed).plain == "1 run · 1 restart · 1 cancel · 1 fail"
     assert view._instances_cell(_operator(3, instances=None)).plain == ""
     assert view._resource_cell(detailed).plain == "1cpu 2gpu"
     assert view._rows_cell(detailed).plain == "1.2k → 2.5k rows"

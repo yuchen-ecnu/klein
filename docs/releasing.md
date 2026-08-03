@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Build, verify, sign, and publish a Klein for Ray release."
+    description: "Build, verify, sign, and publish a Klein release."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

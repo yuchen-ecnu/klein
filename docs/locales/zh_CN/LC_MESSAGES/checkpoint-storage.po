@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -19,9 +19,9 @@ msgstr ""
 "Language: zh_CN\n"
 
 msgid ""
-"Persist Klein for Ray checkpoints to local filesystems, S3-compatible "
+"Persist Klein checkpoints to local filesystems, S3-compatible "
 "storage, or Google Cloud Storage."
-msgstr "将 Klein for Ray 检查点持久化到本地文件系统、兼容 S3 的存储或 Google Cloud Storage。"
+msgstr "将 Klein 检查点持久化到本地文件系统、兼容 S3 的存储或 Google Cloud Storage。"
 
 msgid "Durable checkpoint storage"
 msgstr "持久检查点存储"
@@ -126,3 +126,12 @@ msgid ""
 "selection, `execution.savepoint.path`, compatibility checks, resubmission, "
 "and post-restore validation."
 msgstr "有关检查点选择、`execution.savepoint.path`、兼容性检查、重新提交和恢复后验证，请参阅[恢复作业并调整并行度](checkpoint-recovery.md)。"
+
+msgid "`_latest` accelerates lookup but is not authoritative. Recovery falls back to scanning readable `chk-N/_metadata` objects when the pointer is stale, missing, or corrupt. If completed checkpoints exist but none is readable, discovery fails rather than silently treating the job as new."
+msgstr "`_latest` 可加速查找，但并非权威依据。当指针过期、缺失或损坏时，恢复会回退到扫描可读的 `chk-N/_metadata` 对象。如果存在已完成的 checkpoint 但没有任何一个可读，发现过程会失败，而不会静默地将作业视为新作业。"
+
+msgid "Version 4 `_metadata` starts with a recognizable format prefix and uses JSON for its framework-owned envelope. Embedded source state and sink committables carry their serialized size and SHA-256 checksum; recovery validates the full JSON structure and every size/checksum before deserializing any application payload. Managed-state outer envelopes use a restricted unpickler. These checks detect corruption, not authenticity: application-owned payloads still require a trusted checkpoint prefix."
+msgstr "版本 4 的 `_metadata` 以可识别的格式前缀开头，并使用 JSON 表示框架自有信封。嵌入的 source 状态和 sink committable 携带序列化大小及 SHA-256 校验和；恢复会在反序列化任何应用负载之前，校验完整 JSON 结构以及每个大小和校验和。托管状态的外层信封使用受限 unpickler。这些检查用于发现损坏，而非验证真实性：应用自有负载仍必须来自可信的 checkpoint 前缀。"
+
+msgid "Retention deletes only old `chk-N/` directories and leaves `shared/` and `taskowned/` intact for their separate lifecycles. Prefix-less and version 3 pickle metadata is rejected before unpickling instead of being guessed or silently upgraded during recovery."
+msgstr "保留策略只删除旧的 `chk-N/` 目录，并保留具有独立生命周期的 `shared/` 和 `taskowned/`。恢复不会猜测或静默升级无前缀及版本 3 的 pickle 元数据，而会在反序列化之前将其拒绝。"

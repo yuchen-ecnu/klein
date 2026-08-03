@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Persist Klein for Ray checkpoints to local filesystems, S3-compatible storage, or Google Cloud Storage."
+    description: "Persist Klein checkpoints to local filesystems, S3-compatible storage, or Google Cloud Storage."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -73,7 +73,8 @@ Every job has an isolated directory below the configured root:
 - `chk-N/_metadata` is the only checkpoint completion marker.
 - `_latest` accelerates lookup but is not authoritative. Recovery falls back
   to scanning readable `chk-N/_metadata` objects when the pointer is stale,
-  missing, or corrupt.
+  missing, or corrupt. If completed checkpoints exist but none is readable,
+  discovery fails rather than silently treating the job as new.
 
 Job and operator identifiers are percent-encoded as individual path components
 so user-provided names cannot escape the checkpoint root.
@@ -92,11 +93,17 @@ replays an idempotent commit after recovery when publication was interrupted.
 Checkpoint-aware source offsets are notified after sink publication, preserving
 the end-to-end ordering between input progress and output visibility.
 
-State entries carry their serialized size and SHA-256 checksum. Recovery checks
-both before deserializing a value. Retention deletes only old `chk-N/`
-directories and leaves `shared/` and `taskowned/` intact for their separate
-lifecycles. Checkpoint metadata has one current schema version; incompatible
-pre-revision metadata is rejected explicitly instead of being guessed or
+Version 4 `_metadata` starts with a recognizable format prefix and uses JSON
+for its framework-owned envelope. Embedded source state and sink committables
+carry their serialized size and SHA-256 checksum; recovery validates the full
+JSON structure and every size/checksum before deserializing any application
+payload. Managed-state outer envelopes use a restricted unpickler. These
+checks detect corruption, not authenticity: application-owned payloads still
+require a trusted checkpoint prefix.
+
+Retention deletes only old `chk-N/` directories and leaves `shared/` and
+`taskowned/` intact for their separate lifecycles. Prefix-less and version 3
+pickle metadata is rejected before unpickling instead of being guessed or
 silently upgraded during recovery.
 
 The layout follows Flink's filesystem checkpoint storage conventions:

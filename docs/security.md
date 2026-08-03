@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Security model, trust boundaries, and production hardening guidance for Klein for Ray."
+    description: "Security model, trust boundaries, and production hardening guidance for Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
@@ -35,9 +35,12 @@ untrusted unless the application establishes a narrower contract.
 
 :::{danger}
 Do not restore a checkpoint from an untrusted or shared-writable location.
-Klein checkpoint metadata, source state, managed state, and prepared sink
-committables can contain Python pickle payloads. Deserializing a malicious
-pickle can execute code with the worker's identity. A stored checksum detects
+Version 4 checkpoint metadata has a non-executable JSON envelope, and Klein
+validates every embedded payload's declared size and SHA-256 before loading
+application state. Source state, custom state keys and serializers, generic
+checkpoint-store values, and prepared sink committables can still contain
+Python pickle payloads. Deserializing a malicious, otherwise valid application
+payload can execute code with the worker's identity. A stored checksum detects
 accidental corruption relative to checkpoint metadata; it is not a signature
 and does not make an attacker-controlled checkpoint authentic.
 :::
@@ -50,7 +53,7 @@ another.
 
 | Owner | Responsible for | Not provided by that layer |
 | --- | --- | --- |
-| Klein | Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based redaction in published configuration and structured log fields; checkpoint size/checksum validation before managed-state payload use; documenting source/sink recovery boundaries. | Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, or an audit log independent of Ray. |
+| Klein | Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries. | Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, or an audit log independent of Ray. |
 | Ray | Running actors/tasks, namespaces, runtime environments, Object Store, worker/actor logs, metrics, cluster connectivity, and the authentication/TLS features configured by the Ray operator. | Klein-specific authorization or isolation between mutually untrusted Klein jobs. A Ray namespace avoids actor-name collisions; it is not an access-control boundary. |
 | Platform operator | Network isolation, firewall and ingress policy, TLS termination, Ray authentication, Kubernetes/cloud IAM, node and container hardening, image provenance, secret delivery, object-store IAM/encryption/versioning, log/metric access, backups, and separation of security domains. | Correct UDF behavior, safe application logging, connector semantics, or sink idempotency. |
 | Application owner | Trusted dependencies and code review; input validation; UDF/resource limits; connector credential use; state/schema choices; sensitive-data classification; safe job/operator names; output authorization, idempotency, and retention. | Cluster isolation or platform controls that were never configured. |
@@ -70,6 +73,13 @@ consequences:
   have the same effective trust as the job submitter.
 - Pickle and cloudpickle are data/code transport formats, not safe parsers for
   hostile bytes.
+- Framework-owned managed-state envelopes use a restricted unpickler that
+  resolves only the exact Klein classes required by that envelope. This does
+  not make the application-owned bytes nested inside it safe.
+- Prefix-less and version 3 pickle checkpoint metadata is rejected before any
+  pickle global can be resolved. Version 4 first validates its JSON structure,
+  payload sizes, and SHA-256 digests, then loads source state and sink
+  committables as trusted application payloads.
 - Moving or renaming Python classes and modules can make a trusted checkpoint
   unreadable even when no attacker is involved.
 - Deserialization must happen only in an environment whose code and dependency
@@ -96,6 +106,33 @@ For checkpoint storage:
 See [Checkpoint storage](checkpoint-storage.md) for the actual publication and
 validation behavior.
 
+## SQL DOWNLOAD and media URLs
+
+Treat a URI column consumed by SQL `DOWNLOAD` as a network-capable input.
+Klein permits local paths and selected object-store schemes for compatibility,
+but HTTP(S) uses its own SSRF boundary. The default rejects URL credentials,
+unknown schemes, non-global resolved addresses, HTTPS-to-HTTP redirects, more
+than five redirects, and more than 64 MiB retained for one row. Every redirect
+is validated again, and the connection is pinned to an address that passed the
+IP policy.
+
+Configure `sql.download.allowed-hosts` and `denied-hosts` for service names, and
+`allowed-ip-ranges` and `denied-ip-ranges` for resolved addresses. These checks
+are conjunctive: allowlisting `assets.example.com` does not let that name resolve
+to loopback, link-local metadata, or a private address. Use a narrow explicit IP
+range for an approved internal service; avoid the broader
+`sql.download.allow-private-network=true`.
+
+The byte bound is cumulative across downloads in one SQL projection or batch
+row. A standalone streaming `stream.data.with_column(..., download(...))`
+operator has the same per-response bound; separate chained operators each have
+their own budget. HTTP connection, redirect, and body reads share the configured
+I/O budget. Python's synchronous system resolver cannot be interrupted by that
+timer, and S3/GS timeout and retry behavior remains owned by the configured
+filesystem/provider. Local and object-store schemes do not have HTTP host/IP
+checks, so do not feed attacker-controlled paths to them. Media decoders apply
+their own byte, pixel, page, output, and DPI limits after the download boundary.
+
 ## Dashboard and control APIs
 
 `ray-klein dashboard` serves a separate Klein HTTP page. It is not part of the
@@ -111,7 +148,10 @@ ray-klein dashboard --host 127.0.0.1 --port 8266
 The server refuses a non-loopback listener unless
 `--allow-unauthenticated` is present. That flag only acknowledges the risk; it
 does not add protection. A remote listener exposes job topology and status and
-can submit supported operator-rescale actions.
+can submit supported operator-rescale actions. Programmatic server creation has
+the same default and requires `allow_unauthenticated=True` for a non-loopback
+address. Control requests also reject an untrusted `Host`, a mismatched
+`Origin`, or cross-site Fetch Metadata.
 
 If remote access is required:
 

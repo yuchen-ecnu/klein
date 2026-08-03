@@ -77,15 +77,26 @@ class _FakeFrontendHandler(BaseHTTPRequestHandler):
         if self.path == "/":
             payload = b'<html><head><title>Ray Dashboard</title></head><body><main id="root"></main></body></html>'
             content_type = "text/html; charset=utf-8"
+            status = 200
         elif self.path == "/static/js/bundle.js":
             payload = b"window.__RAY_DASHBOARD__ = true;"
             content_type = "text/javascript; charset=utf-8"
+            status = 200
+        elif self.path == "/oversized":
+            payload = b"12345"
+            content_type = "application/octet-stream"
+            status = 200
+        elif self.path == "/oversized-error":
+            payload = b"12345"
+            content_type = "text/plain"
+            status = 500
         else:
             self.send_error(404)
             return
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(payload)))
+        if self.path != "/oversized-error":
+            self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
 
@@ -134,22 +145,39 @@ def test_dashboard_serves_the_bundled_frontend(dashboard_server) -> None:
     server, _ = dashboard_server
 
     status, headers, page = _request(server, "GET", "/")
-    asset_path = re.search(rb'src="\./(assets/[^"]+\.js)"', page)
 
     assert status == 200
     assert headers["Content-Type"] == "text/html; charset=utf-8"
     assert b'<div id="root"></div>' in page
     assert b'src="__klein/navigation.js"' in page
-    assert asset_path is not None
-    asset_status, asset_headers, asset = _request(server, "GET", f"/{asset_path.group(1).decode()}")
-    assert asset_status == 200
-    assert asset_headers["Content-Type"] in {
-        "application/javascript; charset=utf-8",
-        "text/javascript; charset=utf-8",
-    }
-    assert len(asset) > 1_000
+
+    pending = [asset.decode() for asset in re.findall(rb'(?:src|href)="\./(assets/[^"]+\.(?:js|css))"', page)]
+    assert pending
+    served_assets: dict[str, bytes] = {}
+    while pending:
+        asset_path = pending.pop()
+        if asset_path in served_assets:
+            continue
+        asset_status, asset_headers, asset = _request(server, "GET", f"/{asset_path}")
+        assert asset_status == 200
+        assert asset_headers["Cache-Control"] == "public, max-age=31536000, immutable"
+        if asset_path.endswith(".css"):
+            assert asset_headers["Content-Type"] == "text/css; charset=utf-8"
+        else:
+            assert asset_headers["Content-Type"] in {
+                "application/javascript; charset=utf-8",
+                "text/javascript; charset=utf-8",
+            }
+        assert asset
+        served_assets[asset_path] = asset
+        if asset_path.endswith(".js"):
+            pending.extend(
+                f"assets/{linked.decode()}" for linked in re.findall(rb'["`]\./([^"`]+\.(?:js|css))["`]', asset)
+            )
+
+    javascript = b"".join(asset for path, asset in served_assets.items() if path.endswith(".js"))
     assert all(
-        token in asset
+        token in javascript
         for token in (
             b"data-busy-percent",
             b"max_busy_percent",
@@ -158,6 +186,31 @@ def test_dashboard_serves_the_bundled_frontend(dashboard_server) -> None:
             b"#fff0cc",
         )
     )
+
+
+def test_dashboard_keeps_index_and_navigation_uncached(dashboard_server) -> None:
+    server, _ = dashboard_server
+
+    _, page_headers, _ = _request(server, "GET", "/")
+    _, navigation_headers, _ = _request(server, "GET", "/__klein/navigation.js")
+
+    assert page_headers["Cache-Control"] == "no-store"
+    assert navigation_headers["Cache-Control"] == "no-store"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/assets/foo%00bar.js", f"/assets/{'a' * 300}.js"],
+)
+def test_dashboard_returns_not_found_for_invalid_asset_names(
+    dashboard_server,
+    path,
+) -> None:
+    server, _ = dashboard_server
+
+    status, _, _ = _request(server, "GET", path)
+
+    assert status == 404
 
 
 def test_dashboard_exposes_ray_navigation_configuration() -> None:
@@ -204,6 +257,35 @@ def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_
         assert b"https://ray.example.com/base" in bridge
         assert b'"jobs"' in jobs
         assert json.loads(job) == {"job": state.snapshot}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_dashboard_bounds_success_and_error_frontend_proxy_bodies(
+    frontend_server,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "ray.klein.observability.dashboard.server._MAX_PROXY_RESPONSE_BYTES",
+        4,
+    )
+    server = create_dashboard_server(
+        "127.0.0.1",
+        0,
+        state=_FakeState(),
+        frontend_url=frontend_server,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        success_status, _, success = _request(server, "GET", "/oversized")
+        error_status, _, error = _request(server, "GET", "/oversized-error")
+
+        assert success_status == error_status == 502
+        assert "proxy limit" in json.loads(success)["error"]
+        assert "proxy limit" in json.loads(error)["error"]
     finally:
         server.shutdown()
         server.server_close()
@@ -348,6 +430,21 @@ def test_dashboard_rejects_cross_origin_control_request(dashboard_server) -> Non
     assert state.rescale_calls == []
 
 
+def test_dashboard_rejects_cross_site_fetch_metadata_without_origin(dashboard_server) -> None:
+    server, state = dashboard_server
+
+    status, _, _ = _request(
+        server,
+        "POST",
+        f"/api/klein/jobs/{quote(state.job_id, safe='')}/cancel",
+        body=b"",
+        headers={"Content-Length": "0", "Sec-Fetch-Site": "cross-site"},
+    )
+
+    assert status == 403
+    assert state.cancel_calls == []
+
+
 def test_dashboard_rejects_dns_rebinding_host_before_control_call(dashboard_server) -> None:
     server, state = dashboard_server
     body = json.dumps({"parallelism": 3})
@@ -423,8 +520,8 @@ def test_cli_dashboard_starts_bound_server(monkeypatch) -> None:
     monkeypatch.setattr(cli, "_ensure_ray_init", lambda: events.append("connected"))
     monkeypatch.setattr(
         "ray.klein.observability.dashboard.server.create_dashboard_server",
-        lambda host, port, *, ray_dashboard_url, frontend_url: (
-            events.append((host, port, ray_dashboard_url, frontend_url)) or server
+        lambda host, port, *, ray_dashboard_url, frontend_url, allow_unauthenticated: (
+            events.append((host, port, ray_dashboard_url, frontend_url, allow_unauthenticated)) or server
         ),
     )
 
@@ -454,7 +551,7 @@ def test_cli_dashboard_starts_bound_server(monkeypatch) -> None:
     ]
     assert events == [
         "connected",
-        ("0.0.0.0", 8765, "https://ray.example.com", "http://127.0.0.1:3001"),
+        ("0.0.0.0", 8765, "https://ray.example.com", "http://127.0.0.1:3001", True),
         "served",
         "closed",
     ]
@@ -472,8 +569,8 @@ def test_cli_dashboard_uses_bundled_frontend_by_default(monkeypatch) -> None:
     monkeypatch.setattr(cli, "_ensure_ray_init", lambda: events.append("connected"))
     monkeypatch.setattr(
         "ray.klein.observability.dashboard.server.create_dashboard_server",
-        lambda host, port, *, ray_dashboard_url, frontend_url: (
-            events.append((host, port, ray_dashboard_url, frontend_url)) or server
+        lambda host, port, *, ray_dashboard_url, frontend_url, allow_unauthenticated: (
+            events.append((host, port, ray_dashboard_url, frontend_url, allow_unauthenticated)) or server
         ),
     )
 
@@ -484,7 +581,7 @@ def test_cli_dashboard_uses_bundled_frontend_by_default(monkeypatch) -> None:
     assert "Klein UI is reused" not in result.output
     assert events == [
         "connected",
-        ("127.0.0.1", 8266, "http://127.0.0.1:8265", None),
+        ("127.0.0.1", 8266, "http://127.0.0.1:8265", None, False),
         "served",
         "closed",
     ]
@@ -505,6 +602,19 @@ def test_cli_dashboard_refuses_unauthenticated_non_loopback_listener(monkeypatch
     assert result.exit_code == 1
     assert "Refusing to expose" in result.output
     assert "--allow-unauthenticated" in result.output
+
+
+def test_programmatic_dashboard_binding_requires_the_same_non_loopback_opt_in() -> None:
+    with pytest.raises(ValueError, match="non-loopback"):
+        create_dashboard_server("0.0.0.0", 0, state=_FakeState())
+
+    server = create_dashboard_server(
+        "0.0.0.0",
+        0,
+        state=_FakeState(),
+        allow_unauthenticated=True,
+    )
+    server.server_close()
 
 
 @pytest.mark.skipif(not socket.has_ipv6, reason="IPv6 is unavailable on this host")

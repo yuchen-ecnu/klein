@@ -1,11 +1,11 @@
 ---
 myst:
   html_meta:
-    description: "Build Klein for Ray DataStream programs with precise record, UDF, batching, async, partitioning, and failure semantics."
+    description: "Build Klein DataStream programs with precise record, UDF, batching, async, partitioning, and failure semantics."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# DataStream programming guide
+# DataStream API
 
 Klein programs build a lazy graph of sources, transformations, and terminal
 sinks. The whole graph runs either on the Ray Data batch backend or on Klein's

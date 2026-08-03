@@ -58,7 +58,9 @@ class KleinMetrics:
 
     # Task data plane, barriers and event time.
     INPUT_BUFFER_RECORDS = MetricSpec(
-        "input_buffer_records", MetricKind.GAUGE, "Logical rows currently queued in the task input buffer."
+        "input_buffer_records",
+        MetricKind.GAUGE,
+        "Logical rows retained across the task inbox and input batch accumulator.",
     )
     INPUT_BUFFER_CAPACITY_RECORDS = MetricSpec(
         "input_buffer_capacity_records", MetricKind.GAUGE, "Configured task input-buffer capacity."
@@ -67,7 +69,9 @@ class KleinMetrics:
         "input_buffer_utilization", MetricKind.GAUGE, "Task input-buffer utilization as a ratio from 0 to 1."
     )
     INPUT_BUFFER_BYTES = MetricSpec(
-        "input_buffer_bytes", MetricKind.GAUGE, "Estimated payload bytes currently queued in the task input buffer."
+        "input_buffer_bytes",
+        MetricKind.GAUGE,
+        "Estimated bytes retained across the task inbox, in-flight handoff, and input batch accumulator.",
     )
     INPUT_BUFFER_CAPACITY_BYTES = MetricSpec(
         "input_buffer_capacity_bytes", MetricKind.GAUGE, "Configured task input-buffer byte capacity."

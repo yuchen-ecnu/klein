@@ -5,6 +5,7 @@ from typing import Any
 from unittest import TestCase
 
 import ray.klein as klein
+from ray.klein._internal.block import block_row_dict
 from ray.klein.api.runtime_info import RuntimeInfo
 from ray.klein.config.configuration import Configuration
 from ray.klein.observability.metrics.metric_group import (
@@ -146,7 +147,14 @@ def get_local_klein_handler_list(num: int, qsize: int) -> list[KleinActorHandle]
 
 
 def get_flat_input_datas(handler: KleinActorHandle) -> list[Record]:
-    return [record for batch in klein.get(handler.get_input_datas()) for record in batch]
+    rows: list[Record] = []
+    for batch in klein.get(handler.get_input_datas()):
+        for record in batch:
+            if record.is_columnar:
+                rows.extend(Record(block_row_dict(record.block, index)) for index in range(record.num_rows))
+            else:
+                rows.append(record)
+    return rows
 
 
 def create_output(

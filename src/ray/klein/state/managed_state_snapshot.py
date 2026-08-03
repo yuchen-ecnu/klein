@@ -7,7 +7,9 @@ import pickle
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from ray.klein.state.key_encoding import KEY_ENCODING_VERSION, require_key_encoding_version
 from ray.klein.state.key_group_range import KeyGroupRange, assign_key_group_range, key_group_owner
+from ray.klein.state.restricted_pickle import restricted_pickle_loads
 
 _FORMAT_VERSION = 2
 
@@ -23,6 +25,7 @@ def encode_managed_state_snapshot(
 
     payload = {
         "format_version": _FORMAT_VERSION,
+        "key_encoding_version": KEY_ENCODING_VERSION,
         "max_parallelism": max_parallelism,
         "key_group_range": key_group_range,
         "key_groups": dict(key_groups),
@@ -37,7 +40,12 @@ def decode_managed_state_snapshot(snapshot: bytes) -> dict[str, Any]:
 
     if not isinstance(snapshot, bytes):
         raise TypeError("managed state snapshots must be bytes")
-    payload = pickle.loads(snapshot)
+    payload = restricted_pickle_loads(
+        snapshot,
+        allowed_globals={
+            ("ray.klein.state.key_group_range", "KeyGroupRange"): KeyGroupRange,
+        },
+    )
     if not isinstance(payload, dict):
         raise ValueError("managed state snapshot must contain a mapping")
     _validate_snapshot_payload(payload)
@@ -90,9 +98,22 @@ def repartition_managed_state_snapshots(
 def _validate_snapshot_payload(payload: dict[str, Any]) -> None:
     if payload.get("format_version") != _FORMAT_VERSION:
         raise ValueError("unsupported managed operator state format")
+    require_key_encoding_version(
+        payload.get("key_encoding_version"),
+        context="managed state snapshot",
+    )
     max_parallelism = _max_parallelism(payload)
     key_group_range = payload.get("key_group_range")
-    if not isinstance(key_group_range, KeyGroupRange) or key_group_range.end >= max_parallelism:
+    if (
+        not isinstance(key_group_range, KeyGroupRange)
+        or isinstance(key_group_range.start, bool)
+        or not isinstance(key_group_range.start, int)
+        or key_group_range.start < 0
+        or isinstance(key_group_range.end, bool)
+        or not isinstance(key_group_range.end, int)
+        or key_group_range.end < key_group_range.start
+        or key_group_range.end >= max_parallelism
+    ):
         raise ValueError("managed state snapshot has an invalid key_group_range")
     _watermark(payload)
     for key_group in _key_groups(payload):
@@ -118,7 +139,7 @@ def _watermark(payload: dict[str, Any]) -> int:
     value = payload.get("watermark", -1)
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError("managed state snapshot watermark must be an integer")
-    return value
+    return int(value)
 
 
 def _redistribute_key_groups(

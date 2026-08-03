@@ -1,11 +1,11 @@
 ---
 myst:
   html_meta:
-    description: "Inspect Klein for Ray batch and streaming records with the console and print connector."
+    description: "Inspect Klein batch and streaming records with the console and print connector."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Console and print
+# Console
 
 The console sink is a diagnostic connector for examples and local debugging.
 It prints records to standard output and provides no external durability or

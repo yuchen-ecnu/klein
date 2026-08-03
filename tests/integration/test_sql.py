@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
+from datetime import date
+
 from ray.data.expressions import col, download
 
 from ray.klein.api.changelog_row import ChangelogRow
@@ -21,6 +24,19 @@ def _bucket(value):
 
 def _twice(value):
     return value * 2
+
+
+def _fake_ai_generate(calls):
+    return [f"generated:{prompt}" for (prompt,) in calls]
+
+
+async def _async_fake_ai_generate(calls):
+    await asyncio.sleep(0)
+    return _fake_ai_generate(calls)
+
+
+def _fake_ai_embed(calls):
+    return [[float(len(text)), 1.0] for (text,) in calls]
 
 
 def test_join_group_expression_uses_ray_native_operators() -> None:
@@ -61,7 +77,7 @@ def test_query_without_input_tables() -> None:
     assert execute_terminal(sink, job_name="sql-without-input") == [{"answer": 42}]
 
 
-def test_download_expression_uses_ray_data_operator(tmp_path) -> None:
+def test_sql_download_expression_uses_bounded_runtime(tmp_path) -> None:
     payload = b"ray-klein expression download"
     source_file = tmp_path / "payload.bin"
     source_file.write_bytes(payload)
@@ -75,6 +91,33 @@ def test_download_expression_uses_ray_data_operator(tmp_path) -> None:
 
     rows = execute_terminal(result.data.take_all(), job_name="sql-download")
     assert rows == [{"id": 1, "body": payload}]
+
+
+def test_stream_data_download_uses_the_same_bounded_batch_runtime(tmp_path) -> None:
+    small = tmp_path / "small.bin"
+    large = tmp_path / "large.bin"
+    small.write_bytes(b"four")
+    large.write_bytes(b"too-big")
+    context = KleinContext(
+        {
+            "execution.runtime.mode": "batch",
+            "sql.download.max-bytes": 4,
+        }
+    )
+    files = context.data.from_items(
+        [
+            {"id": 1, "uri": f"local://{small}"},
+            {"id": 2, "uri": f"local://{large}"},
+        ]
+    )
+
+    result = files.data.with_column("body", download("uri"))
+
+    rows = execute_terminal(result.data.take_all(), job_name="stream-data-download")
+    assert sorted(rows, key=lambda row: row["id"]) == [
+        {"id": 1, "uri": f"local://{small}", "body": b"four"},
+        {"id": 2, "uri": f"local://{large}", "body": None},
+    ]
 
 
 def test_ray_data_scalar_expressions_execute_natively() -> None:
@@ -99,6 +142,69 @@ def test_ray_data_scalar_expressions_execute_natively() -> None:
     assert all(0 <= row["sample"] < 1 for row in result)
     assert len({row["uid"] for row in result}) == 2
     assert len({row["mid"] for row in result}) == 2
+
+
+def test_common_sql_builtins_execute_in_batch() -> None:
+    context = KleinContext()
+    rows = context.data.from_items(
+        [
+            {"id": 1, "name": "  Ada  ", "payload": '{"score":2}', "created": "2024-02-28"},
+            {"id": 2, "name": None, "payload": "{}", "created": None},
+        ]
+    )
+
+    result = context.sql(
+        "SELECT id, LOWER(TRIM(name)) AS normalized, "
+        "CONCAT_WS('-', 'user', SUBSTRING(TRIM(name), 1, 3)) AS label, "
+        "GET_JSON_OBJECT(payload, '$.score') AS score, DATE_ADD(TO_DATE(created), 2) AS due, "
+        "ROUND(2.345, 2) AS rounded, ARRAY_SIZE(ARRAY(id, 10)) AS width FROM rows ORDER BY id",
+        tables={"rows": rows},
+    )
+
+    assert execute_terminal(result.data.take_all(), job_name="sql-common-builtins") == [
+        {
+            "id": 1,
+            "normalized": "ada",
+            "label": "user-Ada",
+            "score": "2",
+            "due": date(2024, 3, 1),
+            "rounded": 2.35,
+            "width": 2,
+        },
+        {
+            "id": 2,
+            "normalized": None,
+            "label": "user",
+            "score": None,
+            "due": None,
+            "rounded": 2.35,
+            "width": 2,
+        },
+    ]
+
+
+def test_ai_functions_execute_in_batch_sql_without_provider_dependencies() -> None:
+    context = KleinContext()
+    rows = context.data.from_items(
+        [
+            {"id": 1, "prompt": "hello"},
+            {"id": 2, "prompt": None},
+            {"id": 3, "prompt": "Klein"},
+        ]
+    )
+    context.sql_session.register_ai_function("ai_generate", _fake_ai_generate, batch_size=2)
+    context.sql_session.register_ai_function("ai_embed", _fake_ai_embed, batch_size=2)
+
+    result = context.sql(
+        "SELECT id, AI_GENERATE(prompt) AS answer, AI_EMBED(prompt) AS embedding FROM rows ORDER BY id",
+        tables={"rows": rows},
+    )
+
+    assert execute_terminal(result.data.take_all(), job_name="sql-ai-functions") == [
+        {"id": 1, "answer": "generated:hello", "embedding": [5.0, 1.0]},
+        {"id": 2, "answer": None, "embedding": None},
+        {"id": 3, "answer": "generated:Klein", "embedding": [5.0, 1.0]},
+    ]
 
 
 def test_klein_scalar_function_executes_in_batch_sql() -> None:
@@ -159,6 +265,28 @@ def test_klein_scalar_function_executes_in_streaming_sql(ray_cluster) -> None:
     assert sorted(handle.get(), key=lambda row: row["id"]) == [
         {"id": 1, "distance": 3},
         {"id": 2, "distance": 1},
+    ]
+
+
+def test_common_builtin_and_ai_function_execute_in_streaming_sql(ray_cluster) -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming; state.backend.type=memory"))
+    rows = context.from_values(
+        {"id": 1, "name": " Ada ", "prompt": "hello"},
+        {"id": 2, "name": " Lin ", "prompt": None},
+    )
+    context.sql_session.register_ai_function("ai_generate", _async_fake_ai_generate, batch_size=2)
+    result = context.sql(
+        "SELECT id, LOWER(TRIM(name)) AS normalized, AI_GENERATE(prompt) AS answer FROM rows",
+        tables={"rows": rows},
+    )
+    sink = result.write(CollectFunction, concurrency=1, node_type=NodeType.TAKE, name="SQLAIFunction")
+
+    handle = context.execute("streaming-sql-ai-function", sinks=(sink,))
+    handle.wait()
+
+    assert sorted(handle.get(), key=lambda row: row["id"]) == [
+        {"id": 1, "normalized": "ada", "answer": "generated:hello"},
+        {"id": 2, "normalized": "lin", "answer": None},
     ]
 
 

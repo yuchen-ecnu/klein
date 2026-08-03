@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from ray.klein._internal.values import truncated_repr
+from ray.klein.api.changelog_row import ChangelogRow
 from ray.klein.api.collector import Collector
 from ray.klein.api.source_context import SourceContext
 from ray.klein.runtime.message import InputActive, InputIdle, Record, Watermark
@@ -40,7 +41,11 @@ class RuntimeSourceContext(SourceContext):
             self.mark_active()
         keys = tuple(dict.fromkeys(key for record in materialized for key in record))
         block = {key: [record.get(key) for record in materialized] for key in keys}
-        self.collector.collect(Record(block, num_rows=len(materialized)))
+        batch = Record(block, num_rows=len(materialized))
+        row_kinds = tuple(record.row_kind if isinstance(record, ChangelogRow) else None for record in materialized)
+        if any(row_kind is not None for row_kind in row_kinds):
+            batch.row_kinds = row_kinds
+        self.collector.collect(batch)
         # Preserve record-count checkpoint triggers. The data block is already
         # ordered before any resulting barrier, so snapshots may safely capture
         # the source position at the end of this atomic poll batch.

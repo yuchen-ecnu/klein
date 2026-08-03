@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,12 +22,15 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Measure and tune Klein for Ray concurrency, batching, partitioning, "
+"Measure and tune Klein concurrency, batching, partitioning, "
 "buffers, replay, state, checkpoints, and placement."
-msgstr "测量并调优 Klein for Ray 的并发、批处理、分区、缓冲区、重放、状态、检查点和放置。"
+msgstr "测量并调优 Klein 的并发、批处理、分区、缓冲区、重放、状态、检查点和放置。"
 
 msgid "Performance tuning"
 msgstr "性能调优"
+
+msgid "Published, versioned benchmark results live in [Evaluation](evaluation/index.md). This page describes how to tune a workload; evaluation reports record the exact baseline, environment, samples, negative results, and release decision."
+msgstr "已发布且带版本记录的基准结果集中在[评测](evaluation/index.md)栏目。本页说明如何调优工作负载；评测报告则记录精确基线、环境、样本、负向结果和发布决策。"
 
 msgid ""
 "Tune from measurements, one boundary at a time. Increasing concurrency or"
@@ -270,16 +273,23 @@ msgstr ""
 "跳转。在隔离热点算子、调试生命周期行为或分配不同资源时，请禁用 `pipeline.operator-chaining.enabled`。"
 
 msgid ""
-"`pipeline.columnar-passthrough.enabled` is on by default and keeps "
-"compatible batches column-oriented across an edge. It removes column-to-"
-"row-to-column conversion for batch-heavy UDFs; keyed/custom partitioning "
-"still performs row-level slicing. Large duplicated broadcast batches are "
+"`pipeline.columnar-passthrough.enabled` is on by default. Compatible data is "
+"coalesced into Arrow `RecordBatch` objects at an inter-task edge, while a "
+"chained operator stays in its native in-process representation. Downstream "
+"conversion happens only at the declared UDF batch-format boundary. Keyed and "
+"custom partitioning slice Arrow batches by row; SQL changelog kinds and per-"
+"row event timestamps remain sidecar metadata rather than user columns. "
+"Unsupported Python mapping subclasses use the compatibility path. Large "
+"duplicated broadcast batches are "
 "placed in Ray's Object Store once after `pipeline.transport.object-store-"
-"threshold-bytes`."
+"threshold-bytes`. Disable the option only for the legacy row-oriented wire "
+"shape."
 msgstr ""
-"`pipeline.columnar-passthrough.enabled` 默认启用，可让兼容批次跨边保持列式形态。它为批处理密集型 UDF "
-"消除列到行再到列的转换；键控/自定义分区仍会执行行级切片。大型重复 broadcast 批次超过 `pipeline.transport"
-".object-store-threshold-bytes` 后，只会在 Ray 的 Object Store 中放置一次。"
+"`pipeline.columnar-passthrough.enabled` 默认启用。兼容数据会在跨 task 边界合并为 Arrow "
+"`RecordBatch`，而链内算子继续使用原生进程内表示；仅在下游声明的 UDF 批格式边界执行转换。键控和自定义分区会按行切分 Arrow "
+"批次，SQL changelog 类型和逐行事件时间戳作为旁路元数据保留，不会暴露为用户列。无法安全转换的 Python Mapping 子类会走兼容路径。大型重复 "
+"broadcast 批次超过 `pipeline.transport.object-store-threshold-bytes` 后，只会在 Ray 的 Object Store "
+"中放置一次。仅在需要旧版面向行的传输格式时禁用此选项。"
 
 msgid "Partitioning and skew"
 msgstr "分区与倾斜"
@@ -369,13 +379,16 @@ msgstr ""
 "是硬性保护：超过该值会在进程 OOM 前使任务失败并进入正常恢复。只有修复停滞的确认并验证节点内存后，才应最后考虑提高该值。"
 
 msgid ""
-"`pipeline.input-buffer.size` and `pipeline.input-buffer.max-bytes` bound "
-"logical rows and estimated payload bytes. One oversized columnar block is"
-" admitted only into an otherwise empty inbox. The same dual bound applies"
-" to output buffering, so wide records cannot bypass a row-only limit."
+"`pipeline.input-buffer.size` bounds logical rows in the inbox, while "
+"`pipeline.input-buffer.max-bytes` is shared by the inbox, dequeue handoff,"
+" and input batcher. One oversized columnar block is admitted only when all"
+" three are otherwise empty. The same dual bound applies to output "
+"buffering, so wide records cannot bypass a row-only limit."
 msgstr ""
-"`pipeline.input-buffer.size` 和 `pipeline.input-buffer.max-bytes` "
-"限制逻辑行数和估算的载荷字节数。一个超大列式块只能进入原本为空的 inbox。同样的双重边界也适用于输出缓冲，因此宽记录无法绕过仅基于行数的限制。"
+"`pipeline.input-buffer.size` 限制收件箱中的逻辑行数，而 "
+"`pipeline.input-buffer.max-bytes` 由收件箱、出队交接和输入批处理器共享。"
+"只有三者原本均为空时，才会接纳一个超大列式块。同样的双重边界也适用于输出缓冲，"
+"因此宽记录无法绕过仅基于行数的限制。"
 
 msgid ""
 "After every change, compare throughput, tail latency, checkpoint "

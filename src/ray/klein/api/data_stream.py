@@ -70,6 +70,40 @@ def _identity(value: Any) -> Any:
     return value
 
 
+def _batch_timeout_seconds(value: timedelta) -> float:
+    if not isinstance(value, timedelta):
+        raise TypeError("batch_timeout must be a timedelta")
+    seconds = value.total_seconds()
+    if seconds <= 0:
+        raise ValueError("batch_timeout must be positive")
+    return seconds
+
+
+def _contains_download_expression(expression: Any) -> bool:
+    """Return whether a Ray expression tree contains a DownloadExpr."""
+
+    from ray.data.expressions import DownloadExpr, Expr
+
+    seen: set[int] = set()
+
+    def visit(value: Any) -> bool:
+        if isinstance(value, DownloadExpr):
+            return True
+        if isinstance(value, Expr):
+            identity = id(value)
+            if identity in seen:
+                return False
+            seen.add(identity)
+            return any(visit(child) for child in vars(value).values())
+        if isinstance(value, Mapping):
+            return any(visit(child) for child in value.values())
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return any(visit(child) for child in value)
+        return False
+
+    return visit(expression)
+
+
 class DataStream(Stream):
     """
     Represents a stream of data which applies a transformation executed by
@@ -164,17 +198,23 @@ class DataStream(Stream):
             num_cpus=call.kwargs.get("num_cpus"),
             num_gpus=call.kwargs.get("num_gpus"),
         )
-        streaming_operator = self._ray_data_expression_operator(call, resources)
+        batch_lowering = self._secure_ray_data_batch_lowering(call)
+        streaming_operator = self._ray_data_expression_operator(call, resources, batch_lowering)
         return DataStream(
             list(dependencies),
-            streaming_operator or MapOperator(LogicalFunction(BatchOnlyTransform, lowering=call, resources=resources)),
+            streaming_operator
+            or MapOperator(LogicalFunction(BatchOnlyTransform, lowering=batch_lowering, resources=resources)),
             f"RayData.{call.display_name}",
             NodeType.TRANSFORM,
             resources=resources,
         )
 
     @staticmethod
-    def _ray_data_expression_operator(call: RayDataCall, resources: Resources) -> StreamOperator | None:
+    def _ray_data_expression_operator(
+        call: RayDataCall,
+        resources: Resources,
+        batch_lowering: RayDataCall,
+    ) -> StreamOperator | None:
         """Return a dual-mode operator for the Ray expression APIs Klein can stream."""
 
         from ray.data.expressions import DownloadExpr, Expr
@@ -191,7 +231,7 @@ class DataStream(Stream):
                     LogicalFunction(
                         function,
                         fn_constructor_args=[name, expression],
-                        lowering=call,
+                        lowering=batch_lowering,
                         resources=resources,
                         async_buffer_size=async_buffer_size,
                     )
@@ -205,11 +245,48 @@ class DataStream(Stream):
                     LogicalFunction(
                         StreamingExpressionFilter,
                         fn_constructor_args=[expression],
-                        lowering=call,
+                        lowering=batch_lowering,
                         resources=resources,
                     )
                 )
         return None
+
+    def _secure_ray_data_batch_lowering(self, call: RayDataCall) -> RayDataCall:
+        """Replace Ray's unbounded batch DownloadExpr path with Klein's policy."""
+
+        from ray.data.expressions import DownloadExpr, Expr
+
+        if call.dataset_method_name == "with_column":
+            name = call.args[0] if call.args else call.kwargs.get("column_name")
+            expression = call.args[1] if len(call.args) > 1 else call.kwargs.get("expr")
+        elif call.dataset_method_name == "filter":
+            name = None
+            expression = call.args[1] if len(call.args) > 1 else call.kwargs.get("expr")
+        else:
+            return call
+
+        if isinstance(expression, Expr) and _contains_download_expression(expression):
+            if call.dataset_method_name != "with_column" or not isinstance(expression, DownloadExpr):
+                raise ValueError(
+                    "DownloadExpr is supported only as the direct expr of "
+                    "stream.data.with_column(); composed and filter expressions are rejected"
+                )
+            if not isinstance(name, str):
+                raise TypeError("DownloadExpr column_name must be a string")
+        if not isinstance(name, str) or not isinstance(expression, DownloadExpr):
+            return call
+
+        from ray.klein._internal.sql.download_runtime import (
+            SQLDownloadPolicy,
+            apply_download_expression,
+        )
+
+        return RayDataCall.dataset_callable(
+            apply_download_expression,
+            (name, expression, SQLDownloadPolicy.from_configuration(self.context.config)),
+            {key: value for key, value in call.kwargs.items() if key not in {"column_name", "expr"}},
+            expects_dataset=True,
+        )
 
     def _consume_ray_data(
         self,
@@ -324,7 +401,7 @@ class DataStream(Stream):
                     lowering=lower_map,
                     resources=resources,
                     batch_size=batch_size,
-                    batch_timeout=int(batch_timeout.total_seconds()),
+                    batch_timeout=_batch_timeout_seconds(batch_timeout),
                     async_buffer_size=async_buffer_size,
                 ),
             ),
@@ -428,7 +505,7 @@ class DataStream(Stream):
                     resources=resources,
                     batch_size=batch_size,
                     batch_format=batch_format,
-                    batch_timeout=int(batch_timeout.total_seconds()),
+                    batch_timeout=_batch_timeout_seconds(batch_timeout),
                     async_buffer_size=async_buffer_size,
                 ),
             ),
@@ -536,7 +613,7 @@ class DataStream(Stream):
                     lowering=lower_flat_map,
                     resources=resources,
                     batch_size=batch_size,
-                    batch_timeout=int(batch_timeout.total_seconds()),
+                    batch_timeout=_batch_timeout_seconds(batch_timeout),
                     async_buffer_size=async_buffer_size,
                 ),
             ),
@@ -740,7 +817,7 @@ class DataStream(Stream):
                     lowering=lower_map,
                     resources=process_resources,
                     batch_size=batch_process_size,
-                    batch_timeout=int(batch_process_timeout.total_seconds()),
+                    batch_timeout=_batch_timeout_seconds(batch_process_timeout),
                     batch_format=batch_process_format,
                 ),
             ),
@@ -819,7 +896,7 @@ class DataStream(Stream):
                     lowering=lower_filter,
                     resources=resources,
                     batch_size=batch_size,
-                    batch_timeout=int(batch_timeout.total_seconds()),
+                    batch_timeout=_batch_timeout_seconds(batch_timeout),
                     async_buffer_size=async_buffer_size,
                 ),
             ),
@@ -1510,7 +1587,7 @@ class DataStream(Stream):
                 lowering=lowering,
                 resources=resources,
                 batch_size=batch_size,
-                batch_timeout=int(batch_timeout.total_seconds()),
+                batch_timeout=_batch_timeout_seconds(batch_timeout),
             ),
             resources=resources,
             node_type=node_type,

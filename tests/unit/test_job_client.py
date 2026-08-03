@@ -16,6 +16,7 @@ from ray.klein.api.resource_plan import ResourcePlan
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.environment_variables import EnvironmentVariables
 from ray.klein.config.execution_options import ExecutionOptions
+from ray.klein.config.job_manager_options import JobManagerOptions
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
 from ray.klein.config.udf_options import UDFOptions
 
@@ -131,6 +132,8 @@ class _RemoteJobManager:
     def __init__(self, submit_result: bool = True) -> None:
         self.submit_result = submit_result
         self.submit_calls = []
+        self.cancel_calls = []
+        self.cancel_result = True
         self.inner_actor = object()
 
     def submit(self, *args, **kwargs) -> bool:
@@ -139,6 +142,10 @@ class _RemoteJobManager:
 
     def failure_detail(self) -> str:
         return "placement failed"
+
+    def cancel(self, timeout: int) -> bool:
+        self.cancel_calls.append(timeout)
+        return self.cancel_result
 
 
 def test_streaming_execution_initializes_ray_and_registers_dashboard(monkeypatch) -> None:
@@ -199,6 +206,48 @@ def test_streaming_submission_failure_is_reported(monkeypatch) -> None:
             lineage,
         )
 
+    lineage.report_fail.assert_called_once()
+
+
+@pytest.mark.parametrize("cleanup_times_out", [False, True])
+def test_streaming_submission_timeout_cleans_up_detached_manager(monkeypatch, cleanup_times_out: bool) -> None:
+    config = Configuration(include_environment=False)
+    config.set(JobManagerOptions.SCHEDULER_START_TIMEOUT, 7)
+    config.set(JobManagerOptions.STOP_TIMEOUT, 3)
+    manager = _RemoteJobManager()
+    manager.submit_result = submit_ref = object()
+    manager.cancel_result = cancel_ref = object()
+    lineage = Mock()
+    kill = Mock()
+
+    def get(value, *, timeout=None):
+        if value is submit_ref:
+            assert timeout == 7
+            raise TimeoutError("scheduler wait expired")
+        if value is cancel_ref:
+            assert timeout == 3
+            if cleanup_times_out:
+                raise TimeoutError("cleanup wait expired")
+            return True
+        return value
+
+    monkeypatch.setattr(ray, "is_initialized", lambda: True)
+    monkeypatch.setattr(klein, "is_debug_mode", lambda: True)
+    monkeypatch.setattr(klein, "get", get)
+    monkeypatch.setattr(klein, "kill", kill)
+    monkeypatch.setattr("ray.klein.api.job_client.build_job_namespace", lambda **_kwargs: "job-namespace")
+    monkeypatch.setattr("ray.klein.api.job_client.JobManager.create", lambda *_args, **_kwargs: manager)
+
+    with pytest.raises(TimeoutError, match="scheduler wait expired"):
+        JobClient(config)._execute_streaming(
+            "orders",
+            object(),
+            RuntimeExecutionMode.STREAMING,
+            lineage,
+        )
+
+    assert manager.cancel_calls == [3]
+    kill.assert_called_once_with(manager, timeout=3)
     lineage.report_fail.assert_called_once()
 
 

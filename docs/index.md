@@ -1,24 +1,24 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray documentation for building stateful batch and streaming dataflows on Ray."
+    description: "Klein documentation for building stateful batch and streaming dataflows on Ray."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein)=
-# Klein for Ray: Stateful stream processing on Ray
+# Klein: Stateful stream processing on Ray
 
-Klein for Ray is a stateful stream processing library built on Ray. Use the `DataStream` API to run bounded Ray Data inputs and long-running streaming inputs with event time, managed keyed state, checkpoint recovery, and SQL and Table APIs.
+Klein is a stateful stream processing library built on Ray. Use the `DataStream` API to run bounded Ray Data inputs and long-running streaming inputs with event time, managed keyed state, checkpoint recovery, and SQL and Table APIs.
 
 :::{warning}
-Klein for Ray is independent alpha software. It is not affiliated with,
+Klein is independent alpha software. It is not affiliated with,
 endorsed by, or maintained by the Ray project.
 :::
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Start
+:caption: Getting started
 
 installation
 getting-started
@@ -29,11 +29,23 @@ production-streaming
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Learn
+:caption: Concepts
 
 key-concepts
 architecture
 glossary
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Application development
+
+user-guides
+datastream-programming-guide
+development
+job-lifecycle
+operator-compatibility
 ```
 
 ```{toctree}
@@ -53,26 +65,41 @@ driver-fault-tolerance
 
 ```{toctree}
 :hidden:
-:maxdepth: 2
-:caption: Develop
+:maxdepth: 1
+:caption: Connectors
 
-user-guides
-datastream-programming-guide
-job-lifecycle
-development
 connectors/index
-operator-compatibility
+connectors/ray-data
+connectors/collections
+connectors/kafka
+connectors/rocketmq
+connectors/canal
+connectors/filesystem
+connectors/iceberg
+connectors/redis
+connectors/ray-serve
+connectors/console
+connectors/custom
 ```
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Deploy and operate
+:caption: Deployment
 
 production-readiness
 deployment
 security
 checkpoint-storage
+configuration
+configuration-reference
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Operations
+
 checkpoint-recovery
 observability
 cli-reference
@@ -83,10 +110,16 @@ troubleshooting
 ```{toctree}
 :hidden:
 :maxdepth: 2
+:caption: Evaluation
+
+evaluation/index
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
 :caption: Reference
 
-configuration
-configuration-reference
 limitations
 compatibility
 upgrading
@@ -98,13 +131,20 @@ api/api
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Internals and contribute
+:caption: Project development
 
 local_debug
 package-structure
 testing
-private-api-inventory
 releasing
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Internals
+
+private-api-inventory
 ```
 
 ## When should you use Klein?
@@ -118,7 +158,7 @@ bounded execution to Ray Data instead of implementing another batch engine.
 
 ## Install Klein
 
-Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.x
+Klein targets Python 3.10 through 3.12 and Ray 2.56.x
 (`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:
 
 ```bash

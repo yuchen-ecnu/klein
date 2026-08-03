@@ -17,6 +17,8 @@ from ray.klein.runtime.context.runtime_context import TaskRuntimeContext
 from ray.klein.runtime.message import Record
 from ray.klein.runtime.operator.operator import OneInputOperator, StreamOperator
 from ray.klein.runtime.partitioning import ForwardPartitioner
+from ray.klein.runtime.worker.input_batch_accumulator import InputBatchAccumulator
+from ray.klein.runtime.worker.stream_task import StreamTask
 from tests.unit.task_output_utils import open_task_output
 
 
@@ -276,6 +278,32 @@ def test_task_metrics_initialize_and_saturate_buffer_utilization(fake_ray_metric
     metrics.update_input_buffer(1, 0, 250, 100)
     assert metrics.input_buffer_utilization.value == 0
     assert metrics.input_buffer_byte_utilization.value == 1
+
+
+def test_stream_task_input_buffer_metrics_include_accumulated_batches(fake_ray_metrics) -> None:
+    byte_capacity = 100_000
+    task_group = JobMetricGroup("orders").add_task_group("1", "map", 0)
+    metrics = TaskMetrics.create(task_group, 10, byte_capacity, 1)
+    input_batches = InputBatchAccumulator(
+        RuntimeInfo(batch_size=10, batch_timeout=30, batch_format="native"),
+        max_bytes=byte_capacity,
+    )
+    assert input_batches.accept(Record({"id": 1})) == ()
+
+    task = object.__new__(StreamTask)
+    task._descriptor = SimpleNamespace(
+        input_buffer_size=10,
+        config=SimpleNamespace(get=lambda _option: byte_capacity),
+    )
+    task._state = SimpleNamespace(
+        inbox=SimpleNamespace(qsize=lambda: 2, byte_size=25),
+        input_batches=input_batches,
+        metrics=metrics,
+    )
+
+    assert task._update_buffer_size_metrics() == 2
+    assert metrics.input_buffer_records.value == 3
+    assert metrics.input_buffer_bytes.value == 25 + input_batches.buffered_bytes
 
 
 def test_task_metrics_barrier_and_watermark_time_are_clamped(fake_ray_metrics, monkeypatch) -> None:

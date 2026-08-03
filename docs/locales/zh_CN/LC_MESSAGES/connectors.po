@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"POT-Creation-Date: 2026-08-03 11:02+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
 "Last-Translator: Automatically generated\n"
 "Language: zh_CN\n"
@@ -26,8 +26,8 @@ msgid ""
 "checkpointed Klein changelog rows."
 msgstr "将 Kafka 承载的 Canal MySQL binlog FlatMessage JSON 解码为受检查点保护的 Klein 变更日志行。"
 
-msgid "Canal JSON format"
-msgstr "Canal JSON 格式"
+msgid "Canal"
+msgstr "Canal"
 
 msgid ""
 "Klein consumes MySQL binlog changes that Canal Server publishes to Kafka "
@@ -221,12 +221,12 @@ msgstr ""
 "和分区路由。按主键哈希可保留该键的顺序，但主键变更可能使前后操作被路由到不同位置；请根据下游顺序要求选择 Canal 的路由配置。"
 
 msgid ""
-"Create Klein for Ray inputs from Python collections, values, and existing"
-" Ray Datasets."
-msgstr "从 Python 集合、值和现有 Ray Dataset 创建 Klein for Ray 输入。"
+"Create Klein inputs from Python collections, values, and existing Ray "
+"Datasets."
+msgstr "从 Python 集合、值和现有 Ray Dataset 创建 Klein 输入。"
 
-msgid "Collections and existing Datasets"
-msgstr "集合与现有 Dataset"
+msgid "Collections"
+msgstr "集合"
 
 msgid ""
 "Collection sources are useful for examples, tests, small control inputs, "
@@ -300,9 +300,8 @@ msgid ""
 "selects the native runtime, where values must be mappings because the "
 "native `SourceContext.collect()` contract accepts mapping records."
 msgstr ""
-"`from_items` 同时提供原生集合数据源和 Ray Data 下沉实现，因此在默认 UDF "
-"异常策略下，自动模式会选择批处理。设置 `udf.ignore-exception=true` "
-"或显式强制使用流处理会选择原生运行时；此时值必须是映射，因为原生 "
+"`from_items` 同时提供原生集合数据源和 Ray Data 下沉实现，因此在默认 UDF 异常策略下，自动模式会选择批处理。设置 "
+"`udf.ignore-exception=true` 或显式强制使用流处理会选择原生运行时；此时值必须是映射，因为原生 "
 "`SourceContext.collect()` 契约只接受映射记录。"
 
 msgid "Create a bounded collection"
@@ -353,12 +352,12 @@ msgstr ""
 "Connector。"
 
 msgid ""
-"Inspect Klein for Ray batch and streaming records with the console and "
-"print connector."
-msgstr "使用 console 和 print Connector 查看 Klein for Ray 的批处理与流处理记录。"
+"Inspect Klein batch and streaming records with the console and print "
+"connector."
+msgstr "使用 console 和 print Connector 查看 Klein 的批处理与流处理记录。"
 
-msgid "Console and print"
-msgstr "Console 与 print"
+msgid "Console"
+msgstr "控制台"
 
 msgid ""
 "The console sink is a diagnostic connector for examples and local "
@@ -464,14 +463,14 @@ msgstr ""
 "DDL](../sql.md)。"
 
 msgid ""
-"Implement custom Klein for Ray SourceFunction, SinkFunction, two-phase-"
-"commit sink, and TableFactory connectors."
+"Implement custom Klein SourceFunction, SinkFunction, two-phase-commit "
+"sink, and TableFactory connectors."
 msgstr ""
-"实现自定义 Klein for Ray SourceFunction、SinkFunction、两阶段提交 Sink 和 TableFactory"
-" Connector。"
+"实现自定义 Klein SourceFunction、SinkFunction、两阶段提交 Sink 和 TableFactory "
+"Connector。"
 
-msgid "Custom connectors"
-msgstr "自定义 Connector"
+msgid "Custom"
+msgstr "自定义"
 
 msgid ""
 "Use a custom connector when an external system has no public Ray Data "
@@ -737,8 +736,8 @@ msgstr ""
 
 msgid ""
 "Read files with Ray Data and write checkpoint-transactional JSON, CSV, "
-"Parquet, and text files with Klein for Ray."
-msgstr "使用 Ray Data 读取文件，并通过 Klein for Ray 写入具备检查点事务语义的 JSON、CSV、Parquet 和文本文件。"
+"Parquet, and text files with Klein."
+msgstr "使用 Ray Data 读取文件，并通过 Klein 写入具备检查点事务语义的 JSON、CSV、Parquet 和文本文件。"
 
 msgid "Filesystem"
 msgstr "Filesystem"
@@ -1025,11 +1024,11 @@ msgstr ""
 
 msgid ""
 "Write Ray Data batches or checkpoint-transactional streaming appends to "
-"Apache Iceberg with Klein for Ray."
-msgstr "使用 Klein for Ray 向 Apache Iceberg 写入 Ray Data 批次或具备检查点事务语义的流式追加。"
+"Apache Iceberg with Klein."
+msgstr "使用 Klein 向 Apache Iceberg 写入 Ray Data 批次或具备检查点事务语义的流式追加。"
 
-msgid "Apache Iceberg"
-msgstr "Apache Iceberg"
+msgid "Iceberg"
+msgstr "Iceberg"
 
 msgid "Install the Iceberg extra on the driver and every streaming worker:"
 msgstr "在 Driver 和每个流处理 Worker 上安装 Iceberg extra："
@@ -1120,25 +1119,79 @@ msgstr ""
 "`catalog_kwargs` 中嵌入长期密钥。"
 
 msgid ""
-"Klein for Ray connector catalog for Ray Data, collections, Kafka, "
-"RocketMQ, filesystems, Redis, console, custom connectors, and Ray Serve."
+"Klein connector catalog for Ray Data, collections, Kafka, RocketMQ, "
+"filesystems, Redis, console, custom connectors, and Ray Serve."
 msgstr ""
-"Klein for Ray Connector 目录，涵盖 Ray "
+"Klein Connector 目录，涵盖 Ray "
 "Data、集合、Kafka、RocketMQ、Filesystem、Redis、Console、自定义 Connector 和 Ray "
 "Serve。"
 
-msgid "Connectors"
-msgstr "Connector"
+msgid "Overview"
+msgstr "概览"
 
 msgid ""
-"This section is the complete catalog of inputs, outputs, lookup "
-"integrations, and execution integrations shipped with Klein. Start here "
-"when choosing how a dataflow enters or leaves Klein; each child page "
-"documents installation, supported execution modes, configuration, data "
-"shape, delivery guarantees, and operational constraints."
-msgstr ""
-"本节是 Klein 随附的输入、输出、Lookup 集成和执行集成的完整目录。选择数据流如何进入或离开 Klein "
-"时，请从这里开始；每个子页面都会说明安装方式、支持的执行模式、配置、数据结构、交付保证和运维限制。"
+"This section catalogs the inputs, outputs, formats, and integrations "
+"shipped with Klein. Connector names stay short in the navigation; use the"
+" groups below to choose the right family before comparing detailed "
+"capabilities."
+msgstr "本节汇总 Klein 提供的输入、输出、格式和集成。导航中的 Connector 名称保持简短；请先根据下方分组选择类别，再比较详细能力。"
+
+msgid "Catalog"
+msgstr "目录"
+
+msgid "Group"
+msgstr "分组"
+
+msgid "Entries"
+msgstr "项目"
+
+msgid "Purpose"
+msgstr "用途"
+
+msgid "Native"
+msgstr "原生"
+
+msgid "[Ray Data](ray-data.md), [Collections](collections.md)"
+msgstr "[Ray Data](ray-data.md)、[集合](collections.md)"
+
+msgid "Ray-native and in-memory data"
+msgstr "Ray 原生数据和内存数据"
+
+msgid "Messaging"
+msgstr "消息"
+
+msgid "[Kafka](kafka.md), [RocketMQ](rocketmq.md), [Canal](canal.md)"
+msgstr "[Kafka](kafka.md)、[RocketMQ](rocketmq.md)、[Canal](canal.md)"
+
+msgid "Event streams and CDC records"
+msgstr "事件流与 CDC 记录"
+
+msgid "Storage"
+msgstr "存储"
+
+msgid "[Filesystem](filesystem.md), [Iceberg](iceberg.md)"
+msgstr "[文件系统](filesystem.md)、[Iceberg](iceberg.md)"
+
+msgid "Files and lakehouse tables"
+msgstr "文件与湖仓表"
+
+msgid "Services"
+msgstr "服务"
+
+msgid "[Redis](redis.md), [Ray Serve](ray-serve.md)"
+msgstr "[Redis](redis.md)、[Ray Serve](ray-serve.md)"
+
+msgid "External state and serving regions"
+msgstr "外部状态与服务区域"
+
+msgid "Development"
+msgstr "开发"
+
+msgid "[Console](console.md), [Custom](custom.md)"
+msgstr "[控制台](console.md)、[自定义](custom.md)"
+
+msgid "Debugging and extension points"
+msgstr "调试与扩展点"
 
 msgid "Capability matrix"
 msgstr "能力矩阵"
@@ -1215,6 +1268,15 @@ msgstr "Lookup/过滤"
 msgid "`redis`"
 msgstr "`redis`"
 
+msgid "[Ray Serve](ray-serve.md)"
+msgstr "[Ray Serve](ray-serve.md)"
+
+msgid "Execution region"
+msgstr "执行区域"
+
+msgid "`serve`"
+msgstr "`serve`"
+
 msgid "[Console](console.md)"
 msgstr "[Console](console.md)"
 
@@ -1232,15 +1294,6 @@ msgstr "可选"
 
 msgid "Connector-defined"
 msgstr "由 Connector 定义"
-
-msgid "[Ray Serve](ray-serve.md)"
-msgstr "[Ray Serve](ray-serve.md)"
-
-msgid "Execution region"
-msgstr "执行区域"
-
-msgid "`serve`"
-msgstr "`serve`"
 
 msgid "Matrix notes"
 msgstr "矩阵说明"
@@ -1336,17 +1389,16 @@ msgid ""
 "[Configuration](../configuration.md) for explicit mode selection and [Ray"
 " Data interoperation](../ray-data-interop.md) for the lowering model."
 msgstr ""
-"在 `auto` 模式下，无界数据源、任何缺少批处理下沉实现的计算图顶点，或 "
-"`udf.ignore-exception=true` 都会使运行时选择流处理；只有关闭该策略且整个"
-"有界图均可下沉为批处理时，才选择批处理。因此，未提供下沉实现的原生 "
-"`SourceFunction` 或 `SinkFunction` 会自动选择流处理，即使数据源有界也是"
-"如此。有关显式选择模式的方法，请参阅[配置](../configuration.md)；有关下沉"
-"模型，请参阅 [Ray Data 互操作](../ray-data-interop.md)。"
+"在 `auto` 模式下，无界数据源、任何缺少批处理下沉实现的计算图顶点，或 `udf.ignore-exception=true` "
+"都会使运行时选择流处理；只有关闭该策略且整个有界图均可下沉为批处理时，才选择批处理。因此，未提供下沉实现的原生 `SourceFunction` "
+"或 `SinkFunction` "
+"会自动选择流处理，即使数据源有界也是如此。有关显式选择模式的方法，请参阅[配置](../configuration.md)；有关下沉模型，请参阅 "
+"[Ray Data 互操作](../ray-data-interop.md)。"
 
 msgid ""
-"Configure Klein for Ray Kafka bounded and continuous input, output, "
-"checkpoint offsets, and Table DDL."
-msgstr "配置 Klein for Ray Kafka 的有界与连续输入、输出、检查点 offset 和 Table DDL。"
+"Configure Klein Kafka bounded and continuous input, output, checkpoint "
+"offsets, and Table DDL."
+msgstr "配置 Klein Kafka 的有界与连续输入、输出、检查点 offset 和 Table DDL。"
 
 msgid "Kafka"
 msgstr "Kafka"
@@ -1765,8 +1817,8 @@ msgstr ""
 
 msgid ""
 "Use public Ray Data readers, transforms, consumers, and writers through "
-"Klein for Ray."
-msgstr "通过 Klein for Ray 使用公开的 Ray Data Reader、Transform、Consumer 和 Writer。"
+"Klein."
+msgstr "通过 Klein 使用公开的 Ray Data Reader、Transform、Consumer 和 Writer。"
 
 msgid "Ray Data"
 msgstr "Ray Data"
@@ -1788,14 +1840,15 @@ msgid ""
 "Ray Data sources, general `stream.data` transforms, and `stream.data` "
 "consumers are batch-only. The expression forms "
 "`stream.data.with_column(name, expr)` and `stream.data.filter(expr=expr)`"
-" are dual-mode: batch execution delegates to Ray Data unchanged, while "
-"streaming execution uses Klein's native expression operator. `download()`"
-" runs with bounded ordered concurrency and backpressure."
+" are dual-mode: streaming execution uses Klein's native expression "
+"operator. Non-download batch expressions delegate to Ray Data; "
+"`download()` uses Klein's shared `sql.download.*` network and byte policy"
+" in both modes, with one in-flight streaming request per task."
 msgstr ""
-"Ray Data Source、通用 `stream.data` Transform 和 `stream.data` Consumer "
-"仅支持批处理。表达式形式 `stream.data.with_column(name, expr)` 和 "
-"`stream.data.filter(expr=expr)` 支持双模式：批处理执行会原样委托给 Ray Data，流处理执行则使用 Klein"
-" 的原生表达式 Operator。`download()` 以有界有序并发和背压运行。"
+"Ray Data source、通用 `stream.data` 转换和 `stream.data` consumer 仅支持批处理。表达式形式 "
+"`stream.data.with_column(name, expr)` 和 `stream.data.filter(expr=expr)` "
+"支持双模式：流式执行使用 Klein 原生表达式算子。非下载的批处理表达式委托给 Ray Data；`download()` 在两种模式中都使用 "
+"Klein 共享的 `sql.download.*` 网络和字节策略，每个 task 同时只保留一个进行中的流式请求。"
 
 msgid ""
 "Check availability before relying on an API that differs across Ray "
@@ -1935,12 +1988,12 @@ msgstr ""
 "操作决定；它们不是 Klein 流处理检查点。如果外部系统必须在 Klein 检查点持久化后才提交，请使用事务型原生 Connector。"
 
 msgid ""
-"Run a connected Klein for Ray transformation region behind Ray Serve "
-"through an embedded proxy client."
-msgstr "通过嵌入式 Proxy Client，在 Ray Serve 后运行相连的 Klein for Ray Transform 区域。"
+"Run a connected Klein transformation region behind Ray Serve through an "
+"embedded proxy client."
+msgstr "通过嵌入式 Proxy Client，在 Ray Serve 后运行相连的 Klein Transform 区域。"
 
-msgid "Ray Serve execution integration"
-msgstr "Ray Serve 执行集成"
+msgid "Ray Serve"
+msgstr "Ray Serve"
 
 msgid ""
 "Ray Serve is an optional execution integration, not a data source or "
@@ -2172,10 +2225,8 @@ msgstr ""
 "Header。请通过[可观测性](../observability.md)监控 Serve "
 "请求耗时和失败指标，并使用环境所要求的身份验证和网络策略保护 Proxy Endpoint。"
 
-msgid ""
-"Use Klein for Ray Redis value lookups, missing-key filters, and buffered "
-"output."
-msgstr "使用 Klein for Ray Redis 值 Lookup、缺失键过滤和缓冲输出。"
+msgid "Use Klein Redis value lookups, missing-key filters, and buffered output."
+msgstr "使用 Klein Redis 值 Lookup、缺失键过滤和缓冲输出。"
 
 msgid "Redis"
 msgstr "Redis"
@@ -2435,8 +2486,8 @@ msgstr ""
 "指标和重试日志请参阅[可观测性](../observability.md)；API 类型请参阅 {doc}`Redis API reference"
 " <../api/redis>`。"
 
-msgid "Read continuous Apache RocketMQ topics with Klein for Ray."
-msgstr "使用 Klein for Ray 读取连续 Apache RocketMQ topic。"
+msgid "Read continuous Apache RocketMQ topics with Klein."
+msgstr "使用 Klein 读取连续 Apache RocketMQ topic。"
 
 msgid "RocketMQ"
 msgstr "RocketMQ"
@@ -2740,3 +2791,54 @@ msgstr ""
 #~ "和 HTTP 499 可以重试；大多数其他 4xx 响应会停止重试。由于远程"
 #~ " Deployment 可能在 Client "
 #~ "观察到失败前已完成请求，函数应具有确定性，且不包含非幂等副作用。"
+
+#~ msgid "Canal JSON format"
+#~ msgstr "Canal JSON 格式"
+
+#~ msgid "Collections and existing Datasets"
+#~ msgstr "集合与现有 Dataset"
+
+#~ msgid "Console and print"
+#~ msgstr "Console 与 print"
+
+#~ msgid "Custom connectors"
+#~ msgstr "自定义 Connector"
+
+#~ msgid ""
+#~ "This section is the complete catalog "
+#~ "of inputs, outputs, lookup integrations, "
+#~ "and execution integrations shipped with "
+#~ "Klein. Start here when choosing how "
+#~ "a dataflow enters or leaves Klein; "
+#~ "each child page documents installation, "
+#~ "supported execution modes, configuration, data"
+#~ " shape, delivery guarantees, and "
+#~ "operational constraints."
+#~ msgstr ""
+#~ "本节是 Klein 随附的输入、输出、Lookup 集成和执行集成的完整目录。选择数据流如何进入或离开"
+#~ " Klein 时，请从这里开始；每个子页面都会说明安装方式、支持的执行模式、配置、数据结构、交付保证和运维限制。"
+
+#~ msgid "Ray Serve execution integration"
+#~ msgstr "Ray Serve 执行集成"
+
+#~ msgid "Connectors"
+#~ msgstr "连接器"
+
+#~ msgid ""
+#~ "Ray Data sources, general `stream.data` "
+#~ "transforms, and `stream.data` consumers are"
+#~ " batch-only. The expression forms "
+#~ "`stream.data.with_column(name, expr)` and "
+#~ "`stream.data.filter(expr=expr)` are dual-mode: "
+#~ "batch execution delegates to Ray Data"
+#~ " unchanged, while streaming execution uses"
+#~ " Klein's native expression operator. "
+#~ "`download()` runs with bounded ordered "
+#~ "concurrency and backpressure."
+#~ msgstr ""
+#~ "Ray Data Source、通用 `stream.data` Transform "
+#~ "和 `stream.data` Consumer 仅支持批处理。表达式形式 "
+#~ "`stream.data.with_column(name, expr)` 和 "
+#~ "`stream.data.filter(expr=expr)` 支持双模式：批处理执行会原样委托给 Ray "
+#~ "Data，流处理执行则使用 Klein 的原生表达式 Operator。`download()` "
+#~ "以有界有序并发和背压运行。"

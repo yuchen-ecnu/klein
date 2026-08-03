@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """
-一个持续运行 1 分钟的 Klein for Ray 任务示例（复杂拓扑）。
+一个持续运行 1 分钟的 Klein 任务示例（复杂拓扑）。
 
 任务管道（fan-in + fan-out，用于演示 JobClient.wait() 的拓扑树/反压视图）::
 

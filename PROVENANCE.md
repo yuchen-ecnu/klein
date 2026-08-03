@@ -2,7 +2,7 @@
 
 # Provenance
 
-Klein for Ray was extracted from the Apache-2.0-licensed Red-Ray fork of Ray.
+Klein was extracted from the Apache-2.0-licensed Red-Ray fork of Ray.
 Development of the extracted code occurred from 2024 through 2026 before the
 standalone repository was created.
 
@@ -17,6 +17,11 @@ Project maintainers can perform a private provenance audit of the pre-extraction
 history when required for licensing or security review.
 
 ## Third-party license metadata overrides
+
+`fsspec==2026.7.0` is published without machine-readable license metadata. The
+matching upstream tag contains the reviewed
+[BSD-3-Clause license](https://github.com/fsspec/filesystem_spec/blob/2026.7.0/LICENSE),
+so Klein applies a version-exact licensecheck override.
 
 `rocketmq-client-python==2.0.0` is published without a machine-readable license
 field or a license file in its source distribution. Its package description

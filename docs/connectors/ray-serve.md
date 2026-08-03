@@ -1,12 +1,12 @@
 ---
 myst:
   html_meta:
-    description: "Run a connected Klein for Ray transformation region behind Ray Serve through an embedded proxy client."
+    description: "Run a connected Klein transformation region behind Ray Serve through an embedded proxy client."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-ray-serve-integration)=
-# Ray Serve execution integration
+# Ray Serve
 
 Ray Serve is an optional execution integration, not a data source or sink. It
 moves one connected transform region behind a Serve deployment and replaces

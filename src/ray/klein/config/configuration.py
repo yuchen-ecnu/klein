@@ -3,19 +3,27 @@ from __future__ import annotations
 
 import enum
 import json
+import math
 import os
+import re
 import shlex
 from collections.abc import Mapping
 from datetime import timedelta
-from typing import Any, TypeAlias, TypeVar, Union, cast
+from typing import Any, TypeAlias, TypeVar, Union
 
 from ray.klein._internal.duration import parse_duration
-from ray.klein.config.config_option import ConfigOption, environment_variable_for, normalize_config_key
+from ray.klein.config.config_option import (
+    ConfigOption,
+    _validate_typed_value,
+    environment_variable_for,
+    normalize_config_key,
+)
 
 ConfigInput: TypeAlias = Union["Configuration", Mapping[str, Any], str, None]
 _MISSING = object()
 _ENV_PREFIX = "RAY_KLEIN_"
 T = TypeVar("T")
+_INTEGER_PATTERN = re.compile(r"^[+-]?[0-9]+$")
 
 
 def _convert_boolean(value: Any) -> bool:
@@ -25,19 +33,65 @@ def _convert_boolean(value: Any) -> bool:
             return True
         if normalized in {"0", "false", "no", "off"}:
             return False
-    elif isinstance(value, int | bool):
+    elif isinstance(value, bool):
+        return value
+    elif isinstance(value, int) and value in {0, 1}:
         return bool(value)
     raise ValueError(f"expected a boolean, got {value!r}")
 
 
+def _convert_integer(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"expected an integer, got {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if _INTEGER_PATTERN.fullmatch(normalized) is not None:
+            return int(normalized)
+    raise ValueError(f"expected an integer, got {value!r}")
+
+
+def _convert_float(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"expected a float, got {value!r}")
+    if isinstance(value, int | float | str):
+        try:
+            converted = float(value)
+        except (ValueError, OverflowError):
+            pass
+        else:
+            if math.isfinite(converted):
+                return converted
+    raise ValueError(f"expected a float, got {value!r}")
+
+
 def _convert_duration(value: Any) -> timedelta:
+    if isinstance(value, bool):
+        raise ValueError(f"expected a duration, got {value!r}")
     if isinstance(value, int | float):
-        return timedelta(seconds=float(value))
-    return parse_duration(value)
+        try:
+            seconds = float(value)
+            if not math.isfinite(seconds):
+                raise ValueError(f"expected a finite duration, got {value!r}")
+            return timedelta(seconds=seconds)
+        except OverflowError as error:
+            raise ValueError(f"duration is out of range, got {value!r}") from error
+    if not isinstance(value, str):
+        raise ValueError(f"expected a duration, got {value!r}")
+    parsed = parse_duration(value)
+    if not isinstance(parsed, timedelta):
+        raise TypeError("duration parser returned an invalid value")
+    return parsed
 
 
 def _convert_collection(target: type, value: Any) -> Any:
     decoded = json.loads(value) if isinstance(value, str) else value
+    if target is dict:
+        if not isinstance(decoded, Mapping):
+            raise ValueError(f"expected a mapping, got {decoded!r}")
+    elif target in {list, tuple} and not isinstance(decoded, list | tuple):
+        raise ValueError(f"expected a sequence, got {decoded!r}")
     return target(decoded)
 
 
@@ -50,9 +104,12 @@ def _convert_enum(target: type[enum.Enum], value: Any) -> enum.Enum:
 
 
 def _convert_config_value(target: type, value: Any) -> Any:
-    primitive_converters = {str: str, int: int, float: float}
-    if target in primitive_converters:
-        return primitive_converters[target](value)
+    if target is str:
+        return str(value)
+    if target is int:
+        return _convert_integer(value)
+    if target is float:
+        return _convert_float(value)
     if target is bool:
         return _convert_boolean(value)
     if target is timedelta:
@@ -106,10 +163,11 @@ class Configuration:
 
         value = self.get_optional(option)
         if value is None:
-            return option.default if default is _MISSING else default
-        if isinstance(value, option.value_type):
-            return value
-        raise TypeError(f"wrong type of value {value!r}; expected {option.value_type.__name__}")
+            fallback = option.default if default is _MISSING else default
+            if fallback is None:
+                return None
+            return _validate_typed_value(option.value_type, fallback)
+        return _validate_typed_value(option.value_type, value)
 
     def get_optional(self, option: ConfigOption[T] | str) -> T | Any | None:
         if isinstance(option, str):
@@ -119,8 +177,10 @@ class Configuration:
         raw_value = self._raw_value(option.key)
         if raw_value is _MISSING or raw_value is None:
             return None
-        if isinstance(raw_value, option.value_type):
-            return raw_value
+        try:
+            return _validate_typed_value(option.value_type, raw_value)
+        except TypeError:
+            pass
         return self.convert_value(option, raw_value)
 
     def set(self, option: ConfigOption[T] | str, value: T | Any) -> Configuration:
@@ -129,9 +189,8 @@ class Configuration:
         if isinstance(option, str):
             self._set_value(option, value)
             return self
-        if not isinstance(value, option.value_type):
-            raise TypeError(f"wrong type of value {value!r}; expected {option.value_type.__name__}")
-        self._set_value(option.key, value)
+        typed_value = _validate_typed_value(option.value_type, value)
+        self._set_value(option.key, typed_value)
         return self
 
     def update(self, options: ConfigInput = None) -> Configuration:
@@ -203,6 +262,7 @@ class Configuration:
     def convert_value(option: ConfigOption[T], raw_value: Any) -> T:
         target = option.value_type
         try:
-            return cast(T, _convert_config_value(target, raw_value))
+            converted = _convert_config_value(target, raw_value)
+            return _validate_typed_value(target, converted)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"unable to convert {raw_value!r} for {option.key!r} to {target.__name__}") from exc

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,11 +22,11 @@ msgid "Developing a pipeline"
 msgstr "开发流水线"
 
 msgid ""
-"Klein for Ray builds one directed dataflow graph and chooses batch or "
+"Klein builds one directed dataflow graph and chooses batch or "
 "streaming execution from its sources. Create sources directly from :mod:`ray."
 "klein`, add transforms, attach at least one sink, and execute the current "
 "graph."
-msgstr "Klein for Ray 构建一张有向数据流图，并根据其数据源选择批处理或流处理执行。从 :mod:`ray.klein` 直接创建数据源，添加转换，连接至少一个 Sink，然后执行当前图。"
+msgstr "Klein 构建一张有向数据流图，并根据其数据源选择批处理或流处理执行。从 :mod:`ray.klein` 直接创建数据源，添加转换，连接至少一个 Sink，然后执行当前图。"
 
 msgid "Execution modes"
 msgstr "执行模式"

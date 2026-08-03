@@ -1,0 +1,463 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-21 16:24+0800\n"
+"PO-Revision-Date: 2026-07-21 16:24+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid "Before-and-after evaluation of Klein's Arrow-first inter-task data plane for SQL, batch UDF, embedding, image, and PDF workloads."
+msgstr "Klein Arrow-first 跨任务数据面在 SQL、批 UDF、embedding、图像和 PDF 工作负载下的改造前后评测。"
+
+msgid "Arrow-first data-plane evaluation"
+msgstr "Arrow-first 数据面评测"
+
+msgid "**Evaluation date:** 2026-07-21"
+msgstr "**评测日期：** 2026-07-21"
+
+msgid "**Historical baseline:** clean checkout of `cca02fe`"
+msgstr "**历史基线：** `cca02fe` 的干净检出"
+
+msgid "**Candidate:** the source revision containing this report, with Arrow transport enabled by default"
+msgstr "**候选版本：** 包含本报告的源代码版本，默认启用 Arrow 传输"
+
+msgid "Executive result"
+msgstr "结论摘要"
+
+msgid "The Arrow-first candidate improved measured end-to-end streaming throughput by 5.5 to 6.3 percent over the historical revision. A same-revision transport toggle showed the largest isolated gain, 17.4 percent, for a two-stage embedding batch-UDF pipeline. Existing Ray Data batch SQL remained neutral, and image/PDF workloads were neutral because native decoding, resizing, and rendering dominated their runtime."
+msgstr "与历史版本相比，Arrow-first 候选版本在实测中将端到端流式吞吐提高了 5.5% 至 6.3%。同版本传输开关对照中，两段 embedding 批 UDF 管道取得了最大的独立收益，为 17.4%。现有 Ray Data 批 SQL 基本持平；图像/PDF 工作负载也基本持平，因为原生解码、缩放和渲染占据了主要运行时间。"
+
+msgid "The result supports retaining Arrow at real inter-task data boundaries. It does not support forcing Arrow through chained in-process operators or every row-oriented UDF boundary."
+msgstr "结果支持在真正的任务间数据边界保留 Arrow，但不支持强制让 Arrow 贯穿进程内算子链或每个逐行 UDF 边界。"
+
+msgid "Scope and method"
+msgstr "范围与方法"
+
+msgid "The historical comparison used a clean detached checkout for `cca02fe` and the same Python environment as the candidate. The historical revision already had Python mapping-based columnar passthrough; it was not a pure row-only engine. The controlled comparison ran only the candidate and changed `pipeline.columnar-passthrough.enabled`, which isolates Arrow transport but is not a reconstruction of the historical revision."
+msgstr "历史对照使用 `cca02fe` 的干净分离检出，并与候选版本使用相同的 Python 环境。历史版本已经支持基于 Python mapping 的列式透传，并不是纯逐行引擎。受控对照只运行候选版本并切换 `pipeline.columnar-passthrough.enabled`；它能隔离 Arrow 传输的影响，但不是对历史版本的重建。"
+
+msgid "Item"
+msgstr "项目"
+
+msgid "Setting"
+msgstr "设置"
+
+msgid "Host"
+msgstr "主机"
+
+msgid "64-vCPU AMD EPYC 9K84, 247 GiB RAM"
+msgstr "64-vCPU AMD EPYC 9K84, 247 GiB RAM"
+
+msgid "Runtime"
+msgstr "运行时"
+
+msgid "Python 3.10.16, Ray 2.56.1, PyArrow 23.0.1, NumPy 2.2.6"
+msgstr "Python 3.10.16, Ray 2.56.1, PyArrow 23.0.1, NumPy 2.2.6"
+
+msgid "Streaming cluster"
+msgstr "流式集群"
+
+msgid "Local Ray cluster with 8 logical CPUs"
+msgstr "本地 Ray 集群，8 个逻辑 CPU"
+
+msgid "Complex batch-SQL cluster"
+msgstr "复杂批 SQL 集群"
+
+msgid "Local Ray cluster with 16 logical CPUs"
+msgstr "本地 Ray 集群，16 个逻辑 CPU"
+
+msgid "End-to-end samples"
+msgstr "端到端样本"
+
+msgid "One warm-up followed by three measured jobs; median reported"
+msgstr "预热一次后运行三个计时作业；报告中位数"
+
+msgid "Timed region"
+msgstr "计时范围"
+
+msgid "Job submission through terminal completion; Ray cluster startup excluded"
+msgstr "从作业提交到终端完成；不包含 Ray 集群启动"
+
+msgid "Data-plane stress options"
+msgstr "数据面压力测试选项"
+
+msgid "Operator chaining and replay disabled; transport batches capped at 1,000 rows for SQL/UDF and 16 rows for media"
+msgstr "禁用算子链和重放；SQL/UDF 的传输批次上限为 1,000 行，媒体为 16 行"
+
+msgid "Disabling chaining deliberately exposes inter-task transport. Default plans that chain adjacent operators have fewer transport boundaries and can show a smaller whole-job difference. Synthetic inputs were deterministic. The benchmarked paths first passed their correctness tests, and every measured job had to finish successfully before its timing was accepted."
+msgstr "禁用算子链是为了有意暴露任务间传输。默认计划会链接相邻算子，传输边界更少，因此整作业差异可能更小。合成输入是确定性的。被测路径会先通过正确性测试，并且每个计时作业都必须成功结束，其计时才会被采纳。"
+
+msgid "Historical revision versus candidate"
+msgstr "历史版本与候选版本对照"
+
+msgid "Workload"
+msgstr "工作负载"
+
+msgid "Scale"
+msgstr "规模"
+
+msgid "Historical"
+msgstr "历史版本"
+
+msgid "Candidate"
+msgstr "候选版本"
+
+msgid "Throughput change"
+msgstr "吞吐变化"
+
+msgid "Streaming scalar SQL with a row consumer"
+msgstr "使用逐行消费者的流式标量 SQL"
+
+msgid "30,000 rows"
+msgstr "30,000 行"
+
+msgid "5.673 s; 5,288 rows/s"
+msgstr "5.673 秒；5,288 行/秒"
+
+msgid "5.366 s; 5,591 rows/s"
+msgstr "5.366 秒；5,591 行/秒"
+
+msgid "**+5.7%**"
+msgstr "**+5.7%**"
+
+msgid "Streaming scalar SQL with a batched consumer"
+msgstr "使用批消费者的流式标量 SQL"
+
+msgid "5.627 s; 5,332 rows/s"
+msgstr "5.627 秒；5,332 行/秒"
+
+msgid "5.293 s; 5,667 rows/s"
+msgstr "5.293 秒；5,667 行/秒"
+
+msgid "**+6.3%**"
+msgstr "**+6.3%**"
+
+msgid "Two 256-dimensional embedding batch UDFs"
+msgstr "两段 256 维 embedding 批 UDF"
+
+msgid "20,000 rows"
+msgstr "20,000 行"
+
+msgid "3.452 s; 5,794 rows/s"
+msgstr "3.452 秒；5,794 行/秒"
+
+msgid "3.273 s; 6,110 rows/s"
+msgstr "3.273 秒；6,110 行/秒"
+
+msgid "**+5.5%**"
+msgstr "**+5.5%**"
+
+msgid "Batch CTE, filter, join, group, sort, and limit"
+msgstr "批 CTE、过滤、连接、分组、排序和限制"
+
+msgid "33,000 input rows"
+msgstr "33,000 输入行"
+
+msgid "20.323 s; 1,624 rows/s"
+msgstr "20.323 秒；1,624 行/秒"
+
+msgid "20.545 s; 1,606 rows/s"
+msgstr "20.545 秒；1,606 行/秒"
+
+msgid "-1.1%; neutral"
+msgstr "-1.1%；持平"
+
+msgid "The complex batch query used 30,000 orders and 3,000 customers. Ray Data was already Arrow-native on both revisions, and the 1.1 percent difference was smaller than observed run-to-run variation, so it is classified as neutral."
+msgstr "复杂批查询使用 30,000 条订单和 3,000 条客户记录。两个版本中的 Ray Data 都已经原生使用 Arrow；1.1% 的差异小于实测运行间波动，因此归类为持平。"
+
+msgid "Controlled transport toggle"
+msgstr "受控传输开关对照"
+
+msgid "This comparison used the candidate for both sides. \"Legacy wire\" disabled `pipeline.columnar-passthrough.enabled`; \"Arrow wire\" enabled it. It measures the transport policy in isolation and must not be presented as the historical commit comparison."
+msgstr "该对照两侧都使用候选版本。“旧版线格式”禁用 `pipeline.columnar-passthrough.enabled`，“Arrow 线格式”启用它。它单独测量传输策略，不能作为历史提交对照来表述。"
+
+msgid "Legacy wire median"
+msgstr "旧版线格式中位数"
+
+msgid "Arrow wire median"
+msgstr "Arrow 线格式中位数"
+
+msgid "5.674 s"
+msgstr "5.674 s"
+
+msgid "5.409 s"
+msgstr "5.409 s"
+
+msgid "**+4.9%**"
+msgstr "**+4.9%**"
+
+msgid "5.621 s"
+msgstr "5.621 s"
+
+msgid "5.216 s"
+msgstr "5.216 s"
+
+msgid "**+7.8%**"
+msgstr "**+7.8%**"
+
+msgid "Two-stage embedding batch UDF"
+msgstr "两段 embedding 批 UDF"
+
+msgid "3.876 s"
+msgstr "3.876 s"
+
+msgid "3.303 s"
+msgstr "3.303 s"
+
+msgid "**+17.4%**"
+msgstr "**+17.4%**"
+
+msgid "Resize 64 random 512x512 JPEG images to 224x224 WebP"
+msgstr "将 64 张随机 512x512 JPEG 图像缩放为 224x224 WebP"
+
+msgid "3.573 s"
+msgstr "3.573 s"
+
+msgid "3.617 s"
+msgstr "3.617 s"
+
+msgid "-1.2%; neutral"
+msgstr "-1.2%；持平"
+
+msgid "Render 16 four-page PDFs at 72 DPI"
+msgstr "以 72 DPI 渲染 16 份四页 PDF"
+
+msgid "2.737 s"
+msgstr "2.737 s"
+
+msgid "2.721 s"
+msgstr "2.721 s"
+
+msgid "+0.6%; neutral"
+msgstr "+0.6%；持平"
+
+msgid "The media functions did not exist in the historical baseline, so only the same-revision transport toggle is valid for them. Their results show that Arrow does not materially change compute-bound native media operations at this scale; they do not establish a media speedup."
+msgstr "历史基线中尚不存在媒体函数，因此只能对它们使用同版本传输开关对照。结果表明，在该规模下，Arrow 不会实质改变计算受限的原生媒体操作；这些结果不能证明媒体处理获得了加速。"
+
+msgid "Data-plane microbenchmarks"
+msgstr "数据面微基准"
+
+msgid "The production micro-benchmark is available as `python scripts/benchmark_data_plane.py`. Its Arrow batch-builder result is the median of 25 timed repetitions after warm-up. On the same host, building one 1,000-row Arrow wire batch took 2.819 ms, compared with 25.504 ms for converting rows individually and concatenating them: a **9.05x** improvement in the batch builder itself."
+msgstr "可通过 `python scripts/benchmark_data_plane.py` 运行生产微基准。Arrow 批次构建器的结果是在预热后进行 25 次计时所得的中位数。在同一主机上，构建一个 1,000 行 Arrow 线批次需要 2.819 毫秒；逐行转换后再拼接需要 25.504 毫秒，因此批次构建器本身提升了 **9.05 倍**。"
+
+msgid "Payload"
+msgstr "载荷"
+
+msgid "Historical envelopes and serialized size"
+msgstr "历史 envelope 数量与序列化大小"
+
+msgid "Arrow envelopes and serialized size"
+msgstr "Arrow envelope 数量与序列化大小"
+
+msgid "Size change"
+msgstr "大小变化"
+
+msgid "1,000 scalar SQL rows"
+msgstr "1,000 条标量 SQL 行"
+
+msgid "1,000; 192,300 bytes"
+msgstr "1,000；192,300 字节"
+
+msgid "1; 160,303 bytes"
+msgstr "1；160,303 字节"
+
+msgid "-16.6%"
+msgstr "-16.6%"
+
+msgid "1,000 rows with 768-dimensional embeddings"
+msgstr "1,000 行 768 维 embedding"
+
+msgid "1,000; 3,133,364 bytes"
+msgstr "1,000；3,133,364 字节"
+
+msgid "1; 3,080,561 bytes"
+msgstr "1；3,080,561 字节"
+
+msgid "-1.7%"
+msgstr "-1.7%"
+
+msgid "64 rows with 64-KiB media values"
+msgstr "64 行 64 KiB 媒体值"
+
+msgid "64; 4,197,837 bytes"
+msgstr "64；4,197,837 字节"
+
+msgid "1; 4,196,689 bytes"
+msgstr "1；4,196,689 字节"
+
+msgid "-0.03%"
+msgstr "-0.03%"
+
+msgid "Serialized sizes use `ray.cloudpickle` as a consistent relative measurement; they are not claimed to be exact Ray Object Store network-byte counts. Arrow mostly removes envelope and Python-object overhead. It cannot compress an already encoded JPEG, WebP, or PDF payload."
+msgstr "序列化大小使用 `ray.cloudpickle` 进行一致的相对测量，并不声称它等于 Ray Object Store 的精确网络字节数。Arrow 主要消除 envelope 和 Python 对象开销，无法压缩已经编码的 JPEG、WebP 或 PDF 载荷。"
+
+msgid "Negative result: row materialization"
+msgstr "负向结果：行物化"
+
+msgid "A local pack, serialize, deserialize, and unbatched-consume microbenchmark exposed the principal remaining risk:"
+msgstr "本地打包、序列化、反序列化和非批消费微基准暴露了主要的剩余风险："
+
+msgid "Arrow-first"
+msgstr "Arrow-first"
+
+msgid "Change"
+msgstr "变化"
+
+msgid "1,000 scalar rows"
+msgstr "1,000 条标量行"
+
+msgid "2.651 ms"
+msgstr "2.651 ms"
+
+msgid "11.721 ms"
+msgstr "11.721 ms"
+
+msgid "4.4x slower"
+msgstr "慢 4.4 倍"
+
+msgid "7.857 ms"
+msgstr "7.857 ms"
+
+msgid "165.856 ms"
+msgstr "165.856 ms"
+
+msgid "21.1x slower"
+msgstr "慢 21.1 倍"
+
+msgid "This conversion is expensive because a columnar batch is materialized back into Python dictionaries. Remote end-to-end SQL still improved because fewer RPC envelopes and cheaper serialization outweighed the conversion, but a small-payload, row-only downstream operator can be a counterexample."
+msgstr "该转换代价很高，因为列式批次会重新物化为 Python 字典。远程端到端 SQL 仍有提升，因为更少的 RPC envelope 和更低的序列化成本覆盖了转换开销；但小载荷、纯逐行的下游算子可能成为反例。"
+
+msgid "Decision and follow-up"
+msgstr "决策与后续工作"
+
+msgid "Keep Arrow-first transport at actual inter-task boundaries."
+msgstr "在真正的任务间边界保留 Arrow-first 传输。"
+
+msgid "Keep chained in-process operators in their native representation."
+msgstr "让进程内链接算子保持其原生表示。"
+
+msgid "Prefer batched SQL, vectorized UDFs, and AI tensor pipelines when practical."
+msgstr "在可行时优先使用批 SQL、向量化 UDF 和 AI tensor 管道。"
+
+msgid "Treat media transport as neutral until larger multi-node tests demonstrate a benefit."
+msgstr "在更大规模的多节点测试证明收益前，将媒体传输视为持平。"
+
+msgid "Add a downstream-aware policy that can bypass Arrow for known small, unbatched row consumers, or provide a cheaper lazy row view."
+msgstr "增加下游感知策略：对已知的小型非批逐行消费者绕过 Arrow，或提供成本更低的惰性行视图。"
+
+msgid "Extend future release evaluation with multi-node network throughput, p95/p99 latency, peak worker/Object Store memory, skew, backpressure, and recovery."
+msgstr "后续发布评测应扩展到多节点网络吞吐、p95/p99 延迟、worker/Object Store 峰值内存、倾斜、背压和恢复。"
+
+msgid "These measurements justify the current architecture, but they are not a general performance guarantee for arbitrary clusters or user UDFs."
+msgstr "这些测量结果支持当前架构，但不构成对任意集群或用户 UDF 的通用性能保证。"
+
+msgid "Review reproducible Klein performance, scalability, reliability, SQL, AI UDF, and multimodal evaluations."
+msgstr "查看可复现的 Klein 性能、可扩展性、可靠性、SQL、AI UDF 和多模态评测。"
+
+msgid "Evaluation"
+msgstr "评测"
+
+msgid "This section records measured Klein behavior against an explicit baseline. It is separate from [Performance tuning](../performance-tuning.md): tuning explains what users can change, while an evaluation report states what was measured, what changed, and whether the evidence supports shipping the change."
+msgstr "本栏目记录 Klein 相对明确基线的实测行为。它与[性能调优](../performance-tuning.md)分开：调优说明用户可以改变什么，评测报告则说明测量了什么、发生了什么变化，以及证据是否支持发布该变更。"
+
+msgid "Reporting contract"
+msgstr "报告规范"
+
+msgid "Every evaluation report must include:"
+msgstr "每份评测报告都必须包含："
+
+msgid "the baseline revision or configuration and the candidate under test;"
+msgstr "基线版本或配置，以及被测候选版本；"
+
+msgid "hardware, Python, Ray, PyArrow, and relevant native-library versions;"
+msgstr "硬件、Python、Ray、PyArrow 及相关原生库版本；"
+
+msgid "workload shape, input size, topology, concurrency, and non-default options;"
+msgstr "工作负载形态、输入规模、拓扑、并发和非默认选项；"
+
+msgid "warm-up policy, sample count, aggregation method, and measured units;"
+msgstr "预热策略、样本数量、聚合方法和测量单位；"
+
+msgid "correctness checks performed before accepting performance numbers;"
+msgstr "接受性能数据前执行的正确性检查；"
+
+msgid "neutral and negative results alongside improvements;"
+msgstr "与提升结果一并报告的持平和负向结果；"
+
+msgid "limits on what the experiment can establish; and"
+msgstr "实验结论能力的边界；以及"
+
+msgid "the resulting engineering decision and unresolved follow-up work."
+msgstr "由此得出的工程决策和未解决的后续工作。"
+
+msgid "Changing the execution plan, operator topology, data shape, or resource budget creates a different baseline. Reports must not combine those results into one speedup number."
+msgstr "改变执行计划、算子拓扑、数据形态或资源预算都会形成不同的基线。报告不得将这些结果合并为一个加速比。"
+
+msgid "Result interpretation"
+msgstr "结果解释"
+
+msgid "Classification"
+msgstr "分类"
+
+msgid "Meaning"
+msgstr "含义"
+
+msgid "Improved"
+msgstr "提升"
+
+msgid "The candidate is consistently better for the stated metric and workload."
+msgstr "候选版本在指定指标和工作负载上持续优于基线。"
+
+msgid "Neutral"
+msgstr "持平"
+
+msgid "The observed difference overlaps run-to-run variation or is too small to support a directional claim."
+msgstr "观测差异与运行间波动重叠，或小到不足以支持方向性结论。"
+
+msgid "Regressed"
+msgstr "回归"
+
+msgid "The candidate is consistently worse for the stated metric and workload."
+msgstr "候选版本在指定指标和工作负载上持续劣于基线。"
+
+msgid "A report with only a few repetitions is an engineering comparison, not a statistical performance guarantee. Release gates should use longer runs, tail-latency percentiles, peak memory, and representative cluster traffic."
+msgstr "仅有少量重复次数的报告属于工程对照，并不是统计意义上的性能保证。发布门禁应使用更长时间的运行、尾延迟百分位、峰值内存和具有代表性的集群流量。"
+
+msgid "Planned coverage"
+msgstr "规划中的评测范围"
+
+msgid "Future reports belong in this section and should cover distinct concerns:"
+msgstr "后续报告应归入本栏目，并分别覆盖以下关注点："
+
+msgid "data-plane serialization, routing, backpressure, and Object Store behavior;"
+msgstr "数据面序列化、路由、背压和 Object Store 行为；"
+
+msgid "batch and continuous SQL at increasing scale and skew;"
+msgstr "不同规模和倾斜程度下的批 SQL 与连续 SQL；"
+
+msgid "scalar, vectorized, asynchronous, and AI UDF execution;"
+msgstr "标量、向量化、异步和 AI UDF 执行；"
+
+msgid "image, PDF, audio, video, and mixed multimodal pipelines;"
+msgstr "图像、PDF、音频、视频和混合多模态管道；"
+
+msgid "checkpoint, replay, recovery, and rescaling overhead; and"
+msgstr "检查点、重放、恢复和扩缩容开销；以及"
+
+msgid "multi-node scalability, resource efficiency, and cost."
+msgstr "多节点可扩展性、资源效率和成本。"

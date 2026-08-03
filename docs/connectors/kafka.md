@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Configure Klein for Ray Kafka bounded and continuous input, output, checkpoint offsets, and Table DDL."
+    description: "Configure Klein Kafka bounded and continuous input, output, checkpoint offsets, and Table DDL."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

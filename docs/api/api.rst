@@ -2,7 +2,7 @@
 
 .. _klein-api:
 
-Klein for Ray API
+Klein API
 =================
 
 .. toctree::

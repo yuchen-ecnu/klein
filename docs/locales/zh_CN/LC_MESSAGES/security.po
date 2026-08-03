@@ -1,12 +1,12 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -19,8 +19,8 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-msgid "Security model, trust boundaries, and production hardening guidance for Klein for Ray."
-msgstr "Klein for Ray 的安全模型、信任边界和生产加固指南。"
+msgid "Security model, trust boundaries, and production hardening guidance for Klein."
+msgstr "Klein 的安全模型、信任边界和生产加固指南。"
 
 msgid "Security"
 msgstr "安全"
@@ -432,3 +432,30 @@ msgid ""
 " For upgrade and rollback security, including trusted checkpoint handling, see [Upgrade Klein "
 "jobs](upgrading.md)."
 msgstr "运维发布门槛请使用[生产就绪检查清单](production-readiness.md)。升级和回滚安全（包括受信任检查点处理）请参阅[升级 Klein 作业](upgrading.md)。"
+
+msgid "Do not restore a checkpoint from an untrusted or shared-writable location. Version 4 checkpoint metadata has a non-executable JSON envelope, and Klein validates every embedded payload's declared size and SHA-256 before loading application state. Source state, custom state keys and serializers, generic checkpoint-store values, and prepared sink committables can still contain Python pickle payloads. Deserializing a malicious, otherwise valid application payload can execute code with the worker's identity. A stored checksum detects accidental corruption relative to checkpoint metadata; it is not a signature and does not make an attacker-controlled checkpoint authentic."
+msgstr "不要从不可信或可共享写入的位置恢复 checkpoint。版本 4 的 checkpoint 元数据具有不可执行的 JSON 信封，Klein 会在加载应用状态前校验每个嵌入负载声明的大小和 SHA-256。source 状态、自定义状态 key 和 serializer、通用 checkpoint store 值以及已准备的 sink committable 仍可能包含 Python pickle 负载。反序列化恶意但格式有效的应用负载，可能以 worker 身份执行代码。存储的校验和可发现相对于 checkpoint 元数据的意外损坏；它不是签名，也无法证明攻击者控制的 checkpoint 是真实可信的。"
+
+msgid "Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries."
+msgstr "Dashboard 默认绑定环回地址；除非显式覆盖，否则拒绝非环回绑定；检查 Host header 和同源策略；限制 Dashboard 请求体；按 key 名称遮蔽已发布配置和结构化日志字段；使用安全的 checkpoint 元数据信封；受限解码框架自有状态信封；使用应用负载前校验大小和校验和；记录 source/sink 恢复边界。"
+
+msgid "Framework-owned managed-state envelopes use a restricted unpickler that resolves only the exact Klein classes required by that envelope. This does not make the application-owned bytes nested inside it safe."
+msgstr "框架自有的托管状态信封使用受限 unpickler，只解析该信封所需的确切 Klein 类。这并不会让嵌套其中的应用自有字节变得安全。"
+
+msgid "Prefix-less and version 3 pickle checkpoint metadata is rejected before any pickle global can be resolved. Version 4 first validates its JSON structure, payload sizes, and SHA-256 digests, then loads source state and sink committables as trusted application payloads."
+msgstr "无前缀和版本 3 的 pickle checkpoint 元数据会在解析任何 pickle global 之前被拒绝。版本 4 会先校验 JSON 结构、负载大小和 SHA-256 摘要，再将 source 状态和 sink committable 作为可信应用负载加载。"
+
+msgid "SQL DOWNLOAD and media URLs"
+msgstr "SQL DOWNLOAD 与媒体 URL"
+
+msgid "Treat a URI column consumed by SQL `DOWNLOAD` as a network-capable input. Klein permits local paths and selected object-store schemes for compatibility, but HTTP(S) uses its own SSRF boundary. The default rejects URL credentials, unknown schemes, non-global resolved addresses, HTTPS-to-HTTP redirects, more than five redirects, and more than 64 MiB retained for one row. Every redirect is validated again, and the connection is pinned to an address that passed the IP policy."
+msgstr "应将 SQL `DOWNLOAD` 使用的 URI 列视为具备网络访问能力的输入。为保持兼容性，Klein 允许本地路径和选定的对象存储 scheme，但 HTTP(S) 使用独立的 SSRF 边界。默认会拒绝 URL 凭据、未知 scheme、解析得到的非全局地址、从 HTTPS 到 HTTP 的重定向、超过五次的重定向，以及单行保留超过 64 MiB。每次重定向都会重新验证，连接也会固定到通过 IP 策略的地址。"
+
+msgid "Configure `sql.download.allowed-hosts` and `denied-hosts` for service names, and `allowed-ip-ranges` and `denied-ip-ranges` for resolved addresses. These checks are conjunctive: allowlisting `assets.example.com` does not let that name resolve to loopback, link-local metadata, or a private address. Use a narrow explicit IP range for an approved internal service; avoid the broader `sql.download.allow-private-network=true`."
+msgstr "使用 `sql.download.allowed-hosts` 和 `denied-hosts` 配置服务名称，并使用 `allowed-ip-ranges` 和 `denied-ip-ranges` 配置解析地址。这些检查须同时满足：将 `assets.example.com` 加入允许列表，并不会允许它解析到环回地址、链路本地元数据地址或私有地址。对获准的内部服务使用范围较窄的显式 IP 段；避免使用范围更宽的 `sql.download.allow-private-network=true`。"
+
+msgid "The byte bound is cumulative across downloads in one SQL projection or batch row. A standalone streaming `stream.data.with_column(..., download(...))` operator has the same per-response bound; separate chained operators each have their own budget. HTTP connection, redirect, and body reads share the configured I/O budget. Python's synchronous system resolver cannot be interrupted by that timer, and S3/GS timeout and retry behavior remains owned by the configured filesystem/provider. Local and object-store schemes do not have HTTP host/IP checks, so do not feed attacker-controlled paths to them. Media decoders apply their own byte, pixel, page, output, and DPI limits after the download boundary."
+msgstr "同一 SQL 投影或批处理行中的多个下载会累计使用字节上限。独立的流式 `stream.data.with_column(..., download(...))` 算子具有相同的单响应上限；独立串联的算子各自拥有预算。HTTP 连接、重定向和响应体读取共享配置的 I/O 预算。该计时器无法中断 Python 的同步系统解析器，S3/GS 的超时和重试行为仍由配置的文件系统或提供方负责。本地和对象存储 scheme 没有 HTTP 主机/IP 检查，因此不要向其传入攻击者控制的路径。越过下载边界后，媒体 decoder 会应用各自的字节、像素、页数、输出和 DPI 限制。"
+
+msgid "The server refuses a non-loopback listener unless `--allow-unauthenticated` is present. That flag only acknowledges the risk; it does not add protection. A remote listener exposes job topology and status and can submit supported operator-rescale actions. Programmatic server creation has the same default and requires `allow_unauthenticated=True` for a non-loopback address. Control requests also reject an untrusted `Host`, a mismatched `Origin`, or cross-site Fetch Metadata."
+msgstr "除非提供 `--allow-unauthenticated`，否则 server 会拒绝非环回 listener。该参数只表示已知晓风险，并不会增加保护。远程 listener 会暴露作业拓扑和状态，并可提交受支持的 operator rescale 操作。以编程方式创建 server 时默认行为相同，非环回地址需要 `allow_unauthenticated=True`。控制请求还会拒绝不可信的 `Host`、不匹配的 `Origin` 或跨站 Fetch Metadata。"

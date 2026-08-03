@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Configuration duration parsing."""
 
+import math
 import re
 from datetime import timedelta
 
@@ -38,4 +39,10 @@ def parse_duration(value: str) -> timedelta:
         unit = _DURATION_UNITS[raw_unit.lower()]
     except KeyError as exc:
         raise ValueError(f"Unsupported duration unit {raw_unit!r}") from exc
-    return timedelta(**{unit: float(amount)})
+    try:
+        numeric_amount = float(amount)
+        if not math.isfinite(numeric_amount):
+            raise ValueError("duration amount must be finite")
+        return timedelta(**{unit: numeric_amount})
+    except (OverflowError, ValueError) as exc:
+        raise ValueError(f"Duration is out of range: {value!r}") from exc

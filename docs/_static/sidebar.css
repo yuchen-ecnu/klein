@@ -1,0 +1,108 @@
+/* Keep branding, utility actions, and navigation on one deliberate row. */
+.bd-header .navbar-brand.logo {
+  max-width: min(9rem, 38vw);
+}
+
+.bd-header .navbar-brand.logo img {
+  display: block;
+  max-height: 2.25rem;
+  object-fit: contain;
+}
+
+.bd-header .navbar-header-items,
+.bd-header .navbar-header-items__end {
+  min-width: 0;
+}
+
+.bd-header .navbar-header-items__end {
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+
+.bd-header .navbar-header-items__end > .navbar-item {
+  flex: 0 0 auto;
+}
+
+/* Keep the global documentation tree visible beside article content on desktop. */
+@media (min-width: 960px) {
+  .bd-header .navbar-header-items__start {
+    flex: 0 0 18rem;
+    width: 18rem;
+  }
+
+  .bd-sidebar-primary {
+    flex: 0 0 18rem;
+    padding-top: 1.25rem;
+    width: 18rem;
+  }
+}
+
+#main-sidebar {
+  margin-right: 0;
+  width: 100%;
+}
+
+#main-sidebar .bd-toc-item {
+  overflow-wrap: anywhere;
+}
+
+/* Top-level captions are section controls; keep their chevrons in the row. */
+#main-sidebar .list-caption > .toctree-l0 {
+  margin: 0.2rem 0;
+  position: relative;
+}
+
+#main-sidebar .list-caption > .toctree-l0 > p.caption {
+  font-size: 0.95rem;
+  line-height: 1.35;
+  margin: 0;
+  min-height: 2.25rem;
+  padding: 0.5rem 2.25rem 0.5rem 0.65rem;
+}
+
+#main-sidebar .list-caption > .toctree-l0 > p.caption .caption-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#main-sidebar .list-caption > .toctree-l0 > .label-parts {
+  align-items: center;
+  color: var(--pst-color-text-muted);
+  cursor: pointer;
+  display: flex;
+  height: 2.25rem;
+  justify-content: center;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 2.25rem;
+}
+
+#main-sidebar .list-caption > .toctree-l0 > .label-parts:hover {
+  background: var(--pst-color-surface);
+  border-radius: 0.35rem;
+  color: var(--pst-color-primary);
+}
+
+#main-sidebar .list-caption > .toctree-l0 > .label-parts i {
+  position: static;
+  text-align: center;
+  width: auto;
+}
+
+#main-sidebar li > a {
+  border-radius: 0.35rem;
+  line-height: 1.35;
+}
+
+#main-sidebar li > a:hover {
+  background: var(--pst-color-surface);
+  text-decoration: none;
+}
+
+#main-sidebar .current > a {
+  background: var(--pst-color-primary-bg);
+  box-shadow: inset 3px 0 0 var(--pst-color-primary);
+}

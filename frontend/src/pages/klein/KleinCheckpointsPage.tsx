@@ -17,7 +17,7 @@ import {
 } from "@mui/material";
 import React, { Fragment, useEffect, useMemo, useState } from "react";
 import { RiArrowDownSLine, RiArrowRightSLine } from "react-icons/ri";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { formatDateFromTimeMs } from "../../common/formatUtils";
 import { Order } from "../../common/tableUtils";
 import Loading from "../../components/Loading";

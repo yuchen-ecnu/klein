@@ -39,7 +39,7 @@ class _ProxyConfig:
     num_cpus: float
     concurrency: int | tuple[int, int]
     batch_size: int
-    batch_timeout: int
+    batch_timeout: float
     async_buffer_size: int
 
 

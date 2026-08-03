@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -21,48 +21,60 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-msgid "Start"
-msgstr "开始使用"
+msgid "Getting started"
+msgstr "快速入门"
 
-msgid "Learn"
-msgstr "学习"
+msgid "Concepts"
+msgstr "核心概念"
+
+msgid "Application development"
+msgstr "应用开发"
 
 msgid "Features"
 msgstr "特色功能"
 
-msgid "Develop"
-msgstr "开发"
+msgid "Connectors"
+msgstr "连接器"
 
-msgid "Deploy and operate"
-msgstr "部署与运维"
+msgid "Deployment"
+msgstr "部署"
+
+msgid "Operations"
+msgstr "运维"
+
+msgid "Evaluation"
+msgstr "评测"
 
 msgid "Reference"
 msgstr "参考"
 
-msgid "Internals and contribute"
-msgstr "内部机制与贡献"
+msgid "Project development"
+msgstr "项目开发"
+
+msgid "Internals"
+msgstr "内核"
 
 msgid ""
-"Klein for Ray documentation for building stateful batch and streaming "
-"dataflows on Ray."
-msgstr "Klein for Ray 文档：在 Ray 上构建有状态批处理与流式数据流。"
+"Klein documentation for building stateful batch and streaming dataflows "
+"on Ray."
+msgstr "Klein 文档：在 Ray 上构建有状态批处理与流式数据流。"
 
-msgid "Klein for Ray: Stateful stream processing on Ray"
-msgstr "Klein for Ray：基于 Ray 的有状态流处理"
+msgid "Klein: Stateful stream processing on Ray"
+msgstr "Klein：基于 Ray 的有状态流处理"
 
 msgid ""
-"Klein for Ray is a stateful stream processing library built on Ray. Use "
-"the `DataStream` API to run bounded Ray Data inputs and long-running "
+"Klein is a stateful stream processing library built on Ray. Use the "
+"`DataStream` API to run bounded Ray Data inputs and long-running "
 "streaming inputs with event time, managed keyed state, checkpoint "
 "recovery, and SQL and Table APIs."
 msgstr ""
-"Klein for Ray 是一个构建于 Ray 之上的有状态流处理库。使用 `DataStream` API，可以运行有界 Ray Data "
+"Klein 是一个构建于 Ray 之上的有状态流处理库。使用 `DataStream` API，可以运行有界 Ray Data "
 "输入和长时间运行的流式输入，并获得事件时间、托管键控状态、检查点恢复以及 SQL 和 Table API 支持。"
 
 msgid ""
-"Klein for Ray is independent alpha software. It is not affiliated with, "
-"endorsed by, or maintained by the Ray project."
-msgstr "Klein for Ray 是独立开发的 alpha 阶段软件，与 Ray 项目没有隶属关系，也未获得其认可或由其维护。"
+"Klein is independent alpha software. It is not affiliated with, endorsed "
+"by, or maintained by the Ray project."
+msgstr "Klein 是独立开发的 alpha 阶段软件，与 Ray 项目没有隶属关系，也未获得其认可或由其维护。"
 
 msgid "When should you use Klein?"
 msgstr "何时应使用 Klein？"
@@ -83,19 +95,19 @@ msgid ""
 "compatible bounded execution to Ray Data instead of implementing another "
 "batch engine."
 msgstr ""
-"当工作负载有界、其操作受 Ray Data 支持，且不需要流式状态或事件时间推进时，请直接"
-"使用 [Ray Data](https://docs.ray.io/en/latest/data/data.html)。Klein 将兼容的有界执行"
-"委托给 Ray Data，而不是另行实现一个批处理引擎。"
+"当工作负载有界、其操作受 Ray Data 支持，且不需要流式状态或事件时间推进时，请直接使用 [Ray "
+"Data](https://docs.ray.io/en/latest/data/data.html)。Klein 将兼容的有界执行委托给 Ray"
+" Data，而不是另行实现一个批处理引擎。"
 
 msgid "Install Klein"
 msgstr "安装 Klein"
 
 msgid ""
-"Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.x "
-"(`ray[data]>=2.56.1,<2.57`). Install the project from this checkout:"
+"Klein targets Python 3.10 through 3.12 and Ray 2.56.x "
+"(`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:"
 msgstr ""
-"Klein for Ray 面向 Python 3.10 至 3.12 和 Ray "
-"2.56.x（`ray[data]>=2.56.1,<2.57`）。请从当前检出版本安装项目："
+"Klein 面向 Python 3.10 至 3.12 和 Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。请从 "
+"PyPI 安装 Alpha 版本："
 
 msgid ""
 "See the complete [installation guide](installation.md) for optional "
@@ -108,9 +120,6 @@ msgstr ""
 
 msgid "Learn Klein"
 msgstr "学习 Klein"
-
-msgid "Getting started"
-msgstr "快速入门"
 
 msgid ""
 "Build and run your first bounded pipeline, then learn how to submit a "
@@ -275,11 +284,10 @@ msgid ""
 "cache sufficiently large immutable checkpoint fragments, while external "
 "storage provides the durable recovery boundary."
 msgstr ""
-"在 `auto` 模式下，当 `udf.ignore-exception=false` 时，Klein 会将可完全降低为批处理的"
-"有界数据流编译为 Ray Data 操作。无界数据源、仅支持流式处理的顶点或记录级忽略异常"
-"策略，会让作业选择 Ray Core 上的长生命周期算子。这些算子以有序微批存储记录。启用"
-"缓存后，Ray Object Store 可缓存达到大小阈值的不可变检查点片段；外部存储则提供持久"
-"恢复边界。"
+"在 `auto` 模式下，当 `udf.ignore-exception=false` 时，Klein 会将可完全降低为批处理的有界数据流编译为 "
+"Ray Data 操作。无界数据源、仅支持流式处理的顶点或记录级忽略异常策略，会让作业选择 Ray Core "
+"上的长生命周期算子。这些算子以有序微批存储记录。启用缓存后，Ray Object Store "
+"可缓存达到大小阈值的不可变检查点片段；外部存储则提供持久恢复边界。"
 
 msgid ""
 "Klein's distribution contributes the `ray.klein` namespace package. It "
@@ -321,5 +329,25 @@ msgstr ""
 #~ "safely."
 #~ msgstr "选择合适的伸缩层，自动伸缩有界 Ray Data worker，并安全调整运行中流式算子的并行度。"
 
-msgid "Klein for Ray targets Python 3.10 through 3.12 and Ray 2.56.x (`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:"
-msgstr "Klein for Ray 面向 Python 3.10 至 3.12 和 Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。请从 PyPI 安装 Alpha 版本："
+#~ msgid "Start"
+#~ msgstr "开始使用"
+
+#~ msgid "Learn"
+#~ msgstr "学习"
+
+#~ msgid "Develop"
+#~ msgstr "开发"
+
+#~ msgid "Deploy and operate"
+#~ msgstr "部署与运维"
+
+#~ msgid "Internals and contribute"
+#~ msgstr "内部机制与贡献"
+
+#~ msgid ""
+#~ "Klein targets Python 3.10 through 3.12"
+#~ " and Ray 2.56.x (`ray[data]>=2.56.1,<2.57`). "
+#~ "Install the project from this checkout:"
+#~ msgstr ""
+#~ "Klein 面向 Python 3.10 至 3.12 和 "
+#~ "Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。请从当前检出版本安装项目："

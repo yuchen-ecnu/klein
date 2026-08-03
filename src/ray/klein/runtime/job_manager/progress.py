@@ -63,14 +63,16 @@ class InstanceCounts:
     """Per-operator breakdown of its subtask (instance) states.
 
     The aggregate ``status`` collapses an operator to one label; this keeps the
-    raw counts so the CLI view can show e.g. "3 running / 1 restarting" when an
-    operator is mid-recovery."""
+    effective display counts so the CLI view can show e.g. "3 running / 1
+    restarting" when an operator is mid-recovery. On a cancelled job, unfinished
+    instances are projected to ``cancelled`` even if they were never deployed."""
 
     running: int = 0
     pending: int = 0  # created/deployed but not yet running
     restarting: int = 0  # a subtask Ray is rebuilding (FAILED while job runs)
     finished: int = 0
     failed: int = 0
+    cancelled: int = 0
 
 
 @dataclass(frozen=True, slots=True)

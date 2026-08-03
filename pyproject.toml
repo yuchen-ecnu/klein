@@ -8,10 +8,10 @@ name = "ray-klein"
 version = "0.1.0a1"
 description = "Stateful stream processing for Ray"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE", "LICENSES/*"]
-authors = [{ name = "Klein for Ray Authors" }]
+authors = [{ name = "Klein Authors" }]
 keywords = ["ray", "stream-processing", "batch-processing", "data", "distributed-computing"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
   "click>=8.3.3",
+  "fsspec==2026.7.0",
   "numpy>=1.24,<3; python_version < '3.12'",
   "numpy>=1.26.2,<3; python_version >= '3.12'",
   "pandas>=2.2.3,<3",
@@ -43,6 +44,12 @@ dependencies = [
 [project.optional-dependencies]
 kafka = ["confluent-kafka>=2.3,<3"]
 iceberg = ["pyiceberg>=0.11.1,<0.12"]
+media = [
+  "Pillow>=12.3.0,<13",
+  "pypdf>=6.14.2,<7",
+  "pypdfium2>=4.30,<6",
+  "pyvips[binary]>=3,<4",
+]
 rocketmq = ["rocketmq-client-python==2.0.0"]
 redis = ["redis>=5,<7"]
 rocksdb = ["rocksdict>=0.3.29,<0.4"]
@@ -55,7 +62,11 @@ all = [
   "confluent-kafka>=2.3,<3",
   "httpx>=0.28.1,<1",
   "orjson>=3.11.6",
+  "Pillow>=12.3.0,<13",
   "pyiceberg>=0.11.1,<0.12",
+  "pypdf>=6.14.2,<7",
+  "pypdfium2>=4.30,<6",
+  "pyvips[binary]>=3,<4",
   "ray[serve]>=2.56.1,<2.57",
   "redis>=5,<7",
   "rocksdict>=0.3.29,<0.4",
@@ -163,12 +174,20 @@ files = [
   "src/ray/klein/_compat",
   "src/ray/klein/config",
   "src/ray/klein/_internal/duration.py",
+  "src/ray/klein/_internal/sql/media_function.py",
+  "src/ray/klein/_internal/sql/media_function_execution.py",
+  "src/ray/klein/_internal/sql/media_runtime.py",
+  "src/ray/klein/_internal/sql/download_runtime.py",
+  "src/ray/klein/api/functions/logical_function.py",
+  "src/ray/klein/api/live_job_handle.py",
+  "src/ray/klein/api/runtime_info.py",
   "src/ray/klein/observability/dashboard/serialization.py",
   "src/ray/klein/observability/dashboard/server.py",
   "src/ray/klein/observability/state_api.py",
   "src/ray/klein/state/checkpoint_file_scope.py",
   "src/ray/klein/state/checkpoint_layout.py",
   "src/ray/klein/state/operator_state_checkpoint_entry.py",
+  "src/ray/klein/state/restricted_pickle.py",
   "src/ray/klein/state/sink_committable_checkpoint_entry.py",
   "src/ray/klein/state/source_checkpoint_entry.py",
   "src/ray/klein/state/state_checkpoint_entry.py",
@@ -178,6 +197,10 @@ files = [
   "src/ray/klein/state/state_partition.py",
   "src/ray/klein/state/state_snapshot.py",
   "src/ray/klein/state/state_snapshot_reference.py",
+  "src/ray/klein/runtime/coordinator/checkpoint_io.py",
+  "src/ray/klein/runtime/event_time/input_watermark_tracker.py",
+  "src/ray/klein/runtime/worker/input_batch_accumulator.py",
+  "src/ray/klein/runtime/worker/weighted_queue.py",
 ]
 mypy_path = "src"
 namespace_packages = true

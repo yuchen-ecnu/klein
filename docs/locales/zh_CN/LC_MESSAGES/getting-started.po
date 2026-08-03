@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,12 +22,12 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Install Klein for Ray and build your first bounded and streaming data "
+"Install Klein and build your first bounded and streaming data "
 "pipelines."
-msgstr "安装 Klein for Ray，并构建第一个有界和流式数据管道。"
+msgstr "安装 Klein，并构建第一个有界和流式数据管道。"
 
-msgid "Get started with Klein for Ray"
-msgstr "Klein for Ray 快速入门"
+msgid "Get started with Klein"
+msgstr "Klein 快速入门"
 
 msgid ""
 "This guide creates a bounded `DataStream`, executes it explicitly, and "

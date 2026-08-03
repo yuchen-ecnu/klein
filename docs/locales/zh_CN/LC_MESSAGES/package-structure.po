@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,18 +22,18 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Klein for Ray source layout, package ownership rules, public API "
+"Klein source layout, package ownership rules, public API "
 "boundaries, and architecture checks."
-msgstr "Klein for Ray 的源码布局、包所有权规则、公共 API 边界和架构检查。"
+msgstr "Klein 的源码布局、包所有权规则、公共 API 边界和架构检查。"
 
 msgid "Package structure"
 msgstr "包结构"
 
 msgid ""
-"Klein for Ray uses a conventional `src` layout. The importable package is"
+"Klein uses a conventional `src` layout. The importable package is"
 " under `src/ray/klein`; tests, examples, and documentation do not live "
 "inside the runtime package."
-msgstr "Klein for Ray 使用常规的 `src` 布局。可导入的包位于 `src/ray/klein`；测试、示例和文档不放在运行时包内。"
+msgstr "Klein 使用常规的 `src` 布局。可导入的包位于 `src/ray/klein`；测试、示例和文档不放在运行时包内。"
 
 msgid "Import public APIs"
 msgstr "导入公共 API"

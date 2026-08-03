@@ -13,7 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import React from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink } from "react-router";
 import { formatDateFromTimeMs, formatDuration } from "../../common/formatUtils";
 import Loading from "../../components/Loading";
 import { StatusChip } from "../../components/StatusChip";

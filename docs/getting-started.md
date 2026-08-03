@@ -1,12 +1,12 @@
 ---
 myst:
   html_meta:
-    description: "Install Klein for Ray and build your first bounded and streaming data pipelines."
+    description: "Install Klein and build your first bounded and streaming data pipelines."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-getting-started)=
-# Get started with Klein for Ray
+# Get started with Klein
 
 This guide creates a bounded `DataStream`, executes it explicitly, and shows how to submit a long-running pipeline.
 

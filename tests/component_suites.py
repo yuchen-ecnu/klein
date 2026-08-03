@@ -34,9 +34,13 @@ _CORE_UNIT_MODULES = {
 }
 
 _SQL_UNIT_MODULES = {
+    "test_media_runtime.py",
     "test_sql.py",
+    "test_sql_ai_functions.py",
+    "test_sql_download.py",
     "test_sql_execution.py",
     "test_sql_expression.py",
+    "test_sql_media_functions.py",
     "test_streaming_sql.py",
 }
 
@@ -95,6 +99,7 @@ _RUNTIME_UNIT_MODULES = {
     "test_partitioner.py",
     "test_placement.py",
     "test_progress_view.py",
+    "test_progress_reporter_cancelled.py",
     "test_progress_reporter_rescale.py",
     "test_pump.py",
     "test_restart_strategy.py",

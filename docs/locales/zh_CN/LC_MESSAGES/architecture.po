@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
 # package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -22,9 +22,9 @@ msgstr ""
 "Generated-By: Babel 2.18.0\n"
 
 msgid ""
-"Understand the Klein for Ray architecture, planning pipeline, streaming "
+"Understand the Klein architecture, planning pipeline, streaming "
 "data plane, checkpoint protocol, and extension boundaries."
-msgstr "了解 Klein for Ray 的架构、规划管道、流式数据平面、检查点协议和扩展边界。"
+msgstr "了解 Klein 的架构、规划管道、流式数据平面、检查点协议和扩展边界。"
 
 msgid "Architecture"
 msgstr "架构"

@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Build, run, observe, stop, and restore a production-shaped Kafka streaming pipeline with Klein for Ray."
+    description: "Build, run, observe, stop, and restore a production-shaped Kafka streaming pipeline with Klein."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

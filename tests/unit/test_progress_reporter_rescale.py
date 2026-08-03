@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from ray.klein.api.job_status import JobStatus
 from ray.klein.config.configuration import Configuration
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
@@ -74,7 +75,7 @@ def _vertex(index: int, handle: _CountsHandle) -> SimpleNamespace:
 async def test_scale_in_retains_removed_cumulative_counts_but_only_lists_live_subtasks() -> None:
     handles = [_CountsHandle(_counts(index * 100)) for index in range(4)]
     old_graph = _Graph([_vertex(index, handle) for index, handle in enumerate(handles)])
-    reporter = ProgressReporter(old_graph, lambda: True, lambda: (0, 0, 0))
+    reporter = ProgressReporter(old_graph, lambda: JobStatus.RUNNING, lambda: (0, 0, 0))
 
     before = (await reporter.snapshot()).operators[0]
     handles[0].counts = _counts(1_000)

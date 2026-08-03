@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from contextlib import suppress
-from typing import Any
+from typing import Any, cast
 
 from ray.util.queue import Queue
 
@@ -17,6 +17,7 @@ from ray.klein.observability.diagnostics import DiagnosticLevel, report_diagnost
 from ray.klein.observability.lineage.tracker import KleinLineageTracker
 
 logger = get_logger(__name__)
+_RESULT_UNSET = object()
 
 
 class LiveJobHandle(JobHandle):
@@ -29,7 +30,7 @@ class LiveJobHandle(JobHandle):
 
     def __init__(
         self,
-        jobmanager,
+        jobmanager: Any,
         job_name: str,
         runtime_mode: RuntimeExecutionMode,
         namespace: str,
@@ -40,6 +41,9 @@ class LiveJobHandle(JobHandle):
         self._runtime_mode = runtime_mode
         self._namespace = namespace
         self._lineage_tracker = lineage_tracker
+        self._reported_terminal_status: JobStatus | None = None
+        self._reported_terminal_error: KleinError | None = None
+        self._completed_result: Any = _RESULT_UNSET
 
     def wait(self) -> None:
         """Block until the job reaches a terminal state.
@@ -73,15 +77,7 @@ class LiveJobHandle(JobHandle):
             render_thread.start()
 
         try:
-            klein.get(self._jobmanager.wait_until_terminal())
-        except (SystemExit, KeyboardInterrupt) as error:
-            # SIGTERM from `ray job stop` raises SystemExit via Ray's signal handler.
-            # Cancel the server-side job before re-raising so it doesn't
-            # keep running on the cluster after the client exits.
-            with suppress(Exception):
-                self.cancel(timeout=5)
-            self._lineage_tracker.report_cancel(KleinError(f"Job was terminated by external signal: {error}"))
-            raise
+            self._wait_until_terminal()
         finally:
             if stop_event is not None:
                 stop_event.set()
@@ -95,16 +91,10 @@ class LiveJobHandle(JobHandle):
                 _time.monotonic() - started,
                 progress_result["rows"],
             )
+        terminal_error = self._report_terminal_status(status)
         if status == JobStatus.FAILED:
-            failed_detail = klein.get(self._jobmanager.failure_detail())
-            error_message = f"Job failed due to fatal error, detail:\n {failed_detail}"
-            report_diagnostic(DiagnosticLevel.ERROR, error_message)
-            self._lineage_tracker.report_fail(KleinError(error_message))
-            raise KleinError(error_message)
-        if status == JobStatus.CANCELLED:
-            self._lineage_tracker.report_cancel(KleinError("Job was cancelled"))
-        else:
-            self._lineage_tracker.report_complete()
+            assert terminal_error is not None
+            raise terminal_error
 
     def get(self) -> Any:
         """Block until the job is terminal, then drain the output queue.
@@ -115,22 +105,80 @@ class LiveJobHandle(JobHandle):
         terminal every emitted record is already enqueued, so a single
         non-blocking drain is complete and race-free.
         """
-        klein.get(self._jobmanager.wait_until_terminal())
+        if self._completed_result is not _RESULT_UNSET:
+            return self._completed_result
+        self._wait_until_terminal()
+        terminal_error = self._report_terminal_status(self.status)
+        if terminal_error is not None:
+            self._discard_partial_output()
+            raise terminal_error
         output_queue: Queue = klein.get(self._jobmanager.output_queue())
-        result = [output_queue.get_nowait() for _ in range(output_queue.qsize())]
-        output_queue.shutdown(force=True)
+        try:
+            result = [output_queue.get_nowait() for _ in range(output_queue.qsize())]
+        finally:
+            self._shutdown_output_queue(output_queue)
+        self._completed_result = result
         return result
+
+    def _wait_until_terminal(self) -> None:
+        """Wait for the terminal event and avoid orphaning on interruption."""
+
+        try:
+            klein.get(self._jobmanager.wait_until_terminal())
+        except (SystemExit, KeyboardInterrupt) as error:
+            # SIGTERM from `ray job stop` raises SystemExit via Ray's signal
+            # handler. Cancel before re-raising so the cluster job does not
+            # outlive an interrupted wait/get caller.
+            with suppress(Exception):
+                self.cancel(timeout=5)
+            self._lineage_tracker.report_cancel(KleinError(f"Job was terminated by external signal: {error}"))
+            raise
+
+    def _discard_partial_output(self) -> None:
+        """Best-effort release of a failed collecting job's detached queue."""
+
+        with suppress(Exception):
+            output_queue: Queue = klein.get(self._jobmanager.output_queue())
+            output_queue.shutdown(force=True)
+
+    @staticmethod
+    def _shutdown_output_queue(output_queue: Queue) -> None:
+        """Do not let best-effort queue cleanup hide a completed result."""
+
+        try:
+            output_queue.shutdown(force=True)
+        except Exception:
+            logger.warning("Failed to release completed job output queue", exc_info=True)
+
+    def _report_terminal_status(self, status: JobStatus) -> KleinError | None:
+        if self._reported_terminal_status is status:
+            return self._reported_terminal_error
+        if status == JobStatus.FAILED:
+            failed_detail = klein.get(self._jobmanager.failure_detail())
+            error_message = f"Job failed due to fatal error, detail:\n {failed_detail}"
+            error = KleinError(error_message)
+            report_diagnostic(DiagnosticLevel.ERROR, error_message)
+            self._lineage_tracker.report_fail(error)
+        elif status == JobStatus.CANCELLED:
+            error = KleinError("Job was cancelled")
+            self._lineage_tracker.report_cancel(error)
+        else:
+            error = None
+            self._lineage_tracker.report_complete()
+        self._reported_terminal_status = status
+        self._reported_terminal_error = error
+        return error
 
     @property
     def status(self) -> JobStatus:
         return klein.get(self._jobmanager.job_status())
 
     def cancel(self, timeout: int = 60) -> bool:
-        return klein.get(self._jobmanager.cancel(timeout))
+        return cast(bool, klein.get(self._jobmanager.cancel(timeout)))
 
     def _progress_snapshot(self) -> list[Any]:
         """One per-operator progress snapshot (used by the live CLI view)."""
-        return klein.get(self._jobmanager.progress_snapshot())
+        return cast(list[Any], klein.get(self._jobmanager.progress_snapshot()))
 
     @property
     def namespace(self) -> str:

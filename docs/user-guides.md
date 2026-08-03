@@ -1,7 +1,7 @@
 ---
 myst:
   html_meta:
-    description: "Klein for Ray user guides for pipelines, state, event time, SQL, autoscaling, checkpointing, and operations."
+    description: "Klein user guides for pipelines, state, event time, SQL, autoscaling, checkpointing, and operations."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 

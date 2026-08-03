@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+import json
+import os
 import pickle
 import tempfile
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from unittest import TestCase
@@ -8,6 +11,7 @@ from unittest import TestCase
 import numpy
 
 from ray.klein.api.klein_context import KleinContext
+from ray.klein.api.sink_committable import SinkCommittable
 from ray.klein.config.checkpoint_trigger_options import (
     CheckpointTriggerOptions,
 )
@@ -21,9 +25,54 @@ from ray.klein.runtime.graph.logical_graph import LogicalGraph
 from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
 from ray.klein.state.checkpoint_file_system import CheckpointFileSystem
 from ray.klein.state.checkpoint_layout import CheckpointLayout
+from ray.klein.state.sink_committable_checkpoint_entry import SinkCommittableCheckpointEntry
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from tests.support.execution_graph import expand_execution_graph
 from tests.support.streaming import LoopSourceFunction, flat_map_identity
+
+
+@dataclass(frozen=True)
+class _CustomSourceState:
+    partition: str
+    offset: int
+
+
+class _CheckpointGadget:
+    def __reduce__(self):
+        return (
+            eval,
+            ("__import__('os').environ.__setitem__('KLEIN_CHECKPOINT_GADGET_EXECUTED', '1')",),
+        )
+
+
+class _SinkCheckpointGadget(SinkCommittable):
+    @property
+    def transaction_id(self) -> str:
+        return "sink-gadget"
+
+    def commit(self) -> None:
+        return None
+
+    def abort(self) -> None:
+        return None
+
+    def __reduce__(self):
+        return (
+            eval,
+            ("__import__('os').environ.__setitem__('KLEIN_CHECKPOINT_GADGET_EXECUTED', '1')",),
+        )
+
+
+class _SafeCheckpointCommittable(SinkCommittable):
+    @property
+    def transaction_id(self) -> str:
+        return "safe-sink"
+
+    def commit(self) -> None:
+        return None
+
+    def abort(self) -> None:
+        return None
 
 
 class CheckpointIOTest(TestCase):
@@ -377,8 +426,19 @@ class CheckpointIOTest(TestCase):
             self.assertListEqual(source_states, restored_states)
             self.assertEqual(high_water, 42)
 
+    def test_custom_source_state_round_trips_through_v4_application_payload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_states = [SourceCheckpointEntry("11:0", 1, _CustomSourceState("orders-0", 42))]
+
+            checkpoint_path = checkpoint_io.write_checkpoint(source_states, 1, temp_dir)
+
+            _checkpoint_id, restored_states, _high_water = checkpoint_io.restore_checkpoint(checkpoint_path)
+            self.assertListEqual(source_states, restored_states)
+
     def test_latest_checkpoint_falls_back_from_corrupt_pointer_and_retains_latest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
             root_uri = Path(temp_dir).as_uri()
             source_states = [SourceCheckpointEntry("11:0", 1, {"offset": 1})]
             for checkpoint_id in (1, 2, 3):
@@ -392,12 +452,13 @@ class CheckpointIOTest(TestCase):
 
             filesystem = CheckpointFileSystem(root_uri)
             layout = CheckpointLayout("job-a")
-            filesystem.write_bytes(layout.latest_pointer, b"not-a-pickle", atomic=True)
+            filesystem.write_bytes(layout.latest_pointer, pickle.dumps(_CheckpointGadget()), atomic=True)
             filesystem.create_dir(layout.checkpoint_directory(99))
 
             latest = checkpoint_io.latest_checkpoint(root_uri, "job-a")
 
             self.assertEqual(latest, f"{root_uri}/job-a/chk-3")
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
             checkpoint_io.cleanup_checkpoints(root_uri, "job-a", retained_count=2)
             self.assertTupleEqual(
                 checkpoint_io.list_completed_checkpoints(root_uri, "job-a"),
@@ -405,36 +466,151 @@ class CheckpointIOTest(TestCase):
             )
             self.assertTrue(filesystem.exists(layout.checkpoint_directory(99)))
 
+    def test_latest_checkpoint_falls_back_from_corrupt_newest_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for checkpoint_id in (1, 2):
+                checkpoint_io.write_checkpoint([], checkpoint_id, temp_dir, job_id="job-a")
+            filesystem = CheckpointFileSystem(temp_dir)
+            layout = CheckpointLayout("job-a")
+            filesystem.write_bytes(layout.metadata_path(2), b"corrupt", atomic=True)
+
+            latest = checkpoint_io.latest_checkpoint(temp_dir, "job-a")
+
+            self.assertEqual(latest, filesystem.uri(layout.checkpoint_directory(1)))
+
     def test_explicit_restore_rejects_corrupt_checkpoint(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             checkpoint = Path(temp_dir) / "chk-1"
             checkpoint.mkdir()
             (checkpoint / "_metadata").write_bytes(b"not-a-checkpoint")
 
-            with self.assertRaises(pickle.UnpicklingError):
+            with self.assertRaisesRegex(ValueError, "safe v4 prefix"):
                 checkpoint_io.restore_checkpoint(str(checkpoint))
 
-            with self.assertRaises(pickle.UnpicklingError):
+            with self.assertRaisesRegex(ValueError, "safe v4 prefix"):
                 checkpoint_io.restore_operator_state_entries(str(checkpoint))
 
-    def test_restore_rejects_pre_revision_checkpoint_format(self):
+    def test_restore_rejects_legacy_pickle_without_executing_it(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             checkpoint = Path(temp_dir) / "chk-1"
             checkpoint.mkdir()
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
             (checkpoint / "_metadata").write_bytes(
                 pickle.dumps(
                     {
-                        "version": 2,
-                        "snapshot_id": 1,
-                        "source_states": (),
-                        "barrier_high_water": 0,
+                        "version": 3,
+                        "metadata_revision": 1,
+                        "source_states": (SourceCheckpointEntry("11:0", 1, _CheckpointGadget()),),
+                        "barrier_high_water": 1,
                         "operator_states": (),
+                        "sink_committables": (),
                     }
                 )
             )
 
-            with self.assertRaisesRegex(ValueError, "unsupported checkpoint format version"):
+            with self.assertRaisesRegex(ValueError, "legacy pickle metadata is not loaded"):
                 checkpoint_io.restore_checkpoint(str(checkpoint))
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
+
+    def test_latest_checkpoint_fails_when_only_legacy_metadata_exists(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            filesystem = CheckpointFileSystem(temp_dir)
+            layout = CheckpointLayout("job-a")
+            filesystem.write_bytes(
+                layout.metadata_path(1),
+                pickle.dumps(
+                    {
+                        "version": 3,
+                        "metadata_revision": 1,
+                        "source_states": (SourceCheckpointEntry("11:0", 1, _CheckpointGadget()),),
+                        "barrier_high_water": 1,
+                        "operator_states": (),
+                        "sink_committables": (),
+                    }
+                ),
+            )
+
+            with self.assertRaisesRegex(ValueError, "none has readable v4 metadata.*legacy pickle"):
+                checkpoint_io.latest_checkpoint(temp_dir, "job-a")
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
+
+    def test_invalid_v4_envelope_is_rejected_before_application_pickle_load(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            checkpoint_path = checkpoint_io.write_checkpoint(
+                [SourceCheckpointEntry("11:0", 1, _CheckpointGadget())],
+                1,
+                temp_dir,
+                operator_states={"12:0": b"managed-state"},
+                sink_committables=(SinkCommittableCheckpointEntry("13:0", 1, _SinkCheckpointGadget()),),
+            )
+            metadata_path = Path(checkpoint_path) / "_metadata"
+            payload = metadata_path.read_bytes()
+            encoded = json.loads(payload[len(checkpoint_io._CHECKPOINT_METADATA_MAGIC) :])
+            encoded["operator_states"][0]["size_bytes"] = -1
+            metadata_path.write_bytes(
+                checkpoint_io._CHECKPOINT_METADATA_MAGIC
+                + json.dumps(encoded, separators=(",", ":"), sort_keys=True).encode("utf-8")
+            )
+
+            with self.assertRaisesRegex(ValueError, "size_bytes must be a non-negative integer"):
+                checkpoint_io.restore_checkpoint(checkpoint_path)
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
+
+    def test_metadata_only_reads_do_not_load_source_application_payloads(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            checkpoint_path = checkpoint_io.write_checkpoint(
+                [SourceCheckpointEntry("11:0", 1, _CheckpointGadget())],
+                1,
+                temp_dir,
+                operator_states={"12:0": b"managed-state"},
+            )
+
+            operator_entries = checkpoint_io.restore_operator_state_entries(checkpoint_path)
+            self.assertSetEqual(set(operator_entries), {"12:0"})
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
+
+            self.assertEqual(checkpoint_io.latest_checkpoint(temp_dir), checkpoint_path)
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
+
+    def test_sink_restore_does_not_load_source_application_payloads(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            checkpoint_path = checkpoint_io.write_checkpoint(
+                [SourceCheckpointEntry("11:0", 1, _CheckpointGadget())],
+                1,
+                temp_dir,
+                sink_committables=(SinkCommittableCheckpointEntry("12:0", 1, _SafeCheckpointCommittable()),),
+            )
+
+            restored = checkpoint_io.restore_sink_committable_entries(checkpoint_path)
+
+            self.assertEqual([entry.transaction_id for entry in restored], ["safe-sink"])
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
+
+    def test_source_restore_does_not_load_sink_application_payloads(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            os.environ.pop("KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            self.addCleanup(os.environ.pop, "KLEIN_CHECKPOINT_GADGET_EXECUTED", None)
+            source_states = [SourceCheckpointEntry("11:0", 1, {"offset": 7})]
+            checkpoint_path = checkpoint_io.write_checkpoint(
+                source_states,
+                1,
+                temp_dir,
+                sink_committables=(SinkCommittableCheckpointEntry("12:0", 1, _SinkCheckpointGadget()),),
+            )
+
+            _checkpoint_id, restored_states, _high_water = checkpoint_io.restore_checkpoint(checkpoint_path)
+
+            self.assertListEqual(restored_states, source_states)
+            self.assertNotIn("KLEIN_CHECKPOINT_GADGET_EXECUTED", os.environ)
 
     @staticmethod
     def _to_exec_graph(sinks) -> ExecutionGraph:

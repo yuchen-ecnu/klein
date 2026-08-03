@@ -9,17 +9,26 @@ export type KleinJobStatus =
   | "FAILED"
   | "UNKNOWN";
 
+export type KleinOperatorStatus =
+  | "pending"
+  | "running"
+  | "recovering"
+  | "finished"
+  | "cancelled"
+  | "failed";
+
 export type KleinInstanceCounts = {
   running: number;
   pending: number;
   restarting: number;
   finished: number;
+  cancelled: number;
   failed: number;
 };
 
 export type KleinSubtask = {
   subtask_index: number;
-  status: string;
+  status: KleinOperatorStatus;
   actor_id?: string | null;
   rows_in: number;
   rows_out: number;
@@ -48,7 +57,7 @@ export type KleinOperator = {
   name: string;
   op_id: number;
   parallelism: number;
-  status: string;
+  status: KleinOperatorStatus;
   rows_in: number;
   rows_out: number;
   bytes_in: number;

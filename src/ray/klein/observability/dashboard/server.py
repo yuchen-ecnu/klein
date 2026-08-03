@@ -26,6 +26,12 @@ from urllib.request import Request as URLRequest
 from urllib.request import urlopen
 
 _MAX_REQUEST_BYTES = 64 * 1024
+_MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
+_PROXY_READ_CHUNK_BYTES = 64 * 1024
+
+
+class _ProxyResponseError(OSError):
+    """An upstream response that cannot be safely proxied."""
 
 
 class _DashboardState(Protocol):
@@ -143,14 +149,21 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return False
         try:
             payload = files("ray.klein.observability.dashboard").joinpath("static").joinpath(relative_path).read_bytes()
-        except (FileNotFoundError, IsADirectoryError):
+        except (OSError, ValueError):
             return False
         if relative_path == "index.html":
             payload = _inject_navigation_bridge(payload)
         content_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
         if content_type.startswith("text/") or content_type in {"application/javascript", "image/svg+xml"}:
             content_type = f"{content_type}; charset=utf-8"
-        self._send_bytes(HTTPStatus.OK, payload, content_type)
+        self._send_bytes(
+            HTTPStatus.OK,
+            payload,
+            content_type,
+            cache_control=(
+                "public, max-age=31536000, immutable" if relative_path.startswith("assets/") else "no-store"
+            ),
+        )
         return True
 
     def _do_klein_get(self, path: str) -> bool:
@@ -294,13 +307,23 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         )
         try:
             with urlopen(request, timeout=10) as response:
-                payload = response.read()
+                payload = _read_bounded_proxy_response(response)
                 content_type = response.headers.get_content_type()
                 if inject_navigation and content_type == "text/html":
                     payload = _inject_navigation_bridge(payload)
                 self._send_proxy_response(response.status, payload, response.headers.get("Content-Type"))
         except HTTPError as error:
-            self._send_proxy_response(error.code, error.read(), error.headers.get("Content-Type"))
+            try:
+                try:
+                    payload = _read_bounded_proxy_response(error)
+                except _ProxyResponseError as response_error:
+                    self._send_error_json(HTTPStatus.BAD_GATEWAY, str(response_error))
+                    return
+                self._send_proxy_response(error.code, payload, error.headers.get("Content-Type"))
+            finally:
+                error.close()
+        except _ProxyResponseError as error:
+            self._send_error_json(HTTPStatus.BAD_GATEWAY, str(error))
         except (OSError, URLError) as error:
             self._send_error_json(
                 HTTPStatus.BAD_GATEWAY,
@@ -362,6 +385,9 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         return value
 
     def _same_origin_request(self) -> bool:
+        fetch_site = self.headers.get("Sec-Fetch-Site")
+        if fetch_site and fetch_site.casefold() != "same-origin":
+            return False
         origin = self.headers.get("Origin")
         if not origin:
             return True
@@ -378,11 +404,18 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
     def _send_error_json(self, status: HTTPStatus, message: str) -> None:
         self._send_json(status, {"error": message, "status": int(status)})
 
-    def _send_bytes(self, status: HTTPStatus, payload: bytes, content_type: str) -> None:
+    def _send_bytes(
+        self,
+        status: HTTPStatus,
+        payload: bytes,
+        content_type: str,
+        *,
+        cache_control: str = "no-store",
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache_control)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header(
@@ -403,13 +436,43 @@ def _path_segments(path: str) -> list[str]:
     return [unquote(segment) for segment in path.split("/") if segment]
 
 
+def _read_bounded_proxy_response(response: Any) -> bytes:
+    raw_length = response.headers.get("Content-Length")
+    if raw_length is not None:
+        try:
+            length = int(raw_length)
+        except ValueError as error:
+            raise _ProxyResponseError("Dashboard frontend returned an invalid Content-Length") from error
+        if length < 0:
+            raise _ProxyResponseError("Dashboard frontend returned an invalid Content-Length")
+        if length > _MAX_PROXY_RESPONSE_BYTES:
+            raise _ProxyResponseError("Dashboard frontend response exceeds the 16 MiB proxy limit")
+
+    chunks: list[bytes] = []
+    retained = 0
+    while True:
+        chunk = response.read(min(_PROXY_READ_CHUNK_BYTES, _MAX_PROXY_RESPONSE_BYTES - retained + 1))
+        if not chunk:
+            return b"".join(chunks)
+        retained += len(chunk)
+        if retained > _MAX_PROXY_RESPONSE_BYTES:
+            raise _ProxyResponseError("Dashboard frontend response exceeds the 16 MiB proxy limit")
+        chunks.append(chunk)
+
+
 def _embedded_frontend_path(path: str) -> str | None:
     if path in {"/", "/index.html"}:
         return "index.html"
     if not path.startswith("/assets/"):
         return None
     asset_name = unquote(path.removeprefix("/assets/"))
-    if not asset_name or "/" in asset_name or "\\" in asset_name or asset_name in {".", ".."}:
+    if (
+        not asset_name
+        or "/" in asset_name
+        or "\\" in asset_name
+        or asset_name in {".", ".."}
+        or any(ord(character) < 0x20 or ord(character) == 0x7F for character in asset_name)
+    ):
         return None
     return f"assets/{asset_name}"
 
@@ -422,6 +485,7 @@ def create_dashboard_server(
     trusted_hosts: Collection[str] | None = None,
     ray_dashboard_url: str = "http://127.0.0.1:8265",
     frontend_url: str | None = None,
+    allow_unauthenticated: bool = False,
 ) -> ThreadingHTTPServer:
     """Create a Klein Dashboard server without starting its blocking loop."""
 
@@ -429,6 +493,11 @@ def create_dashboard_server(
         raise ValueError("host cannot be empty")
     if not 0 <= port <= 65535:
         raise ValueError("port must be between 0 and 65535")
+    if not _is_loopback_listener(host) and not allow_unauthenticated:
+        raise ValueError(
+            "refusing an unauthenticated non-loopback Dashboard listener; "
+            "set allow_unauthenticated=True only behind a trusted access boundary"
+        )
     server_type = _IPv6DashboardHTTPServer if _is_ipv6_literal(host) else _DashboardHTTPServer
     return server_type(
         (host, port),
@@ -445,6 +514,7 @@ def serve_dashboard(
     *,
     ray_dashboard_url: str = "http://127.0.0.1:8265",
     frontend_url: str | None = None,
+    allow_unauthenticated: bool = False,
 ) -> None:
     """Serve the Klein Dashboard until interrupted."""
 
@@ -453,6 +523,7 @@ def serve_dashboard(
         port,
         ray_dashboard_url=ray_dashboard_url,
         frontend_url=frontend_url,
+        allow_unauthenticated=allow_unauthenticated,
     )
     try:
         server.serve_forever()
@@ -583,6 +654,11 @@ def _is_loopback_ip(host: str) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+def _is_loopback_listener(host: str) -> bool:
+    normalized = host.strip().strip("[]").rstrip(".").casefold()
+    return normalized == "localhost" or _is_loopback_ip(normalized)
 
 
 def _is_ipv6_literal(host: str) -> bool:

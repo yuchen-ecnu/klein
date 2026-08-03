@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# Chinese translations for Klein for Ray package
-# Simplified Chinese translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -19,9 +19,9 @@ msgstr ""
 "Language: zh_CN\n"
 
 msgid ""
-"Assign event timestamps and coordinate Klein for Ray watermarks across "
+"Assign event timestamps and coordinate Klein watermarks across "
 "active and idle streaming inputs."
-msgstr "分配事件时间戳，并在活动和空闲的流输入之间协调 Klein for Ray 水位线。"
+msgstr "分配事件时间戳，并在活动和空闲的流输入之间协调 Klein 水位线。"
 
 msgid "Event time and idle inputs"
 msgstr "事件时间与空闲输入"

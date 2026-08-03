@@ -9,6 +9,7 @@ import pytest
 
 from ray.klein._internal import ray as klein_ray
 from ray.klein._internal.constants import ComponentName
+from ray.klein.api.job_status import JobStatus
 from ray.klein.runtime.actor import KleinActorHandle, create_remote_actor
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
@@ -71,7 +72,7 @@ def test_subtask_progress_exposes_actor_id_for_dashboard_navigation() -> None:
         vertex,
         SubtaskCounts(),
         progress_failed=False,
-        job_running=True,
+        job_status=JobStatus.RUNNING,
     )
 
     assert progress.actor_id == "actor-id-for-dashboard"

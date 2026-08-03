@@ -2,12 +2,17 @@
 """Routing, batching and delivery for one logical output edge."""
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
+
+import pyarrow as pa
 
 import ray
 import ray.klein as klein
+from ray.klein._internal.block import concat_blocks, try_to_arrow_record_batch
 from ray.klein._internal.memory import estimate_retained_size
+from ray.klein.api.changelog_row import ChangelogRow
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.observability.metrics.metrics import Counter, Histogram
@@ -32,6 +37,14 @@ class DeliveryMode(Enum):
 
     INLINE = "inline"
     PIPELINED = "pipelined"
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedWirePayload:
+    """Canonical records retained for replay plus their RPC payload."""
+
+    records: tuple[Record, ...]
+    transport: object
 
 
 class EdgeOutput:
@@ -59,6 +72,7 @@ class EdgeOutput:
         self._buffer_limit = output_buffer_max_rows
         self._buffer_byte_limit = 0
         self._object_store_threshold_bytes = 0
+        self._arrow_transport_enabled = True
         self._delivery_mode = delivery_mode
         self._router = RecordRouter(partitioner, len(target_tasks), control_targets)
         self._journal = DeliveryJournal(len(target_tasks))
@@ -89,6 +103,7 @@ class EdgeOutput:
         self._object_store_threshold_bytes = runtime_context.config.get(
             PipelineOptions.TRANSPORT_OBJECT_STORE_THRESHOLD_BYTES
         )
+        self._arrow_transport_enabled = runtime_context.config.get(PipelineOptions.COLUMNAR_PASSTHROUGH_ENABLED)
         if self._object_store_threshold_bytes < 0:
             raise ValueError("pipeline.transport.object-store-threshold-bytes cannot be negative")
         batch_timeout = runtime_context.runtime_info.batch_timeout
@@ -178,17 +193,21 @@ class EdgeOutput:
 
         async def send_lane(commands: Sequence[EdgeCommand]) -> None:
             for command in commands:
-                wire_records = shared_payloads.get(id(command))
-                if wire_records is None:
+                payload = shared_payloads.get(id(command))
+                if payload is None:
                     await self._send_async(command)
                 else:
-                    await self._send_async_shared(command, wire_records)
+                    await self._send_async_prepared(command, payload)
 
         if lanes:
             await asyncio.gather(*(send_lane(commands) for commands in lanes.values()))
 
-    def _shared_wire_payloads(self, lanes: dict[int, list[EdgeCommand]]) -> dict[int, object]:
-        """Put duplicated large broadcast batches into the Object Store once."""
+    def _shared_wire_payloads(
+        self,
+        lanes: dict[int, list[EdgeCommand]],
+    ) -> dict[int, _PreparedWirePayload]:
+        """Prepare Arrow wire batches and share large broadcast payloads once."""
+
         if not ray.is_initialized() or klein.is_debug_mode():
             return {}
         by_identity: dict[tuple[int, ...], list[DataCommand | ReplayCommand]] = {}
@@ -196,31 +215,35 @@ class EdgeOutput:
             for command in commands:
                 if isinstance(command, DataCommand | ReplayCommand):
                     by_identity.setdefault(tuple(map(id, command.records)), []).append(command)
-        shared: dict[int, object] = {}
+        shared: dict[int, _PreparedWirePayload] = {}
         for commands in by_identity.values():
-            records = commands[0].records
-            if len(commands) < 2 or estimate_retained_size(records) < self._object_store_threshold_bytes:
+            if len(commands) < 2:
                 continue
-            payload_ref = ray.put(records)
-            shared.update((id(command), payload_ref) for command in commands)
+            records = commands[0].records
+            packed = self._prepare_wire_records(records)
+            transport: object = packed
+            if estimate_retained_size(packed) >= self._object_store_threshold_bytes:
+                transport = ray.put(packed)
+            payload = _PreparedWirePayload(packed, transport)
+            shared.update((id(command), payload) for command in commands)
         return shared
 
-    async def _send_async_shared(self, command: EdgeCommand, wire_records: object) -> None:
+    async def _send_async_prepared(self, command: EdgeCommand, payload: _PreparedWirePayload) -> None:
         if isinstance(command, DataCommand):
             await self._sender.send_async(
                 command.target,
-                command.records,
+                payload.records,
                 command.retry_ring,
-                wire_records=wire_records,
+                wire_records=payload.transport,
             )
         elif isinstance(command, ReplayCommand):
             await self._sender.send_async(
                 command.target,
-                command.records,
+                payload.records,
                 (command.target,),
                 is_replay=True,
                 replay_sequence=command.sequence,
-                wire_records=wire_records,
+                wire_records=payload.transport,
             )
         else:
             raise TypeError(f"only data commands can share a wire payload, got {type(command).__name__}")
@@ -323,15 +346,15 @@ class EdgeOutput:
         lanes = {command.target: [command] for command in commands}
         shared_payloads = self._shared_wire_payloads(lanes)
         for command in commands:
-            wire_records = shared_payloads.get(id(command))
-            if wire_records is None:
+            payload = shared_payloads.get(id(command))
+            if payload is None:
                 self._send_sync(command)
             else:
                 self._sender.send_sync(
                     command.target,
-                    command.records,
+                    payload.records,
                     command.retry_ring,
-                    wire_records=wire_records,
+                    wire_records=payload.transport,
                 )
             self._release(command.records)
 
@@ -345,11 +368,13 @@ class EdgeOutput:
 
     def _send_sync(self, command: EdgeCommand) -> None:
         if isinstance(command, DataCommand):
-            self._sender.send_sync(command.target, command.records, command.retry_ring)
+            records = self._prepare_wire_records(command.records)
+            self._sender.send_sync(command.target, records, command.retry_ring)
         elif isinstance(command, ReplayCommand):
+            records = self._prepare_wire_records(command.records)
             self._sender.send_sync(
                 command.target,
-                command.records,
+                records,
                 (command.target,),
                 is_replay=True,
                 replay_sequence=command.sequence,
@@ -363,11 +388,13 @@ class EdgeOutput:
 
     async def _send_async(self, command: EdgeCommand) -> None:
         if isinstance(command, DataCommand):
-            await self._sender.send_async(command.target, command.records, command.retry_ring)
+            records = self._prepare_wire_records(command.records)
+            await self._sender.send_async(command.target, records, command.retry_ring)
         elif isinstance(command, ReplayCommand):
+            records = self._prepare_wire_records(command.records)
             await self._sender.send_async(
                 command.target,
-                command.records,
+                records,
                 (command.target,),
                 is_replay=True,
                 replay_sequence=command.sequence,
@@ -378,6 +405,156 @@ class EdgeOutput:
             await self._sender.send_control_async(command.control)
         else:
             raise TypeError(f"EdgeOutput cannot send {type(command).__name__}")
+
+    @classmethod
+    def _pack_wire_records(cls, records: Sequence[Record]) -> tuple[Record, ...]:
+        """Convert compatible contiguous records into canonical Arrow batches.
+
+        Row dictionaries are converted together so the hot path performs one
+        Arrow array build per micro-batch, rather than one build per row. A
+        value Arrow cannot represent remains on the legacy Python-object path.
+        """
+
+        packed: list[Record] = []
+        run: list[Record] = []
+        for record in records:
+            if not cls._arrow_packable(record):
+                cls._flush_wire_run(run, packed)
+                packed.append(record)
+                continue
+            if run and not cls._wire_compatible(run[-1], record):
+                cls._flush_wire_run(run, packed)
+            run.append(record)
+        cls._flush_wire_run(run, packed)
+        return tuple(packed)
+
+    def _prepare_wire_records(self, records: Sequence[Record]) -> tuple[Record, ...]:
+        if not self._arrow_transport_enabled:
+            return tuple(records)
+        return self._pack_wire_records(records)
+
+    @classmethod
+    def _flush_wire_run(cls, run: list[Record], packed: list[Record]) -> None:
+        if not run:
+            return
+        converted = cls._convert_wire_run(run)
+        if converted is not None:
+            packed.append(converted)
+        elif len(run) == 1:
+            packed.append(run[0])
+        else:
+            # Isolate an Arrow-incompatible value without forcing otherwise
+            # representable neighbors onto the compatibility path.
+            for record in run:
+                cls._flush_wire_run([record], packed)
+        run.clear()
+
+    @staticmethod
+    def _convert_wire_run(records: Sequence[Record]) -> Record | None:
+        first = records[0]
+        if first.block is None:
+            return None
+        block = (
+            EdgeOutput._convert_columnar_wire_run(records)
+            if first.is_columnar
+            else EdgeOutput._convert_row_wire_run(records)
+        )
+        if block is None:
+            return None
+        merged = Record(block, num_rows=block.num_rows)
+        merged.sender = first.sender
+        merged.input_tag = first.input_tag
+        merged.row_kinds = EdgeOutput._combined_row_kinds(records)
+        timestamps = EdgeOutput._combined_row_timestamps(records)
+        if timestamps and all(timestamp == timestamps[0] for timestamp in timestamps[1:]):
+            merged.timestamp = timestamps[0]
+        elif timestamps:
+            merged.row_timestamps = timestamps
+        return merged
+
+    @staticmethod
+    def _convert_columnar_wire_run(records: Sequence[Record]) -> pa.RecordBatch | None:
+        batches: list[pa.RecordBatch] = []
+        for record in records:
+            if record.block is None:
+                return None
+            batch = try_to_arrow_record_batch(record.block, expected_rows=record.num_rows)
+            if batch is None:
+                return None
+            batches.append(batch)
+        try:
+            block = concat_blocks(batches)
+        except ValueError:
+            return None
+        if not isinstance(block, pa.RecordBatch):
+            raise AssertionError("Arrow batch concatenation returned a non-Arrow block")
+        return block
+
+    @staticmethod
+    def _convert_row_wire_run(records: Sequence[Record]) -> pa.RecordBatch | None:
+        blocks: list[Mapping] = []
+        for record in records:
+            if not isinstance(record.block, Mapping):
+                return None
+            blocks.append(record.block)
+        names = tuple(blocks[0])
+        if any(tuple(block) != names for block in blocks[1:]):
+            return None
+        columns = {name: [block[name] for block in blocks] for name in names}
+        return try_to_arrow_record_batch(columns, expected_rows=len(records))
+
+    @staticmethod
+    def _arrow_packable(record: Record) -> bool:
+        if type(record) is not Record or record.block is None:
+            return False
+        if record.is_columnar:
+            return isinstance(record.block, Mapping | pa.RecordBatch | pa.Table)
+        # Arbitrary Mapping subclasses may carry semantics outside their keys.
+        # ChangelogRow is the supported semantic row type; unknown subclasses
+        # stay on the Python compatibility path instead of silently losing data.
+        return type(record.block) is dict or isinstance(record.block, ChangelogRow)
+
+    @staticmethod
+    def _combined_row_kinds(records: Sequence[Record]) -> tuple[object | None, ...] | None:
+        kinds: list[object | None] = []
+        for record in records:
+            rows = EdgeOutput._record_rows(record)
+            if record.row_kinds is not None:
+                if len(record.row_kinds) != rows:
+                    raise ValueError(f"record has {len(record.row_kinds)} row kinds for {rows} logical rows")
+                kinds.extend(record.row_kinds)
+            elif not record.is_columnar and isinstance(record.block, ChangelogRow):
+                kinds.append(record.block.row_kind)
+            else:
+                kinds.extend([None] * rows)
+        return tuple(kinds) if any(kind is not None for kind in kinds) else None
+
+    @staticmethod
+    def _combined_row_timestamps(records: Sequence[Record]) -> tuple[int | None, ...]:
+        timestamps: list[int | None] = []
+        for record in records:
+            rows = EdgeOutput._record_rows(record)
+            if record.row_timestamps is not None:
+                if len(record.row_timestamps) != rows:
+                    raise ValueError(f"record has {len(record.row_timestamps)} row timestamps for {rows} logical rows")
+                timestamps.extend(record.row_timestamps)
+            else:
+                timestamps.extend([record.timestamp] * rows)
+        return tuple(timestamps)
+
+    @staticmethod
+    def _wire_compatible(left: Record, right: Record) -> bool:
+        if left.is_columnar != right.is_columnar:
+            return False
+        if (left.sender, left.input_tag) != (right.sender, right.input_tag):
+            return False
+        left_block = left.block
+        right_block = right.block
+        if isinstance(left_block, pa.RecordBatch | pa.Table):
+            return isinstance(right_block, pa.RecordBatch | pa.Table) and left_block.schema.equals(right_block.schema)
+        if isinstance(left_block, Mapping) and isinstance(right_block, Mapping):
+            return tuple(left_block) == tuple(right_block)
+        return False
 
     def _reserve(self, record: Record) -> None:
         rows = self._record_rows(record)

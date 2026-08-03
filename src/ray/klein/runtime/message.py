@@ -5,9 +5,12 @@ from copy import copy
 from dataclasses import dataclass
 from typing import Any
 
+import pyarrow as pa
+
+from ray.klein._internal.block import ColumnarBlock
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 
-Block = dict[str, Any] | None
+Block = ColumnarBlock | None
 MAX_WATERMARK = (1 << 63) - 1
 
 
@@ -111,6 +114,12 @@ class Record:
         self.sender: ExecutionVertexId | None = None
         self.input_tag: int | None = None
         self.timestamp: int | None = None
+        # Per-row semantic metadata that is deliberately not exposed as a user
+        # column. SQL changelog kinds use this while the values travel in Arrow.
+        self.row_kinds: tuple[Any | None, ...] | None = None
+        # Event timestamps may vary within one transport micro-batch. Keeping
+        # them beside the Arrow values avoids one RecordBatch per timestamp.
+        self.row_timestamps: tuple[int | None, ...] | None = None
 
     @property
     def is_columnar(self) -> bool:
@@ -122,7 +131,14 @@ class Record:
         if self.block is None:
             raise ValueError("control records cannot be forked as data")
         forked = copy(self)
-        forked.block = dict(self.block)
+        if isinstance(self.block, pa.RecordBatch | pa.Table):
+            forked.block = self.block
+        elif isinstance(self.block, dict):
+            # ``copy`` retains semantic dict subclasses such as ChangelogRow;
+            # ``dict(block)`` would silently erase their sidecar attributes.
+            forked.block = copy(self.block)
+        else:
+            forked.block = dict(self.block)
         return forked
 
     def __repr__(self) -> str:
@@ -133,6 +149,12 @@ class Record:
             return False
         if self.block is None or other.block is None:
             return self.block is other.block
+        if isinstance(self.block, pa.RecordBatch | pa.Table) or isinstance(other.block, pa.RecordBatch | pa.Table):
+            if not isinstance(self.block, pa.RecordBatch | pa.Table) or not isinstance(
+                other.block, pa.RecordBatch | pa.Table
+            ):
+                return False
+            return self.block.equals(other.block)
         if self.block.keys() != other.block.keys():
             return False
         return all(_values_equal(value, other.block[key]) for key, value in self.block.items())

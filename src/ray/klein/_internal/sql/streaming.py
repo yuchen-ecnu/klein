@@ -11,6 +11,8 @@ from sqlglot import exp
 
 from ray.klein._internal.duration import parse_duration
 from ray.klein._internal.frozen_mapping import FrozenMapping
+from ray.klein._internal.sql.ai_function_execution import apply_streaming_ai_projections
+from ray.klein._internal.sql.ai_function_registry import AIFunctionSpec
 from ray.klein._internal.sql.execution import (
     _FilterRow,
     _has_aggregates,
@@ -20,6 +22,8 @@ from ray.klein._internal.sql.execution import (
     _ProjectRow,
 )
 from ray.klein._internal.sql.expression import evaluate_expression
+from ray.klein._internal.sql.media_function import plan_media_projections, validate_media_function_calls
+from ray.klein._internal.sql.media_function_execution import apply_streaming_media_computations
 from ray.klein._internal.sql.ray_data_expression import (
     is_ray_data_only_expression,
     to_ray_data_expression,
@@ -114,9 +118,7 @@ class _AsyncRayProjectChangelogRow:
         for index, evaluator in self._evaluators.items():
             if not evaluator.is_async:
                 values[index] = evaluator.evaluate(row)
-        for index, evaluator in self._evaluators.items():
-            if evaluator.is_async:
-                values[index] = await evaluator.evaluate_async(row)
+        values.update(await _evaluate_downloads_with_shared_budget(self._evaluators, row))
         return _render_projection(self._projections, row, values, self._functions)
 
 
@@ -172,11 +174,32 @@ class _AsyncAddStreamingExpressions:
                 result[name] = evaluate_expression(expression, row, self._functions)
             elif not evaluator.is_async:
                 result[name] = evaluator.evaluate(row)
-        for index, (name, _expression) in enumerate(self._expressions):
-            evaluator = self._evaluators.get(index)
-            if evaluator is not None and evaluator.is_async:
-                result[name] = await evaluator.evaluate_async(row)
+        downloaded = await _evaluate_downloads_with_shared_budget(self._evaluators, row)
+        for index, value in downloaded.items():
+            result[self._expressions[index][0]] = value
         return ChangelogRow(result, row_kind=row_kind_of(row))
+
+
+async def _evaluate_downloads_with_shared_budget(
+    evaluators: Mapping[int, StreamingExpressionEvaluator],
+    row: Mapping[str, Any],
+) -> dict[int, Any]:
+    """Evaluate one SQL row's downloads under one cumulative byte budget."""
+
+    values: dict[int, Any] = {}
+    remaining_bytes: int | None = None
+    for index, evaluator in evaluators.items():
+        if not evaluator.is_async:
+            continue
+        if remaining_bytes is None:
+            remaining_bytes = evaluator.download_max_bytes
+        else:
+            remaining_bytes = min(remaining_bytes, evaluator.download_max_bytes)
+        value = await evaluator.evaluate_async(row, max_bytes=remaining_bytes)
+        values[index] = value
+        if value is not None:
+            remaining_bytes -= len(value)
+    return values
 
 
 def _compile_ray_evaluators(
@@ -235,11 +258,13 @@ def build_streaming_query(
     bindings: Mapping[str, DataStream],
     *,
     functions: Mapping[str, ScalarFunction],
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
     num_cpus: float,
 ) -> DataStream:
     """Build a continuous query using Klein operators and managed state."""
 
     statement = validate_read_query(query)
+    validate_media_function_calls(statement)
     if not isinstance(statement, exp.Select):
         raise SQLQueryError("Streaming SQL currently supports one SELECT query block; CTE and UNION require batch mode")
     _validate_streaming_select(statement)
@@ -254,6 +279,7 @@ def build_streaming_query(
             statement.expressions,
             (),
             functions=functions,
+            ai_functions=ai_functions,
             num_cpus=num_cpus,
         )
 
@@ -299,6 +325,7 @@ def build_streaming_query(
             statement.expressions,
             aliases,
             functions=functions,
+            ai_functions=ai_functions,
             num_cpus=num_cpus,
         )
     if statement.args.get("order") is not None:
@@ -338,8 +365,31 @@ def _apply_streaming_projection(
     aliases: Sequence[str],
     *,
     functions: Mapping[str, ScalarFunction],
+    ai_functions: Mapping[str, AIFunctionSpec] | None = None,
     num_cpus: float,
 ) -> DataStream:
+    media_plan = plan_media_projections(projections)
+    if media_plan.downloads:
+        stream = _add_streaming_expressions(
+            stream,
+            media_plan.downloads,
+            aliases,
+            functions=functions,
+            num_cpus=num_cpus,
+        )
+    stream = apply_streaming_media_computations(
+        stream,
+        media_plan.computations,
+        functions=functions,
+        num_cpus=num_cpus,
+    )
+    projections = media_plan.projections
+    stream, projections = apply_streaming_ai_projections(
+        stream,
+        projections,
+        functions=functions,
+        ai_functions=ai_functions or {},
+    )
     ray_expressions = [expression for expression in projections if is_ray_data_only_expression(expression)]
     if not ray_expressions:
         return stream.map(

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 from datetime import timedelta
 
+import pyarrow as pa
+
 from ray.klein.api.collector import Collector
 from ray.klein.api.watermark_strategy import WatermarkStrategy
 from ray.klein.runtime.context.source_context import RuntimeSourceContext
@@ -54,6 +56,50 @@ def test_watermark_implicitly_reactivates_an_idle_input_even_when_stale():
     assert tracker.on_control("input", Watermark(10)) == (InputActive(10),)
 
 
+def test_reconfigure_inputs_advances_after_removing_the_slowest_input():
+    tracker = InputWatermarkTracker(("fast", "slow"))
+    assert tracker.on_control("fast", Watermark(100)) == ()
+    assert tracker.on_control("slow", Watermark(10)) == (Watermark(10),)
+
+    assert tracker.reconfigure_inputs(("fast",)) == (Watermark(100),)
+    assert tracker.current_watermark == 100
+
+
+def test_reconfigure_inputs_waits_for_a_new_input_before_advancing():
+    tracker = InputWatermarkTracker(("existing",))
+    assert tracker.on_control("existing", Watermark(100)) == (Watermark(100),)
+
+    assert tracker.reconfigure_inputs(("existing", "new")) == ()
+    assert tracker.on_control("existing", Watermark(200)) == ()
+    assert tracker.on_control("new", Watermark(150)) == (Watermark(150),)
+
+
+def test_reconfigure_inputs_can_restore_progress_after_topology_rollback():
+    tracker = InputWatermarkTracker(("fast", "slow"))
+    tracker.on_control("fast", Watermark(100))
+    tracker.on_control("slow", Watermark(10))
+    snapshot = tracker.snapshot_state()
+
+    assert tracker.reconfigure_inputs(("fast",)) == (Watermark(100),)
+    tracker.restore_state(snapshot)
+
+    assert tracker.current_watermark == 10
+    assert tracker.on_control("slow", Watermark(20)) == (Watermark(20),)
+
+
+def test_reconfigure_inputs_updates_aggregate_idleness():
+    tracker = InputWatermarkTracker(("active", "idle"))
+    tracker.on_control("active", Watermark(100))
+    tracker.on_control("idle", Watermark(10))
+    assert tracker.on_control("idle", InputIdle()) == (Watermark(100),)
+
+    assert tracker.reconfigure_inputs(("idle",)) == (InputIdle(),)
+    assert tracker.is_idle
+
+    assert tracker.reconfigure_inputs(("idle", "new")) == (InputActive(100),)
+    assert not tracker.is_idle
+
+
 def test_source_context_emits_idle_active_and_watermark_in_order():
     collector = RecordingCollector()
     context = RuntimeSourceContext(collector)
@@ -91,7 +137,8 @@ def test_source_context_collect_many_uses_one_columnar_transport_record():
 
     assert len(downstream.received) == 1
     record = downstream.received[0][0]
-    assert record.block == {"id": [1, 2], "value": ["a", "b"]}
+    assert isinstance(record.block, pa.RecordBatch)
+    assert record.block.to_pydict() == {"id": [1, 2], "value": ["a", "b"]}
     assert record.num_rows == 2
     assert emissions == [(True, 2)]
 

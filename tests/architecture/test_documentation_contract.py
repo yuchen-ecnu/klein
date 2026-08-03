@@ -132,6 +132,139 @@ def test_feature_guides_have_dedicated_navigation() -> None:
     assert "`udf.ignore-exception=true`" in features
 
 
+def test_documentation_navigation_is_grouped_by_user_task() -> None:
+    index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
+    captions = [
+        "Getting started",
+        "Concepts",
+        "Application development",
+        "Features",
+        "Connectors",
+        "Deployment",
+        "Operations",
+        "Evaluation",
+        "Reference",
+        "Project development",
+        "Internals",
+    ]
+    positions = [index.index(f":caption: {caption}") for caption in captions]
+    assert positions == sorted(positions)
+
+    def navigation_group(caption: str) -> str:
+        return index.split(f":caption: {caption}", maxsplit=1)[1].split("```", maxsplit=1)[0]
+
+    assert "datastream-programming-guide" in navigation_group("Application development")
+    assert "connectors/index" in navigation_group("Connectors")
+    assert "configuration-reference" in navigation_group("Deployment")
+    assert "observability" in navigation_group("Operations")
+    assert "private-api-inventory" in navigation_group("Internals")
+
+
+def test_connector_navigation_uses_short_product_names() -> None:
+    connector_paths = [
+        "ray-data",
+        "collections",
+        "kafka",
+        "rocketmq",
+        "canal",
+        "filesystem",
+        "iceberg",
+        "redis",
+        "ray-serve",
+        "console",
+        "custom",
+    ]
+    root_index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
+    connector_tree = root_index.split(":caption: Connectors", maxsplit=1)[1].split("```", maxsplit=1)[0]
+    positions = [connector_tree.index(f"\nconnectors/{path}\n") for path in connector_paths]
+    assert positions == sorted(positions)
+
+    overview = (DOCS_ROOT / "connectors" / "index.md").read_text(encoding="utf-8")
+    assert "# Overview" in overview
+    assert "```{toctree}" not in overview
+
+    for connector_path in connector_paths:
+        page = (DOCS_ROOT / "connectors" / f"{connector_path}.md").read_text(encoding="utf-8")
+        title = next(line[2:] for line in page.splitlines() if line.startswith("# "))
+        assert len(title.split()) <= 2, f"Connector navigation title is too long: {title}"
+
+
+def test_configuration_reference_is_grouped_and_scannable() -> None:
+    reference = (DOCS_ROOT / "configuration-reference.md").read_text(encoding="utf-8")
+    assert reference.count("| Key | Default | Type | Description |") >= 10
+    for heading in (
+        "## Execution mode and task deployment",
+        "## Checkpointing",
+        "## Buffers and backpressure",
+        "## Scheduling and placement",
+        "## Managed state",
+        "## Ray Serve integration",
+    ):
+        assert heading in reference
+
+
+def test_documentation_uses_a_desktop_section_sidebar() -> None:
+    config_path = DOCS_ROOT / "conf.py"
+    config = config_path.read_text(encoding="utf-8")
+    tree = ast.parse(config, filename=str(config_path))
+    sidebar_assignment = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "html_sidebars" for target in node.targets)
+    )
+    assert ast.literal_eval(sidebar_assignment.value) == {"**": ["global-sidebar.html"]}
+
+    sidebar_template = (DOCS_ROOT / "_templates" / "global-sidebar.html").read_text(encoding="utf-8")
+    assert "generate_toctree_html(" in sidebar_template
+    assert "startdepth=0" in sidebar_template
+
+    assert '"navbar_center": []' in config
+    assert '"image_light": "_static/klein-logo.svg"' in config
+    assert '"image_dark": "_static/klein-logo-dark.svg"' in config
+    assert (DOCS_ROOT / "_static" / "klein-logo.svg").is_file()
+    assert (DOCS_ROOT / "_static" / "klein-logo-dark.svg").is_file()
+
+    sidebar_css = (DOCS_ROOT / "_static" / "sidebar.css").read_text(encoding="utf-8")
+    assert ".navbar-header-items__end" in sidebar_css
+    assert ".toctree-l0 > .label-parts" in sidebar_css
+
+    config_css = (DOCS_ROOT / "_static" / "configuration.css").read_text(encoding="utf-8")
+    assert "#configuration-reference table" in config_css
+
+
+def test_branding_stays_compact_across_surfaces() -> None:
+    readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    assert '<img alt="Klein" src="docs/_static/klein-logo.svg" width="440">' in readme
+
+    sidebar_css = (DOCS_ROOT / "_static" / "sidebar.css").read_text(encoding="utf-8")
+    assert "max-width: min(9rem, 38vw);" in sidebar_css
+    assert "max-height: 2.25rem;" in sidebar_css
+
+    dashboard = (PROJECT_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    assert "src={KleinMark} sx={{ height: 24, width: 28 }}" in dashboard
+
+
+def test_documentation_uses_klein_as_the_product_name() -> None:
+    legacy_brand = "Klein for " + "Ray"
+    text_suffixes = {".css", ".html", ".js", ".md", ".po", ".py", ".rst", ".svg"}
+    paths = [
+        path
+        for path in DOCS_ROOT.rglob("*")
+        if path.is_file() and "_build" not in path.parts and path.suffix in text_suffixes
+    ]
+    paths.extend(PROJECT_ROOT.glob("*.md"))
+    paths.extend(PACKAGE_ROOT.rglob("*.py"))
+    paths.extend([PROJECT_ROOT / "CITATION.cff", PROJECT_ROOT / "NOTICE"])
+
+    offenders = [
+        str(path.relative_to(PROJECT_ROOT))
+        for path in sorted(set(paths))
+        if legacy_brand.casefold() in path.read_text(encoding="utf-8").casefold()
+    ]
+    assert not offenders, f"Legacy product name remains in documentation: {offenders}"
+
+
 def test_restore_guide_uses_the_canonical_option() -> None:
     recovery = (DOCS_ROOT / "checkpoint-recovery.md").read_text(encoding="utf-8")
     driver_fault_tolerance = (DOCS_ROOT / "driver-fault-tolerance.md").read_text(encoding="utf-8")

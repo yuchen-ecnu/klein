@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-# Simplified Chinese theme translations for Klein for Ray.
-# Copyright (C) 2024-2026, Klein for Ray Authors
-# This file is distributed under the same license as the Klein for Ray package.
+# Simplified Chinese theme translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein package.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein for Ray 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0.dev0\n"
 "Report-Msgid-Bugs-To: \n"
 "PO-Revision-Date: 2026-07-20 00:00+0800\n"
-"Last-Translator: Klein for Ray Authors\n"
+"Last-Translator: Klein Authors\n"
 "Language-Team: Simplified Chinese\n"
 "Language: zh_CN\n"
 "MIME-Version: 1.0\n"
