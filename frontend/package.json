@@ -28,7 +28,7 @@
     "typeface-roboto": "1.1.13"
   },
   "devDependencies": {
-    "@types/node": "^20.14.12",
+    "@types/node": "^25.9.5",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
