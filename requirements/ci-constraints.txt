@@ -39,6 +39,6 @@ rocketmq-client-python==2.0.0
 ruff==0.15.22
 setuptools==83.0.0
 sqlglot==30.14.0
-testcontainers==4.13.3
+testcontainers==4.15.0
 tomli==2.4.1; python_version < "3.11"
 twine==6.2.0
