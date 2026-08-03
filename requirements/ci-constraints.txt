@@ -10,7 +10,7 @@ fsspec==2026.7.0
 httpx==0.28.1
 hypothesis==6.164.0
 licensecheck==2025.1.0
-mypy==1.18.2
+mypy==1.20.2
 numpy==2.2.6
 orjson==3.11.9
 pandas==2.3.3
