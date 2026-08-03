@@ -29,7 +29,7 @@ PyYAML==6.0; python_version < "3.12"
 PyYAML==6.0.1; python_version >= "3.12"
 ray==2.56.1
 redis==5.0.0
-redislite==6.2.899109
+redislite==6.2.912183
 reuse==5.0.0
 rich==13.9.4
 rocksdict==0.3.29
