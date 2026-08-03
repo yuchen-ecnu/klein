@@ -18,6 +18,11 @@ history when required for licensing or security review.
 
 ## Third-party license metadata overrides
 
+`fsspec==2026.7.0` is published without machine-readable license metadata. The
+matching upstream tag contains the reviewed
+[BSD-3-Clause license](https://github.com/fsspec/filesystem_spec/blob/2026.7.0/LICENSE),
+so Klein applies a version-exact licensecheck override.
+
 `rocketmq-client-python==2.0.0` is published without a machine-readable license
 field or a license file in its source distribution. Its package description
 identifies the Apache License 2.0, and the Apache RocketMQ upstream repository

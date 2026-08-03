@@ -21,6 +21,11 @@ class LicenseOverride:
 # matching dependency exact-pinned in pyproject.toml and document the evidence in
 # PROVENANCE.md.
 LICENSE_OVERRIDES = {
+    "fsspec": LicenseOverride(
+        version="2026.7.0",
+        license_expression="BSD-3-Clause",
+        evidence_url="https://github.com/fsspec/filesystem_spec/blob/2026.7.0/LICENSE",
+    ),
     "rocketmq-client-python": LicenseOverride(
         version="2.0.0",
         license_expression="Apache-2.0",
