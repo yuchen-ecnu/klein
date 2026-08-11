@@ -31,10 +31,13 @@ and messages contain none of the identified organization-only markers or strong
 secret patterns. GitHub's read-only pull-request refs for 46 pre-rewrite pull
 requests still retain old metadata and, in some cases, old lock-file blobs.
 Provider-side dereferencing, garbage collection, and cached-view removal are
-therefore pending through GitHub Support. Strong secret patterns were absent
-from those refs as well. Affected pre-rewrite commit IDs are intentionally no
-longer part of branch history, so clones made before 2026-08-11 must fetch and
-rebase or re-clone. CI additionally runs Gitleaks over branch history.
+therefore pending through GitHub Support. One independently controlled fork
+created before the rewrite also retains old history and requires coordination
+with its owner. Neither copy is part of a maintained branch or release artifact,
+and strong secret patterns were absent from both. Affected pre-rewrite commit
+IDs are intentionally no longer part of branch history, so clones made before
+2026-08-11 must fetch and rebase or re-clone. CI additionally runs Gitleaks over
+branch history.
 
 The remaining authorization evidence and release gate are tracked in
 [IP_CLEARANCE.md](IP_CLEARANCE.md). Nothing in this provenance record should be

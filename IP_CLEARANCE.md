@@ -19,7 +19,7 @@ contribution and bundled asset was authorized for independent publication.
 | Employer or copyright-holder authorization where applicable | Pending | Verifiable grant covering the extracted code and assets |
 | Third-party dependency and frontend asset notices | Automated | `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, SPDX/REUSE, SBOM, and license checks |
 | Private endpoint and credential removal from current artifacts | Automated | Public-source, secret-scan, and distribution-policy CI checks |
-| Historical internal metadata disposition | In progress | Branch rewrite completed; provider purge of 46 read-only pull-request refs pending |
+| Historical internal metadata disposition | In progress | Branch rewrite completed; provider PR-ref purge and external fork cleanup pending |
 | Independent clearance review | Pending | Public maintainer vote recording reviewed evidence and exceptions |
 
 Before changing this status to `CLEARED`, maintainers must attach the evidence
