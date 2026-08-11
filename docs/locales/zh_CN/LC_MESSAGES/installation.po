@@ -475,8 +475,8 @@ msgstr "这是集群连接问题，而不是导入问题。请启动或选择 Ra
 msgid "The base installation also constrains NumPy to `<3`, pandas to `<3`, protobuf to `>=5.29.6,<8`, and SQLGlot to `>=30.12,<31`. Let the package resolver install these dependencies instead of overriding them independently. Read [Compatibility](compatibility.md) before changing Python, Ray, protobuf, or checkpoint-producing Klein versions."
 msgstr "基础安装还将 NumPy 限制为 `<3`、pandas 限制为 `<3`、protobuf 限制为 `>=5.29.6,<8`，并将 SQLGlot 限制为 `>=30.12,<31`。请让包解析器安装这些依赖，不要单独覆盖。更改 Python、Ray、protobuf 或会生成检查点的 Klein 版本前，请阅读[兼容性](compatibility.md)。"
 
-msgid "`pyvips[binary]>=3,<4`, `Pillow>=12.3.0,<13`, `pypdf>=6.14.2,<7`, and `pypdfium2>=4.30,<6`"
-msgstr "`pyvips[binary]>=3,<4`、`Pillow>=12.3.0,<13`、`pypdf>=6.14.2,<7` 和 `pypdfium2>=4.30,<6`"
+msgid "`pyvips[binary]>=3,<4`, `Pillow>=12.3.0,<13`, `pypdf>=6.15.0,<7`, and `pypdfium2>=4.30,<6`"
+msgstr "`pyvips[binary]>=3,<4`、`Pillow>=12.3.0,<13`、`pypdf>=6.15.0,<7` 和 `pypdfium2>=4.30,<6`"
 
 msgid "`rocketmq-client-python==2.0.0`"
 msgstr "`rocketmq-client-python==2.0.0`"

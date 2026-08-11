@@ -17,7 +17,8 @@ import pytest
 from click.testing import CliRunner
 from ray.exceptions import RayTaskError
 
-from ray.klein.observability.dashboard.server import create_dashboard_server
+from ray.klein.observability.dashboard.server import _proxy_content_type, create_dashboard_server
+from tests.support.waiting import wait_until
 
 cli = importlib.import_module("ray.klein.cli")
 
@@ -283,9 +284,15 @@ def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, c
         },
     )
 
-    events = {getattr(record, "klein_event", None): record for record in caplog.records}
     assert status == 202
     assert headers["X-Request-ID"] == "control-123"
+    wait_until(
+        lambda: any(getattr(record, "klein_event", None) == "dashboard.http.request" for record in caplog.records),
+        timeout=1,
+        interval=0.001,
+        description="Dashboard access log",
+    )
+    events = {getattr(record, "klein_event", None): record for record in caplog.records}
     assert "dashboard.http.request" in events
     assert "dashboard.control.rescale.requested" in events
     assert "dashboard.control.rescale.completed" in events
@@ -324,6 +331,22 @@ def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+@pytest.mark.parametrize(
+    ("upstream", "expected"),
+    [
+        ("text/html", "text/html"),
+        ("application/javascript", "text/javascript; charset=utf-8"),
+        ("image/png", "image/png"),
+        ("text/html\r\nX-Injected: true", "application/octet-stream"),
+        ("application/example", "application/octet-stream"),
+    ],
+)
+def test_dashboard_maps_upstream_content_types_to_safe_constants(upstream, expected) -> None:
+    headers = SimpleNamespace(get_content_type=lambda: upstream)
+
+    assert _proxy_content_type(headers) == expected
 
 
 def test_dashboard_bounds_success_and_error_frontend_proxy_bodies(
