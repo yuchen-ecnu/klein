@@ -133,6 +133,30 @@ def frontend_server():
         thread.join(timeout=2)
 
 
+@pytest.fixture
+def dashboard_log_records():
+    records: list[logging.LogRecord] = []
+
+    class _RecordHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    target = logging.getLogger("ray.klein.observability.dashboard.server")
+    previous_level = target.level
+    previous_disabled = target.disabled
+    handler = _RecordHandler()
+    target.addHandler(handler)
+    target.setLevel(logging.INFO)
+    target.disabled = False
+    try:
+        yield records
+    finally:
+        target.removeHandler(handler)
+        target.setLevel(previous_level)
+        target.disabled = previous_disabled
+        handler.close()
+
+
 def _request(server, method, path, *, body=None, headers=None):
     connection = HTTPConnection("127.0.0.1", server.server_port, timeout=2)
     connection.request(method, path, body=body, headers=headers or {})
@@ -267,9 +291,8 @@ def test_dashboard_readiness_fails_closed_while_liveness_stays_healthy(dashboard
     assert json.loads(ready_payload)["request_id"]
 
 
-def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, caplog) -> None:
+def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, dashboard_log_records) -> None:
     server, state = dashboard_server
-    caplog.set_level(logging.INFO, logger="ray.klein.observability.dashboard.server")
     body = json.dumps({"parallelism": 5})
 
     status, headers, _ = _request(
@@ -287,12 +310,14 @@ def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, c
     assert status == 202
     assert headers["X-Request-ID"] == "control-123"
     wait_until(
-        lambda: any(getattr(record, "klein_event", None) == "dashboard.http.request" for record in caplog.records),
+        lambda: any(
+            getattr(record, "klein_event", None) == "dashboard.http.request" for record in dashboard_log_records
+        ),
         timeout=1,
         interval=0.001,
         description="Dashboard access log",
     )
-    events = {getattr(record, "klein_event", None): record for record in caplog.records}
+    events = {getattr(record, "klein_event", None): record for record in dashboard_log_records}
     assert "dashboard.http.request" in events
     assert "dashboard.control.rescale.requested" in events
     assert "dashboard.control.rescale.completed" in events
@@ -556,9 +581,8 @@ def test_dashboard_rejects_dns_rebinding_host_before_control_call(dashboard_serv
     assert state.rescale_calls == []
 
 
-def test_dashboard_maps_backend_type_error_to_service_unavailable(dashboard_server, caplog) -> None:
+def test_dashboard_maps_backend_type_error_to_service_unavailable(dashboard_server, dashboard_log_records) -> None:
     server, state = dashboard_server
-    caplog.set_level(logging.INFO, logger="ray.klein.observability.dashboard.server")
     state.rescale_error = TypeError("JobManager returned an invalid result")
     body = json.dumps({"parallelism": 3})
 
@@ -574,7 +598,7 @@ def test_dashboard_maps_backend_type_error_to_service_unavailable(dashboard_serv
     assert "TypeError" in json.loads(payload)["error"]
     completed = next(
         record
-        for record in caplog.records
+        for record in dashboard_log_records
         if getattr(record, "klein_event", None) == "dashboard.control.rescale.completed"
     )
     assert completed.klein_fields["result"] == "ERROR"
