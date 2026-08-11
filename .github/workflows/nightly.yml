@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-runtime
 
@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-state
 
@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-sql
 
@@ -75,7 +75,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: make integration-connectors
 
@@ -92,7 +92,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - name: Ten-minute unbounded runtime soak
         env:
@@ -113,7 +113,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
       - run: python scripts/benchmark_data_plane.py --quick --min-speedup 0.9 --json benchmark-results.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

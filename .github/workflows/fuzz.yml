@@ -35,7 +35,7 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements/ci-constraints.txt
-      - run: python -m pip install "pip==26.2"
+      - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt atheris
       - run: mkdir -p fuzz-artifacts
       - name: Run bounded fuzzing smoke test
