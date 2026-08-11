@@ -100,8 +100,8 @@ proxy and restrict network access. See [Security](security.md#dashboard-and-cont
 and [Observability](observability.md#use-the-klein-dashboard).
 
 The listener exposes `GET /healthz` for liveness and `GET /readyz` for state
-service readiness. Responses include `X-Request-ID`, which can be supplied by a
-trusted proxy for log correlation.
+service readiness. Responses include a server-generated `X-Request-ID` for log
+correlation; caller-provided values are not reflected.
 
 ## `list`
 

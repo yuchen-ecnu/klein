@@ -14,7 +14,6 @@ import asyncio
 import ipaddress
 import json
 import logging
-import re
 import socket
 import time
 import uuid
@@ -33,7 +32,6 @@ from ray.klein._internal.logging import get_logger, log_event
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 _PROXY_READ_CHUNK_BYTES = 64 * 1024
-_REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{1,128}")
 _PROXY_CONTENT_TYPES = {
     "application/javascript": "text/javascript; charset=utf-8",
     "application/json": "application/json; charset=utf-8",
@@ -515,8 +513,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         existing = getattr(self, "_klein_request_id", None)
         if isinstance(existing, str):
             return existing
-        requested = self.headers.get("X-Request-ID", "")
-        self._klein_request_id = requested if _REQUEST_ID.fullmatch(requested) else uuid.uuid4().hex
+        self._klein_request_id = uuid.uuid4().hex
         return self._klein_request_id
 
     def _log_access(self, method: str, started_at: float) -> None:
