@@ -14,7 +14,6 @@ import asyncio
 import ipaddress
 import json
 import logging
-import mimetypes
 import re
 import socket
 import time
@@ -35,6 +34,22 @@ _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 _PROXY_READ_CHUNK_BYTES = 64 * 1024
 _REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{1,128}")
+_PROXY_CONTENT_TYPES = {
+    "application/javascript": "text/javascript; charset=utf-8",
+    "application/json": "application/json; charset=utf-8",
+    "font/otf": "font/otf",
+    "font/ttf": "font/ttf",
+    "font/woff": "font/woff",
+    "font/woff2": "font/woff2",
+    "image/gif": "image/gif",
+    "image/jpeg": "image/jpeg",
+    "image/png": "image/png",
+    "image/svg+xml": "image/svg+xml; charset=utf-8",
+    "image/webp": "image/webp",
+    "text/css": "text/css; charset=utf-8",
+    "text/html": "text/html",
+    "text/javascript": "text/javascript; charset=utf-8",
+}
 
 logger = get_logger(__name__)
 
@@ -171,13 +186,10 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return False
         if relative_path == "index.html":
             payload = _inject_navigation_bridge(payload)
-        content_type = mimetypes.guess_type(relative_path)[0] or "application/octet-stream"
-        if content_type.startswith("text/") or content_type in {"application/javascript", "image/svg+xml"}:
-            content_type = f"{content_type}; charset=utf-8"
         self._send_bytes(
             HTTPStatus.OK,
             payload,
-            content_type,
+            _embedded_content_type(relative_path),
             cache_control=(
                 "public, max-age=31536000, immutable" if relative_path.startswith("assets/") else "no-store"
             ),
@@ -372,10 +384,10 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         try:
             with urlopen(request, timeout=10) as response:
                 payload = _read_bounded_proxy_response(response)
-                content_type = response.headers.get_content_type()
+                content_type = _proxy_content_type(response.headers)
                 if inject_navigation and content_type == "text/html":
                     payload = _inject_navigation_bridge(payload)
-                self._send_proxy_response(response.status, payload, response.headers.get("Content-Type"))
+                self._send_proxy_response(response.status, payload, content_type)
         except HTTPError as error:
             try:
                 try:
@@ -383,7 +395,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
                 except _ProxyResponseError as response_error:
                     self._send_error_json(HTTPStatus.BAD_GATEWAY, str(response_error))
                     return
-                self._send_proxy_response(error.code, payload, error.headers.get("Content-Type"))
+                self._send_proxy_response(error.code, payload, _proxy_content_type(error.headers))
             finally:
                 error.close()
         except _ProxyResponseError as error:
@@ -600,6 +612,27 @@ def _read_bounded_proxy_response(response: Any) -> bytes:
         if retained > _MAX_PROXY_RESPONSE_BYTES:
             raise _ProxyResponseError("Dashboard frontend response exceeds the 16 MiB proxy limit")
         chunks.append(chunk)
+
+
+def _proxy_content_type(headers: Any) -> str:
+    """Map an untrusted upstream media type to a fixed safe header value."""
+
+    media_type = headers.get_content_type().casefold()
+    return _PROXY_CONTENT_TYPES.get(media_type, "application/octet-stream")
+
+
+def _embedded_content_type(relative_path: str) -> str:
+    """Return fixed media types for the bundled frontend's supported files."""
+
+    if relative_path == "index.html":
+        return "text/html; charset=utf-8"
+    if relative_path.endswith(".css"):
+        return "text/css; charset=utf-8"
+    if relative_path.endswith(".js"):
+        return "text/javascript; charset=utf-8"
+    if relative_path.endswith(".svg"):
+        return "image/svg+xml; charset=utf-8"
+    return "application/octet-stream"
 
 
 def _embedded_frontend_path(path: str) -> str | None:

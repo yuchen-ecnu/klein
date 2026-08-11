@@ -46,7 +46,7 @@ kafka = ["confluent-kafka>=2.3,<3"]
 iceberg = ["pyiceberg>=0.11.1,<0.12"]
 media = [
   "Pillow>=12.3.0,<13",
-  "pypdf>=6.14.2,<7",
+  "pypdf>=6.15.0,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
 ]
@@ -64,7 +64,7 @@ all = [
   "orjson>=3.11.6",
   "Pillow>=12.3.0,<13",
   "pyiceberg>=0.11.1,<0.12",
-  "pypdf>=6.14.2,<7",
+  "pypdf>=6.15.0,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
   "ray[serve]>=2.56.1,<2.57",

@@ -107,7 +107,7 @@ checkout.
 | --- | --- | --- |
 | `kafka` | `confluent-kafka>=2.3,<3` | Bounded or continuous Kafka input and Kafka output. |
 | `iceberg` | `pyiceberg>=0.11.1,<0.12` | Iceberg catalog access and batch or checkpointed append output. Catalog-specific dependencies may still be required. |
-| `media` | `pyvips[binary]>=3,<4`, `Pillow>=12.3.0,<13`, `pypdf>=6.14.2,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
+| `media` | `pyvips[binary]>=3,<4`, `Pillow>=12.3.0,<13`, `pypdf>=6.15.0,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
 | `rocketmq` | `rocketmq-client-python==2.0.0` | Continuous RocketMQ input. A compatible native `librocketmq` is also required on every executing worker. |
 | `redis` | `redis>=5,<9` | Redis lookup, filtering, and output. |
 | `rocksdb` | `rocksdict>=0.3.29,<0.4` | The node-local RocksDB managed-state backend. |

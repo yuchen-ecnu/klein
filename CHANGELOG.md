@@ -19,6 +19,10 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
+- Dashboard proxy and asset response headers now use fixed, allowlisted media
+  types so untrusted values cannot produce HTTP response splitting.
+- The optional PDF dependency now requires `pypdf>=6.15.0,<7`, resolving the
+  published vulnerabilities affecting earlier supported versions.
 - Unsupported `DOWNLOAD` compositions now fail during graph construction;
   redirects are revalidated, request budgets are cumulative, and private
   destinations remain denied unless explicitly allowlisted.
@@ -52,6 +56,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
+- Published Git history was sanitized across all branches to replace legacy
+  private-registry coordinates and corporate-domain commit metadata; clones
+  created before 2026-08-11 must fetch and rebase or re-clone.
 - The source and Python release workflow now requires a signed tag, public
   72-hour vote evidence, the voted source SHA-512 digest, detached signatures,
   SBOMs, and guarded promotion environments.

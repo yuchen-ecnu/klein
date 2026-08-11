@@ -20,13 +20,17 @@ The public history root is commit
 `bcef4bf838ebb8ca9361d9f4252976891deb58ac` (2026-07-19). The current tree has
 automated checks for credentials, organization-only markers, private package
 resolutions, license metadata, and release contents. A 2026-08-11 audit found
-the historical private-registry coordinates only in
-`frontend/package-lock.json` across 14 reachable revisions, 30 commit author
-records using a corporate domain, and no matches for the repository's strong
-secret patterns. CI additionally runs Gitleaks over the complete history.
-Removing the metadata requires a coordinated history rewrite and force-push,
-so it is tracked as an explicit pending decision rather than being silently
-rewritten.
+historical private-registry coordinates in old frontend lock files and
+corporate-domain identities in commit metadata, with no matches for the
+repository's strong secret patterns. A coordinated rewrite then replaced the
+registry coordinates with canonical public npm URLs and the affected identities
+with the contributor's public noreply identity across every published branch.
+The rewrite preserved the current source tree; an independent mirror audit
+confirmed that published content, commit metadata, and messages contain none of
+the identified organization-only markers or strong secret patterns. Affected
+pre-rewrite commit IDs are intentionally no longer part of the public history,
+so clones made before 2026-08-11 must fetch and rebase or re-clone. CI
+additionally runs Gitleaks over the complete history.
 
 The remaining authorization evidence and release gate are tracked in
 [IP_CLEARANCE.md](IP_CLEARANCE.md). Nothing in this provenance record should be

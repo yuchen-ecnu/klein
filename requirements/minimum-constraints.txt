@@ -18,7 +18,7 @@ pip-audit==2.7.0
 protobuf==5.29.6
 pyarrow==23.0.1
 pyiceberg==0.11.1
-pypdf==6.14.2
+pypdf==6.15.0
 pypdfium2==4.30.0
 pytest==9.0.3
 pytest-asyncio==1.4.0
