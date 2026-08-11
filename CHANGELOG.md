@@ -10,6 +10,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Added
 
+- A scheduled Atheris workflow now fuzzes the restricted framework-snapshot
+  Pickle decoder, with bounded campaigns on relevant pull requests and pushes.
 - SQL now supports registered `AI_GENERATE` and `AI_EMBED` backends with
   resource-aware batch and ordered streaming execution.
 - Built-in image and PDF SQL functions execute in one fused media stage with

@@ -43,14 +43,14 @@ def restricted_pickle_loads(
 
     if not isinstance(payload, bytes):
         raise TypeError("restricted pickle payloads must be bytes")
+    stream = io.BytesIO(payload)
     try:
         for opcode, _argument, _position in pickletools.genops(payload):
             if opcode.name in _EXTENSION_OPCODES:
                 raise pickle.UnpicklingError("extension globals are not allowed in a framework snapshot")
-    except ValueError as error:
+        value = _RestrictedUnpickler(stream, allowed_globals or {}).load()
+    except (EOFError, OverflowError, ValueError) as error:
         raise pickle.UnpicklingError("malformed framework snapshot pickle") from error
-    stream = io.BytesIO(payload)
-    value = _RestrictedUnpickler(stream, allowed_globals or {}).load()
     if stream.read(1):
         raise pickle.UnpicklingError("trailing data is not allowed in a framework snapshot")
     return value
