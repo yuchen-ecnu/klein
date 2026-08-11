@@ -56,9 +56,10 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
-- Published Git history was sanitized across all branches to replace legacy
-  private-registry coordinates and corporate-domain commit metadata; clones
-  created before 2026-08-11 must fetch and rebase or re-clone.
+- Maintainer-controlled Git history was sanitized across all branches to
+  replace legacy private-registry coordinates and corporate-domain commit
+  metadata; provider-retained pull-request refs are tracked in `PROVENANCE.md`,
+  and clones created before 2026-08-11 must fetch and rebase or re-clone.
 - The source and Python release workflow now requires a signed tag, public
   72-hour vote evidence, the voted source SHA-512 digest, detached signatures,
   SBOMs, and guarded promotion environments.
