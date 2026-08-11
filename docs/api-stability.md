@@ -25,10 +25,10 @@ before upgrading.
 | Internal implementation | `ray.klein._internal`, most of `ray.klein.runtime`, underscore-prefixed names, undocumented actor methods, and undocumented files | No compatibility promise. Do not import or automate against these surfaces. |
 
 An object appearing in Python's `dir()` or a package `__all__` is not by itself
-a stability declaration. The documentation is the source of truth. Some
-runtime bridge names remain top-level for the bundled CLI; the
-[top-level namespace reference](api/top_level.rst) identifies them as
-non-application APIs.
+a stability declaration. The documentation is the source of truth. Legacy
+runtime bridge attributes remain resolvable only while bundled internals are
+migrated; they are omitted from discovery and are not application APIs. See
+the [top-level namespace reference](api/top_level.rst).
 
 ## What compatibility means
 

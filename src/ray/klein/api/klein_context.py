@@ -17,9 +17,9 @@ from typing import (
 )
 
 import ray.data
-from ray.util.annotations import PublicAPI
 
 from ray.klein._internal.logging import get_logger
+from ray.klein.api.api_stability import public_api
 from ray.klein.api.data_stream import DataStream
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.job_client import JobClient
@@ -96,14 +96,13 @@ class KleinContext:
     process must build explicitly isolated pipelines.
     """
 
-    _current: ClassVar["KleinContext | None"] = None
     _scoped_current: ClassVar[ContextVar["KleinContext | None"]] = ContextVar(
         "ray_klein_scoped_context",
         default=None,
     )
-    _lock: ClassVar[RLock] = RLock()
 
     def __init__(self, configuration: ConfigInput = None) -> None:
+        self._lock = RLock()
         self._config = configuration if isinstance(configuration, Configuration) else Configuration(configuration)
         self._sinks: list[StreamSink] = []
         self._inflight_sink_ids: set[int] = set()
@@ -111,40 +110,43 @@ class KleinContext:
         self.interactive_mode_enabled = False
         self._sql_session = None
 
+    def __getstate__(self) -> dict[str, Any]:
+        """Copy or serialize a pipeline without its process-local lock."""
+
+        with self._lock:
+            state = self.__dict__.copy()
+        state.pop("_lock", None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._lock = RLock()
+
     def _allocate_stream_id(self) -> int:
-        self._last_stream_id += 1
-        return self._last_stream_id
+        with self._lock:
+            self._last_stream_id += 1
+            return self._last_stream_id
 
     @classmethod
     def current(cls) -> "KleinContext":
-        scoped = cls._scoped_current.get()
-        if scoped is not None:
-            return scoped
-        with cls._lock:
-            if cls._current is None:
-                cls._current = cls()
-            return cls._current
+        context = cls._scoped_current.get()
+        if context is None:
+            context = cls()
+            cls._scoped_current.set(context)
+        return context
 
     @classmethod
     def install(cls, context: "KleinContext") -> "KleinContext":
         if not isinstance(context, cls):
             raise TypeError(f"context must be {cls.__name__}, got {type(context).__name__}")
-        if cls._scoped_current.get() is not None:
-            cls._scoped_current.set(context)
-            return context
-        with cls._lock:
-            cls._current = context
+        cls._scoped_current.set(context)
         return context
 
     @classmethod
     def reset(cls, configuration: ConfigInput = None) -> "KleinContext":
-        if cls._scoped_current.get() is not None:
-            context = cls(configuration)
-            cls._scoped_current.set(context)
-            return context
-        with cls._lock:
-            cls._current = cls(configuration)
-            return cls._current
+        context = cls(configuration)
+        cls._scoped_current.set(context)
+        return context
 
     @classmethod
     @contextmanager
@@ -174,7 +176,8 @@ class KleinContext:
     def configure(self, options: ConfigInput = None) -> "KleinContext":
         """Overlay explicit code configuration and return this context."""
 
-        self._config.update(options)
+        with self._lock:
+            self._config.update(options)
         return self
 
     @property
@@ -187,11 +190,12 @@ class KleinContext:
     def sql_session(self) -> "SQLSession":
         """Return this context's persistent SQL session and temporary-view catalog."""
 
-        if self._sql_session is None:
-            from ray.klein.api.sql_session import SQLSession
+        with self._lock:
+            if self._sql_session is None:
+                from ray.klein.api.sql_session import SQLSession
 
-            self._sql_session = SQLSession(self)
-        return self._sql_session
+                self._sql_session = SQLSession(self)
+            return self._sql_session
 
     def sql(
         self,
@@ -262,7 +266,7 @@ class KleinContext:
         self.interactive_mode_enabled = enable
         return self
 
-    @PublicAPI
+    @public_api
     def read_kafka(
         self,
         topics: str | list[str],
@@ -399,7 +403,7 @@ class KleinContext:
             changelog_mode=changelog_mode,
         )
 
-    @PublicAPI
+    @public_api
     def read_canal(
         self,
         topics: str | list[str],
@@ -441,7 +445,7 @@ class KleinContext:
             format_options={"include_metadata": include_metadata, "ddl_handling": ddl_handling},
         )
 
-    @PublicAPI
+    @public_api
     def read_rocketmq(
         self,
         topic: str,
@@ -501,7 +505,7 @@ class KleinContext:
             bounded=False,
         )
 
-    @PublicAPI
+    @public_api
     def from_items(
         self,
         items: list[Any],
@@ -542,7 +546,7 @@ class KleinContext:
         row_kinds = {row_kind_of(item) for item in items if isinstance(item, Mapping)}
         return stream._set_changelog_mode(frozenset(row_kinds)) if row_kinds else stream
 
-    @PublicAPI
+    @public_api
     def from_values(self, *values: Any, name: str = "ValueSource") -> "DataStream":
         """Creates a data stream from values with multiple column.
 
@@ -668,8 +672,9 @@ class KleinContext:
             if selected_ids & self._inflight_sink_ids:
                 raise RuntimeError("one or more selected terminal operations are already being submitted")
             self._inflight_sink_ids.update(selected_ids)
+            submission_config = Configuration(self._config)
         job_name = job_name or ("klein-" + "".join(random.choices(string.ascii_letters + string.digits, k=8)))
-        client = JobClient(self._config)
+        client = JobClient(submission_config)
         try:
             handle = client.execute(job_name, selected_sinks)
         except BaseException:
@@ -690,10 +695,11 @@ class KleinContext:
         """Get the execution plan of the data stream"""
         if job_name is not None and not isinstance(job_name, str):
             raise TypeError("job_name must be a string or None")
-        client = JobClient(self._config)
         job_name = job_name or f"job_{uuid.uuid4()}"
         with self._lock:
             selected_sinks = self._select_sinks(sinks)
+            submission_config = Configuration(self._config)
+        client = JobClient(submission_config)
         return client.explain(job_name, selected_sinks)
 
     def _select_sinks(self, sinks: Sequence[StreamSink] | None) -> tuple[StreamSink, ...]:

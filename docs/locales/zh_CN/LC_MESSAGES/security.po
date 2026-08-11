@@ -6,7 +6,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -459,3 +459,12 @@ msgstr "同一 SQL 投影或批处理行中的多个下载会累计使用字节�
 
 msgid "The server refuses a non-loopback listener unless `--allow-unauthenticated` is present. That flag only acknowledges the risk; it does not add protection. A remote listener exposes job topology and status and can submit supported operator-rescale actions. Programmatic server creation has the same default and requires `allow_unauthenticated=True` for a non-loopback address. Control requests also reject an untrusted `Host`, a mismatched `Origin`, or cross-site Fetch Metadata."
 msgstr "除非提供 `--allow-unauthenticated`，否则 server 会拒绝非环回 listener。该参数只表示已知晓风险，并不会增加保护。远程 listener 会暴露作业拓扑和状态，并可提交受支持的 operator rescale 操作。以编程方式创建 server 时默认行为相同，非环回地址需要 `allow_unauthenticated=True`。控制请求还会拒绝不可信的 `Host`、不匹配的 `Origin` 或跨站 Fetch Metadata。"
+
+msgid "Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; liveness/readiness probes; correlated sanitized access and control events; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries."
+msgstr "Dashboard 默认绑定回环地址；除非明确覆盖，否则拒绝非回环绑定；执行 Host 标头和同源检查；限制 Dashboard 请求体；提供活性/就绪探针；记录可关联且脱敏的访问与控制事件；按键名脱敏已发布配置和结构化日志字段；使用安全检查点元数据封装；限制框架自有状态封装的解码；在使用应用负载前验证大小/校验和；记录源与接收器恢复边界。"
+
+msgid "Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, or a durable audit log independent of Ray."
+msgstr "不提供身份认证、授权、TLS、恶意代码沙箱、密钥存储、租户隔离、检查点签名、记录级加密，也不提供独立于 Ray 的持久审计日志。"
+
+msgid "retain proxy audit logs. Klein suppresses the base HTTP log but emits sanitized `dashboard.http.request` and `dashboard.control.*` structured events with `X-Request-ID`; Ray log retention is not an independent audit store;"
+msgstr "保留代理审计日志。Klein 会抑制基础 HTTP 日志，但通过 `X-Request-ID` 发出脱敏的 `dashboard.http.request` 和 `dashboard.control.*` 结构化事件；Ray 日志保留不是独立审计存储；"

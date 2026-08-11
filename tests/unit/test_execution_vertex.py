@@ -86,3 +86,21 @@ def test_rebind_explicitly_preserves_runtime_state_without_sharing_status() -> N
 
     rebound.transition_to(ExecutionVertexStatus.CANCELLED)
     assert vertex.status is ExecutionVertexStatus.RUNNING
+
+
+def test_runtime_snapshot_is_immutable_and_rebuilds_serialization_lock() -> None:
+    vertex = _vertex()
+    vertex.restore_operation_id = "restore-1"
+    vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+
+    snapshot = vertex.runtime_snapshot()
+    serialized_state = vertex.__getstate__()
+    restored = object.__new__(ExecutionVertex)
+    restored.__setstate__(serialized_state)
+
+    assert "_runtime_lock" not in serialized_state
+    assert snapshot.status is ExecutionVertexStatus.DEPLOYED
+    assert snapshot.restore_operation_id == "restore-1"
+    assert restored.runtime_snapshot() == snapshot
+    restored.transition_to(ExecutionVertexStatus.RUNNING)
+    assert restored.status is ExecutionVertexStatus.RUNNING

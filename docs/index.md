@@ -159,13 +159,16 @@ bounded execution to Ray Data instead of implementing another batch engine.
 ## Install Klein
 
 Klein targets Python 3.10 through 3.12 and Ray 2.56.x
-(`ray[data]>=2.56.1,<2.57`). Install the Alpha release from PyPI:
+(`ray[data]>=2.56.1,<2.57`). Until the first approved release, install a
+reviewed source checkout:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "ray-klein==0.1.0a1"
+git clone https://github.com/yuchen-ecnu/klein.git
+cd klein
+python -m pip install .
 ```
 
 See the complete [installation guide](installation.md) for optional extras,

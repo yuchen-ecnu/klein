@@ -6,7 +6,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -77,6 +77,9 @@ msgstr ""
 msgid "Is the API stable enough for production?"
 msgstr "API 是否足够稳定，可用于生产？"
 
+msgid "The current source tree carries the `0.1.0a1` alpha candidate version. Production evaluation should pin Klein and Ray, rehearse recovery, and accept that APIs and checkpoint formats can change before 1.0. See [API stability](api-stability.md) and the [production-readiness checklist](production-readiness.md)."
+msgstr "当前源码树使用 `0.1.0a1` Alpha 候选版本。生产评估应固定 Klein 与 Ray 版本、演练恢复，并接受 1.0 前 API 和检查点格式可能变化。请参阅 [API 稳定性](api-stability.md)和[生产就绪检查表](production-readiness.md)。"
+
 msgid ""
 "Klein is at `0.1.0.dev0` and classified as alpha. Production evaluation "
 "should pin Klein and Ray, rehearse recovery, and accept that APIs and "
@@ -117,6 +120,9 @@ msgstr ""
 
 msgid "Can I install `ray-klein` from PyPI?"
 msgstr "可以从 PyPI 安装 `ray-klein` 吗？"
+
+msgid "No approved release has been published yet. The current documentation does not assume a PyPI distribution. Install a source checkout non-editably, use an editable checkout for development, or install a wheel built from a reviewed checkout. See [Installation](installation.md#regular-installation-from-a-checkout)."
+msgstr "尚未发布任何通过批准的版本。当前文档不假设 PyPI 上已有发行包。可采用非编辑模式安装源码检出、以编辑模式开发，或安装从已审核检出构建的 wheel。请参阅[安装](installation.md#regular-installation-from-a-checkout)。"
 
 msgid ""
 "The current documentation does not assume a published PyPI distribution. "

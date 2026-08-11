@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-.PHONY: audit benchmark build clean coverage docs docs-check-i18n docs-en docs-gettext docs-zh external format integration integration-connectors integration-runtime \
+.PHONY: audit benchmark build clean coverage docs docs-check-i18n docs-en docs-gettext docs-zh external format integration integration-connectors integration-runtime source-release \
 	integration-sql integration-state lint test unit unit-connectors unit-core unit-runtime unit-sql unit-state
 
 format:
@@ -62,6 +62,7 @@ audit:
 	reuse lint
 	pip-audit --local --skip-editable --progress-spinner off
 	python scripts/check_dependency_licenses.py
+	python scripts/check_public_source.py
 
 docs:
 	rm -rf docs/_build/html
@@ -87,6 +88,9 @@ build:
 	python -m build
 	python -m twine check dist/*
 	python scripts/check_distribution.py dist/*
+
+source-release:
+	python scripts/build_source_release.py
 
 clean:
 	rm -rf build dist docs/_build .coverage coverage.json coverage.xml htmlcov .pytest_cache .ruff_cache .mypy_cache

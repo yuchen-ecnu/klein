@@ -17,7 +17,7 @@ copyright = "2024-2026, Klein Authors"
 try:
     release = version("ray-klein")
 except PackageNotFoundError:
-    release = "0.1.0.dev0"
+    release = "0.1.0a1"
 version = release
 
 extensions = [

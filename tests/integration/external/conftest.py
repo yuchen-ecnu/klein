@@ -29,7 +29,12 @@ def redis_service():
         probe.bind(("127.0.0.1", 0))
         port = int(probe.getsockname()[1])
         probe.close()
-        owner = EmbeddedRedis(serverconfig={"bind": "127.0.0.1", "port": str(port)})
+        owner = EmbeddedRedis(
+            serverconfig={"bind": "127.0.0.1", "port": str(port)},
+            # Redis 8 defaults to RESP3 maintenance notifications, which need
+            # a TCP host that redislite's internal Unix socket does not have.
+            protocol=2,
+        )
         client = Redis(host="127.0.0.1", port=port)
         wait_until(client.ping, timeout=30, interval=0.2, description="embedded Redis to accept connections")
         try:

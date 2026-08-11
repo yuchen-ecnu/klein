@@ -36,7 +36,7 @@ porting a job.
 
 ### Is the API stable enough for production?
 
-Klein is at `0.1.0.dev0` and classified as alpha. Production evaluation should
+The current source tree carries the `0.1.0a1` alpha candidate version. Production evaluation should
 pin Klein and Ray, rehearse recovery, and accept that APIs and checkpoint
 formats can change before 1.0. See [API stability](api-stability.md) and the
 [production-readiness checklist](production-readiness.md).
@@ -57,7 +57,7 @@ intentional. See [Installation](installation.md#supported-environment) and
 
 ### Can I install `ray-klein` from PyPI?
 
-The current documentation does not assume a published PyPI distribution.
+No approved release has been published yet. The current documentation does not assume a PyPI distribution.
 Install a source checkout non-editably, use an editable checkout for
 development, or install a wheel built from a reviewed checkout. See
 [Installation](installation.md#regular-installation-from-a-checkout).

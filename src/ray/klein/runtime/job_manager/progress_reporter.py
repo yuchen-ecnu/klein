@@ -15,6 +15,7 @@ import ray.klein as klein
 from ray.klein._internal.logging import get_logger
 from ray.klein.api.job_status import JobStatus
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
+from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertexRuntimeSnapshot
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
     ExecutionVertexStatus,
@@ -79,11 +80,15 @@ class ProgressReporter:
         job_status = self._job_status()
         job_vertices = list(self._execution_graph.job_vertices.values())
         vertices_by_job_vertex = [list(job_vertex.execution_vertices.values()) for job_vertex in job_vertices]
-        counts_by_vertex, failed_vertices = await self._probe_counts(vertices_by_job_vertex)
+        runtime_by_vertex = {
+            vertex.id: self._runtime_snapshot(vertex) for vertices in vertices_by_job_vertex for vertex in vertices
+        }
+        counts_by_vertex, failed_vertices = await self._probe_counts(vertices_by_job_vertex, runtime_by_vertex)
         operators = [
             self._operator_progress(
                 job_vertex,
                 vertices,
+                runtime_by_vertex,
                 counts_by_vertex,
                 failed_vertices,
                 job_status,
@@ -101,6 +106,21 @@ class ProgressReporter:
             restarts=restarts,
             max_restarts=max_restarts,
             window_seconds=window_seconds,
+        )
+
+    @staticmethod
+    def _runtime_snapshot(vertex) -> ExecutionVertexRuntimeSnapshot:
+        snapshot = getattr(vertex, "runtime_snapshot", None)
+        if callable(snapshot):
+            return snapshot()
+        # Lightweight graph doubles used by embedders and unit tests predate
+        # ExecutionVertex's atomic snapshot API.
+        return ExecutionVertexRuntimeSnapshot(
+            status=vertex.status,
+            error_message=getattr(vertex, "error_message", None),
+            stream_task=getattr(vertex, "stream_task", None),
+            task_generation=getattr(vertex, "task_generation", ""),
+            restore_operation_id=getattr(vertex, "restore_operation_id", None),
         )
 
     async def replace_execution_graph(
@@ -133,12 +153,15 @@ class ProgressReporter:
             self._execution_graph = execution_graph
 
     async def _probe_counts(
-        self, vertices_by_job_vertex
+        self, vertices_by_job_vertex, runtime_by_vertex
     ) -> tuple[dict[ExecutionVertexId, SubtaskCounts], set[ExecutionVertexId]]:
         probed_vertices = [
-            vertex for vertices in vertices_by_job_vertex for vertex in vertices if vertex.stream_task is not None
+            vertex
+            for vertices in vertices_by_job_vertex
+            for vertex in vertices
+            if runtime_by_vertex[vertex.id].stream_task is not None
         ]
-        requests = [vertex.stream_task.progress_counts() for vertex in probed_vertices]
+        requests = [runtime_by_vertex[vertex.id].stream_task.progress_counts() for vertex in probed_vertices]
         results = (
             await asyncio.gather(
                 *(klein.aget(request, timeout=_PROGRESS_RPC_TIMEOUT_SECONDS) for request in requests),
@@ -164,11 +187,12 @@ class ProgressReporter:
         self,
         job_vertex,
         vertices,
+        runtime_by_vertex,
         counts_by_vertex,
         failed_vertices,
         job_status: JobStatus,
     ) -> OperatorProgress:
-        statuses = [vertex.status for vertex in vertices]
+        statuses = [runtime_by_vertex[vertex.id].status for vertex in vertices]
         counts = [counts_by_vertex.get(vertex.id, SubtaskCounts()) for vertex in vertices]
         live_totals = self._sum_counts(counts)
         retired = self._retired_counts.get(job_vertex.id, SubtaskCounts())
@@ -176,7 +200,13 @@ class ProgressReporter:
         failed_progress_requests = sum(1 for vertex in vertices if vertex.id in failed_vertices)
         resources = job_vertex.resources
         subtasks = tuple(
-            self._subtask_progress(vertex, count, vertex.id in failed_vertices, job_status)
+            self._subtask_progress(
+                vertex,
+                runtime_by_vertex[vertex.id],
+                count,
+                vertex.id in failed_vertices,
+                job_status,
+            )
             for vertex, count in zip(vertices, counts, strict=True)
         )
         return OperatorProgress(
@@ -241,15 +271,16 @@ class ProgressReporter:
     def _subtask_progress(
         cls,
         vertex,
+        runtime,
         counts: SubtaskCounts,
         progress_failed: bool,
         job_status: JobStatus,
     ) -> SubtaskProgress:
-        status = cls._aggregate_status([vertex.status], job_status, int(progress_failed))
+        status = cls._aggregate_status([runtime.status], job_status, int(progress_failed))
         return SubtaskProgress(
             subtask_index=vertex.index,
             status=status,
-            actor_id=getattr(vertex.stream_task, "actor_id", None),
+            actor_id=getattr(runtime.stream_task, "actor_id", None),
             **{field.name: getattr(counts, field.name) for field in fields(SubtaskCounts)},
         )
 

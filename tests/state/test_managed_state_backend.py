@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from ray.klein.state import rocks_db_state_backend
 from ray.klein.state.key_encoding import KEY_ENCODING_VERSION
 from ray.klein.state.key_group_range import (
     assign_key_group_range,
@@ -263,6 +264,81 @@ def test_rocksdb_full_snapshot_rejects_legacy_encoding_before_mutation(tmp_path)
     with pytest.raises(ValueError, match="legacy key encoding"):
         target.restore(legacy)
 
+    assert target.get(descriptor) == "preserved"
+    target.close()
+
+
+def test_rocksdb_full_restore_rolls_back_when_reopen_fails(tmp_path, monkeypatch):
+    descriptor = ValueStateDescriptor("value")
+    source = RocksDBStateBackend(str(tmp_path / "source"))
+    source.current_key = "key"
+    source.put(descriptor, "replacement")
+    snapshot = source.snapshot()
+    source.close()
+
+    target = RocksDBStateBackend(str(tmp_path / "target"))
+    target.current_key = "key"
+    target.put(descriptor, "preserved")
+    original_open = target._open_db
+    calls = 0
+
+    def fail_first_open():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("injected reopen failure")
+        original_open()
+
+    monkeypatch.setattr(target, "_open_db", fail_first_open)
+    with pytest.raises(OSError, match="injected reopen failure"):
+        target.restore(snapshot)
+
+    target.current_key = "key"
+    assert target.get(descriptor) == "preserved"
+    target.close()
+
+
+def test_rocksdb_key_group_restore_rolls_back_when_atomic_install_fails(tmp_path, monkeypatch):
+    descriptor = ValueStateDescriptor("value")
+    target = RocksDBStateBackend(str(tmp_path / "target"))
+    target.current_key = "key"
+    target.put(descriptor, "preserved")
+    group = key_group_for_key("key", 16)
+    snapshots = target.snapshot_key_groups(16, (group,))
+    original_replace = rocks_db_state_backend.os.replace
+    calls = 0
+
+    def fail_staged_install(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("injected atomic install failure")
+        original_replace(source, destination)
+
+    monkeypatch.setattr(rocks_db_state_backend.os, "replace", fail_staged_install)
+    with pytest.raises(OSError, match="injected atomic install failure"):
+        target.restore_key_groups(snapshots)
+
+    target.current_key = "key"
+    assert target.get(descriptor) == "preserved"
+    target.close()
+
+
+def test_rocksdb_restore_reopens_live_database_when_backup_move_fails(tmp_path, monkeypatch):
+    descriptor = ValueStateDescriptor("value")
+    target = RocksDBStateBackend(str(tmp_path / "target"))
+    target.current_key = "key"
+    target.put(descriptor, "preserved")
+    snapshots = target.snapshot_key_groups(16, (key_group_for_key("key", 16),))
+
+    def fail_backup_move(_source, _destination):
+        raise OSError("injected backup move failure")
+
+    monkeypatch.setattr(rocks_db_state_backend.os, "replace", fail_backup_move)
+    with pytest.raises(OSError, match="injected backup move failure"):
+        target.restore_key_groups(snapshots)
+
+    target.current_key = "key"
     assert target.get(descriptor) == "preserved"
     target.close()
 

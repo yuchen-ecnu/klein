@@ -5,7 +5,6 @@ const basicTheme: ThemeOptions = {
   typography: {
     fontSize: 12,
     fontFamily: [
-      "Roboto",
       "-apple-system",
       "BlinkMacSystemFont",
       '"Segoe UI"',

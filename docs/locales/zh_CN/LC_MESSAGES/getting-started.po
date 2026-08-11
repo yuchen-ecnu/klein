@@ -8,7 +8,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -189,3 +189,6 @@ msgstr "创建隔离的 Python 环境并安装 Alpha 版本："
 
 msgid "Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install only the extra required by the application, for example `ray-klein[kafka]`, `ray-klein[iceberg]`, `ray-klein[rocketmq]`, `ray-klein[redis]`, `ray-klein[rocksdb]`, or `ray-klein[serve]`. Use `ray-klein[all]` for an integration development environment. RocketMQ also requires the native `librocketmq` runtime on every worker."
 msgstr "Kafka、Iceberg、RocketMQ、Redis、RocksDB 和 Serve 均为可选集成。请只安装应用所需的额外依赖，例如 `ray-klein[kafka]`、`ray-klein[iceberg]`、`ray-klein[rocketmq]`、`ray-klein[redis]`、`ray-klein[rocksdb]` 或 `ray-klein[serve]`。集成开发环境可使用 `ray-klein[all]`。RocketMQ 还要求每个 Worker 都具备原生 `librocketmq` 运行时。"
+
+msgid "Create an isolated Python environment and install the current source checkout:"
+msgstr "创建隔离的 Python 环境并安装当前源码检出："

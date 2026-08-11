@@ -8,7 +8,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -351,3 +351,6 @@ msgstr ""
 #~ msgstr ""
 #~ "Klein 面向 Python 3.10 至 3.12 和 "
 #~ "Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。请从当前检出版本安装项目："
+
+msgid "Klein targets Python 3.10 through 3.12 and Ray 2.56.x (`ray[data]>=2.56.1,<2.57`). Until the first approved release, install a reviewed source checkout:"
+msgstr "Klein 面向 Python 3.10 至 3.12 和 Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。在首个批准版本发布前，请安装经过审核的源码检出："

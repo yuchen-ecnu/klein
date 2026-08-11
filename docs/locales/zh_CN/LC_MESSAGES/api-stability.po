@@ -6,7 +6,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -337,3 +337,6 @@ msgid ""
 "Use the private process in the project security policy when the break can"
 " expose data, credentials, or code execution."
 msgstr "如果该破坏可能暴露数据、凭据或代码执行能力，请使用项目安全政策规定的私密报告流程。"
+
+msgid "An object appearing in Python's `dir()` or a package `__all__` is not by itself a stability declaration. The documentation is the source of truth. Legacy runtime bridge attributes remain resolvable only while bundled internals are migrated; they are omitted from discovery and are not application APIs. See the [top-level namespace reference](api/top_level.rst)."
+msgstr "对象出现在 Python 的 `dir()` 或包的 `__all__` 中，本身并不构成稳定性声明。文档才是事实来源。旧版运行时桥接属性仅在迁移内置内部代码期间保持可解析；它们不会出现在发现结果中，也不是应用 API。请参阅[顶层命名空间参考](api/top_level.rst)。"

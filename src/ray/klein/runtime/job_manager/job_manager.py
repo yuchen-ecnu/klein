@@ -35,6 +35,10 @@ from ray.klein.runtime.graph.logical_optimizer import LogicalOptimizer
 from ray.klein.runtime.graph.vertex_id import VertexId
 from ray.klein.runtime.graph.vertex_spec import VertexSpec
 from ray.klein.runtime.job_manager.failover_supervisor import FailoverSupervisor
+from ray.klein.runtime.job_manager.rescale_operation import (
+    TERMINAL_RESCALE_STATUSES,
+    RescaleOperation,
+)
 from ray.klein.runtime.scheduler.job_master import JobMaster
 from ray.klein.runtime.worker.async_worker import AsyncWorker
 
@@ -49,7 +53,7 @@ _T = TypeVar("_T")
 _ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[@-_])")
 _RESCALE_OPERATION_HISTORY_LIMIT = 20
 _RESCALE_STABILIZATION_POLL_SECONDS = 0.25
-_TERMINAL_RESCALE_STATUSES = frozenset({"COMPLETED", "NOOP", "REJECTED", "FAILED"})
+_TERMINAL_RESCALE_STATUSES = TERMINAL_RESCALE_STATUSES
 
 
 def _format_rescale_error(error: BaseException) -> str:
@@ -131,7 +135,7 @@ class JobManager(AsyncWorker):
         self._status_history: list[dict[str, object]] = [{"status": JobStatus.CREATED.name, "timestamp_ms": now_ms}]
         self._rescale_in_progress = False
         self._rescale_done_obj: asyncio.Event | None = None
-        self._rescale_operations: dict[str, dict[str, object]] = {}
+        self._rescale_operations: dict[str, RescaleOperation] = {}
         self._active_rescale_operation_id: str | None = None
         self._rescale_task_obj: asyncio.Task | None = None
         self._completion_task_obj: asyncio.Task[None] | None = None
@@ -381,22 +385,15 @@ class JobManager(AsyncWorker):
 
         operation_id = uuid.uuid4().hex
         now_ms = int(time.time() * 1000)
-        operation: dict[str, object] = {
-            "operation_id": operation_id,
-            "job_id": self.namespace,
-            "operator_id": vertex_id.index,
-            "operator_name": logical_vertex.name,
-            "previous_parallelism": previous_parallelism,
-            "parallelism": parallelism,
-            "target_parallelism": parallelism,
-            "status": "ACCEPTED",
-            "phase": "QUEUED",
-            "accepted_at_ms": now_ms,
-            "started_at_ms": None,
-            "updated_at_ms": now_ms,
-            "ended_at_ms": None,
-            "error": None,
-        }
+        operation = RescaleOperation.accepted(
+            operation_id=operation_id,
+            job_id=self.namespace,
+            operator_id=vertex_id.index,
+            operator_name=logical_vertex.name,
+            previous_parallelism=previous_parallelism,
+            target_parallelism=parallelism,
+            now_ms=now_ms,
+        )
         self._remember_rescale_operation(operation)
         self._active_rescale_operation_id = operation_id
         self._rescale_in_progress = True
@@ -408,7 +405,7 @@ class JobManager(AsyncWorker):
         )
         # Return an immutable point-in-time response.  The background task may
         # advance the authoritative record as soon as this actor method yields.
-        return dict(operation)
+        return operation.to_dict()
 
     async def _wait_for_rescale_operation(self, operation_id: str) -> dict:
         """Wait for a submitted operation without coupling it to its caller."""
@@ -549,8 +546,8 @@ class JobManager(AsyncWorker):
         # stabilization wait.  The real coordinator contract returns bool.
         return result if type(result) is bool else False
 
-    def _remember_rescale_operation(self, operation: dict[str, object]) -> None:
-        operation_id = str(operation["operation_id"])
+    def _remember_rescale_operation(self, operation: RescaleOperation) -> None:
+        operation_id = operation.operation_id
         self._rescale_operations[operation_id] = operation
         while len(self._rescale_operations) > _RESCALE_OPERATION_HISTORY_LIMIT:
             oldest_operation_id = next(iter(self._rescale_operations))
@@ -560,25 +557,12 @@ class JobManager(AsyncWorker):
 
     def _update_rescale_operation(self, operation_id: str, **updates: object) -> None:
         operation = self._rescale_operations[operation_id]
-        operation.update(updates)
         now_ms = int(time.time() * 1000)
-        operation["updated_at_ms"] = now_ms
-        if operation["status"] in _TERMINAL_RESCALE_STATUSES:
-            operation["ended_at_ms"] = now_ms
+        operation.transition(now_ms=now_ms, **updates)
 
     def _merge_rescale_result(self, operation_id: str, result: dict) -> None:
         operation = self._rescale_operations[operation_id]
-        for key in (
-            "operator_id",
-            "operator_name",
-            "previous_parallelism",
-            "parallelism",
-            "target_parallelism",
-            "error",
-        ):
-            if key in result:
-                operation[key] = result[key]
-        operation["updated_at_ms"] = int(time.time() * 1000)
+        operation.merge_result(result, now_ms=int(time.time() * 1000))
 
     def _rejected_rescale_submission(
         self,
@@ -612,25 +596,20 @@ class JobManager(AsyncWorker):
         remember: bool = True,
     ) -> dict:
         now_ms = int(time.time() * 1000)
-        operation: dict[str, object] = {
-            "operation_id": uuid.uuid4().hex,
-            "job_id": self.namespace,
-            "operator_id": operator_id,
-            "operator_name": operator_name,
-            "previous_parallelism": previous_parallelism,
-            "parallelism": parallelism,
-            "target_parallelism": parallelism,
-            "status": status,
-            "phase": "COMPLETED",
-            "accepted_at_ms": now_ms,
-            "started_at_ms": now_ms,
-            "updated_at_ms": now_ms,
-            "ended_at_ms": now_ms,
-            "error": error,
-        }
+        operation = RescaleOperation.terminal(
+            operation_id=uuid.uuid4().hex,
+            job_id=self.namespace,
+            operator_id=operator_id,
+            operator_name=operator_name,
+            previous_parallelism=previous_parallelism,
+            target_parallelism=parallelism,
+            status=status,
+            error=error,
+            now_ms=now_ms,
+        )
         if remember:
             self._remember_rescale_operation(operation)
-        return dict(operation)
+        return operation.to_dict()
 
     async def _rescale_operator_locked(
         self,
@@ -641,7 +620,7 @@ class JobManager(AsyncWorker):
     ) -> dict:
         """Run one local rescale while holding the lifecycle transaction gate."""
 
-        started_at_ms = int(self._rescale_operations[operation_id]["started_at_ms"] or time.time() * 1000)
+        started_at_ms = int(self._rescale_operations[operation_id].started_at_ms or time.time() * 1000)
         try:
             vertex_id, logical_vertex = self._resolve_rescale_request(operator_id, parallelism)
         except (KeyError, TypeError, ValueError, RuntimeError) as error:
@@ -1035,7 +1014,7 @@ class JobManager(AsyncWorker):
         checkpoint = await self._checkpoint_dashboard_snapshot()
         rescale_stabilizing = bool(checkpoint.get("rescale_recovery_fenced", False))
         rescale_operations = [
-            dashboard_value(dict(operation)) for operation in reversed(tuple(self._rescale_operations.values()))
+            dashboard_value(operation.to_dict()) for operation in reversed(tuple(self._rescale_operations.values()))
         ]
         operators = [dashboard_value(operator) for operator in progress.operators]
         for operator in operators:

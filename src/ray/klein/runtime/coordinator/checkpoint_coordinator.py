@@ -593,19 +593,6 @@ class CheckpointCoordinator(AsyncWorker):
             return_exceptions=True,
         )
 
-    def _checkpoint_domain_for_source(self, vertex_id: ExecutionVertexId) -> CheckpointDomain | None:
-        graph = self._execution_graph
-        if graph is None:
-            return None
-        finder = getattr(graph, "find_checkpoint_domain", None)
-        if not callable(finder):
-            return None
-        domain = finder(vertex_id)
-        # Several coordinator unit tests deliberately use a loose Mock graph.
-        # Only accept the concrete graph value; otherwise preserve the legacy
-        # single-source fallback below.
-        return domain if isinstance(domain, CheckpointDomain) else None
-
     def _find_execution_vertex(self, vertex_id: ExecutionVertexId) -> "ExecutionVertex | None":
         graph = self._execution_graph
         if graph is None:
@@ -620,30 +607,6 @@ class CheckpointCoordinator(AsyncWorker):
             return lookup(vertex_id)
         except KeyError:
             return None
-
-    def _reachable_domain_sinks(
-        self,
-        domain: CheckpointDomain,
-        source_ids: tuple[ExecutionVertexId, ...],
-    ) -> tuple[ExecutionVertexId, ...]:
-        """Return sink subtasks reachable from this epoch's live sources."""
-
-        members = frozenset(domain.vertex_ids)
-        adjacency: dict[ExecutionVertexId, list[ExecutionVertexId]] = {vertex_id: [] for vertex_id in members}
-        for job_edge in self._execution_graph.job_edges:
-            for edge in job_edge.execution_edges:
-                if edge.source.id in members and edge.target.id in members:
-                    adjacency[edge.source.id].append(edge.target.id)
-        reachable: set[ExecutionVertexId] = set()
-        stack = list(source_ids)
-        while stack:
-            vertex_id = stack.pop()
-            if vertex_id in reachable:
-                continue
-            reachable.add(vertex_id)
-            stack.extend(adjacency.get(vertex_id, ()))
-        sinks = reachable.intersection(domain.sink_vertex_ids)
-        return tuple(sorted(sinks, key=lambda item: (item.job_vertex_id, item.index)))
 
     def _release_domain_slot(self, checkpoint: Checkpoint) -> None:
         domain_id = checkpoint.domain_id

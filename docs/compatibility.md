@@ -27,6 +27,6 @@ signature and documentation and validates Dataset-producing operations at the
 execution boundary. Compatibility tests enumerate every public API exported by
 the pinned Ray version so newly added methods cannot be silently hidden.
 
-Supported Ray Serve releases still read the protobuf `FieldDescriptor.label`
-attribute, which protobuf 7 removed. Klein therefore constrains
-`protobuf<7` until that incompatibility is fixed upstream.
+Klein tests protobuf from `5.29.6` through the 7.x line and constrains the next
+unvalidated major with `protobuf<8`. Widening that range requires the minimum
+and latest dependency jobs plus the Ray Serve compatibility tests.

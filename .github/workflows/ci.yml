@@ -28,6 +28,7 @@ jobs:
   quality:
     name: Quality / lint and repository policy
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -42,11 +43,13 @@ jobs:
       - run: ruff check .
       - run: mypy
       - run: reuse lint
+      - run: python scripts/check_public_source.py
 
   frontend:
     name: Frontend / security, typecheck, and generated assets
     needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -62,20 +65,30 @@ jobs:
         working-directory: frontend
       - run: npm run typecheck
         working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run licenses
+        working-directory: frontend
       - run: npm run build
         working-directory: frontend
       - run: npm run check:bundle
         working-directory: frontend
       - name: Verify committed Dashboard assets are reproducible
         run: |
-          git diff --exit-code -- src/ray/klein/observability/dashboard/static
-          git status --porcelain --untracked-files=all -- src/ray/klein/observability/dashboard/static | tee /tmp/dashboard-static-status
+          git diff --exit-code -- THIRD_PARTY_NOTICES src/ray/klein/observability/dashboard/static
+          git status --porcelain --untracked-files=all -- THIRD_PARTY_NOTICES src/ray/klein/observability/dashboard/static | tee /tmp/dashboard-static-status
           test ! -s /tmp/dashboard-static-status
+      - name: Verify production dependency SBOM generation
+        run: |
+          npm sbom --omit=dev --sbom-format=cyclonedx > /tmp/frontend-sbom.cdx.json
+          node -e 'JSON.parse(require("fs").readFileSync("/tmp/frontend-sbom.cdx.json"))'
+        working-directory: frontend
 
   unit-core:
     name: Unit / core API, config, graph, architecture
     needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -102,6 +115,7 @@ jobs:
     name: Unit / runtime, scheduler, data plane, failover
     needs: unit-core
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -128,6 +142,7 @@ jobs:
     name: Unit / state, checkpoint, event time
     needs: unit-core
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -154,6 +169,7 @@ jobs:
     name: Unit / batch and streaming SQL
     needs: [unit-core, unit-runtime, unit-state]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -180,6 +196,7 @@ jobs:
     name: Unit / connectors and format contracts
     needs: [unit-core, unit-runtime]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -210,6 +227,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11"]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -248,6 +266,7 @@ jobs:
             python-version: "3.12"
             constraint: latest
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -284,6 +303,7 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -344,6 +364,7 @@ jobs:
     name: Integration / real Ray state and recovery
     needs: [unit-state, integration-runtime]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -370,6 +391,7 @@ jobs:
     name: Integration / real Ray SQL and state restore
     needs: [unit-sql, integration-state]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -396,6 +418,7 @@ jobs:
     name: Integration / local connectors
     needs: [unit-connectors, integration-runtime]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -422,6 +445,7 @@ jobs:
     name: External / Kafka and Redis services
     needs: integration-connectors
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -436,6 +460,13 @@ jobs:
           pytest tests/integration/external
           -m "external and component_connectors" --run-external
           --timeout=300 --junitxml=test-results/external-connectors.xml
+      - name: Verify the embedded-service fallback
+        env:
+          KLEIN_TEST_EMBEDDED_SERVICES: "1"
+        run: >-
+          pytest tests/integration/external
+          -m "external and component_connectors" --run-external
+          --timeout=300 --junitxml=test-results/external-connectors-embedded.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -447,6 +478,7 @@ jobs:
     name: Documentation / strict build
     needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -465,6 +497,7 @@ jobs:
     name: Security / dependencies and licenses
     needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -486,6 +519,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -515,6 +549,7 @@ jobs:
   ci-success:
     name: CI / required gate
     if: always()
+    timeout-minutes: 5
     needs:
       - quality
       - frontend

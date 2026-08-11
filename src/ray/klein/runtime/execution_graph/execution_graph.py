@@ -26,9 +26,11 @@ if TYPE_CHECKING:
 
 
 class ExecutionGraph:
-    """Immutable physical topology used to schedule Ray actors.
+    """Structurally immutable physical topology used to schedule Ray actors.
 
     Adjacency and degree views are computed lazily from the fixed topology.
+    Each :class:`ExecutionVertex` separately owns synchronized runtime state
+    (actor handle, generation, status and recovery metadata).
     """
 
     def __init__(

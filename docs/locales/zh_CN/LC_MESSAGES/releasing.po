@@ -7,7 +7,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -62,3 +62,78 @@ msgstr "使用 `python -m build` 构建，运行 `python scripts/check_distribut
 
 msgid "Verify the CycloneDX SBOM, `SHA256SUMS`, GitHub build-provenance attestation, immutable GitHub release assets, and PyPI Trusted Publisher provenance."
 msgstr "验证 CycloneDX SBOM、`SHA256SUMS`、GitHub 构建来源证明、不可变的 GitHub Release 资产以及 PyPI Trusted Publisher 来源信息。"
+
+msgid "Build, vote on, verify, sign, and publish a Klein source release."
+msgstr "构建、投票、验证、签名并发布 Klein 源码版本。"
+
+msgid "Klein treats the signed source archive as the release. Wheels are convenience artifacts built from the same tag. An official release is blocked until `IP_CLEARANCE.md` is `CLEARED` and the maintainer quorum in `GOVERNANCE.md` can be met."
+msgstr "Klein 将已签名的源码归档视为发行版。Wheel 是从同一标签构建的便捷制品。在 `IP_CLEARANCE.md` 状态变为 `CLEARED` 且满足 `GOVERNANCE.md` 的维护者法定人数前，正式发布会被阻止。"
+
+msgid "One-time repository setup"
+msgstr "一次性仓库设置"
+
+msgid "Configure the release workflow with:"
+msgstr "为发布工作流配置："
+
+msgid "`RELEASE_GPG_PUBLIC_KEY`, an armored public key repository variable;"
+msgstr "`RELEASE_GPG_PUBLIC_KEY`：ASCII 装甲格式的公钥仓库变量；"
+
+msgid "`RELEASE_GPG_PRIVATE_KEY` and `RELEASE_GPG_PASSPHRASE`, environment secrets limited to the `release-candidate` environment;"
+msgstr "`RELEASE_GPG_PRIVATE_KEY` 和 `RELEASE_GPG_PASSPHRASE`：仅限 `release-candidate` 环境的环境密钥；"
+
+msgid "required human reviewers on `release-candidate` and `pypi`; and"
+msgstr "为 `release-candidate` 和 `pypi` 设置必需的人工审核者；以及"
+
+msgid "PyPI Trusted Publishing for the `pypi` environment."
+msgstr "为 `pypi` 环境配置 PyPI Trusted Publishing。"
+
+msgid "Keep signing keys outside the repository. Publish key transitions before using them, and retain revoked keys in the public `KEYS` history."
+msgstr "签名密钥必须保存在仓库之外。使用新密钥前公开密钥迁移，并在公开 `KEYS` 历史中保留已吊销密钥。"
+
+msgid "Prepare and publish a candidate"
+msgstr "准备并发布候选版本"
+
+msgid "Resolve every release-blocking issue; update the version, `CHANGELOG.md`, and compatibility documentation. Do not put a release date in `CITATION.cff` before approval."
+msgstr "解决所有发布阻断问题；更新版本、`CHANGELOG.md` 和兼容性文档。批准前不要在 `CITATION.cff` 中填写发布日期。"
+
+msgid "Confirm CI, CodeQL, dependency review, secret scanning, Scorecard, full integration tests, frontend tests, coverage, REUSE, and documentation are green on the exact commit."
+msgstr "确认 CI、CodeQL、依赖审查、密钥扫描、Scorecard、完整集成测试、前端测试、覆盖率、REUSE 和文档在同一精确提交上全部通过。"
+
+msgid "Create and verify a signed annotated tag. From a clean checkout of that tag, run `make source-release`, `python -m build`, `python -m twine check dist/*`, and `python scripts/check_distribution.py` over the source archive, wheel, and Python sdist."
+msgstr "创建并验证已签名的附注标签。在该标签的干净检出中运行 `make source-release`、`python -m build`、`python -m twine check dist/*`，并对源码归档、wheel 和 Python sdist 运行 `python scripts/check_distribution.py`。"
+
+msgid "Generate CycloneDX SBOMs, `THIRD_PARTY_NOTICES`, and a SHA-512 digest. Sign the source candidate with an ASCII-armored detached OpenPGP signature."
+msgstr "生成 CycloneDX SBOM、`THIRD_PARTY_NOTICES` 和 SHA-512 摘要。使用 ASCII 装甲格式的 OpenPGP 分离签名为源码候选签名。"
+
+msgid "Publish the source archive, signature, digest, tag, commit, SBOMs, test evidence, and known issues at a stable public candidate URL."
+msgstr "在稳定的公开候选 URL 发布源码归档、签名、摘要、标签、提交、SBOM、测试证据和已知问题。"
+
+msgid "Open a public vote lasting at least 72 hours. The vote is on the identified source bytes, not on a branch name. Follow `GOVERNANCE.md`; record every binding vote and the final result at a stable URL."
+msgstr "发起至少持续 72 小时的公开投票。投票对象是已标识的源码字节，而不是分支名称。遵循 `GOVERNANCE.md`，并在稳定 URL 记录每张有约束力的选票和最终结果。"
+
+msgid "If the candidate changes by one byte, cancel the vote, issue a new candidate, and restart the 72-hour window."
+msgstr "如果候选版本有一个字节发生变化，请取消投票、发布新候选，并重新开始 72 小时窗口。"
+
+msgid "Promote an approved candidate"
+msgstr "晋升已批准候选版本"
+
+msgid "Run the `Release` workflow manually with:"
+msgstr "使用以下输入手动运行 `Release` 工作流："
+
+msgid "the signed final tag;"
+msgstr "已签名的最终标签；"
+
+msgid "the public vote-result URL; and"
+msgstr "公开投票结果 URL；以及"
+
+msgid "the voted source archive's SHA-512 digest."
+msgstr "被投票源码归档的 SHA-512 摘要。"
+
+msgid "The workflow verifies the tag, main-branch ancestry, exact package version, HTTPS vote evidence, voted source digest, tests, source/distribution policy, SBOM generation, signatures, and checksums. It then publishes the wheel and sdist through PyPI Trusted Publishing and creates the immutable GitHub release. Every source, Python, SBOM, checksum, and key artifact receives a detached signature; `SHA512SUMS` covers the release payload."
+msgstr "工作流会验证标签、主分支祖先关系、精确包版本、HTTPS 投票证据、被投票源码摘要、测试、源码/发行包策略、SBOM 生成、签名和校验和。随后通过 PyPI Trusted Publishing 发布 wheel 和 sdist，并创建不可变的 GitHub Release。每个源码、Python、SBOM、校验和与密钥制品都有分离签名；`SHA512SUMS` 覆盖发行负载。"
+
+msgid "After promotion, independently install the wheel, verify all signatures and digests from a clean machine, confirm PyPI/GitHub provenance, then add the approved version and date to `CITATION.cff` and the changelog in the next development commit."
+msgstr "晋升后，在干净机器上独立安装 wheel、验证全部签名和摘要、确认 PyPI/GitHub 来源证明，然后在下一开发提交中把批准的版本和日期加入 `CITATION.cff` 与变更日志。"
+
+msgid "Never reuse an uploaded version. If promotion is partial, stop, preserve the evidence, publish an incident note, and either complete the exact approved candidate or issue a new version; do not replace files under the same version."
+msgstr "绝不重复使用已上传的版本。如果晋升只完成一部分，请停止操作、保留证据并发布事件说明；只能完成完全相同的已批准候选，或发布新版本，不得替换同一版本下的文件。"

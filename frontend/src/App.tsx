@@ -26,7 +26,6 @@ import {
   useParams,
 } from "react-router";
 import KleinMark from "./assets/KleinMark.svg";
-import RayLogo from "./assets/RayLogo.svg";
 import { useKleinJob } from "./pages/klein/hook/useKleinJobs";
 
 const KleinJobsPage = lazy(() =>
@@ -126,10 +125,18 @@ const MainNav = () => {
       }}
     >
       <Link
+        aria-label="Open Ray Dashboard"
         href={rayHref("/")}
-        sx={{ display: "flex", justifyContent: "center", marginLeft: 2, marginRight: 3 }}
+        sx={{
+          color: "#036DCF",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+          marginLeft: 2,
+          marginRight: 3,
+          textDecoration: "none",
+        }}
       >
-        <Box alt="Ray" component="img" src={RayLogo} sx={{ width: 28 }} />
+        Ray Dashboard
       </Link>
       {RAY_NAV_ITEMS.slice(0, 3).map(([title, path]) => (
         <NavItem href={rayHref(path)} key={path} title={title} />

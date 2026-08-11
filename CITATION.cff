@@ -3,8 +3,6 @@ cff-version: 1.2.0
 message: "If you use Klein in research, please cite the software repository."
 title: "Klein"
 type: software
-version: 0.1.0a1
-date-released: 2026-07-20
 authors:
   - family-names: "Klein Authors"
 repository-code: "https://github.com/yuchen-ecnu/klein"

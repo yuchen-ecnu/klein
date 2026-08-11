@@ -53,7 +53,7 @@ another.
 
 | Owner | Responsible for | Not provided by that layer |
 | --- | --- | --- |
-| Klein | Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries. | Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, or an audit log independent of Ray. |
+| Klein | Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; liveness/readiness probes; correlated sanitized access and control events; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries. | Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, or a durable audit log independent of Ray. |
 | Ray | Running actors/tasks, namespaces, runtime environments, Object Store, worker/actor logs, metrics, cluster connectivity, and the authentication/TLS features configured by the Ray operator. | Klein-specific authorization or isolation between mutually untrusted Klein jobs. A Ray namespace avoids actor-name collisions; it is not an access-control boundary. |
 | Platform operator | Network isolation, firewall and ingress policy, TLS termination, Ray authentication, Kubernetes/cloud IAM, node and container hardening, image provenance, secret delivery, object-store IAM/encryption/versioning, log/metric access, backups, and separation of security domains. | Correct UDF behavior, safe application logging, connector semantics, or sink idempotency. |
 | Application owner | Trusted dependencies and code review; input validation; UDF/resource limits; connector credential use; state/schema choices; sensitive-data classification; safe job/operator names; output authorization, idempotency, and retention. | Cluster isolation or platform controls that were never configured. |
@@ -159,8 +159,10 @@ If remote access is required:
 2. restrict ingress to the operations network and approved identities;
 3. preserve or rewrite `Host` to a host trusted by the listener;
 4. enforce request, rate, and session limits at the proxy;
-5. monitor control requests at the proxy, because Klein suppresses the base
-   HTTP access log to avoid leaking job identifiers;
+5. retain proxy audit logs. Klein suppresses the base HTTP log but emits
+   sanitized `dashboard.http.request` and `dashboard.control.*` structured
+   events with `X-Request-ID`; Ray log retention is not an independent audit
+   store;
 6. do not rely on the built-in Host-header, same-origin, CSP, or frame checks as
    substitutes for authentication.
 

@@ -34,13 +34,13 @@ application must support more than one compatible Ray patch.
 Runtime bridge exports
 ----------------------
 
-The standalone distribution currently exposes ``get``, ``aget``, ``kill``,
-``exit_actor``, ``get_actor_by_name``, ``get_actor_status``,
-``kill_actor_by_name``, ``register_debug_actor``, and ``is_debug_mode`` at the
-top level because the bundled CLI and runtime share the lightweight Ray/debug
-adapter. These names originate in ``ray.klein._internal`` and are **not** an
-application compatibility promise. Do not use them to manage arbitrary Ray
-actors or build user dataflows.
+The bundled CLI and runtime use ``get``, ``aget``, ``kill``, ``exit_actor``,
+``get_actor_by_name``, ``get_actor_status``, ``kill_actor_by_name``,
+``register_debug_actor``, and ``is_debug_mode`` from a lightweight Ray/debug
+adapter. During the alpha migration these names remain attribute-compatible
+for Klein internals, but they are omitted from ``ray.klein.__all__`` and
+``dir(ray.klein)``. They are **not** an application compatibility promise. Do
+not use them to manage arbitrary Ray actors or build user dataflows.
 
 An exported name is not a substitute for the documented API boundary. New
 application code should use :class:`JobHandle`, the JSON-safe observability

@@ -26,6 +26,7 @@ class _SlowStopActor:
 
 def _vertex(index: int, status: ExecutionVertexStatus, *, handle=...) -> ExecutionVertex:
     vertex = object.__new__(ExecutionVertex)
+    vertex._runtime_lock = threading.RLock()
     vertex.name = f"operator ({index + 1}/3)"
     vertex.index = index
     vertex._status = status

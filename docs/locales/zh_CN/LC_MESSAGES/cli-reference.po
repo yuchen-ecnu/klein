@@ -6,7 +6,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:35+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -654,3 +654,9 @@ msgid ""
 "For symptoms and recovery steps, see [Troubleshooting](troubleshooting.md"
 "#jobs-and-cli)."
 msgstr "有关症状和恢复步骤，请参阅[故障排查](troubleshooting.md#jobs-and-cli)。"
+
+msgid "Use `ray-klein COMMAND --help` to inspect the installed version. The command names and defaults below describe the current `0.1.0a1` source tree."
+msgstr "使用 `ray-klein COMMAND --help` 查看已安装版本。以下命令名称和默认值描述当前 `0.1.0a1` 源码树。"
+
+msgid "The listener exposes `GET /healthz` for liveness and `GET /readyz` for state service readiness. Responses include `X-Request-ID`, which can be supplied by a trusted proxy for log correlation."
+msgstr "监听器提供 `GET /healthz` 活性检查和 `GET /readyz` 状态服务就绪检查。响应包含 `X-Request-ID`；受信代理可提供该值用于日志关联。"

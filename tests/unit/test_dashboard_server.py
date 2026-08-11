@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import logging
 import re
 import socket
 import threading
@@ -230,6 +231,68 @@ def test_dashboard_exposes_ray_navigation_configuration() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_dashboard_health_and_readiness_have_correlated_request_ids(dashboard_server) -> None:
+    server, _ = dashboard_server
+
+    health_status, health_headers, health_payload = _request(
+        server,
+        "GET",
+        "/healthz",
+        headers={"X-Request-ID": "probe-123"},
+    )
+    ready_status, ready_headers, ready_payload = _request(server, "GET", "/readyz")
+
+    assert health_status == ready_status == 200
+    assert health_headers["X-Request-ID"] == "probe-123"
+    assert re.fullmatch(r"[0-9a-f]{32}", ready_headers["X-Request-ID"])
+    assert json.loads(health_payload) == {"status": "ok"}
+    assert json.loads(ready_payload) == {"status": "ready"}
+
+
+def test_dashboard_readiness_fails_closed_while_liveness_stays_healthy(dashboard_server) -> None:
+    server, state = dashboard_server
+
+    def unavailable():
+        raise RuntimeError("state actor unavailable")
+
+    state.list_jobs = unavailable
+    health_status, _, _ = _request(server, "GET", "/healthz")
+    ready_status, _, ready_payload = _request(server, "GET", "/readyz")
+
+    assert health_status == 200
+    assert ready_status == 503
+    assert json.loads(ready_payload)["request_id"]
+
+
+def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, caplog) -> None:
+    server, state = dashboard_server
+    caplog.set_level(logging.INFO, logger="ray.klein.observability.dashboard.server")
+    body = json.dumps({"parallelism": 5})
+
+    status, headers, _ = _request(
+        server,
+        "POST",
+        f"/api/jobs/{quote(state.job_id, safe='')}/operators/7/rescale",
+        body=body,
+        headers={
+            "Content-Type": "application/json",
+            "Content-Length": str(len(body)),
+            "X-Request-ID": "control-123",
+        },
+    )
+
+    events = {getattr(record, "klein_event", None): record for record in caplog.records}
+    assert status == 202
+    assert headers["X-Request-ID"] == "control-123"
+    assert "dashboard.http.request" in events
+    assert "dashboard.control.rescale.requested" in events
+    assert "dashboard.control.rescale.completed" in events
+    access_record = events["dashboard.http.request"]
+    assert state.job_id not in access_record.getMessage()
+    assert access_record.klein_fields["route"] == "operator.rescale"
+    assert access_record.klein_fields["request_id"] == "control-123"
 
 
 def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_server) -> None:
@@ -470,8 +533,9 @@ def test_dashboard_rejects_dns_rebinding_host_before_control_call(dashboard_serv
     assert state.rescale_calls == []
 
 
-def test_dashboard_maps_backend_type_error_to_service_unavailable(dashboard_server) -> None:
+def test_dashboard_maps_backend_type_error_to_service_unavailable(dashboard_server, caplog) -> None:
     server, state = dashboard_server
+    caplog.set_level(logging.INFO, logger="ray.klein.observability.dashboard.server")
     state.rescale_error = TypeError("JobManager returned an invalid result")
     body = json.dumps({"parallelism": 3})
 
@@ -485,6 +549,12 @@ def test_dashboard_maps_backend_type_error_to_service_unavailable(dashboard_serv
 
     assert status == 503
     assert "TypeError" in json.loads(payload)["error"]
+    completed = next(
+        record
+        for record in caplog.records
+        if getattr(record, "klein_event", None) == "dashboard.control.rescale.completed"
+    )
+    assert completed.klein_fields["result"] == "ERROR"
 
 
 def test_dashboard_maps_ray_wrapped_asyncio_timeout_to_gateway_timeout(dashboard_server) -> None:

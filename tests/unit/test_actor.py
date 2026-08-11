@@ -70,6 +70,7 @@ def test_subtask_progress_exposes_actor_id_for_dashboard_navigation() -> None:
 
     progress = ProgressReporter._subtask_progress(
         vertex,
+        ProgressReporter._runtime_snapshot(vertex),
         SubtaskCounts(),
         progress_failed=False,
         job_status=JobStatus.RUNNING,

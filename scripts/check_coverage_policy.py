@@ -17,13 +17,20 @@ class CoveragePolicy:
 
 
 COMPONENT_POLICIES = {
+    "api": CoveragePolicy("src/ray/klein/api/", 82.0),
+    "collector": CoveragePolicy("src/ray/klein/runtime/collector/", 72.0),
     "configuration": CoveragePolicy("src/ray/klein/config/", 82.0),
     "connectors": CoveragePolicy("src/ray/klein/integrations/", 70.0),
     "coordinator": CoveragePolicy("src/ray/klein/runtime/coordinator/", 65.0),
     "event-time": CoveragePolicy("src/ray/klein/runtime/event_time/", 85.0),
+    "execution-graph": CoveragePolicy("src/ray/klein/runtime/execution_graph/", 80.0),
+    "job-manager": CoveragePolicy("src/ray/klein/runtime/job_manager/", 75.0),
     "observability": CoveragePolicy("src/ray/klein/observability/", 60.0),
     "partitioning": CoveragePolicy("src/ray/klein/runtime/partitioning/", 82.0),
+    "scheduler": CoveragePolicy("src/ray/klein/runtime/scheduler/", 70.0),
+    "sql": CoveragePolicy("src/ray/klein/_internal/sql/", 75.0),
     "state": CoveragePolicy("src/ray/klein/state/", 82.0),
+    "worker": CoveragePolicy("src/ray/klein/runtime/worker/", 68.0),
 }
 
 

@@ -5,3 +5,5 @@
 *.jpg binary
 *.jpeg binary
 *.gif binary
+.github export-ignore
+src/ray/klein/observability/dashboard/static export-ignore

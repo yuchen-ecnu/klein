@@ -38,6 +38,23 @@ def _python_modules():
     return PACKAGE_ROOT.rglob("*.py")
 
 
+def _module_name(path: Path) -> str:
+    relative = path.relative_to(PACKAGE_ROOT.parent.parent)
+    parts = relative.with_suffix("").parts
+    return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+
+
+def _top_level_imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    imported: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+        elif isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+    return imported
+
+
 def _defined_public_classes(path: Path) -> list[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     return [node.name for node in tree.body if isinstance(node, ast.ClassDef) and not node.name.startswith("_")]
@@ -74,6 +91,39 @@ def test_distribution_uses_the_ray_klein_namespace():
 def test_source_uses_the_public_ray_runtime_context_api():
     source = "\n".join(path.read_text(encoding="utf-8") for path in _python_modules())
     assert "create_runtime_context" not in source
+
+
+def test_api_module_import_graph_is_acyclic() -> None:
+    api_modules = {_module_name(path): path for path in (PACKAGE_ROOT / "api").rglob("*.py")}
+    graph = {
+        module: {dependency for dependency in _top_level_imports(path) if dependency in api_modules}
+        for module, path in api_modules.items()
+    }
+    visited: set[str] = set()
+    active: list[str] = []
+
+    def visit(module: str) -> list[str] | None:
+        if module in active:
+            start = active.index(module)
+            return [*active[start:], module]
+        if module in visited:
+            return None
+        active.append(module)
+        for dependency in sorted(graph[module]):
+            cycle = visit(dependency)
+            if cycle is not None:
+                return cycle
+        active.pop()
+        visited.add(module)
+        return None
+
+    cycles = [cycle for module in sorted(graph) if (cycle := visit(module)) is not None]
+    assert cycles == []
+
+
+def test_api_stability_markers_are_owned_by_klein() -> None:
+    imports = {imported for path in (PACKAGE_ROOT / "api").rglob("*.py") for imported in _top_level_imports(path)}
+    assert "ray.util.annotations" not in imports
 
 
 def test_source_respects_forbidden_namespace_boundaries():

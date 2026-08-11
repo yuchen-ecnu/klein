@@ -180,6 +180,14 @@ is loopback-only, and a non-loopback listener requires
 `--allow-unauthenticated`. Expose both Klein and Ray through the cluster's
 authenticated operations proxy.
 
+For orchestrators, `GET /healthz` reports that the HTTP process is alive and
+`GET /readyz` verifies that the published state service can answer. Every HTTP
+response includes `X-Request-ID`; a valid caller-provided identifier is
+preserved, otherwise Klein generates one. Access events use bounded route names
+instead of raw job paths. Cancel and rescale actions emit paired
+`dashboard.control.*.requested` and `.completed` events. Export these Ray logs
+to durable storage when they are part of an audit requirement.
+
 ## Configure operational logs
 
 Klein emits operational events through Python's standard `logging` package.
@@ -209,7 +217,8 @@ JSON events contain a timestamp, level, component, event name, message, process
 and thread identity, plus available context such as `job_id`, `operator_id`,
 `task_id`, `subtask_index`, and `checkpoint_id`. Stable event names use dotted
 verbs, for example `job.status.changed`, `checkpoint.completed`, and
-`failover.global.started`. Structured fields whose names look like passwords,
+`failover.global.started`. Dashboard events additionally carry `request_id`,
+HTTP route/status, duration, and control result. Structured fields whose names look like passwords,
 tokens, credentials, secrets, or API keys are redacted.
 
 ## Keep logs and data separate

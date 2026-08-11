@@ -39,7 +39,6 @@ _EXPORTS = {
     "WatermarkStrategy": ("ray.klein.api.watermark_strategy", "WatermarkStrategy"),
     "WindowAssigner": ("ray.klein.api.window_assigner", "WindowAssigner"),
     "WindowedStream": ("ray.klein.api.windowed_stream", "WindowedStream"),
-    "aget": ("ray.klein._internal.ray", "aget"),
     "cancel_job": ("ray.klein.observability.state_api", "cancel_job"),
     "configure": ("ray.klein.api.klein_context", "configure"),
     "configure_logging": ("ray.klein._internal.logging", "configure_logging"),
@@ -47,26 +46,18 @@ _EXPORTS = {
     "dataset_factory": ("ray.klein.api.read_api", "dataset_factory"),
     "execute": ("ray.klein.api.klein_context", "execute"),
     "execute_sql": ("ray.klein.api.klein_context", "execute_sql"),
-    "exit_actor": ("ray.klein._internal.ray", "exit_actor"),
     "explain": ("ray.klein.api.klein_context", "explain"),
     "from_items": ("ray.klein.api.read_api", "from_items"),
     "from_ray_dataset": ("ray.klein.api.read_api", "from_ray_dataset"),
     "from_values": ("ray.klein.api.read_api", "from_values"),
-    "get": ("ray.klein._internal.ray", "get"),
     "get_job_snapshot": ("ray.klein.observability.state_api", "get_job_snapshot"),
-    "get_actor_by_name": ("ray.klein._internal.ray", "get_actor_by_name"),
-    "get_actor_status": ("ray.klein._internal.ray", "get_actor_status"),
     "get_config": ("ray.klein.api.klein_context", "get_config"),
     "install_context": ("ray.klein.api.klein_context", "install_context"),
-    "is_debug_mode": ("ray.klein._internal.ray", "is_debug_mode"),
-    "kill": ("ray.klein._internal.ray", "kill"),
-    "kill_actor_by_name": ("ray.klein._internal.ray", "kill_actor_by_name"),
     "list_job_snapshots": ("ray.klein.observability.state_api", "list_job_snapshots"),
     "read_kafka": ("ray.klein.api.read_api", "read_kafka"),
     "read_canal": ("ray.klein.api.read_api", "read_canal"),
     "read_rocketmq": ("ray.klein.api.read_api", "read_rocketmq"),
     "rescale_operator": ("ray.klein.observability.state_api", "rescale_operator"),
-    "register_debug_actor": ("ray.klein._internal.ray", "register_debug_actor"),
     "register_ai_function": ("ray.klein.api.klein_context", "register_ai_function"),
     "register_scalar_function": ("ray.klein.api.klein_context", "register_scalar_function"),
     "register_table_factory": ("ray.klein.api.klein_context", "register_table_factory"),
@@ -75,12 +66,30 @@ _EXPORTS = {
     "sql": ("ray.klein.api.sql", "sql"),
 }
 
+# Runtime modules still resolve these names through the package during the
+# alpha migration, but they are deliberately absent from ``__all__`` and
+# ``dir(ray.klein)`` so applications do not mistake the Ray/debug adapter for a
+# supported public API.
+_RUNTIME_BRIDGE_EXPORTS = {
+    "aget": ("ray.klein._internal.ray", "aget"),
+    "exit_actor": ("ray.klein._internal.ray", "exit_actor"),
+    "get": ("ray.klein._internal.ray", "get"),
+    "get_actor_by_name": ("ray.klein._internal.ray", "get_actor_by_name"),
+    "get_actor_status": ("ray.klein._internal.ray", "get_actor_status"),
+    "is_debug_mode": ("ray.klein._internal.ray", "is_debug_mode"),
+    "kill": ("ray.klein._internal.ray", "kill"),
+    "kill_actor_by_name": ("ray.klein._internal.ray", "kill_actor_by_name"),
+    "register_debug_actor": ("ray.klein._internal.ray", "register_debug_actor"),
+}
+
 __all__ = sorted([*_EXPORTS, "__version__"])
 
 
 def __getattr__(name: str) -> Any:
     if name in _EXPORTS:
         return resolve_lazy_export(name, _EXPORTS, globals(), __name__)
+    if name in _RUNTIME_BRIDGE_EXPORTS:
+        return resolve_lazy_export(name, _RUNTIME_BRIDGE_EXPORTS, globals(), __name__)
 
     from ray.klein.api.ray_data.discovery import has_public_dataset_factory
 
@@ -96,7 +105,7 @@ def __getattr__(name: str) -> Any:
 def __dir__() -> list[str]:
     from ray.klein.api.ray_data.discovery import public_dataset_factories
 
-    return sorted(set(globals()) | set(public_dataset_factories()))
+    return sorted(set(globals()) | set(_EXPORTS) | set(public_dataset_factories()))
 
 
 try:

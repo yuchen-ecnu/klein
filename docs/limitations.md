@@ -161,8 +161,10 @@ and the connector's own delivery section before combining a source and sink.
 - The Dashboard control endpoint can rescale supported operators. The CLI and
   Python state API can also cancel jobs. Protect every control path with the
   Ray and network boundary documented in the security guide.
-- The detached state actor keeps a bounded in-memory job history. It is not an
-  audit log, durable metric store, or source of checkpoint truth.
+- The detached state actor keeps a bounded in-memory job history. Dashboard
+  request/control events are structured but follow Ray log retention; neither
+  facility is an independent durable audit log, metric store, or source of
+  checkpoint truth.
 - Klein relies on Ray and the deployment platform for cluster authentication,
   network isolation, process isolation, secret delivery, and multi-tenant
   policy.

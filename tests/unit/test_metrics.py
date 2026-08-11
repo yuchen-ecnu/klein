@@ -14,7 +14,7 @@ from ray.klein.observability.metrics.metric_spec import MetricKind, MetricSpec
 from ray.klein.observability.metrics.task_metrics import TaskMetrics
 from ray.klein.runtime.collector.edge_output import DeliveryMode
 from ray.klein.runtime.context.runtime_context import TaskRuntimeContext
-from ray.klein.runtime.message import Record
+from ray.klein.runtime.message import KeyRecord, Record
 from ray.klein.runtime.operator.operator import OneInputOperator, StreamOperator
 from ray.klein.runtime.partitioning import ForwardPartitioner
 from ray.klein.runtime.worker.input_batch_accumulator import InputBatchAccumulator
@@ -62,6 +62,15 @@ def fake_ray_metrics(monkeypatch):
     monkeypatch.setattr("ray.klein.observability.metrics.metrics.ray.util.metrics.Gauge", factory)
     monkeypatch.setattr("ray.klein.observability.metrics.metrics.ray.util.metrics.Histogram", factory)
     return created
+
+
+def test_record_memory_estimate_includes_key_and_row_metadata() -> None:
+    plain = Record({"value": [1]})
+    keyed = KeyRecord("customer-" + "x" * 1_000, {"value": [1]})
+    keyed.row_kinds = ("INSERT-" + "x" * 1_000,)
+    keyed.row_timestamps = (1_000_000_000,)
+
+    assert estimate_retained_size(keyed) > estimate_retained_size(plain) + 2_000
 
 
 def test_metric_spec_rejects_ambiguous_contracts() -> None:

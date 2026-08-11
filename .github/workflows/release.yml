@@ -2,22 +2,40 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Signed release tag (vX.Y.Z)"
+        required: true
+        type: string
+      vote_url:
+        description: "Public release-vote result URL"
+        required: true
+        type: string
+      source_sha512:
+        description: "SHA-512 digest of the voted canonical source archive"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag }}
+  RELEASE_SOURCE_SHA512: ${{ inputs.source_sha512 }}
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
@@ -26,12 +44,44 @@ jobs:
           cache: pip
       - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[dev]"
-      - name: Verify tag and release ancestry
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22.22.3"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify signed tag, vote evidence, and release ancestry
+        env:
+          RELEASE_GPG_PUBLIC_KEY: ${{ vars.RELEASE_GPG_PUBLIC_KEY }}
+          RELEASE_VOTE_URL: ${{ inputs.vote_url }}
         run: |
-          git fetch origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          test -n "$RELEASE_GPG_PUBLIC_KEY"
+          [[ "$RELEASE_VOTE_URL" == https://* ]]
+          [[ "$RELEASE_SOURCE_SHA512" =~ ^[0-9a-fA-F]{128}$ ]]
+          printf '%s' "$RELEASE_GPG_PUBLIC_KEY" | gpg --batch --import
+          git fetch origin main --tags
+          git verify-tag "$RELEASE_TAG"
+          release_sha=$(git rev-parse "$RELEASE_TAG^{commit}")
+          git merge-base --is-ancestor "$release_sha" origin/main
           package_version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          test "${GITHUB_REF_NAME#v}" = "$package_version"
+          test "${RELEASE_TAG#v}" = "$package_version"
+      - name: Enforce intellectual-property clearance
+        run: "grep -Fq '**Status: CLEARED' IP_CLEARANCE.md"
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: npm audit --audit-level=moderate
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run licenses
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - name: Verify generated frontend artifacts
+        run: |
+          git diff --exit-code -- THIRD_PARTY_NOTICES src/ray/klein/observability/dashboard/static
+          test -z "$(git status --porcelain --untracked-files=all -- THIRD_PARTY_NOTICES src/ray/klein/observability/dashboard/static)"
       - run: ruff format --check .
       - run: ruff check .
       - run: mypy
@@ -69,6 +119,7 @@ jobs:
   build:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -76,6 +127,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
@@ -83,9 +136,23 @@ jobs:
           cache: pip
       - run: python -m pip install "pip==26.2"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22.22.3"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+        working-directory: frontend
+      - run: npm run licenses && npm run build
+        working-directory: frontend
       - run: python -m build --outdir release/python
+      - run: python scripts/build_source_release.py --output-dir release/source --ref "$RELEASE_TAG"
+      - name: Verify the voted canonical source digest
+        run: |
+          actual=$(sha512sum release/source/*-src.tar.gz | awk '{print $1}')
+          test "${actual,,}" = "${RELEASE_SOURCE_SHA512,,}"
       - run: python -m twine check release/python/*
-      - run: python scripts/check_distribution.py release/python/*
+      - run: python scripts/check_distribution.py release/python/* release/source/*
       - name: Verify the wheel in a clean environment
         run: |
           python -m venv /tmp/ray-klein-release
@@ -94,23 +161,64 @@ jobs:
           /tmp/ray-klein-release/bin/python -c "import ray, ray.klein; print(ray.klein.__version__)"
       - name: Generate dependency SBOM
         run: |
-          mkdir -p release/metadata
-          pip-audit --format cyclonedx-json --output release/metadata/sbom.cdx.json --progress-spinner off
-          cd release
-          sha256sum python/* > metadata/SHA256SUMS
-      - name: Attest Python distributions
+          mkdir -p ../release/metadata
+          pip-audit --format cyclonedx-json --output ../release/metadata/python-environment-sbom.cdx.json --progress-spinner off
+          npm sbom --omit=dev --sbom-format=cyclonedx > ../release/metadata/frontend-sbom.cdx.json
+        working-directory: frontend
+      - name: Attest source and Python distributions
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
         with:
-          subject-path: release/python/*
+          subject-path: |
+            release/source/*
+            release/python/*
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: release-artifacts
+          name: unsigned-release-artifacts
+          path: release/
+          if-no-files-found: error
+
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release-candidate
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: unsigned-release-artifacts
+          path: release/
+      - name: Sign and checksum every release artifact
+        env:
+          RELEASE_GPG_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+          RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+        run: |
+          test -n "$RELEASE_GPG_PRIVATE_KEY"
+          printf '%s' "$RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
+          fingerprint=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "fpr" {print $10; exit}')
+          test -n "$fingerprint"
+          gpg --batch --armor --export "$fingerprint" > release/metadata/KEYS
+          cd release
+          find source python metadata -type f ! -name SHA512SUMS ! -name '*.asc' -print0 \
+            | sort -z | xargs -0 sha512sum > metadata/SHA512SUMS
+          while IFS= read -r -d '' artifact; do
+            gpg --batch --yes --armor --detach-sign \
+              --local-user "$fingerprint" \
+              --pinentry-mode loopback \
+              --passphrase "$RELEASE_GPG_PASSPHRASE" \
+              "$artifact"
+          done < <(find source python metadata -type f ! -name '*.asc' -print0)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: signed-release-artifacts
           path: release/
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: sign
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: pypi
       url: https://pypi.org/project/ray-klein/
@@ -119,8 +227,16 @@ jobs:
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: release-artifacts
+          name: signed-release-artifacts
           path: release/
+      - name: Verify candidate signatures and checksums
+        run: |
+          gpg --batch --import release/metadata/KEYS
+          cd release
+          sha512sum --check metadata/SHA512SUMS
+          while IFS= read -r -d '' signature; do
+            gpg --batch --verify "$signature" "${signature%.asc}"
+          done < <(find source python metadata -name '*.asc' -print0)
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           packages-dir: release/python/
@@ -128,25 +244,26 @@ jobs:
   github-release:
     needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: release-artifacts
+          name: signed-release-artifacts
           path: release/
       - name: Publish immutable GitHub release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           release_flags=()
-          if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
+          if [[ "$RELEASE_TAG" =~ (a|b|rc)[0-9]+$ ]]; then
             release_flags+=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" \
-            release/python/* release/metadata/* \
+          gh release create "$RELEASE_TAG" \
+            release/source/* release/python/* release/metadata/* \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --generate-notes \
-            --title "Klein ${GITHUB_REF_NAME}" \
+            --title "Klein ${RELEASE_TAG}" \
             "${release_flags[@]}"

@@ -7,7 +7,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-20 11:04+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -371,3 +371,9 @@ msgstr "页面会轮询已发布的作业快照并渲染算子 DAG。与 Flink �
 
 msgid "The standalone Dashboard has no built-in authentication. Its default listener is loopback-only, and a non-loopback listener requires `--allow-unauthenticated`. Expose both Klein and Ray through the cluster's authenticated operations proxy."
 msgstr "独立 Dashboard 不内置身份认证。它默认只监听回环地址；监听非回环地址必须使用 `--allow-unauthenticated`。请通过集群已认证的运维代理同时对外提供 Klein 和 Ray。"
+
+msgid "For orchestrators, `GET /healthz` reports that the HTTP process is alive and `GET /readyz` verifies that the published state service can answer. Every HTTP response includes `X-Request-ID`; a valid caller-provided identifier is preserved, otherwise Klein generates one. Access events use bounded route names instead of raw job paths. Cancel and rescale actions emit paired `dashboard.control.*.requested` and `.completed` events. Export these Ray logs to durable storage when they are part of an audit requirement."
+msgstr "对于编排系统，`GET /healthz` 报告 HTTP 进程存活，`GET /readyz` 验证发布状态服务能够响应。每个 HTTP 响应都包含 `X-Request-ID`；有效的调用方标识会被保留，否则由 Klein 生成。访问事件使用有界路由名，不记录原始作业路径。取消与扩缩容操作会成对发出 `dashboard.control.*.requested` 和 `.completed` 事件。如果这些 Ray 日志属于审计要求，请将其导出到持久存储。"
+
+msgid "JSON events contain a timestamp, level, component, event name, message, process and thread identity, plus available context such as `job_id`, `operator_id`, `task_id`, `subtask_index`, and `checkpoint_id`. Stable event names use dotted verbs, for example `job.status.changed`, `checkpoint.completed`, and `failover.global.started`. Dashboard events additionally carry `request_id`, HTTP route/status, duration, and control result. Structured fields whose names look like passwords, tokens, credentials, secrets, or API keys are redacted."
+msgstr "JSON 事件包含时间戳、级别、组件、事件名、消息、进程和线程标识，以及 `job_id`、`operator_id`、`task_id`、`subtask_index`、`checkpoint_id` 等可用上下文。稳定事件名采用点分动词，例如 `job.status.changed`、`checkpoint.completed` 和 `failover.global.started`。Dashboard 事件还携带 `request_id`、HTTP 路由/状态、耗时和控制结果。名称类似密码、令牌、凭据、密钥或 API 密钥的结构化字段会被脱敏。"

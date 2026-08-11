@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from ray.data import SaveMode
 from ray.data.block import UserDefinedFunction
-from ray.util.annotations import PublicAPI
 
 from ray.klein._internal.streaming_expression import (
     DEFAULT_EXPRESSION_ASYNC_BUFFER_SIZE,
@@ -14,6 +13,7 @@ from ray.klein._internal.streaming_expression import (
     StreamingExpressionFilter,
     StreamingWithColumn,
 )
+from ray.klein.api.api_stability import public_api
 from ray.klein.api.collect_function import CollectFunction
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.functions.ray_data_lowering import (
@@ -31,10 +31,6 @@ from ray.klein.api.ray_data import (
 )
 from ray.klein.api.sink_function import SinkFunction
 from ray.klein.api.stream import Stream
-from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
-from ray.klein.integrations.filesystem.streaming_file_sink import StreamingFileSink
-from ray.klein.integrations.iceberg.streaming_iceberg_sink import StreamingIcebergSink
-from ray.klein.integrations.sql.streaming_sql_sink import StreamingSQLSink
 from ray.klein.runtime.backend.batch_only_sink import BatchOnlySink
 from ray.klein.runtime.backend.batch_only_transform import BatchOnlyTransform
 from ray.klein.runtime.operator.batch_process_operator import BatchProcessOperator
@@ -61,6 +57,7 @@ if TYPE_CHECKING:
     from ray.klein.api.keyed_stream import KeyedStream
     from ray.klein.api.klein_context import KleinContext
     from ray.klein.api.row_kind import RowKind
+    from ray.klein.api.stream_sink import StreamSink
     from ray.klein.api.watermark_strategy import WatermarkStrategy
     from ray.klein.integrations.redis.redis_connection_config import RedisConnectionConfig
     from ray.klein.integrations.redis.redis_sink_config import RedisSinkConfig
@@ -295,6 +292,8 @@ class DataStream(Stream):
     ) -> Any:
         """Attach a batch-only terminal Ray Data call to the graph."""
 
+        from ray.klein.api.stream_sink import StreamSink
+
         input_streams = list(dependencies)
         if self.context.interactive_mode_enabled:
             input_streams = copy.deepcopy(input_streams)
@@ -315,7 +314,7 @@ class DataStream(Stream):
             return input_streams[0].context.execute(sink.name, sinks=(sink,)).get()
         return sink
 
-    @PublicAPI
+    @public_api
 
     # ------------------------------------------------------------------
     #  Element-wise transforms: map, map_batches, flat_map, map_reduce, filter
@@ -410,7 +409,7 @@ class DataStream(Stream):
             ray_serve_enabled=ray_serve_enabled,
         )
 
-    @PublicAPI
+    @public_api
     def map_batches(
         self,
         fn: UserDefinedFunction,
@@ -514,7 +513,7 @@ class DataStream(Stream):
             ray_serve_enabled=ray_serve_enabled,
         )
 
-    @PublicAPI
+    @public_api
     def flat_map(
         self,
         fn: UserDefinedFunction,
@@ -622,7 +621,7 @@ class DataStream(Stream):
             ray_serve_enabled=ray_serve_enabled,
         )
 
-    @PublicAPI
+    @public_api
     def map_reduce(
         self,
         key_selector: Callable[[Any], Any],
@@ -841,7 +840,7 @@ class DataStream(Stream):
             resources=Resources(num_cpus[2], num_gpus[2], concurrency[2]),
         )
 
-    @PublicAPI
+    @public_api
     def filter(
         self,
         fn: UserDefinedFunction[dict[str, Any], bool | list[bool]],
@@ -920,6 +919,8 @@ class DataStream(Stream):
             A new UnionStream.
         """
 
+        from ray.klein.api.union_stream import UnionStream
+
         def union_fn(_record: dict[str, Any]) -> None:
             raise RuntimeError("map-reduce pipeline construction reached an invalid state")
 
@@ -934,7 +935,7 @@ class DataStream(Stream):
             ),
         )
 
-    @PublicAPI
+    @public_api
     def assign_timestamps_and_watermarks(self, strategy: "WatermarkStrategy") -> "DataStream":
         """Assign event timestamps and emit ordered Watermark/Idle/Active controls."""
 
@@ -949,7 +950,7 @@ class DataStream(Stream):
             self.resources,
         )
 
-    @PublicAPI
+    @public_api
     def key_by(self, fn: Callable[[dict[str, Any]], Any]) -> "KeyedStream":
         """Hash-partition this branch and expose managed keyed operations."""
 
@@ -964,7 +965,7 @@ class DataStream(Stream):
         branch.partition_by(KeyPartitioner(key_selector=fn))
         return KeyedStream(branch, fn)
 
-    @PublicAPI
+    @public_api
     def group_by(self, fn: Callable[[dict[str, Any]], Any]) -> "KeyedStream":
         """
         Creates a new :class:`KeyedStream` that uses the provided key to
@@ -980,7 +981,7 @@ class DataStream(Stream):
         """
         return self.key_by(fn)
 
-    @PublicAPI
+    @public_api
     def join(
         self,
         other: "DataStream",
@@ -1109,7 +1110,7 @@ class DataStream(Stream):
             raise TypeError("partition_func must be a Partitioner or callable")
         return self
 
-    @PublicAPI
+    @public_api
 
     # ------------------------------------------------------------------
     #  Diagnostics: show, take_all, take, schema
@@ -1139,6 +1140,8 @@ class DataStream(Stream):
             interactive mode the bounded graph runs immediately and the
             terminal operation returns ``None`` after printing.
         """
+        from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
+
         return self.write(
             ConsoleSinkFunction,
             fn_constructor_kwargs={"limit": limit},
@@ -1155,7 +1158,7 @@ class DataStream(Stream):
             name=name if name is not None else "Show",
         )
 
-    @PublicAPI
+    @public_api
     def take_all(self, limit: int | None = None) -> "StreamSink | list[dict[str, Any]]":
         """Attach a sink that collects all rows from this :class:`DataStream`.
 
@@ -1182,7 +1185,7 @@ class DataStream(Stream):
             name="TakeAll",
         )
 
-    @PublicAPI
+    @public_api
     def take(self, limit: int = 20) -> "StreamSink | list[dict[str, Any]]":
         """Attach a sink that collects up to ``limit`` rows.
 
@@ -1209,7 +1212,7 @@ class DataStream(Stream):
             name="Take",
         )
 
-    @PublicAPI
+    @public_api
     def schema(self, fetch_if_missing: bool = True) -> Any:
         """Return the schema of the datastream.
 
@@ -1222,6 +1225,8 @@ class DataStream(Stream):
             A terminal :class:`StreamSink` outside interactive mode. In
             interactive mode, returns the schema reported by Ray Data.
         """
+        from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
+
         return self.write(
             ConsoleSinkFunction,
             lowering=RayDataCall.dataset_method(
@@ -1233,12 +1238,12 @@ class DataStream(Stream):
             name="Schema",
         )
 
-    @PublicAPI
+    @public_api
     # ------------------------------------------------------------------
     #  Klein-native sinks: files, Kafka, Redis, and custom SinkFunction
     # ------------------------------------------------------------------
 
-    @PublicAPI
+    @public_api
     def write_files(
         self,
         path: str,
@@ -1262,6 +1267,7 @@ class DataStream(Stream):
         and single-column text are supported. Batch execution delegates JSON,
         CSV, and Parquet writes to the matching public Ray Data API.
         """
+        from ray.klein.integrations.filesystem.streaming_file_sink import StreamingFileSink
 
         normalized_format = data_format.strip().lower()
         supported_formats = frozenset({"csv", "json", "parquet", "text"})
@@ -1304,25 +1310,25 @@ class DataStream(Stream):
             name=f"{normalized_format.title()}FileSink",
         )
 
-    @PublicAPI
+    @public_api
     def write_json(self, path: str, **options: Any) -> "StreamSink":
         """Write newline-delimited JSON files in batch or streaming mode."""
 
         return self.write_files(path, "json", **options)
 
-    @PublicAPI
+    @public_api
     def write_csv(self, path: str, **options: Any) -> "StreamSink":
         """Write CSV files in batch or streaming mode."""
 
         return self.write_files(path, "csv", **options)
 
-    @PublicAPI
+    @public_api
     def write_parquet(self, path: str, **options: Any) -> "StreamSink":
         """Write Parquet files in batch or streaming mode."""
 
         return self.write_files(path, "parquet", **options)
 
-    @PublicAPI
+    @public_api
     def write_iceberg(
         self,
         table_identifier: str,
@@ -1343,6 +1349,7 @@ class DataStream(Stream):
         idempotent Iceberg snapshot per logical sink and checkpoint-domain
         epoch.
         """
+        from ray.klein.integrations.iceberg.streaming_iceberg_sink import StreamingIcebergSink
 
         batch_lowering = RayDataCall.dataset_method(
             "write_iceberg",
@@ -1378,7 +1385,7 @@ class DataStream(Stream):
             name="IcebergSink",
         )
 
-    @PublicAPI
+    @public_api
     def write_sql(
         self,
         sql: str,
@@ -1393,6 +1400,7 @@ class DataStream(Stream):
         ``executemany`` call and flush at checkpoint barriers, providing
         at-least-once delivery.
         """
+        from ray.klein.integrations.sql.streaming_sql_sink import StreamingSQLSink
 
         batch_lowering = RayDataCall.dataset_method(
             "write_sql",
@@ -1414,7 +1422,7 @@ class DataStream(Stream):
             name="SQLSink",
         )
 
-    @PublicAPI
+    @public_api
     def write_text(self, path: str, **options: Any) -> "StreamSink":
         """Write one-column UTF-8 text files in streaming mode."""
 
@@ -1478,7 +1486,7 @@ class DataStream(Stream):
             name="KafkaSink",
         )
 
-    @PublicAPI
+    @public_api
     def write_redis(
         self,
         connection: "RedisConnectionConfig",
@@ -1570,6 +1578,8 @@ class DataStream(Stream):
         Returns:
             :class:`StreamSink`.
         """
+        from ray.klein.api.stream_sink import StreamSink
+
         if not isinstance(fn, type) or not issubclass(fn, SinkFunction):
             raise TypeError("fn must be a SinkFunction class")
         data_stream = self
@@ -1596,9 +1606,3 @@ class DataStream(Stream):
         if self.context.interactive_mode_enabled:
             return data_stream.context.execute(name, sinks=(stream_sink,)).get()
         return stream_sink
-
-
-# Imported after DataStream is defined to keep the small stream class modules
-# acyclic while preserving runtime ``isinstance`` behaviour.
-from ray.klein.api.stream_sink import StreamSink  # noqa: E402
-from ray.klein.api.union_stream import UnionStream  # noqa: E402

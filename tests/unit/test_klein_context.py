@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 import pytest
 
 import ray.klein as klein
@@ -47,6 +51,27 @@ class MockLoopSourceFunction(SourceFunction):
 
 
 class TestKleinContext:
+    def test_default_context_is_isolated_between_threads(self) -> None:
+        main_context = KleinContext.reset()
+        rendezvous = Barrier(2)
+
+        def current_context(_index: int) -> KleinContext:
+            rendezvous.wait()
+            return KleinContext.current()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            worker_contexts = tuple(executor.map(current_context, range(2)))
+
+        assert worker_contexts[0] is not worker_contexts[1]
+        assert main_context not in worker_contexts
+
+    def test_deepcopy_rebuilds_the_process_local_lock(self, context) -> None:
+        cloned = copy.deepcopy(context)
+
+        assert cloned is not context
+        assert cloned._lock is not context._lock
+        assert cloned.config.to_dict() == context.config.to_dict()
+
     def test_from_values_validates_every_value(self) -> None:
         context = KleinContext()
 

@@ -4,8 +4,10 @@
 
 ## Supported versions
 
-Until the first stable release, only the latest release is eligible for security
-fixes. Supported versions will be listed here when releases begin.
+No release has completed the project's approval process yet. Security fixes are
+made on `main` on a best-effort basis; there is currently no supported released
+version. Approved versions and end-of-support dates will be listed here when
+releases begin.
 
 ## Reporting a vulnerability
 

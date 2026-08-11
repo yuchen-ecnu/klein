@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import uuid
+from dataclasses import dataclass
+from threading import RLock
 from typing import ClassVar
 
 from ray.klein.config.configuration import Configuration
@@ -11,6 +13,17 @@ from ray.klein.runtime.execution_graph.execution_vertex_status import (
 )
 from ray.klein.runtime.operator.operator_spec import OperatorSpec
 from ray.klein.runtime.resources import Resources
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionVertexRuntimeSnapshot:
+    """Atomic read-side view of one mutable task runtime."""
+
+    status: ExecutionVertexStatus
+    error_message: str | None
+    stream_task: KleinActorHandle | None
+    task_generation: str
+    restore_operation_id: str | None
 
 
 class ExecutionVertex:
@@ -27,6 +40,7 @@ class ExecutionVertex:
         config: Configuration,
         task_metric_group: TaskMetricGroup,
     ) -> None:
+        self._runtime_lock = RLock()
         self._vertex_name = vertex_name
         # ``name`` is the stable Ray actor/routing identity.  Total parallelism
         # is mutable topology metadata, so including it here would leave a
@@ -39,20 +53,18 @@ class ExecutionVertex:
         self.concurrency = concurrency
         self.operator_spec = operator_spec
         self.config = config
-        self.stream_task: KleinActorHandle | None = None
+        self._stream_task: KleinActorHandle | None = None
         self.task_metric_group = task_metric_group
         # ExecutionVertexId and the human-readable task name are intentionally
         # stable across a local rescale.  A separate generation token lets the
         # control plane reject a status RPC that arrives from an older actor
         # after the same parallelism (and therefore the same name) is reused.
-        self.task_generation = uuid.uuid4().hex
+        self._task_generation = uuid.uuid4().hex
         # Replacement tasks keep the local-cut identity through Ray actor
         # rebuilds until a later global deployment explicitly clears it.
-        self.restore_operation_id: str | None = None
+        self._restore_operation_id: str | None = None
         self._status = ExecutionVertexStatus.CREATED
         self._error_message: str | None = None
-        # No per-vertex lock: all _status writes are serialized on the JobManager's
-        # single _scheduler_lock, so the read-compare-write below can't race.
 
     _ALLOWED_TRANSITIONS: ClassVar[dict[ExecutionVertexStatus, frozenset[ExecutionVertexStatus]]] = {
         ExecutionVertexStatus.CREATED: frozenset({ExecutionVertexStatus.DEPLOYED, ExecutionVertexStatus.FAILED}),
@@ -96,21 +108,22 @@ class ExecutionVertex:
         status: ExecutionVertexStatus,
         error_message: str | None = None,
     ) -> None:
-        if status == self._status:
-            return
-        allowed = self._ALLOWED_TRANSITIONS.get(self._status, frozenset())
-        if status not in allowed:
-            raise RuntimeError(f"Invalid execution vertex transition {self._status} → {status} for {self.name}")
-        self._status = status
-        if error_message is not None:
-            self._error_message = error_message
-        if status in {
-            ExecutionVertexStatus.CREATED,
-            ExecutionVertexStatus.DEPLOYED,
-            ExecutionVertexStatus.RUNNING,
-            ExecutionVertexStatus.FINISHED,
-        }:
-            self._error_message = None
+        with self._runtime_lock:
+            if status == self._status:
+                return
+            allowed = self._ALLOWED_TRANSITIONS.get(self._status, frozenset())
+            if status not in allowed:
+                raise RuntimeError(f"Invalid execution vertex transition {self._status} → {status} for {self.name}")
+            self._status = status
+            if error_message is not None:
+                self._error_message = error_message
+            if status in {
+                ExecutionVertexStatus.CREATED,
+                ExecutionVertexStatus.DEPLOYED,
+                ExecutionVertexStatus.RUNNING,
+                ExecutionVertexStatus.FINISHED,
+            }:
+                self._error_message = None
 
     def reset(self) -> None:
         """Return the vertex to CREATED so it can be redeployed on a restart.
@@ -120,13 +133,15 @@ class ExecutionVertex:
         terminal status (CANCELLED/FAILED/FINISHED). Without this reset the
         subsequent DEPLOYED/RUNNING transitions are all rejected as invalid.
         """
-        self._status = ExecutionVertexStatus.CREATED
-        self._error_message = None
+        with self._runtime_lock:
+            self._status = ExecutionVertexStatus.CREATED
+            self._error_message = None
 
     def renew_task_generation(self) -> None:
         """Give the next actor incarnation a unique status-report identity."""
 
-        self.task_generation = uuid.uuid4().hex
+        with self._runtime_lock:
+            self._task_generation = uuid.uuid4().hex
 
     def rebind(
         self,
@@ -156,22 +171,65 @@ class ExecutionVertex:
         if not isinstance(config, Configuration):
             raise TypeError("config must be Configuration")
 
-        rebound = ExecutionVertex(
-            vertex_id=self.id.job_vertex_id,
-            vertex_name=self._vertex_name,
-            vertex_resources=vertex_resources,
-            index=self.index,
-            concurrency=concurrency,
-            operator_spec=operator_spec,
-            config=config,
-            task_metric_group=self.task_metric_group,
-        )
-        rebound.stream_task = self.stream_task
-        rebound.task_generation = self.task_generation
-        rebound.restore_operation_id = self.restore_operation_id
-        rebound._status = self._status
-        rebound._error_message = self._error_message
+        with self._runtime_lock:
+            rebound = ExecutionVertex(
+                vertex_id=self.id.job_vertex_id,
+                vertex_name=self._vertex_name,
+                vertex_resources=vertex_resources,
+                index=self.index,
+                concurrency=concurrency,
+                operator_spec=operator_spec,
+                config=config,
+                task_metric_group=self.task_metric_group,
+            )
+            rebound._stream_task = self._stream_task
+            rebound._task_generation = self._task_generation
+            rebound._restore_operation_id = self._restore_operation_id
+            rebound._status = self._status
+            rebound._error_message = self._error_message
         return rebound
+
+    def runtime_snapshot(self) -> ExecutionVertexRuntimeSnapshot:
+        """Return all mutable runtime fields from one lock acquisition."""
+
+        with self._runtime_lock:
+            return ExecutionVertexRuntimeSnapshot(
+                status=self._status,
+                error_message=self._error_message,
+                stream_task=self._stream_task,
+                task_generation=self._task_generation,
+                restore_operation_id=self._restore_operation_id,
+            )
+
+    @property
+    def stream_task(self) -> KleinActorHandle | None:
+        with self._runtime_lock:
+            return self._stream_task
+
+    @stream_task.setter
+    def stream_task(self, value: KleinActorHandle | None) -> None:
+        with self._runtime_lock:
+            self._stream_task = value
+
+    @property
+    def task_generation(self) -> str:
+        with self._runtime_lock:
+            return self._task_generation
+
+    @task_generation.setter
+    def task_generation(self, value: str) -> None:
+        with self._runtime_lock:
+            self._task_generation = value
+
+    @property
+    def restore_operation_id(self) -> str | None:
+        with self._runtime_lock:
+            return self._restore_operation_id
+
+    @restore_operation_id.setter
+    def restore_operation_id(self, value: str | None) -> None:
+        with self._runtime_lock:
+            self._restore_operation_id = value
 
     @property
     def display_name(self) -> str:
@@ -181,11 +239,25 @@ class ExecutionVertex:
 
     @property
     def status(self) -> ExecutionVertexStatus:
-        return self._status
+        with self._runtime_lock:
+            return self._status
 
     @property
     def error_message(self) -> str | None:
-        return self._error_message
+        with self._runtime_lock:
+            return self._error_message
+
+    def __getstate__(self) -> dict:
+        """Exclude the process-local lock when Ray serializes a graph."""
+
+        with self._runtime_lock:
+            state = self.__dict__.copy()
+        state.pop("_runtime_lock", None)
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._runtime_lock = RLock()
 
     def __repr__(self) -> str:
         return (

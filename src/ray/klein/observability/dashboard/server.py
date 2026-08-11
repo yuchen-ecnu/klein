@@ -13,8 +13,12 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import logging
 import mimetypes
+import re
 import socket
+import time
+import uuid
 from collections.abc import Callable, Collection
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,9 +29,14 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 from urllib.request import Request as URLRequest
 from urllib.request import urlopen
 
+from ray.klein._internal.logging import get_logger, log_event
+
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 _PROXY_READ_CHUNK_BYTES = 64 * 1024
+_REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{1,128}")
+
+logger = get_logger(__name__)
 
 
 class _ProxyResponseError(OSError):
@@ -122,8 +131,17 @@ class _IPv6DashboardHTTPServer(_DashboardHTTPServer):
 
 class _DashboardRequestHandler(BaseHTTPRequestHandler):
     server: _DashboardHTTPServer
+    _klein_request_id: str
+    _response_status: int
 
     def do_GET(self) -> None:
+        started_at = time.monotonic()
+        try:
+            self._do_get()
+        finally:
+            self._log_access("GET", started_at)
+
+    def _do_get(self) -> None:
         if not self._require_trusted_host():
             return
         path = urlsplit(self.path).path
@@ -168,6 +186,12 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def _do_klein_get(self, path: str) -> bool:
         segments = _path_segments(path)
+        if segments == ["healthz"]:
+            self._send_json(HTTPStatus.OK, {"status": "ok"})
+            return True
+        if segments == ["readyz"]:
+            self._state_call(self._send_readiness)
+            return True
         if segments == ["api", "config"]:
             self._send_json(
                 HTTPStatus.OK,
@@ -194,10 +218,18 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self._state_call(_get_job)
         return True
 
+    def _send_readiness(self) -> None:
+        self.server.state.list_jobs()
+        self._send_json(HTTPStatus.OK, {"status": "ready"})
+
     def do_POST(self) -> None:
-        if not self._require_trusted_host():
-            return
-        self._do_trusted_post()
+        started_at = time.monotonic()
+        try:
+            if not self._require_trusted_host():
+                return
+            self._do_trusted_post()
+        finally:
+            self._log_access("POST", started_at)
 
     def _do_trusted_post(self) -> None:
         segments = _path_segments(urlsplit(self.path).path)
@@ -236,13 +268,31 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return
 
         def _rescale() -> None:
+            self._log_control("rescale.requested", job_id, operator_id=operator_id, parallelism=parallelism)
             submit = getattr(self.server.state, "submit_operator_rescale", None)
-            result = (
-                submit(job_id, operator_id, parallelism)
-                if submit is not None
-                else self.server.state.rescale_operator(job_id, operator_id, parallelism)
-            )
+            try:
+                result = (
+                    submit(job_id, operator_id, parallelism)
+                    if submit is not None
+                    else self.server.state.rescale_operator(job_id, operator_id, parallelism)
+                )
+            except Exception:
+                self._log_control(
+                    "rescale.completed",
+                    job_id,
+                    operator_id=operator_id,
+                    parallelism=parallelism,
+                    result="ERROR",
+                )
+                raise
             if result is False or result is None:
+                self._log_control(
+                    "rescale.completed",
+                    job_id,
+                    operator_id=operator_id,
+                    parallelism=parallelism,
+                    result="NOT_FOUND",
+                )
                 self._send_error_json(HTTPStatus.NOT_FOUND, "The job or operator is no longer available")
                 return
             if isinstance(result, dict):
@@ -261,6 +311,13 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
                 else HTTPStatus.CONFLICT
                 if operation_status == "REJECTED"
                 else HTTPStatus.OK
+            )
+            self._log_control(
+                "rescale.completed",
+                job_id,
+                operator_id=operator_id,
+                parallelism=parallelism,
+                result=operation_status or "UNKNOWN",
             )
             self._send_json(response_status, response)
 
@@ -286,10 +343,17 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return
 
         def _cancel() -> None:
-            cancelled = self.server.state.cancel_job(job_id)
+            self._log_control("cancel.requested", job_id)
+            try:
+                cancelled = self.server.state.cancel_job(job_id)
+            except Exception:
+                self._log_control("cancel.completed", job_id, result="ERROR")
+                raise
             if not cancelled:
+                self._log_control("cancel.completed", job_id, result="NOT_FOUND")
                 self._send_error_json(HTTPStatus.NOT_FOUND, f"Unknown Klein job: {job_id}")
                 return
+            self._log_control("cancel.completed", job_id, result="CANCELLED")
             self._send_json(HTTPStatus.OK, {"job_id": job_id, "cancelled": True})
 
         self._state_call(_cancel)
@@ -336,6 +400,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Request-ID", self._request_id())
         self.end_headers()
         self.wfile.write(payload)
 
@@ -402,7 +467,10 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self._send_bytes(status, payload, "application/json; charset=utf-8")
 
     def _send_error_json(self, status: HTTPStatus, message: str) -> None:
-        self._send_json(status, {"error": message, "status": int(status)})
+        self._send_json(
+            status,
+            {"error": message, "request_id": self._request_id(), "status": int(status)},
+        )
 
     def _send_bytes(
         self,
@@ -418,6 +486,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", cache_control)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Request-ID", self._request_id())
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; connect-src 'self'; font-src 'self' data:; img-src 'self' data:; "
@@ -425,6 +494,58 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         )
         self.end_headers()
         self.wfile.write(payload)
+
+    def send_response(self, code: int, message: str | None = None) -> None:
+        self._response_status = code
+        super().send_response(code, message)
+
+    def _request_id(self) -> str:
+        existing = getattr(self, "_klein_request_id", None)
+        if isinstance(existing, str):
+            return existing
+        requested = self.headers.get("X-Request-ID", "")
+        self._klein_request_id = requested if _REQUEST_ID.fullmatch(requested) else uuid.uuid4().hex
+        return self._klein_request_id
+
+    def _log_access(self, method: str, started_at: float) -> None:
+        route = _route_name(urlsplit(self.path).path)
+        response_status = getattr(self, "_response_status", 0)
+        log_event(
+            logger,
+            logging.INFO,
+            "dashboard.http.request",
+            "%s %s -> %s",
+            method,
+            route,
+            response_status,
+            duration_ms=round((time.monotonic() - started_at) * 1000, 3),
+            method=method,
+            request_id=self._request_id(),
+            route=route,
+            status=response_status,
+        )
+
+    def _log_control(
+        self,
+        event: str,
+        job_id: str,
+        *,
+        operator_id: int | None = None,
+        parallelism: int | None = None,
+        result: str | None = None,
+    ) -> None:
+        log_event(
+            logger,
+            logging.INFO,
+            f"dashboard.control.{event}",
+            "Dashboard control action: %s",
+            event,
+            job_id=job_id,
+            operator_id=operator_id,
+            parallelism=parallelism,
+            request_id=self._request_id(),
+            result=result,
+        )
 
     def log_message(self, _format: str, *_args: Any) -> None:
         # The CLI already announces the listener. Avoid leaking job identifiers
@@ -434,6 +555,27 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
 
 def _path_segments(path: str) -> list[str]:
     return [unquote(segment) for segment in path.split("/") if segment]
+
+
+def _route_name(path: str) -> str:
+    """Return a bounded route label without copying identifiers into access logs."""
+
+    segments = _path_segments(path)
+    if segments in (["healthz"], ["readyz"]):
+        return segments[0]
+    if segments in (["api", "jobs"], ["api", "klein", "jobs"]):
+        return "jobs.list"
+    if segments and segments[-1] == "cancel":
+        return "job.cancel"
+    if segments and segments[-1] == "rescale":
+        return "operator.rescale"
+    if segments[:2] == ["api", "jobs"] or segments[:3] == ["api", "klein", "jobs"]:
+        return "job.detail"
+    if path.startswith("/assets/"):
+        return "frontend.asset"
+    if path in {"/", "/index.html", "/__klein/navigation.js"}:
+        return "frontend.entry"
+    return "not-found"
 
 
 def _read_bounded_proxy_response(response: Any) -> bytes:

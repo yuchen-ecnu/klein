@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import os
 import pickle
 import shutil
 import tarfile
@@ -206,7 +207,12 @@ class RocksDBStateBackend(ManagedStateBackend):
         # Decode into an isolated directory first. A corrupt checkpoint must not
         # destroy the currently open database, and archive members must never be
         # allowed to create links or escape the destination.
-        with tempfile.TemporaryDirectory(prefix="klein-rocks-restore-") as temporary:
+        live_path = Path(self._path)
+        live_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{live_path.name}.restore-",
+            dir=live_path.parent,
+        ) as temporary:
             staged_path = Path(temporary) / "db"
             staged_path.mkdir()
             with tarfile.open(fileobj=io.BytesIO(snapshot), mode="r:") as archive:
@@ -214,10 +220,7 @@ class RocksDBStateBackend(ManagedStateBackend):
 
             staged_backend = RocksDBStateBackend(str(staged_path))
             staged_backend.close()
-            self._close_db()
-            _remove_tree_if_present(self._path)
-            shutil.move(str(staged_path), self._path)
-        self._open_db()
+            self._replace_with_staged(staged_path)
 
     def snapshot_key_groups(
         self,
@@ -277,14 +280,21 @@ class RocksDBStateBackend(ManagedStateBackend):
             payloads.append(payload)
         entries = _validated_key_group_entries(payloads)
 
-        self._close_db()
-        _remove_tree_if_present(self._path)
-        self._open_db()
-        batch = WriteBatch(raw_mode=True)
-        for family, encoded_key, encoded_value in entries:
-            batch.put(encoded_key, encoded_value, self._handles[family])
-        if entries:
-            self._db.write(batch)
+        live_path = Path(self._path)
+        live_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{live_path.name}.restore-",
+            dir=live_path.parent,
+        ) as temporary:
+            staged_path = Path(temporary) / "db"
+            staged_backend = RocksDBStateBackend(str(staged_path), clock=self._clock)
+            batch = WriteBatch(raw_mode=True)
+            for family, encoded_key, encoded_value in entries:
+                batch.put(encoded_key, encoded_value, staged_backend._handles[family])
+            if entries:
+                staged_backend._db.write(batch)
+            staged_backend.close()
+            self._replace_with_staged(staged_path)
 
     def close(self) -> None:
         self._close_db()
@@ -341,6 +351,36 @@ class RocksDBStateBackend(ManagedStateBackend):
         if self._db is not None:
             self._db.close()
             self._db = None
+
+    def _replace_with_staged(self, staged_path: Path) -> None:
+        """Atomically install a validated sibling database and roll back on failure."""
+
+        live_path = Path(self._path)
+        backup_path = staged_path.parent / "previous"
+        self._close_db()
+        live_backed_up = False
+        staged_installed = False
+        try:
+            os.replace(live_path, backup_path)  # noqa: PTH105 - explicit atomic filesystem primitive
+            live_backed_up = True
+            os.replace(staged_path, live_path)  # noqa: PTH105 - explicit atomic filesystem primitive
+            staged_installed = True
+            self._open_db()
+        except BaseException:
+            self._close_db()
+            try:
+                if live_backed_up:
+                    if staged_installed:
+                        _remove_tree_if_present(str(live_path))
+                    os.replace(backup_path, live_path)  # noqa: PTH105 - explicit atomic filesystem primitive
+                elif not live_path.exists():
+                    raise RuntimeError("the previous RocksDB directory disappeared before installation")
+                self._open_db()
+            except BaseException as rollback_error:
+                raise RuntimeError(
+                    "RocksDB restore failed and the previous database could not be reopened"
+                ) from rollback_error
+            raise
 
     def _delete_state_key(self, state_key: bytes) -> None:
         from rocksdict import WriteBatch

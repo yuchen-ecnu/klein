@@ -24,3 +24,15 @@ path = [
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2024-2026 Klein Authors"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "THIRD_PARTY_NOTICES",
+  "src/ray/klein/observability/dashboard/static/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = [
+  "2024-2026 Klein Authors",
+  "Various third-party contributors",
+]
+SPDX-License-Identifier = "Apache-2.0 AND BSD-3-Clause AND ISC AND MIT"

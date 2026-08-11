@@ -18,6 +18,7 @@ _CORE_UNIT_MODULES = {
     "test_datastream_api_contracts.py",
     "test_datastream_without_sink.py",
     "test_dependency_license_policy.py",
+    "test_distribution_policy.py",
     "test_duration.py",
     "test_enum_types.py",
     "test_klein_context.py",
@@ -30,6 +31,7 @@ _CORE_UNIT_MODULES = {
     "test_resource_plan_generator.py",
     "test_resources.py",
     "test_runtime_info.py",
+    "test_source_release.py",
     "test_transform.py",
 }
 
@@ -103,6 +105,7 @@ _RUNTIME_UNIT_MODULES = {
     "test_progress_reporter_rescale.py",
     "test_pump.py",
     "test_restart_strategy.py",
+    "test_rescale_operation.py",
     "test_runtime_rescale.py",
     "test_runtime_rescale_delta.py",
     "test_serve_client.py",

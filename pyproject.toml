@@ -10,7 +10,7 @@ description = "Stateful stream processing for Ray"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE", "LICENSES/*"]
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES", "LICENSES/*"]
 authors = [{ name = "Klein Authors" }]
 keywords = ["ray", "stream-processing", "batch-processing", "data", "distributed-computing"]
 classifiers = [
@@ -179,6 +179,7 @@ files = [
   "src/ray/klein/_internal/sql/media_runtime.py",
   "src/ray/klein/_internal/sql/download_runtime.py",
   "src/ray/klein/api/functions/logical_function.py",
+  "src/ray/klein/api/api_stability.py",
   "src/ray/klein/api/live_job_handle.py",
   "src/ray/klein/api/runtime_info.py",
   "src/ray/klein/observability/dashboard/serialization.py",
@@ -198,6 +199,8 @@ files = [
   "src/ray/klein/state/state_snapshot.py",
   "src/ray/klein/state/state_snapshot_reference.py",
   "src/ray/klein/runtime/coordinator/checkpoint_io.py",
+  "src/ray/klein/runtime/execution_graph/execution_vertex.py",
+  "src/ray/klein/runtime/job_manager/rescale_operation.py",
   "src/ray/klein/runtime/event_time/input_watermark_tracker.py",
   "src/ray/klein/runtime/worker/input_batch_accumulator.py",
   "src/ray/klein/runtime/worker/weighted_queue.py",

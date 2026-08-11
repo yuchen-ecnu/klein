@@ -29,7 +29,12 @@ def estimate_retained_size(value: Any, seen: set[int] | None = None) -> int:
         return max(0, nbytes)
     block = getattr(value, "block", None)
     if block is not None:
-        return sys.getsizeof(value) + estimate_retained_size(block, seen)
+        retained = sys.getsizeof(value) + estimate_retained_size(block, seen)
+        for attribute in ("key", "row_kinds", "row_timestamps"):
+            metadata = getattr(value, attribute, None)
+            if metadata is not None:
+                retained += estimate_retained_size(metadata, seen)
+        return retained
     if isinstance(value, Mapping):
         return sys.getsizeof(value) + sum(
             estimate_retained_size(key, seen) + estimate_retained_size(item, seen) for key, item in value.items()

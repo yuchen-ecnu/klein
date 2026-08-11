@@ -22,7 +22,7 @@ assume that a `ray-klein` distribution is available from PyPI.
 | Project maturity | Alpha | Public APIs and checkpoint formats can still change before 1.0. |
 
 The base installation also constrains NumPy to `<3`, pandas to `<3`, protobuf
-to `<7`, and SQLGlot to `>=30.12,<31`. Let the package resolver install these
+to `>=5.29.6,<8`, and SQLGlot to `>=30.12,<31`. Let the package resolver install these
 dependencies instead of overriding them independently. Read
 [Compatibility](compatibility.md) before changing Python, Ray, protobuf, or
 checkpoint-producing Klein versions.
@@ -107,11 +107,11 @@ checkout.
 | --- | --- | --- |
 | `kafka` | `confluent-kafka>=2.3,<3` | Bounded or continuous Kafka input and Kafka output. |
 | `iceberg` | `pyiceberg>=0.11.1,<0.12` | Iceberg catalog access and batch or checkpointed append output. Catalog-specific dependencies may still be required. |
-| `media` | `pyvips[binary]>=3,<4`, `Pillow>=10,<13`, `pypdf>=5,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
-| `rocketmq` | `rocketmq-client-python>=2,<3` | Continuous RocketMQ input. A compatible native `librocketmq` is also required on every executing worker. |
+| `media` | `pyvips[binary]>=3,<4`, `Pillow>=12.3.0,<13`, `pypdf>=6.14.2,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
+| `rocketmq` | `rocketmq-client-python==2.0.0` | Continuous RocketMQ input. A compatible native `librocketmq` is also required on every executing worker. |
 | `redis` | `redis>=5,<9` | Redis lookup, filtering, and output. |
 | `rocksdb` | `rocksdict>=0.3.29,<0.4` | The node-local RocksDB managed-state backend. |
-| `serve` | `aiohttp>=3.13.3`, `orjson>=3.9`, and compatible `ray[serve]` | Ray Serve execution regions and the embedded proxy client. |
+| `serve` | `httpx>=0.28.1,<1`, `orjson>=3.11.6`, and `ray[serve]>=2.56.1,<2.57` | Ray Serve execution regions and the embedded proxy client. |
 | `all` | All runtime integrations above | An integration-development environment; it does not include test or documentation tools. |
 | `test` | pytest, build/audit tools, testcontainers, and test-only Iceberg support | Running the repository test suites. |
 | `docs` | Sphinx, MyST, the PyData theme, copybutton, and sphinx-design | Building this documentation. |

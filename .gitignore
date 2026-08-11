@@ -13,6 +13,7 @@ docs/_build/
 docs/locales/**/*.mo
 htmlcov/
 frontend/node_modules/
+frontend/coverage/
 *.egg-info/
 *.py[cod]
 *.so

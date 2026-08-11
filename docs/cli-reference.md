@@ -25,7 +25,7 @@ ray-klein [--help] [--version] COMMAND [ARGS]...
 | `stop` | Compatibility alias for `cancel`. | No |
 
 Use `ray-klein COMMAND --help` to inspect the installed version. The command
-names and defaults below describe the current `0.1.0.dev0` source tree.
+names and defaults below describe the current `0.1.0a1` source tree.
 
 (cli-ray-connection)=
 ## Connect to the Ray cluster
@@ -98,6 +98,10 @@ Prefer the default loopback listener through an SSH tunnel. If a non-loopback
 listener is unavoidable, place it behind an authenticated, encrypted reverse
 proxy and restrict network access. See [Security](security.md#dashboard-and-control-apis)
 and [Observability](observability.md#use-the-klein-dashboard).
+
+The listener exposes `GET /healthz` for liveness and `GET /readyz` for state
+service readiness. Responses include `X-Request-ID`, which can be supplied by a
+trusted proxy for log correlation.
 
 ## `list`
 

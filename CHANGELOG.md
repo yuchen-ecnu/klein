@@ -52,6 +52,12 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
+- The source and Python release workflow now requires a signed tag, public
+  72-hour vote evidence, the voted source SHA-512 digest, detached signatures,
+  SBOMs, and guarded promotion environments.
+- Protobuf 7 is supported; the validated dependency range is now
+  `protobuf>=5.29.6,<8`.
+
 - SQL media batches are materialized one row at a time before validation to
   keep peak input memory within the per-asset safety boundary.
 - Dashboard routes are lazy-loaded into deterministic vendor chunks, only the
@@ -76,7 +82,10 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 - Pre-commit now installs a `commit-msg` hook that rejects commits without a
   Developer Certificate of Origin sign-off before they reach CI.
 
-## [0.1.0a1] - 2026-07-20
+## Initial pre-release development
+
+The entries below describe the initial public source snapshot. They do not
+represent an approved or published release.
 
 ### Added
 
@@ -158,9 +167,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   later Ray releases.
 - Embedded streaming startup no longer claims a fixed private Ray metrics port;
   applications can pre-initialize Ray when custom runtime settings are needed.
-- Protobuf is constrained below 7 because supported Ray Serve versions use a descriptor
-  attribute removed by protobuf 7.
-- Dependency floors for `aiohttp`, `click`, `orjson`, `protobuf`, `pyarrow`,
+- Protobuf is validated through the 7.x line and constrained below 8.
+- Dependency floors for `httpx`, `click`, `orjson`, `protobuf`, `pyarrow`,
   and `pytest` now exclude releases with known security vulnerabilities.
 - CI enforces a 68% branch-coverage floor with focused unit, state,
   architecture, integration, and external connector tiers.

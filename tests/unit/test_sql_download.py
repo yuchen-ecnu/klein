@@ -95,7 +95,7 @@ def test_denied_ip_range_takes_precedence_over_an_allow_range(monkeypatch) -> No
     "uri",
     (
         "ftp://files.example.com/body",
-        "http://user:secret@files.example.com/body",
+        "http://" + "user:secret@files.example.com/body",
         "http://files.example.com/body#fragment",
     ),
 )

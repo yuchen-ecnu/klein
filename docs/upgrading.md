@@ -13,7 +13,7 @@ positions, managed state, timers, and prepared sink transactions remain
 compatible.
 
 :::{danger}
-Klein is currently `0.1.0.dev0` alpha software. Before 1.0, Semantic Versioning
+The current source tree carries the `0.1.0a1` alpha candidate version. Before 1.0, Semantic Versioning
 compatibility is not promised, only the latest release is eligible for security
 fixes, and checkpoint formats can change between releases. Klein currently
 ships no automatic checkpoint migration tool and no user-triggered command for
@@ -31,7 +31,7 @@ The current tested compatibility target is:
 
 - Python 3.10--3.12;
 - `ray>=2.56.1,<2.57` with the `data` extra;
-- `protobuf>=3.20.3,<7`;
+- `protobuf>=5.29.6,<8`;
 - connector dependencies within the ranges in `pyproject.toml`.
 
 Ray Data integration uses DeveloperAPI extension points. A newer Ray minor is

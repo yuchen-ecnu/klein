@@ -8,7 +8,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 00:53+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
@@ -2541,3 +2541,6 @@ msgstr "SQL 下载选项"
 
 msgid ":py:obj:`SQLDownloadOptions <ray.klein.config.sql_download_options.SQLDownloadOptions>`"
 msgstr ":py:obj:`SQLDownloadOptions <ray.klein.config.sql_download_options.SQLDownloadOptions>`"
+
+msgid "The bundled CLI and runtime use ``get``, ``aget``, ``kill``, ``exit_actor``, ``get_actor_by_name``, ``get_actor_status``, ``kill_actor_by_name``, ``register_debug_actor``, and ``is_debug_mode`` from a lightweight Ray/debug adapter. During the alpha migration these names remain attribute-compatible for Klein internals, but they are omitted from ``ray.klein.__all__`` and ``dir(ray.klein)``. They are **not** an application compatibility promise. Do not use them to manage arbitrary Ray actors or build user dataflows."
+msgstr "内置 CLI 和运行时通过轻量级 Ray/调试适配器使用 ``get``、``aget``、``kill``、``exit_actor``、``get_actor_by_name``、``get_actor_status``、``kill_actor_by_name``、``register_debug_actor`` 和 ``is_debug_mode``。在 Alpha 迁移期间，这些名称仅为 Klein 内部代码保留属性兼容性，但不会出现在 ``ray.klein.__all__`` 或 ``dir(ray.klein)`` 中。它们**不**构成应用兼容性承诺。不要用它们管理任意 Ray actor 或构建用户数据流。"

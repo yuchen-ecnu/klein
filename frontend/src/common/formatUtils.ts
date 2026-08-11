@@ -6,17 +6,23 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export const formatDuration = (durationInSeconds: number) => {
-  const durationSeconds = Math.floor(durationInSeconds) % 60;
-  const durationMinutes = Math.floor(durationInSeconds / 60) % 60;
-  const durationHours = Math.floor(durationInSeconds / 60 / 60) % 24;
-  const durationDays = Math.floor(durationInSeconds / 60 / 60 / 24);
+  const normalizedSeconds =
+    Number.isFinite(durationInSeconds) && durationInSeconds > 0
+      ? Math.floor(durationInSeconds)
+      : 0;
+  const durationSeconds = normalizedSeconds % 60;
+  const durationMinutes = Math.floor(normalizedSeconds / 60) % 60;
+  const durationHours = Math.floor(normalizedSeconds / 60 / 60) % 24;
+  const durationDays = Math.floor(normalizedSeconds / 60 / 60 / 24);
   const pad = (value: number) => value.toString().padStart(2, "0");
   return [
     durationDays ? `${durationDays}d` : "",
     `${pad(durationHours)}h`,
     `${pad(durationMinutes)}m`,
     `${pad(durationSeconds)}s`,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 };
 
 export const formatDateFromTimeMs = (time: number) =>

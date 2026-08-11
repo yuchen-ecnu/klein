@@ -9,6 +9,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parents[2]
 POLICY_MODULE = runpy.run_path(str(PROJECT_ROOT / "scripts" / "check_coverage_policy.py"))
 component_coverage = POLICY_MODULE["component_coverage"]
+COMPONENT_POLICIES = POLICY_MODULE["COMPONENT_POLICIES"]
 
 
 def _report(*, covered_lines: int, statements: int, covered_branches: int, branches: int) -> dict:
@@ -35,3 +36,17 @@ def test_component_coverage_combines_lines_and_branches() -> None:
 def test_component_coverage_requires_matching_source_files() -> None:
     with pytest.raises(ValueError, match="contains no files"):
         component_coverage(_report(covered_lines=1, statements=1, covered_branches=0, branches=0), "missing/")
+
+
+def test_every_high_risk_runtime_component_has_an_explicit_floor() -> None:
+    assert {
+        "api",
+        "collector",
+        "coordinator",
+        "execution-graph",
+        "job-manager",
+        "scheduler",
+        "sql",
+        "state",
+        "worker",
+    } <= COMPONENT_POLICIES.keys()

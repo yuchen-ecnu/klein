@@ -6,7 +6,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0.dev0\n"
+"Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-07-21 01:05+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -532,3 +532,6 @@ msgstr "如果应用依赖缺失的能力，请在围绕内部模块构建之前
 #~ "authenticated proxy if it is exposed "
 #~ "at all."
 #~ msgstr "Dashboard 控制端点可以取消作业并扩缩受支持的算子。如果需要暴露该端点，请将其置于经过身份验证的代理之后。"
+
+msgid "The detached state actor keeps a bounded in-memory job history. Dashboard request/control events are structured but follow Ray log retention; neither facility is an independent durable audit log, metric store, or source of checkpoint truth."
+msgstr "分离的状态 actor 仅保留有界的内存作业历史。Dashboard 请求/控制事件采用结构化格式，但沿用 Ray 日志保留策略；两者都不是独立持久的审计日志、指标存储或检查点事实来源。"
