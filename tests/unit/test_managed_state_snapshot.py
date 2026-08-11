@@ -10,6 +10,7 @@ from ray.klein.state.managed_state_snapshot import (
     decode_managed_state_snapshot,
     repartition_managed_state_snapshots,
 )
+from ray.klein.state.restricted_pickle import restricted_pickle_loads
 
 
 class _SnapshotGadget:
@@ -54,6 +55,13 @@ def test_managed_snapshot_rejects_pickle_globals_without_executing_them(monkeypa
         decode_managed_state_snapshot(pickle.dumps(_SnapshotGadget()))
 
     assert "KLEIN_SNAPSHOT_GADGET_EXECUTED" not in os.environ
+
+
+def test_restricted_pickle_normalizes_an_oversized_frame_error() -> None:
+    oversized_frame = b"\x80\x04\x95" + b"\xff" * 8 + b"."
+
+    with pytest.raises(pickle.UnpicklingError, match="malformed framework snapshot pickle"):
+        restricted_pickle_loads(oversized_frame)
 
 
 @pytest.mark.parametrize(

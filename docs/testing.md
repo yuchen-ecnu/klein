@@ -29,6 +29,16 @@ and Python 3.12, plus the newest versions within the declared bounds. Hypothesis
 property tests exercise configuration encodings and durable state binary
 round-trips across generated values.
 
+Atheris coverage-guided fuzzing continuously exercises the restricted Pickle
+decoder with untrusted bytes. Relevant pull requests and main-branch pushes run
+a bounded smoke campaign; the weekly schedule runs for ten minutes. Reproduce
+the smoke campaign locally with:
+
+```bash
+python -m pip install --constraint requirements/ci-constraints.txt atheris
+PYTHONPATH=src python tests/fuzz/fuzz_restricted_pickle.py -runs=50000 -max_len=65536
+```
+
 ## CI components
 
 Every collected test receives exactly one component marker from
