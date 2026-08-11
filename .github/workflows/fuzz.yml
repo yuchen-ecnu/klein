@@ -42,12 +42,14 @@ jobs:
         if: github.event_name != 'schedule'
         run: >-
           PYTHONPATH=src python tests/fuzz/fuzz_restricted_pickle.py
+          tests/fuzz/corpus/restricted_pickle
           -runs=50000 -max_len=65536 -timeout=5
           -artifact_prefix=fuzz-artifacts/
       - name: Run scheduled fuzzing campaign
         if: github.event_name == 'schedule'
         run: >-
           PYTHONPATH=src python tests/fuzz/fuzz_restricted_pickle.py
+          tests/fuzz/corpus/restricted_pickle
           -max_total_time=600 -max_len=65536 -timeout=5
           -artifact_prefix=fuzz-artifacts/
       - if: failure()

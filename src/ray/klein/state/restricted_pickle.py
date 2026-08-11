@@ -11,6 +11,8 @@ from typing import Any
 
 _GlobalName = tuple[str, str]
 _EXTENSION_OPCODES = frozenset({"EXT1", "EXT2", "EXT4"})
+_MEMO_INDEX_OPCODES = frozenset({"PUT", "GET", "BINPUT", "LONG_BINPUT", "BINGET", "LONG_BINGET"})
+_FRAME_HEADER_SIZE = 9
 
 
 class _RestrictedUnpickler(pickle.Unpickler):
@@ -45,11 +47,31 @@ def restricted_pickle_loads(
         raise TypeError("restricted pickle payloads must be bytes")
     stream = io.BytesIO(payload)
     try:
-        for opcode, _argument, _position in pickletools.genops(payload):
+        for opcode, argument, position in pickletools.genops(payload):
             if opcode.name in _EXTENSION_OPCODES:
                 raise pickle.UnpicklingError("extension globals are not allowed in a framework snapshot")
+            if opcode.name in _MEMO_INDEX_OPCODES and (
+                not isinstance(argument, int) or argument < 0 or argument > len(payload)
+            ):
+                raise pickle.UnpicklingError("pickle memo index exceeds the framework snapshot bound")
+            if opcode.name == "FRAME" and (
+                position is None
+                or not isinstance(argument, int)
+                or argument < 0
+                or argument > len(payload) - position - _FRAME_HEADER_SIZE
+            ):
+                raise pickle.UnpicklingError("pickle frame exceeds the framework snapshot payload")
         value = _RestrictedUnpickler(stream, allowed_globals or {}).load()
-    except (EOFError, OverflowError, ValueError) as error:
+    except (
+        AttributeError,
+        EOFError,
+        ImportError,
+        IndexError,
+        OverflowError,
+        RecursionError,
+        TypeError,
+        ValueError,
+    ) as error:
         raise pickle.UnpicklingError("malformed framework snapshot pickle") from error
     if stream.read(1):
         raise pickle.UnpicklingError("trailing data is not allowed in a framework snapshot")
