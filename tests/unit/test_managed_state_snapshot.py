@@ -60,8 +60,22 @@ def test_managed_snapshot_rejects_pickle_globals_without_executing_them(monkeypa
 def test_restricted_pickle_normalizes_an_oversized_frame_error() -> None:
     oversized_frame = b"\x80\x04\x95" + b"\xff" * 8 + b"."
 
-    with pytest.raises(pickle.UnpicklingError, match="malformed framework snapshot pickle"):
+    with pytest.raises(pickle.UnpicklingError, match="frame exceeds"):
         restricted_pickle_loads(oversized_frame)
+
+
+def test_restricted_pickle_rejects_sparse_memo_indexes_before_allocation() -> None:
+    memo_allocation_bomb = b"K\x0cr" + (1_920_103_026).to_bytes(4, "little") + b"."
+
+    with pytest.raises(pickle.UnpicklingError, match="memo index exceeds"):
+        restricted_pickle_loads(memo_allocation_bomb)
+
+
+def test_restricted_pickle_normalizes_invalid_stack_target_errors() -> None:
+    invalid_append_target = b"I1\nI2\na."
+
+    with pytest.raises(pickle.UnpicklingError, match="malformed framework snapshot pickle"):
+        restricted_pickle_loads(invalid_append_target)
 
 
 @pytest.mark.parametrize(

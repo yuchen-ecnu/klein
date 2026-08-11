@@ -21,6 +21,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
+- Restricted snapshot decoding now rejects sparse pickle memo indexes and
+  oversized frames before they can trigger disproportionate allocation.
 - Dashboard proxy, asset, and request-correlation response headers now use
   fixed, allowlisted, or server-generated values so untrusted input cannot
   produce HTTP response splitting.
