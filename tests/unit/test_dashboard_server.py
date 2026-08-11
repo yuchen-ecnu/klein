@@ -270,8 +270,10 @@ def test_dashboard_health_and_readiness_have_correlated_request_ids(dashboard_se
     ready_status, ready_headers, ready_payload = _request(server, "GET", "/readyz")
 
     assert health_status == ready_status == 200
-    assert health_headers["X-Request-ID"] == "probe-123"
+    assert re.fullmatch(r"[0-9a-f]{32}", health_headers["X-Request-ID"])
+    assert health_headers["X-Request-ID"] != "probe-123"
     assert re.fullmatch(r"[0-9a-f]{32}", ready_headers["X-Request-ID"])
+    assert health_headers["X-Request-ID"] != ready_headers["X-Request-ID"]
     assert json.loads(health_payload) == {"status": "ok"}
     assert json.loads(ready_payload) == {"status": "ready"}
 
@@ -308,7 +310,8 @@ def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, d
     )
 
     assert status == 202
-    assert headers["X-Request-ID"] == "control-123"
+    assert re.fullmatch(r"[0-9a-f]{32}", headers["X-Request-ID"])
+    assert headers["X-Request-ID"] != "control-123"
     wait_until(
         lambda: any(
             getattr(record, "klein_event", None) == "dashboard.http.request" for record in dashboard_log_records
@@ -324,7 +327,7 @@ def test_dashboard_emits_sanitized_access_and_control_events(dashboard_server, d
     access_record = events["dashboard.http.request"]
     assert state.job_id not in access_record.getMessage()
     assert access_record.klein_fields["route"] == "operator.rescale"
-    assert access_record.klein_fields["request_id"] == "control-123"
+    assert access_record.klein_fields["request_id"] == headers["X-Request-ID"]
 
 
 def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_server) -> None:

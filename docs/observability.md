@@ -182,9 +182,9 @@ authenticated operations proxy.
 
 For orchestrators, `GET /healthz` reports that the HTTP process is alive and
 `GET /readyz` verifies that the published state service can answer. Every HTTP
-response includes `X-Request-ID`; a valid caller-provided identifier is
-preserved, otherwise Klein generates one. Access events use bounded route names
-instead of raw job paths. Cancel and rescale actions emit paired
+response includes a server-generated `X-Request-ID`; caller-provided values are
+not reflected. Access events use bounded route names instead of raw job paths.
+Cancel and rescale actions emit paired
 `dashboard.control.*.requested` and `.completed` events. Export these Ray logs
 to durable storage when they are part of an audit requirement.
 

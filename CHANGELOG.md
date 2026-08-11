@@ -19,8 +19,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
-- Dashboard proxy and asset response headers now use fixed, allowlisted media
-  types so untrusted values cannot produce HTTP response splitting.
+- Dashboard proxy, asset, and request-correlation response headers now use
+  fixed, allowlisted, or server-generated values so untrusted input cannot
+  produce HTTP response splitting.
 - The optional PDF dependency now requires `pypdf>=6.15.0,<7`, resolving the
   published vulnerabilities affecting earlier supported versions.
 - Unsupported `DOWNLOAD` compositions now fail during graph construction;
