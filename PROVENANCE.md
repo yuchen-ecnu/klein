@@ -24,13 +24,17 @@ historical private-registry coordinates in old frontend lock files and
 corporate-domain identities in commit metadata, with no matches for the
 repository's strong secret patterns. A coordinated rewrite then replaced the
 registry coordinates with canonical public npm URLs and the affected identities
-with the contributor's public noreply identity across every published branch.
-The rewrite preserved the current source tree; an independent mirror audit
-confirmed that published content, commit metadata, and messages contain none of
-the identified organization-only markers or strong secret patterns. Affected
-pre-rewrite commit IDs are intentionally no longer part of the public history,
-so clones made before 2026-08-11 must fetch and rebase or re-clone. CI
-additionally runs Gitleaks over the complete history.
+with the contributor's public noreply identity across every
+maintainer-controlled branch. The rewrite preserved the current source tree;
+an independent mirror audit confirmed that all branch content, commit metadata,
+and messages contain none of the identified organization-only markers or strong
+secret patterns. GitHub's read-only pull-request refs for 46 pre-rewrite pull
+requests still retain old metadata and, in some cases, old lock-file blobs.
+Provider-side dereferencing, garbage collection, and cached-view removal are
+therefore pending through GitHub Support. Strong secret patterns were absent
+from those refs as well. Affected pre-rewrite commit IDs are intentionally no
+longer part of branch history, so clones made before 2026-08-11 must fetch and
+rebase or re-clone. CI additionally runs Gitleaks over branch history.
 
 The remaining authorization evidence and release gate are tracked in
 [IP_CLEARANCE.md](IP_CLEARANCE.md). Nothing in this provenance record should be
