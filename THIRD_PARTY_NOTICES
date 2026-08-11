@@ -17,8 +17,8 @@ Component inventory
 - @babel/template@7.29.7 — MIT — https://github.com/babel/babel
 - @babel/traverse@7.29.7 — MIT — https://github.com/babel/babel
 - @babel/types@7.29.7 — MIT — https://github.com/babel/babel
-- @dagrejs/dagre@3.0.0 — MIT — https://github.com/dagrejs/dagre
-- @dagrejs/graphlib@4.0.1 — MIT — https://github.com/dagrejs/graphlib
+- @dagrejs/dagre@3.1.0 — MIT — https://github.com/dagrejs/dagre
+- @dagrejs/graphlib@4.0.3 — MIT — https://github.com/dagrejs/graphlib
 - @emotion/babel-plugin@11.13.5 — MIT — https://github.com/emotion-js/emotion/tree/main/packages/babel-plugin
 - @emotion/cache@11.14.0 — MIT — https://github.com/emotion-js/emotion/tree/main/packages/cache
 - @emotion/hash@0.9.2 — MIT — https://github.com/emotion-js/emotion/tree/main/packages/hash
@@ -137,7 +137,7 @@ Component inventory
 - source-map@0.5.7 — BSD-3-Clause — http://github.com/mozilla/source-map
 - stylis@4.2.0 — MIT — https://github.com/thysultan/stylis.js
 - supports-preserve-symlinks-flag@1.0.0 — MIT — https://github.com/inspect-js/node-supports-preserve-symlinks-flag
-- swr@2.4.2 — MIT — github:vercel/swr
+- swr@2.5.0 — MIT — github:vercel/swr
 - use-sync-external-store@1.6.0 — MIT — https://github.com/facebook/react
 - yaml@1.10.3 — ISC — github:eemeli/yaml
 - zustand@4.5.7 — MIT — https://github.com/pmndrs/zustand
@@ -428,7 +428,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
-@dagrejs/dagre@3.0.0 (MIT)
+@dagrejs/dagre@3.1.0 (MIT)
 ==============================================================================
 Copyright (c) 2012-2014 Chris Pettitt
 
@@ -451,7 +451,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-@dagrejs/graphlib@4.0.1 (MIT)
+@dagrejs/graphlib@4.0.3 (MIT)
 ==============================================================================
 Copyright (c) 2012-2014 Chris Pettitt
 
@@ -3232,7 +3232,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-swr@2.4.2 (MIT)
+swr@2.5.0 (MIT)
 ==============================================================================
 MIT License
 
