@@ -7,9 +7,28 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import * as XYFlow from "@xyflow/react";
+import {
+  Background,
+  BackgroundVariant,
+  BaseEdge,
+  Controls,
+  Handle as FlowHandle,
+  MarkerType,
+  MiniMap,
+  Panel,
+  Position,
+  ReactFlow,
+  useEdgesState,
+  useNodesState,
+  type Edge,
+  type EdgeProps,
+  type EdgeTypes,
+  type Node,
+  type NodeProps,
+  type NodeTypes,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import React, { useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   RiDatabase2Line,
   RiFlowChart,
@@ -34,36 +53,10 @@ type OperatorNodeData = {
   operator: KleinOperator;
   role: OperatorRole;
 };
-type OperatorFlowNode = XYFlow.Node<OperatorNodeData, "kleinOperator">;
+type OperatorFlowNode = Node<OperatorNodeData, "kleinOperator">;
 type EdgePoint = { x: number; y: number };
 type OperatorEdgeData = Record<string, unknown> & { points: EdgePoint[] };
-type OperatorFlowEdge = XYFlow.Edge<OperatorEdgeData, "kleinRoute">;
-type FlowHandleProps = React.HTMLAttributes<HTMLDivElement> & {
-  isConnectable?: boolean;
-  position: XYFlow.Position;
-  type: "source" | "target";
-};
-
-// React Flow 12's root declaration also exports an internal `Handle` type,
-// which TypeScript 4.8 incorrectly prefers over the runtime component.
-const FlowHandle = (
-  XYFlow as unknown as {
-    Handle: React.ComponentType<FlowHandleProps>;
-  }
-).Handle;
-const {
-  Background,
-  BackgroundVariant,
-  BaseEdge,
-  Controls,
-  MarkerType,
-  MiniMap,
-  Panel,
-  Position,
-  ReactFlow,
-  useEdgesState,
-  useNodesState,
-} = XYFlow;
+type OperatorFlowEdge = Edge<OperatorEdgeData, "kleinRoute">;
 
 // Keep execution nodes deliberately compact. A streaming graph often has many
 // ranks, and large monitoring cards make the topology unreadable once fit into
@@ -74,10 +67,10 @@ const NODE_HEIGHT = 124;
 const RANK_SEPARATION = 72;
 const NODE_TEXT_COLOR = "#111820";
 
-const nodeTypes: XYFlow.NodeTypes = {
+const nodeTypes: NodeTypes = {
   kleinOperator: OperatorNode,
 };
-const edgeTypes: XYFlow.EdgeTypes = {
+const edgeTypes: EdgeTypes = {
   kleinRoute: KleinRouteEdge,
 };
 
@@ -219,7 +212,7 @@ export const KleinJobGraph = ({
 
 // A function declaration is intentional: nodeTypes is initialized at module load.
 // eslint-disable-next-line prefer-arrow/prefer-arrow-functions
-function OperatorNode({ data, selected }: XYFlow.NodeProps<OperatorFlowNode>) {
+function OperatorNode({ data, selected }: NodeProps<OperatorFlowNode>) {
   const { operator, role } = data;
   const nodeColors = getOperatorNodeColors(operator);
   const busy = nodeColors.busyPercent;
@@ -397,7 +390,7 @@ function KleinRouteEdge({
   labelStyle,
   markerEnd,
   style,
-}: XYFlow.EdgeProps<OperatorFlowEdge>) {
+}: EdgeProps<OperatorFlowEdge>) {
   const points = data?.points ?? [];
   if (points.length < 2) {
     return null;

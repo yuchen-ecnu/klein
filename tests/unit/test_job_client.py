@@ -95,6 +95,19 @@ def test_auto_mode_keeps_batch_for_fully_supported_bounded_graph() -> None:
     assert JobClient._determine_runtime_mode(graph) is RuntimeExecutionMode.BATCH
 
 
+@pytest.mark.parametrize(
+    ("method", "limit", "truncate"),
+    [("take", 3, True), ("take_all", 4, False), ("collect", 5, False)],
+)
+def test_collect_options_are_forwarded_to_the_live_handle(method: str, limit: int, truncate: bool) -> None:
+    config = Configuration(include_environment=False)
+    context = KleinContext(config)
+    sink = getattr(context.from_values({"value": 1}), method)(limit)
+    graph = JobClient._get_logical_graph((sink,), "collect-options", config)
+
+    assert JobClient._collect_options(graph) == (True, limit, truncate)
+
+
 def test_batch_execution_reports_success(monkeypatch) -> None:
     from ray.klein.runtime.graph import batch_compiler as compiler_module
 
@@ -155,7 +168,7 @@ def test_streaming_execution_initializes_ray_and_registers_dashboard(monkeypatch
     client = JobClient(config)
     manager = _RemoteJobManager()
     lineage = Mock()
-    graph = object()
+    graph = SimpleNamespace(take_vertices=())
     ray_init = Mock()
     register = Mock()
     monkeypatch.setattr(ray, "is_initialized", lambda: False)
@@ -174,6 +187,7 @@ def test_streaming_execution_initializes_ray_and_registers_dashboard(monkeypatch
     )
 
     assert isinstance(handle, LiveJobHandle)
+    assert handle._collecting is False
     assert handle.namespace == "job-namespace"
     ray_init.assert_called_once_with()
     lineage.report_start.assert_called_once_with()
@@ -201,7 +215,7 @@ def test_streaming_submission_failure_is_reported(monkeypatch) -> None:
     with pytest.raises(ValueError, match="placement failed"):
         JobClient(Configuration())._execute_streaming(
             "orders",
-            object(),
+            SimpleNamespace(take_vertices=()),
             RuntimeExecutionMode.STREAMING,
             lineage,
         )
@@ -241,7 +255,7 @@ def test_streaming_submission_timeout_cleans_up_detached_manager(monkeypatch, cl
     with pytest.raises(TimeoutError, match="scheduler wait expired"):
         JobClient(config)._execute_streaming(
             "orders",
-            object(),
+            SimpleNamespace(take_vertices=()),
             RuntimeExecutionMode.STREAMING,
             lineage,
         )

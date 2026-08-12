@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from contextlib import suppress
+from threading import Event, Lock, Thread
 from typing import Any, cast
 
-from ray.util.queue import Queue
+from ray.util.queue import Empty, Queue
 
 import ray.klein as klein
 from ray.klein._internal.logging import get_logger
+from ray.klein.api.collect_function import _CollectLimitExceeded
 from ray.klein.api.job_handle import JobHandle
 from ray.klein.api.job_status import JobStatus
 from ray.klein.config.execution_options import (
@@ -18,6 +20,8 @@ from ray.klein.observability.lineage.tracker import KleinLineageTracker
 
 logger = get_logger(__name__)
 _RESULT_UNSET = object()
+_OUTPUT_DRAIN_POLL_SECONDS = 0.1
+_OUTPUT_DRAIN_JOIN_SECONDS = 2.0
 
 
 class LiveJobHandle(JobHandle):
@@ -35,15 +39,28 @@ class LiveJobHandle(JobHandle):
         runtime_mode: RuntimeExecutionMode,
         namespace: str,
         lineage_tracker: KleinLineageTracker,
+        collecting: bool = True,
+        collect_limit: int | None = None,
+        collect_truncate: bool = False,
     ) -> None:
         self._jobmanager = jobmanager
         self._job_name = job_name
         self._runtime_mode = runtime_mode
         self._namespace = namespace
         self._lineage_tracker = lineage_tracker
+        self._collecting = collecting
+        self._collect_limit = collect_limit
+        self._collect_truncate = collect_truncate
         self._reported_terminal_status: JobStatus | None = None
         self._reported_terminal_error: KleinError | None = None
         self._completed_result: Any = _RESULT_UNSET
+        self._completed_result_error: Exception | None = None
+        self._output_drain_error: KleinError | None = None
+        self._output_queue_drained = False
+        self._drained_output: list[Any] = []
+        self._drained_output_rows = 0
+        self._collect_limit_exceeded = False
+        self._completion_lock = Lock()
 
     def wait(self) -> None:
         """Block until the job reaches a terminal state.
@@ -77,13 +94,16 @@ class LiveJobHandle(JobHandle):
             render_thread.start()
 
         try:
-            self._wait_until_terminal()
+            with self._completion_lock:
+                self._wait_and_drain_output()
+                status = self.status
+                terminal_error = self._report_terminal_status(status)
+                self._finalize_drained_output(success=terminal_error is None and self._output_drain_error is None)
         finally:
             if stop_event is not None:
                 stop_event.set()
             if render_thread is not None:
                 render_thread.join(timeout=2)
-        status = self.status
         if render_thread is not None:
             _progress_view.print_summary(
                 self._job_name,
@@ -91,34 +111,130 @@ class LiveJobHandle(JobHandle):
                 _time.monotonic() - started,
                 progress_result["rows"],
             )
-        terminal_error = self._report_terminal_status(status)
         if status == JobStatus.FAILED:
             assert terminal_error is not None
             raise terminal_error
+        if terminal_error is None and self._output_drain_error is not None:
+            raise self._output_drain_error
 
     def get(self) -> Any:
         """Block until the job is terminal, then drain the output queue.
 
         Waits on the same event-driven ``wait_until_terminal`` block used by
-        :meth:`wait` (no polling), then drains. The output queue is unbounded so
-        producers never stall on a slow consumer — by the time the job is
-        terminal every emitted record is already enqueued, so a single
-        non-blocking drain is complete and race-free.
+        :meth:`wait` while concurrently draining the bounded output queue. This
+        keeps producer backpressure without deadlocking terminal completion.
         """
-        if self._completed_result is not _RESULT_UNSET:
+        with self._completion_lock:
+            if self._completed_result is not _RESULT_UNSET:
+                return self._completed_result
+            if self._completed_result_error is not None:
+                raise self._completed_result_error
+            if not self._collecting:
+                raise ValueError("result() is only available for take() or take_all() terminals")
+            self._wait_and_drain_output()
+            terminal_error = self._report_terminal_status(self.status)
+            if terminal_error is not None:
+                self._finalize_drained_output(success=False)
+                raise terminal_error
+            if self._output_drain_error is not None:
+                self._finalize_drained_output(success=False)
+                self._completed_result_error = self._output_drain_error
+                raise self._output_drain_error
+            self._finalize_drained_output(success=True)
+            if self._completed_result_error is not None:
+                raise self._completed_result_error
             return self._completed_result
-        self._wait_until_terminal()
-        terminal_error = self._report_terminal_status(self.status)
-        if terminal_error is not None:
-            self._discard_partial_output()
-            raise terminal_error
-        output_queue: Queue = klein.get(self._jobmanager.output_queue())
+
+    def _finalize_drained_output(self, *, success: bool) -> None:
+        if not self._collecting or self._completed_result is not _RESULT_UNSET:
+            return
+        if self._completed_result_error is not None:
+            return
+        if not success:
+            self._drained_output.clear()
+            return
+        exceeded = next((item for item in self._drained_output if isinstance(item, _CollectLimitExceeded)), None)
+        if exceeded is not None:
+            self._completed_result_error = ValueError(f"take_all() result exceeds limit {exceeded.limit}")
+            self._drained_output.clear()
+            return
+        self._completed_result = self._drained_output
+
+    def _wait_and_drain_output(self) -> None:
+        """Drain a collecting queue concurrently so its hard bound can backpressure."""
+
+        if not self._collecting or self._output_queue_drained:
+            self._wait_until_terminal()
+            return
+
         try:
-            result = [output_queue.get_nowait() for _ in range(output_queue.qsize())]
+            output_queue: Queue = klein.get(self._jobmanager.output_queue())
+        except Exception as error:
+            self._remember_output_drain_error("Failed to access the collecting output queue", error)
+            self._output_queue_drained = True
+            self._wait_until_terminal()
+            return
+        terminal = Event()
+        drain_errors: list[BaseException] = []
+        drain_thread = Thread(
+            target=self._drain_output_queue,
+            args=(output_queue, terminal, drain_errors),
+            name=f"klein-output-{self._namespace}",
+            daemon=True,
+        )
+        drain_thread.start()
+        try:
+            self._wait_until_terminal()
         finally:
-            self._shutdown_output_queue(output_queue)
-        self._completed_result = result
-        return result
+            terminal.set()
+            drain_thread.join(timeout=_OUTPUT_DRAIN_JOIN_SECONDS)
+            if drain_thread.is_alive():
+                self._shutdown_output_queue(output_queue)
+                drain_thread.join(timeout=_OUTPUT_DRAIN_JOIN_SECONDS)
+            else:
+                self._shutdown_output_queue(output_queue)
+            self._output_queue_drained = True
+            if drain_thread.is_alive():
+                self._output_drain_error = KleinError("Timed out while draining the collecting output queue")
+            elif drain_errors:
+                self._remember_output_drain_error("Failed to drain the collecting output queue", drain_errors[0])
+
+    def _drain_output_queue(
+        self,
+        output_queue: Queue,
+        terminal: Event,
+        drain_errors: list[BaseException],
+    ) -> None:
+        try:
+            while not terminal.is_set():
+                with suppress(Empty):
+                    self._append_drained_output(output_queue.get(timeout=_OUTPUT_DRAIN_POLL_SECONDS))
+            while True:
+                try:
+                    self._append_drained_output(output_queue.get_nowait())
+                except Empty:
+                    return
+        except BaseException as error:
+            drain_errors.append(error)
+
+    def _append_drained_output(self, item: Any) -> None:
+        if isinstance(item, _CollectLimitExceeded):
+            if not self._collect_limit_exceeded:
+                self._drained_output.append(item)
+                self._collect_limit_exceeded = True
+            return
+        limit = self._collect_limit
+        if limit is not None and self._drained_output_rows >= limit:
+            if not self._collect_truncate and not self._collect_limit_exceeded:
+                self._append_drained_output(_CollectLimitExceeded(limit))
+            return
+        self._drained_output.append(item)
+        self._drained_output_rows += 1
+
+    def _remember_output_drain_error(self, context: str, error: BaseException) -> None:
+        if self._output_drain_error is None:
+            self._output_drain_error = KleinError(f"{context}: {error}")
+            self._output_drain_error.__cause__ = error
 
     def _wait_until_terminal(self) -> None:
         """Wait for the terminal event and avoid orphaning on interruption."""
@@ -133,13 +249,6 @@ class LiveJobHandle(JobHandle):
                 self.cancel(timeout=5)
             self._lineage_tracker.report_cancel(KleinError(f"Job was terminated by external signal: {error}"))
             raise
-
-    def _discard_partial_output(self) -> None:
-        """Best-effort release of a failed collecting job's detached queue."""
-
-        with suppress(Exception):
-            output_queue: Queue = klein.get(self._jobmanager.output_queue())
-            output_queue.shutdown(force=True)
 
     @staticmethod
     def _shutdown_output_queue(output_queue: Queue) -> None:

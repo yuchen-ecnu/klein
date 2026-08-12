@@ -141,7 +141,7 @@ class Pipeline(KleinContext):
 
     @staticmethod
     def _reject_statement_set_sinks(sinks: Sequence[StreamSink]) -> None:
-        if any(getattr(sink, "_statement_set_owner_id", None) is not None for sink in sinks):
+        if any(getattr(sink, "_statement_set_owner_token", None) is not None for sink in sinks):
             raise RuntimeError("submit sinks captured by a StatementSet through that StatementSet")
 
     def _validate_statement_set_sinks(
@@ -151,6 +151,29 @@ class Pipeline(KleinContext):
     ) -> None:
         if statement_set.pipeline is not self:
             raise ValueError("StatementSet belongs to a different Pipeline")
-        owner_id = id(statement_set)
-        if any(sink._statement_set_owner_id != owner_id for sink in sinks):
+        if any(sink._statement_set_owner_token != statement_set._owner_token for sink in sinks):
             raise ValueError("all submitted sinks must belong to this StatementSet")
+
+
+def pipeline(
+    configuration: ConfigInput = None,
+    *,
+    name: str | None = None,
+    strict_config: bool = True,
+) -> Pipeline:
+    """Create an isolated user-facing pipeline.
+
+    This namespace-friendly factory is the recommended construction API::
+
+        import ray.klein as klein
+
+        orders = klein.pipeline(name="orders")
+
+    ``Pipeline`` remains available for annotations, subclassing, and
+    compatibility.
+    """
+
+    return Pipeline(configuration, name=name, strict_config=strict_config)
+
+
+__all__ = ["Pipeline", "pipeline"]

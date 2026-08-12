@@ -41,7 +41,8 @@ to choose the right family before comparing detailed capabilities.
 
 **Ray Data streaming**
 
-`stream.data.with_column(name, expr)` and `stream.data.filter(expr=expr)`
+`stream.ray_data.with_column(name, expr)` and
+`stream.ray_data.filter(expr=expr)`
 support streaming. Other Ray Data operations are batch-only; Klein's native
 filesystem writers and `stream.write_sql` support streaming separately.
 

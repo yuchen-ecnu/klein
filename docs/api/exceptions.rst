@@ -43,7 +43,7 @@ Common exception families
    partially configured graph.
 
 ``RayDataAPIError``
-   A dynamic ``ray.klein.read_*`` or ``stream.data`` operation is unavailable
+   A dynamic ``pipeline.ray_data`` or ``stream.ray_data`` operation is unavailable
    or used in the wrong adapter category for the installed Ray version.
 
 ``StateConflictError``
@@ -54,8 +54,9 @@ Common exception families
 ``KleinError``
    A submitted job reached a failure boundary. ``LiveJobHandle.wait()`` raises
    this with the retained job failure detail. The collection-specific
-   ``get()`` path also validates terminal status, raises for failed or
-   cancelled jobs, and does not expose partial queued results.
+   ``result()`` path also validates terminal status, raises for failed or
+   cancelled jobs, and does not expose partial queued results. ``get()`` is its
+   compatibility alias.
 
 ``TimeoutError``
    A client wait, deployment, data-plane drain, or control operation exceeded

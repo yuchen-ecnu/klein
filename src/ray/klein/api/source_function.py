@@ -42,3 +42,11 @@ class SourceFunction(Function, ABC):
         Delivery is at least once across coordinator recovery, so implementations
         must use ``checkpoint_id`` as an idempotency key.
         """
+
+    def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        """Notify the source that a captured checkpoint will not complete.
+
+        Delivery is at least once because an RPC response can be lost. Source
+        implementations that retain per-checkpoint bookkeeping must therefore
+        make cleanup idempotent by ``checkpoint_id``.
+        """

@@ -18,7 +18,7 @@ try:
     release = version("ray-klein")
 except PackageNotFoundError:
     release = "0.1.0a1"
-version = release
+version = os.environ.get("KLEIN_DOCS_VERSION", release)
 
 extensions = [
     "myst_parser",
@@ -44,6 +44,7 @@ myst_enable_extensions = ["colon_fence", "deflist", "fieldlist", "substitution"]
 myst_heading_anchors = 3
 
 language = os.environ.get("KLEIN_DOCS_LANGUAGE", "en")
+docs_base_url = os.environ.get("KLEIN_DOCS_BASE_URL", "https://yuchen-ecnu.github.io/klein").rstrip("/")
 locale_dirs = ["locales/"]
 gettext_compact = True
 gettext_location = False
@@ -68,14 +69,28 @@ html_theme_options = {
     "show_nav_level": 2,
     "navigation_depth": 4,
     "navbar_center": [],
-    "navbar_end": ["language-switcher.html", "theme-switcher.html", "navbar-icon-links.html"],
+    "navbar_end": [
+        "version-switcher",
+        "language-switcher.html",
+        "theme-switcher.html",
+        "navbar-icon-links.html",
+    ],
     "secondary_sidebar_items": ["page-toc"] if language == "zh_CN" else ["page-toc", "edit-this-page"],
     "use_edit_page_button": True,
+    "switcher": {
+        "json_url": (
+            f"{docs_base_url}/versions-zh_CN.json" if language == "zh_CN" else f"{docs_base_url}/versions.json"
+        ),
+        "version_match": version,
+    },
+    # CI generates and schema-tests the switcher files in the final Pages
+    # tree; do not make an offline Sphinx build fetch the deployed website.
+    "check_switcher": False,
 }
 html_context = {
     "github_user": "yuchen-ecnu",
     "github_repo": "klein",
-    "github_version": "main",
+    "github_version": os.environ.get("KLEIN_DOCS_GITHUB_REF", "main"),
     "doc_path": "docs",
 }
 html_sidebars = {"**": ["global-sidebar.html"]}

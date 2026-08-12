@@ -32,7 +32,10 @@ them, and retain revoked keys in the public `KEYS` history.
    before approval.
 2. Confirm CI, CodeQL, dependency review, secret scanning, Scorecard, full
    integration tests, frontend tests, coverage, REUSE, and documentation are
-   green on the exact commit.
+   green on the exact commit. After resolving the target dependencies, run
+   `python scripts/check_ray_namespace.py`: the selected Ray distribution must
+   not already own `ray/klein`, because overlapping distributions can overwrite
+   each other during installation or removal.
 3. Create and verify a signed annotated tag. From a clean checkout of that tag,
    run `make source-release`, `python -m build`, `python -m twine check dist/*`,
    and `python scripts/check_distribution.py` over the source archive, wheel,
@@ -41,9 +44,11 @@ them, and retain revoked keys in the public `KEYS` history.
    the source candidate with an ASCII-armored detached OpenPGP signature.
 5. Publish the source archive, signature, digest, tag, commit, SBOMs, test
    evidence, and known issues at a stable public candidate URL.
-6. Open a public vote lasting at least 72 hours. The vote is on the identified
-   source bytes, not on a branch name. Follow `GOVERNANCE.md`; record every
-   binding vote and the final result at a stable URL.
+6. Open a public issue in this repository for a vote lasting at least 72 hours.
+   Put the exact tag, 40-character commit, and source SHA-512 in the issue body.
+   Current maintainers cast a binding vote by starting a comment with `+1`,
+   `0`, or `-1`. After the result is final, close and lock the issue. The vote
+   is on the identified source bytes, not on a branch name.
 
 If the candidate changes by one byte, cancel the vote, issue a new candidate,
 and restart the 72-hour window.
@@ -57,10 +62,12 @@ Run the `Release` workflow manually with:
 - the voted source archive's SHA-512 digest.
 
 The workflow verifies the tag, main-branch ancestry, exact package version,
-HTTPS vote evidence, voted source digest, tests, source/distribution policy,
-SBOM generation, signatures, and checksums. It then publishes the wheel and
-sdist through PyPI Trusted Publishing and creates the immutable GitHub release.
-Every source, Python, SBOM, checksum, and key artifact receives a detached
+the closed and locked same-repository vote, three current-maintainer approvals,
+absence of an unresolved binding veto, and required checks on the exact commit.
+It archives that evidence with the voted source digest, runs the tests and
+source/distribution policy, generates artifact-profile SBOMs, then publishes
+through PyPI Trusted Publishing and creates the immutable GitHub release. Every
+source, Python, evidence, SBOM, checksum, and key artifact receives a detached
 signature; `SHA512SUMS` covers the release payload.
 
 After promotion, independently install the wheel, verify all signatures and

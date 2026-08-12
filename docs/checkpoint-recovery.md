@@ -28,16 +28,16 @@ Use shared durable storage and retain more than one checkpoint while operating
 an important job:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "execution.runtime.mode": "streaming",
         "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
         "execution.checkpointing.num-retained": 3,
         "state.keyed.max-parallelism": 32768,
-    }
+    },
+    name="orders",
 )
 ```
 
@@ -81,29 +81,29 @@ Recreate the same logical graph and pass the complete checkpoint-directory URI:
 
 ```python
 import ray
-import ray.klein
+import ray.klein as klein
 
 ray.init(address="auto")
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "execution.runtime.mode": "streaming",
         "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
         "execution.savepoint.path": ("s3://data-platform/klein-checkpoints/klein-orders-0123abcd/chk-42"),
         "state.keyed.max-parallelism": 32768,
-    }
+    },
+    name="orders-restored",
 )
 
-# Build the same sources, transforms, operator names, and terminal sinks here.
-build_pipeline()
-handle = ray.klein.execute("orders-restored")
+# Rebuild the same graph; return its single terminal handle.
+handle = build_pipeline(pipeline)
 print(handle.namespace)
 handle.wait()
 ```
 
 The restore path is intentionally singular: it names one completed checkpoint,
-not the checkpoint root. Configuration accepts unknown keys for application
-metadata, so a misspelling such as `execution.checkpointing.restore-path` is a
-silent no-op. Use the canonical `execution.savepoint.path` key.
+not the checkpoint root. The recommended explicit pipeline rejects unknown
+Klein keys, so a misspelling such as `execution.checkpointing.restore-path`
+fails during construction. Use the canonical `execution.savepoint.path` key.
 
 When resubmitting on the same cluster, stop the old job first. A stable
 `job.namespace` is useful for operational attachment, but reusing a namespace

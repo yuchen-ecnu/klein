@@ -108,6 +108,56 @@ def test_failed_reload_keeps_previous_chain_ready(tmp_path) -> None:
     deployment.__del__()
 
 
+def test_failed_reload_preserves_limits_until_successful_swap(tmp_path) -> None:
+    workflow = tmp_path / "workflow.py"
+    workflow.write_text("old", encoding="utf-8")
+    old = _Closable("old")
+    new = _Closable("new")
+    deployment = _deployment()
+    old_limits = {
+        "max_request_bytes": 101,
+        "max_response_bytes": 102,
+        "max_rows": 103,
+        "max_result_rows": 104,
+    }
+    new_limits = {
+        "max_request_bytes": 201,
+        "max_response_bytes": 202,
+        "max_rows": 203,
+        "max_result_rows": 204,
+    }
+
+    with patch("ray.klein.runtime.serve_extract.run_extraction", return_value=[old]):
+        deployment.reconfigure({"workflow": str(workflow), **old_limits})
+    workflow.write_text("new", encoding="utf-8")
+
+    with (
+        patch("ray.klein.runtime.serve_extract.run_extraction", side_effect=RuntimeError("broken")),
+        pytest.raises(RuntimeError, match="Failed to extract"),
+    ):
+        deployment.reconfigure({"workflow": str(workflow), **new_limits})
+
+    assert deployment.operators == [old]
+    assert {
+        "max_request_bytes": deployment.max_request_bytes,
+        "max_response_bytes": deployment.max_response_bytes,
+        "max_rows": deployment.max_rows,
+        "max_result_rows": deployment.max_result_rows,
+    } == old_limits
+
+    with patch("ray.klein.runtime.serve_extract.run_extraction", return_value=[new]):
+        deployment.reconfigure({"workflow": str(workflow), **new_limits})
+
+    assert deployment.operators == [new]
+    assert {
+        "max_request_bytes": deployment.max_request_bytes,
+        "max_response_bytes": deployment.max_response_bytes,
+        "max_rows": deployment.max_rows,
+        "max_result_rows": deployment.max_result_rows,
+    } == new_limits
+    deployment.__del__()
+
+
 def test_reload_closes_new_chain_if_workflow_disappears_after_extraction(tmp_path) -> None:
     workflow = tmp_path / "workflow.py"
     workflow.write_text("old", encoding="utf-8")

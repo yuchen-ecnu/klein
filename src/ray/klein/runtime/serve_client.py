@@ -20,7 +20,7 @@ from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.config.serve_options import ServeOptions
 from ray.klein.observability.metrics.metric_catalog import KleinMetrics
 from ray.klein.observability.metrics.metrics import Counter, Histogram
-from ray.klein.runtime.serve_serialization import numpy_encoder
+from ray.klein.runtime.serve_serialization import enforce_row_limit, numpy_encoder
 
 logger = get_logger(__name__)
 _RETRYABLE_HTTP_STATUSES = frozenset({408, 429, 499})
@@ -36,6 +36,10 @@ class EmbeddedProxyClient(Function):
         self.deployment_name = self.config.get(ServeOptions.DEPLOYMENT_NAME)
         self.route_prefix = self.config.get(ServeOptions.ROUTE_PREFIX)
         self.max_attempts = self._positive(ServeOptions.CLIENT_MAX_ATTEMPTS)
+        self.max_request_bytes = self._positive(ServeOptions.CLIENT_MAX_REQUEST_BYTES)
+        self.max_response_bytes = self._positive(ServeOptions.CLIENT_MAX_RESPONSE_BYTES)
+        self.max_rows = self._positive(ServeOptions.CLIENT_MAX_ROWS)
+        self.max_result_rows = self._positive(ServeOptions.CLIENT_MAX_RESULT_ROWS)
         self.slow_request_warning = self._positive(ServeOptions.CLIENT_SLOW_REQUEST_WARNING)
         self.request_timeout = self._positive(ServeOptions.HTTP_TIMEOUT)
         self.connect_timeout = self._positive(ServeOptions.HTTP_CONNECT_TIMEOUT)
@@ -118,8 +122,29 @@ class EmbeddedProxyClient(Function):
             ) as response:
                 if response.status_code >= 400:
                     response.raise_for_status()
-                await response.aread()
-                return response
+                raw_length = response.headers.get("Content-Length")
+                if raw_length is not None:
+                    try:
+                        declared_length = int(raw_length)
+                    except ValueError as error:
+                        raise ValueError("Serve response has an invalid Content-Length") from error
+                    if declared_length < 0:
+                        raise ValueError("Serve response has an invalid Content-Length")
+                    if declared_length > self.max_response_bytes:
+                        raise ValueError(f"Serve response exceeds the {self.max_response_bytes}-byte limit")
+                chunks: list[bytes] = []
+                retained = 0
+                async for chunk in response.aiter_bytes():
+                    retained += len(chunk)
+                    if retained > self.max_response_bytes:
+                        raise ValueError(f"Serve response exceeds the {self.max_response_bytes}-byte limit")
+                    chunks.append(chunk)
+                return httpx.Response(
+                    status_code=response.status_code,
+                    content=b"".join(chunks),
+                    headers=response.headers,
+                    request=response.request,
+                )
 
         semaphore = self._host_semaphore(url)
         if semaphore is None:
@@ -173,7 +198,10 @@ class EmbeddedProxyClient(Function):
             self.request_duration.observe_elapsed(started_at)
 
     async def post_request_with_retry(self, payload: dict[str, np.ndarray]) -> Any:
+        enforce_row_limit(payload, self.max_rows, "Serve request")
         body = orjson.dumps(payload, default=numpy_encoder)
+        if len(body) > self.max_request_bytes:
+            raise ValueError(f"Serve request exceeds the {self.max_request_bytes}-byte limit")
         started_at = time.monotonic()
         request_id = str(uuid.uuid4())
         last_error: Exception | None = None
@@ -201,7 +229,9 @@ class EmbeddedProxyClient(Function):
                     self._post(selected_url, body, request_id),
                     timeout=remaining,
                 )
-                return response.json()
+                result = response.json()
+                enforce_row_limit(result, self.max_result_rows, "Serve result")
+                return result
             except httpx.HTTPStatusError as error:
                 last_error = error
                 last_status = error.response.status_code

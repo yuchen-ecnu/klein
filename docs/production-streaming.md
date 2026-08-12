@@ -37,7 +37,7 @@ import json
 from datetime import timedelta
 
 import ray
-from ray.klein import TumblingWindow, WatermarkStrategy
+import ray.klein as klein
 
 
 def decode_order(record: dict) -> dict:
@@ -60,8 +60,8 @@ def add_amount(left: dict, right: dict) -> dict:
     }
 
 
-def build_pipeline() -> None:
-    ray.klein.configure(
+def build_pipeline() -> klein.StatementSet:
+    pipeline = klein.pipeline(
         {
             "execution.runtime.mode": "streaming",
             "execution.checkpointing.dir": "s3://platform/klein-checkpoints",
@@ -72,10 +72,11 @@ def build_pipeline() -> None:
             "state.backend.local-dir": "/mnt/nvme/klein-state",
             "state.keyed.max-parallelism": 32768,
             "job.namespace": "orders-production",
-        }
+        },
+        name="orders",
     )
 
-    raw_orders = ray.klein.read_kafka(
+    raw_orders = pipeline.read_kafka(
         "orders",
         bootstrap_servers="kafka-1:9092,kafka-2:9092",
         trigger="continuous",
@@ -88,7 +89,7 @@ def build_pipeline() -> None:
 
     orders = raw_orders.map(decode_order, name="DecodeOrder")
     timed_orders = orders.assign_timestamps_and_watermarks(
-        WatermarkStrategy.for_bounded_out_of_orderness(
+        klein.WatermarkStrategy.for_bounded_out_of_orderness(
             timedelta(seconds=10),
             lambda row: row["event_time_ms"],
         ).with_idleness(timedelta(minutes=1))
@@ -97,7 +98,7 @@ def build_pipeline() -> None:
     totals = (
         timed_orders.key_by(lambda row: row["customer_id"])
         .window(
-            TumblingWindow(timedelta(minutes=5)),
+            klein.TumblingWindow(timedelta(minutes=5)),
             timestamp_selector=lambda row: row["event_time_ms"],
             allowed_lateness=timedelta(seconds=30),
             state_ttl=timedelta(days=1),
@@ -105,20 +106,23 @@ def build_pipeline() -> None:
         .reduce(add_amount, concurrency=4, name="FiveMinuteCustomerTotal")
     )
 
-    totals.write_json(
+    statements = pipeline.create_statement_set()
+    statements.add(
+        totals.write_json,
         "s3://platform/klein-output/orders-five-minute/",
         filename_prefix="customer-total",
         max_rows_per_file=100_000,
         rollover_interval=timedelta(minutes=15),
         concurrency=4,
     )
+    return statements
 
 
 def main() -> None:
     ray.init(address="auto")
-    build_pipeline()
-    print(ray.klein.explain("orders"))
-    handle = ray.klein.execute("orders")
+    statements = build_pipeline()
+    print(statements.explain())
+    handle = statements.execute()
     print(f"namespace={handle.namespace}")
     try:
         handle.wait()
@@ -130,8 +134,10 @@ if __name__ == "__main__":
     main()
 ```
 
-The window emits after the watermark passes the five-minute window end plus 30
-seconds of allowed lateness. A one-minute idle timeout prevents an empty Kafka
+The `StatementSet` keeps the file terminal staged so the application can
+inspect the complete plan before submission. The window emits after the
+watermark passes the five-minute window end plus 30 seconds of allowed
+lateness. A one-minute idle timeout prevents an empty Kafka
 partition from blocking every window. `state_ttl` is a safety bound, not the
 normal window cleanup mechanism.
 
@@ -181,10 +187,16 @@ Find the latest completed directory, for example:
 s3://platform/klein-checkpoints/orders-production/chk-42
 ```
 
-Add it to the same graph configuration before `execute()`:
+Add it to the mapping passed to `klein.pipeline()` before rebuilding the graph:
 
 ```python
-ray.klein.configure({"execution.savepoint.path": ("s3://platform/klein-checkpoints/orders-production/chk-42")})
+pipeline = klein.pipeline(
+    {
+        # Keep the other production options unchanged.
+        "execution.savepoint.path": "s3://platform/klein-checkpoints/orders-production/chk-42",
+    },
+    name="orders",
+)
 ```
 
 Keep the graph, operator names, state descriptors, serializers, and

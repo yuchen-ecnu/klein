@@ -516,16 +516,26 @@ jobs:
           cache: pip
       - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,test]"
+      - run: python scripts/check_ray_namespace.py
       - run: pip-audit --local --skip-editable --progress-spinner off
       - run: python scripts/check_dependency_licenses.py
 
   package:
-    name: Package / ${{ matrix.os }} wheel
+    name: Package / ${{ matrix.os }} / Python ${{ matrix.python-version }} wheel
     needs: [quality, python-compat]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+            upload: false
+          - os: ubuntu-latest
+            python-version: "3.12"
+            upload: true
+          - os: macos-14
+            python-version: "3.12"
+            upload: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -534,7 +544,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt "build==1.5.0" "twine==7.0.0"
@@ -546,9 +556,13 @@ jobs:
           python -m venv /tmp/ray-klein-wheel-test
           /tmp/ray-klein-wheel-test/bin/python -m pip install "pip==26.2.1"
           /tmp/ray-klein-wheel-test/bin/pip install --constraint requirements/ci-constraints.txt dist/*.whl
+          /tmp/ray-klein-wheel-test/bin/python scripts/check_ray_namespace.py
           /tmp/ray-klein-wheel-test/bin/python -c "import ray, ray.klein; assert callable(ray.klein.from_items)"
+          /tmp/ray-klein-wheel-test/bin/python -c "from importlib.metadata import metadata; assert {'all', 'docs', 'media', 'serve', 'test'} <= set(metadata('ray-klein').get_all('Provides-Extra') or ())"
+          /tmp/ray-klein-wheel-test/bin/ray-klein --version
+          /tmp/ray-klein-wheel-test/bin/python -m pip check
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: runner.os == 'Linux'
+        if: matrix.upload
         with:
           name: distributions
           path: dist/

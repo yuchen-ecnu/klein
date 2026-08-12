@@ -61,6 +61,30 @@ class ServeOptions:
         int,
         description="Maximum proxy request attempts.",
     )
+    CLIENT_MAX_REQUEST_BYTES = ConfigOption(
+        "serve.client.max-request-bytes",
+        16 * 1024 * 1024,
+        int,
+        description="Maximum encoded request body size for an embedded proxy client.",
+    )
+    CLIENT_MAX_RESPONSE_BYTES = ConfigOption(
+        "serve.client.max-response-bytes",
+        16 * 1024 * 1024,
+        int,
+        description="Maximum decoded response body size for an embedded proxy client.",
+    )
+    CLIENT_MAX_ROWS = ConfigOption(
+        "serve.client.max-rows",
+        100_000,
+        int,
+        description="Maximum rows in one embedded proxy client request.",
+    )
+    CLIENT_MAX_RESULT_ROWS = ConfigOption(
+        "serve.client.max-result-rows",
+        100_000,
+        int,
+        description="Maximum rows accepted in one embedded proxy client result.",
+    )
     CLIENT_SLOW_REQUEST_WARNING = ConfigOption(
         "serve.client.slow-request-warning",
         60,
@@ -96,4 +120,28 @@ class ServeOptions:
         3.0,
         float,
         description="Maximum exponential retry backoff in seconds.",
+    )
+    DEPLOYMENT_MAX_REQUEST_BYTES = ConfigOption(
+        "serve.deployment.max-request-bytes",
+        16 * 1024 * 1024,
+        int,
+        description="Maximum request body size accepted by a Klein Serve deployment.",
+    )
+    DEPLOYMENT_MAX_RESPONSE_BYTES = ConfigOption(
+        "serve.deployment.max-response-bytes",
+        16 * 1024 * 1024,
+        int,
+        description="Maximum response body size emitted by a Klein Serve deployment.",
+    )
+    DEPLOYMENT_MAX_ROWS = ConfigOption(
+        "serve.deployment.max-rows",
+        100_000,
+        int,
+        description="Maximum rows accepted in one Klein Serve deployment request.",
+    )
+    DEPLOYMENT_MAX_RESULT_ROWS = ConfigOption(
+        "serve.deployment.max-result-rows",
+        100_000,
+        int,
+        description="Maximum rows emitted by one Klein Serve deployment request.",
     )

@@ -21,17 +21,17 @@ owned by the installed compatible Ray Data version.
 
 | API | Batch | Streaming | Notes |
 |---|---:|---:|---|
-| Dynamic `ray.klein.read_*` Ray Data factory | Yes | No | The selected public Ray Data factory defines its arguments and result schema. |
-| `from_ray_dataset()` | Yes | No | Keeps the existing Dataset lazy; it is not converted to an unbounded source. |
+| Dynamic `pipeline.ray_data.read_*` factory | Yes | No | The selected public Ray Data factory defines its arguments and result schema. |
+| `pipeline.ray_data.from_dataset()` | Yes | No | Keeps the existing Dataset lazy; it is not converted to an unbounded source. |
 | `from_items()` / `from_values()` | Yes | Yes | Bounded by default; a finite native streaming source is used when the graph selects streaming. |
 | `read_kafka(trigger="once")` | Yes | No | Delegates to Ray Data. |
 | `read_kafka(trigger="continuous")` | No | Yes | Checkpoint-aware native source. |
 | `read_canal()` | No | Yes | Continuous Kafka input decoded to changelog rows. |
 | `read_rocketmq()` | No | Yes | Broker-managed consumer progress; not checkpoint-aligned. |
-| `ray.klein.source()` | No by default | Yes | A custom source needs an explicit batch lowering to run in batch; the public helper currently builds native sources. |
-| `stream.data.with_column(name, expr)` | Ray Data; Klein-bounded batch for `download()` | Yes | Streaming evaluates Ray expressions per record; `download()` uses the shared network policy and one in-flight request per task. |
-| `stream.data.filter(expr=expr)` | Ray Data | Yes | Supports Ray Data expression predicates in both modes. |
-| Other `stream.data.*` | Ray Data | No | Other Dataset transforms and terminal consumers remain batch-only. |
+| `pipeline.source()` | No by default | Yes | A custom source needs an explicit batch lowering to run in batch; the public helper currently builds native sources. |
+| `stream.ray_data.with_column(name, expr)` | Ray Data; Klein-bounded batch for `download()` | Yes | Streaming evaluates Ray expressions per record; `download()` uses the shared network policy and one in-flight request per task. |
+| `stream.ray_data.filter(expr=expr)` | Ray Data | Yes | Supports Ray Data expression predicates in both modes. |
+| Other `stream.ray_data.*` | Ray Data | No | Other Dataset transforms and terminal consumers remain batch-only. |
 
 ## DataStream transformations
 
@@ -61,7 +61,7 @@ counted by `late_records_dropped`.
 `broadcast()`, `rescale()`, `round_robin()`, `adaptive_shuffle()`, and
 `partition_by()` configure the next edge in the native streaming graph. They do
 not control Ray Data partitions in batch mode. For batch repartitioning and
-sorting, use the matching `stream.data` Dataset method.
+sorting, use the matching `stream.ray_data` Dataset method.
 
 | Method | Native streaming behavior | Typical use |
 |---|---|---|
@@ -79,7 +79,10 @@ immediately before the operation whose input placement they should control.
 
 | API | Batch | Streaming | Delivery behavior |
 |---|---:|---:|---|
-| `show()`, `take()`, `take_all()`, `schema()` | Yes | Yes | Lazy diagnostic terminals; `take()` drains after reaching its limit. |
+| `show()` | Yes | Yes | Submits directly on an explicit pipeline and remains deferred on the compatibility API; the display limit does not stop a streaming job. |
+| `take(limit)` | Yes | Yes | Truncates the result and may finish when the non-negative limit is reached. |
+| `collect(limit)` / `take_all(limit)` | Yes | Yes | Collects the complete result and raises if it contains more than the optional non-negative limit. |
+| `schema()` | Yes | Yes | Resolves the schema through the selected execution path. |
 | `write_json/csv/parquet()` | Ray Data | Yes | Streaming output is checkpoint-transactional. |
 | `write_iceberg()` | Ray Data | Append | Streaming appends are checkpoint-transactional; overwrite and upsert remain batch-only. |
 | `write_text()` | No | Yes | Native checkpoint-transactional text sink. |

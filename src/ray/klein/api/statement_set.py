@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import uuid4
 
 from ray.klein.api.node_type import NodeType
 from ray.klein.api.stream_sink import StreamSink
@@ -40,6 +41,7 @@ class StatementSet:
         if not isinstance(pipeline, Pipeline):
             raise TypeError("pipeline must be a Pipeline")
         self._pipeline = pipeline
+        self._owner_token = uuid4().hex
         self._sinks: list[StreamSink] = []
         self._capture_scope: Any = None
         self._entry_size = 0
@@ -112,7 +114,7 @@ class StatementSet:
             sinks,
         )
         for sink in sinks:
-            sink._statement_set_owner_id = None
+            sink._statement_set_owner_token = None
         self._sinks.clear()
         return handle
 
@@ -167,18 +169,18 @@ class StatementSet:
             raise ValueError("StatementSet accepts side-effect sinks; use collect().result() separately")
         if any(existing is sink for existing in self._sinks):
             raise ValueError("a terminal operation may be added to a StatementSet only once")
-        if sink._statement_set_owner_id is not None:
+        if sink._statement_set_owner_token is not None:
             raise ValueError("a terminal operation already belongs to a StatementSet")
         if not any(pending is sink for pending in self._pipeline.sinks):
             raise ValueError("a StatementSet sink must still be pending")
-        sink._statement_set_owner_id = id(self)
+        sink._statement_set_owner_token = self._owner_token
         self._sinks.append(sink)
 
     def _rollback(self, start: int) -> None:
         added = self._sinks[start:]
         del self._sinks[start:]
         for sink in added:
-            sink._statement_set_owner_id = None
+            sink._statement_set_owner_token = None
             self._pipeline._discard_sink(sink)
 
 

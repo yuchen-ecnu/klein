@@ -248,6 +248,14 @@ Choose inputs and outputs, then review every option, default, schema, execution
 mode, and delivery guarantee.
 :::
 
+:::{grid-item-card} Evaluation
+:link: evaluation/index
+:link-type: doc
+
+Review reproducible before-and-after benchmarks, correctness checks, neutral
+results, and the engineering decisions they support.
+:::
+
 :::{grid-item-card} API reference
 :link: api/api
 :link-type: doc
@@ -289,8 +297,8 @@ watermarks; continue into the event-time guide for windows and joins.
 :link: sql
 :link-type: doc
 
-Run bounded or continuous SQL, work with explicit changelog rows, and define
-connector tables with DDL.
+Run bounded or continuous SQL with built-ins, scalar and AI UDFs, image/PDF
+functions, explicit changelog rows, and connector DDL.
 :::
 
 :::{grid-item-card} Checkpoint-aware output

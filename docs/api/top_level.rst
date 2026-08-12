@@ -7,7 +7,7 @@ Application code normally imports both ``ray`` and ``ray.klein`` and then
 accesses ``ray.klein``. The following categories are documented application
 contracts:
 
-* graph construction and execution: :class:`~ray.klein.Pipeline`,
+* graph construction and execution: ``pipeline``, :class:`~ray.klein.Pipeline`,
   :class:`~ray.klein.StatementSet`, :class:`~ray.klein.DataStream`,
   ``from_items``, ``from_values``, ``source``, ``run``, ``execute``,
   ``explain``, and ``sql``;
@@ -27,9 +27,10 @@ Dynamic Ray Data names
 ----------------------
 
 Public factories discovered from the installed compatible ``ray.data`` module,
-such as ``ray.klein.read_parquet``, are created lazily and are not enumerated in
-``ray.klein.__all__``. Their signatures and documentation come from that Ray
-version. Use ``dir(ray.klein)`` and ``stream.ray_data.available`` when an
+such as ``pipeline.ray_data.read_parquet``, are created lazily. Module-level
+factory aliases are not enumerated in ``ray.klein.__all__``. Their signatures
+and documentation come from that Ray version. Use
+``pipeline.ray_data.available`` and ``stream.ray_data.available`` when an
 application must support more than one compatible Ray patch.
 
 Runtime bridge exports
@@ -50,16 +51,20 @@ API, and Ray's own public APIs instead of these bridge helpers.
 Import guidance
 ---------------
 
-Use short imports for ordinary graph code and domain packages for specialized
-contracts:
+Use the ``ray.klein`` namespace for ordinary graph code and domain packages
+for specialized contracts. The lowercase factory is the recommended way to
+create an isolated job; import ``Pipeline`` directly only for type annotations
+or subclassing:
 
 .. code-block:: python
 
-   import ray
+   import ray.klein as klein
    from ray.klein import DataStream, JobHandle, Pipeline, StatementSet
    from ray.klein.api import RuntimeContext, SinkFunction, SourceFunction
    from ray.klein.config import ExecutionOptions, RuntimeExecutionMode
    from ray.klein.state import StateTTLConfig, ValueStateDescriptor
+
+   pipeline = klein.pipeline(name="orders")
 
 The public :class:`~ray.klein.StreamSink` type is useful for annotations in
 advanced selective-execution code; ordinary pipelines do not need to import or

@@ -43,21 +43,22 @@ dashboard, metrics exporter, runtime environment, or custom resources:
 
 ```python
 import ray
-import ray.klein
+import ray.klein as klein
 
 ray.init(address="auto")
 
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "job.namespace": "orders-production",
         "execution.checkpointing.dir": "s3://platform-checkpoints/klein",
-    }
+    },
+    name="orders",
 )
 
-# Application code builds sources and transforms and registers terminal sinks.
-build_pipeline()
-print(ray.klein.explain("orders"))
-handle = ray.klein.execute("orders")
+# The builder captures its side-effect terminals in a StatementSet.
+statements = build_pipeline(pipeline)
+print(statements.explain())
+handle = statements.execute()
 print(handle.namespace)
 ```
 
@@ -97,7 +98,7 @@ the JobManager, checkpoint coordinator, and optional Serve client actors.
 Before submitting:
 
 ```python
-print(ray.klein.explain("orders"))
+print(statements.explain())
 ```
 
 Review the plan for unexpected shuffles, fan-out, concurrency, and resource

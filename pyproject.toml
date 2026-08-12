@@ -90,6 +90,7 @@ test = [
   "testcontainers[kafka,redis]>=4.13,<5",
   "tomli>=2.4.1; python_version < '3.11'",
   "twine>=5,<8",
+  "uv>=0.11.31,<0.12",
 ]
 dev = [
   "ray-klein[all,docs,test]",
@@ -102,6 +103,7 @@ docs = [
   "sphinx==8.1.3",
   "sphinx-copybutton==0.5.2",
   "sphinx-design==0.6.1",
+  "tomli>=2.4.1; python_version < '3.11'",
 ]
 
 [project.scripts]
@@ -163,7 +165,7 @@ source = ["ray.klein"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-fail_under = 78
+fail_under = 80
 
 [tool.ruff]
 target-version = "py310"

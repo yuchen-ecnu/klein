@@ -32,14 +32,14 @@ integration development environment. RocketMQ also requires the native
 
 ## Run a bounded pipeline
 
-`Pipeline` isolates one logical job and rejects misspelled Klein configuration
-keys by default. A single terminal submits itself; `result()` waits for and
-returns collected rows:
+`klein.pipeline()` isolates one logical job and rejects misspelled Klein
+configuration keys by default. A single terminal submits itself; `result()`
+waits for and returns collected rows:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(name="quick-start")
+pipeline = klein.pipeline(name="quick-start")
 rows = (
     pipeline.from_items(
         [
@@ -63,8 +63,8 @@ The completed job handle returns these rows:
 
 Klein keeps transformations lazy until `collect()` creates and submits the
 single terminal. Batch execution lowers the graph to Ray Data. The module-level
-`ray.klein` builders plus `execute()` and `JobHandle.get()` remain available
-for applications that prefer one implicit, deferred pipeline.
+`klein.read_*` and `klein.from_*` builders plus `klein.execute()` remain
+available for applications that prefer one implicit, deferred pipeline.
 
 ## Read data with Ray Data
 
@@ -72,9 +72,9 @@ Source construction follows `ray.data`. Use the explicit `ray_data` namespace
 when calling an installed Ray Data reader or Dataset method:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(name="inspect-events")
+pipeline = klein.pipeline(name="inspect-events")
 events = pipeline.ray_data.read_parquet("s3://<bucket>/events/")
 
 # Use Klein's DataStream semantics.
@@ -92,9 +92,9 @@ Klein forwards reader and Dataset arguments to the installed Ray version. See [R
 Use a `StatementSet` when multiple side-effect sinks must share one job:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(name="doubled-events")
+pipeline = klein.pipeline(name="doubled-events")
 events = pipeline.from_items([{"id": 1}, {"id": 2}, {"id": 3}])
 doubled = events.map(lambda row: {"id": row["id"] * 2})
 statements = pipeline.create_statement_set()
@@ -115,9 +115,9 @@ as Kafka or a custom `SourceFunction`, keep the job active until you stop it or
 the source terminates.
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(
+pipeline = klein.pipeline(
     {"execution.runtime.mode": "streaming"},
     name="processed-events",
 )
@@ -155,34 +155,24 @@ duplicates when exactly-once processing is required.
 Use a mapping, a `key=value` string, typed options, or `RAY_KLEIN_*` environment variables. Explicit code takes precedence over environment values:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
+        "execution.runtime.mode": "streaming",
         "execution.checkpointing.dir": "s3://<bucket>/klein-checkpoints",
         "state.backend.type": "rocksdb",
         "state.keyed.max-parallelism": 32768,
-    }
+    },
+    name="orders",
 )
 ```
 
 This example selects the optional RocksDB backend; install `.[rocksdb]` first.
-The dependency-free default is `memory`.
-
-New code can put the same options on an explicit pipeline. Strict validation
-then reports unknown keys immediately and suggests close canonical names:
-
-```python
-from ray.klein import Pipeline
-
-pipeline = Pipeline(
-    {
-        "execution.runtime.mode": "streaming",
-        "state.backend.type": "rocksdb",
-    }
-)
-```
+The dependency-free default is `memory`. Explicit pipelines report unknown
+keys immediately and suggest close canonical names. The compatibility
+module-level API can receive the same mapping through `klein.configure()`
+before source construction.
 
 Use `strict_config=False` only when the mapping intentionally includes
 application-owned metadata alongside Klein options.

@@ -93,6 +93,12 @@ replays an idempotent commit after recovery when publication was interrupted.
 Checkpoint-aware source offsets are notified after sink publication, preserving
 the end-to-end ordering between input progress and output visibility.
 
+A failed or timed-out cut does not immediately abort prepared transactions while
+its tasks keep running. The coordinator carries them within that physical
+checkpoint domain and attaches them to its next successful cut, whose source
+state covers the already-consumed records. Terminal teardown aborts any
+remaining undurable carry-over.
+
 Version 4 `_metadata` starts with a recognizable format prefix and uses JSON
 for its framework-owned envelope. Embedded source state and sink committables
 carry their serialized size and SHA-256 checksum; recovery validates the full

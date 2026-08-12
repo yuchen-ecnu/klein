@@ -27,10 +27,10 @@ RocketMQ 5 gRPC SimpleConsumer implementation.
 ## Read a topic
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-orders = ray.klein.read_rocketmq(
+pipeline = klein.pipeline(name="rocketmq-orders")
+orders = pipeline.read_rocketmq(
     "orders",
     name_server_address="nameserver:9876",
     consumer_group="ray-klein-orders",
@@ -43,9 +43,7 @@ orders.map(
         "message_id": row["message_id"],
         "body": row["value"].decode("utf-8"),
     }
-).show()
-
-ray.klein.execute("rocketmq-orders").wait()
+).show().wait()
 ```
 
 In clustering mode, all source subtasks join the same consumer group and

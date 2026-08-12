@@ -31,8 +31,7 @@ logical graph is built:
 served = stream.map_batches(preprocess, ray_serve_enabled=True).map_batches(
     predict, ray_serve_enabled=True, batch_size=16
 )
-served.write_parquet("s3://warehouse/predictions/")
-ray.klein.execute("served-inference").wait()
+served.write_parquet("s3://warehouse/predictions/").wait()
 ```
 
 All marked nodes in a job must form exactly one connected linear chain. A
@@ -58,11 +57,12 @@ deployments:
       workflow: /workspace/workflow.py
 ```
 
-The deployment runs that workflow as `__main__` and intercepts its call to
-`execute()`. It extracts the marked functions without submitting the workflow's
-ordinary Klein job, then executes the extracted chain for incoming batches.
-The workflow file must therefore build the graph and call `execute`; keep graph
-construction deterministic and avoid unrelated process-wide side effects.
+The deployment runs that workflow as `__main__` and intercepts job submission.
+An explicit pipeline's terminal calls `execute()` internally; the deferred API
+calls it explicitly. The deployment extracts the marked functions without
+submitting the workflow's ordinary Klein job, then executes the extracted chain
+for incoming batches. Keep graph construction deterministic and avoid unrelated
+process-wide side effects.
 
 The job-side client must point at an already reachable proxy and deployment:
 
@@ -86,12 +86,20 @@ serve:
 | `serve.client.batch-timeout` | `5` | Proxy batch timeout in seconds. |
 | `serve.client.batch-size` | `2` | Proxy request batch size. |
 | `serve.client.max-attempts` | `30` | Maximum HTTP request attempts. |
+| `serve.client.max-request-bytes` | `16777216` (16 MiB) | Maximum encoded JSON request body. |
+| `serve.client.max-response-bytes` | `16777216` (16 MiB) | Maximum retained HTTP response body before JSON decoding. |
+| `serve.client.max-rows` | `100000` | Maximum logical rows in one proxy request. |
+| `serve.client.max-result-rows` | `100000` | Maximum logical rows accepted from one proxy result. |
 | `serve.client.slow-request-warning` | `60` | Seconds before one slow-request warning. |
 | `serve.client.http-timeout` | `300` | Total logical request timeout across retries and backoff, in seconds. |
 | `serve.client.http-connect-timeout` | `5` | HTTP connect timeout in seconds. |
 | `serve.client.http-limit-per-host` | `1000` | Per-host connection limit. |
 | `serve.client.http-connection-limit` | `1000` | Total connection limit. |
 | `serve.client.retry-backoff-max` | `3.0` | Maximum randomized exponential backoff; runtime-capped at 10 seconds. |
+| `serve.deployment.max-request-bytes` | `16777216` (16 MiB) | Maximum request body accepted by one deployment replica. |
+| `serve.deployment.max-response-bytes` | `16777216` (16 MiB) | Maximum encoded response body emitted by one deployment request. |
+| `serve.deployment.max-rows` | `100000` | Maximum logical rows accepted by one deployment request. |
+| `serve.deployment.max-result-rows` | `100000` | Maximum logical rows emitted by one deployment request. |
 
 For a single marked operator, the proxy inherits that operator's CPU,
 concurrency, batch size, and timeout. A multi-operator region uses the
@@ -108,6 +116,17 @@ configured HTTP timeout is one total budget for the logical call, including
 all attempts and backoff. Because a
 remote deployment can finish a request before the client observes a failure,
 functions should be deterministic and free of non-idempotent side effects.
+
+The client checks request rows and encoded bytes before opening the network
+request. It checks a response's declared length and streamed bytes before JSON
+decoding, then validates result rows. The deployment independently enforces its
+own limits, so set both sides deliberately: an oversized request body returns
+HTTP 413, malformed JSON or too many request rows returns HTTP 400, and an
+oversized or over-row result returns HTTP 422. Row limits use the largest
+top-level array/list column length. All eight limit values must be positive
+integers; the deployment also accepts the short `max_request_bytes`,
+`max_response_bytes`, `max_rows`, and `max_result_rows` aliases in Serve
+`user_config`, but canonical keys are preferred.
 
 The deployment can optionally validate the `rayservice` request header when
 the `RAY_SERVICE_NAME` environment variable is set. Monitor Serve request

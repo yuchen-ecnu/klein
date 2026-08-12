@@ -20,7 +20,7 @@ before upgrading.
 | --- | --- | --- |
 | Documented application API | Listed in the [API reference](api/api.rst), connector catalog, CLI reference, or configuration reference | Supported for the documented release. Alpha changes are announced in the changelog and upgrade guide. |
 | Documented extension API | Custom source/sink, table factory, partitioner, state backend, metric, and related contracts explicitly described in the reference | Intended for integrations, but more likely to evolve before 1.0. Pin the exact release and test lifecycle behavior. |
-| Delegated Ray API | Dynamic `ray.klein.read_*` and `stream.data.*` methods | Signature, schema, and batch behavior belong to the pinned Ray release. Klein only promises the documented adapter boundary. |
+| Delegated Ray API | Dynamic `pipeline.ray_data.*` and `stream.ray_data.*` methods | Signature, schema, and batch behavior belong to the pinned Ray release. Klein only promises the documented adapter boundary. |
 | Operational contract | Configuration keys, CLI syntax, JSON snapshots, metric names/labels, checkpoint layout, and environment variables | Public only where explicitly documented. Consumers must tolerate additive JSON fields. Alpha releases can make announced breaking changes. |
 | Internal implementation | `ray.klein._internal`, most of `ray.klein.runtime`, underscore-prefixed names, undocumented actor methods, and undocumented files | No compatibility promise. Do not import or automate against these surfaces. |
 
@@ -89,9 +89,9 @@ pages.
 Use:
 
 ```python
-"read_parquet" in dir(ray.klein)
-"map_batches" in stream.data.available
-stream.data.kind("map_batches")
+"read_parquet" in pipeline.ray_data.available
+"map_batches" in stream.ray_data.available
+stream.ray_data.kind("map_batches")
 ```
 
 Library code that supports several Ray patches should check availability rather

@@ -44,8 +44,9 @@ formats can change before 1.0. See [API stability](api-stability.md) and the
 ### Can one application mix Klein and native Ray libraries?
 
 Yes. Bounded Klein graphs lower to Ray Data, while native streaming operators
-run on Ray Core. Use the explicit `.data` adapter for Ray Data operations and
-review where execution semantics change in [Ray Data interoperability](ray-data-interop.md).
+run on Ray Core. Use the explicit `.ray_data` adapter for Ray Data operations;
+`.data` remains a compatibility alias. Review where execution semantics change
+in [Ray Data interoperability](ray-data-interop.md).
 
 ## Installation
 
@@ -115,15 +116,16 @@ source or provide a batch lowering when batch execution is required. See
 ### Do all `DataStream` methods work in both modes?
 
 No. Basic row transforms work in both, but keyed state, watermarks, windows,
-and most custom source/sink contracts are streaming features; many `.data`
-operations are batch-only. Use the [operator compatibility matrix](operator-compatibility.md).
+and most custom source/sink contracts are streaming features; many
+`.ray_data` operations are batch-only. Use the [operator compatibility
+matrix](operator-compatibility.md).
 
 ### What is interactive mode?
 
-It is a deprecated, opt-in compatibility mode in which terminal operations
-such as `take_all()` execute a bounded graph immediately. New code should keep
-terminal operations lazy, register every intended sink, call
-`execute("job-name")`, and retrieve results from the returned job handle. See
+It is a deprecated flag on the legacy deferred API that changes the return type
+of bounded terminal operations. New code should not enable it. Create an
+explicit `Pipeline` instead: one terminal submits directly and returns a
+`JobHandle`, while a `StatementSet` groups multiple side-effect terminals. See
 [Getting started](getting-started.md).
 
 ### Does local debug mode validate distributed behavior?

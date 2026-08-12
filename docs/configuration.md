@@ -20,9 +20,9 @@ Klein resolves each option from three sources:
 | 3 | Typed option default | `execution.runtime.mode=auto` |
 
 Klein captures matching environment values when it creates a `Configuration`,
-so later environment changes don't alter that configuration. Call
-`ray.klein.configure()` before building the graph; submission gives the running
-job its configuration snapshot.
+so later environment changes don't alter that configuration. An explicit
+`Pipeline` owns its configuration snapshot from construction onward. With the
+legacy module-level API, call `ray.klein.configure()` before building the graph.
 
 For every supported key, type, default, constraint, and direct runtime
 environment variable, see the [complete configuration reference](configuration-reference.md).
@@ -32,27 +32,41 @@ environment variable, see the [complete configuration reference](configuration-r
 Choose the input form that matches how your application receives configuration:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-# Set options from a mapping.
-ray.klein.configure(
+# Construct the recommended explicit pipeline from a mapping.
+pipeline = klein.pipeline(
     {
         "execution.runtime.mode": "streaming",
         "state.backend.type": "rocksdb",
-    }
+    },
+    name="orders",
 )
 
 # Separate key=value pairs with commas, semicolons, or whitespace.
-ray.klein.configure("execution.checkpointing.timeout=300; pipeline.operator-chaining.enabled=false")
+pipeline = klein.pipeline(
+    "execution.checkpointing.timeout=300; pipeline.operator-chaining.enabled=false",
+    name="orders",
+)
+```
+
+For the implicit deferred pipeline, install the same values before creating a
+source:
+
+```python
+klein.configure({"execution.runtime.mode": "streaming"})
+events = klein.read_kafka(...)
 ```
 
 Use a JSON object string when values contain dictionaries or lists:
 
 ```python
-ray.klein.configure("""{
+pipeline = klein.pipeline(
+    """{
   "execution.checkpointing.storage-options": {"region": "us-west-2"}
-}""")
+}""",
+    name="orders",
+)
 ```
 
 When you call `Configuration.set()` with a `ConfigOption`, pass the final typed
@@ -95,12 +109,15 @@ options reject floats and Booleans, float options reject Booleans and
 non-finite values, and numeric Boolean input accepts only `0` or `1`. Durations
 reject non-finite and out-of-range values.
 
-## Advanced: isolate a context
+## Choose a graph owner
 
-Most application code should use the module-level API shown above. For the
-advanced case where one process must build mutually isolated pipelines,
-construct `KleinContext(configuration)` directly and use its graph-building
-methods.
+Use `klein.pipeline()` for new applications. It creates an isolated graph,
+rejects unknown Klein keys by default, and gives directly submitted terminals a
+stable default name. The module-level API remains a permissive compatibility
+surface with deferred terminal registration.
+
+Construct `KleinContext(configuration)` only when one process needs mutually
+isolated builders and the legacy deferred `execute()` contract:
 
 ```python
 from ray.klein import KleinContext
@@ -128,19 +145,20 @@ Configuration keys use a lower-case dotted hierarchy and kebab-case compound nam
 | `serve.*` | Ray Serve deployment and embedded HTTP proxy-client settings. |
 | `udf.*` | User-function error handling. |
 
-Unknown canonical keys are accepted and retained, which lets applications keep
-their own metadata beside Klein settings. Klein doesn't validate or act on
-unknown keys. Use the [configuration reference](configuration-reference.md) to
-distinguish active Klein options from application-defined values.
+Permissive `Configuration` objects and the legacy APIs accept and retain
+unknown keys, which lets applications keep their own metadata beside Klein
+settings. Klein doesn't act on those keys. Use the [configuration
+reference](configuration-reference.md) to distinguish active Klein options
+from application-defined values.
 
 An explicit `Pipeline` uses strict configuration by default. This catches
-misspellings at construction time while keeping the legacy module-level API
-permissive for compatibility:
+misspellings at construction time while keeping the module-level API and direct
+`KleinContext` construction permissive for compatibility:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline({"execution.runtime.mode": "streaming"})
+pipeline = klein.pipeline({"execution.runtime.mode": "streaming"})
 ```
 
 Use `Configuration(..., strict=True)` or `ray.klein.configure(..., strict=True)`
@@ -149,12 +167,11 @@ only when a pipeline mapping deliberately contains application metadata.
 
 ## Inspect configuration before submission
 
-Build a `Configuration`, inspect or update it with typed options, and then
-install its values before constructing the graph:
+Build a `Configuration`, inspect or update it with typed options, and then pass
+it to the explicit pipeline before constructing the graph:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
 from ray.klein import Configuration
 from ray.klein.config.execution_options import ExecutionOptions
@@ -162,7 +179,7 @@ from ray.klein.config.execution_options import ExecutionOptions
 config = Configuration({"execution.runtime.mode": "streaming"})
 mode = config.get(ExecutionOptions.MODE)
 print(mode.value)
-ray.klein.configure(config)
+pipeline = klein.pipeline(config, name="orders")
 ```
 
 `to_dict()` returns only explicit values. It deliberately doesn't expand
@@ -173,7 +190,7 @@ config = Configuration({"state.backend.type": "memory"})
 assert config.to_dict() == {
     "state.backend.type": "memory",
 }
-ray.klein.configure(config)
+pipeline = klein.pipeline(config, name="orders")
 ```
 
 `unset(key)` removes the explicit value. The next typed `get()` then reveals a

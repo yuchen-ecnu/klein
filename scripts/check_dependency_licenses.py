@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -13,6 +14,14 @@ from dataclasses import dataclass
 class LicenseOverride:
     version: str
     license_expression: str
+    evidence_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class LicenseParserException:
+    version: str
+    metadata_license: str
+    ignored_fragment: str
     evidence_url: str
 
 
@@ -33,6 +42,28 @@ LICENSE_OVERRIDES = {
     ),
 }
 
+# These artifacts do publish license metadata, but the pinned licensecheck
+# parser warns on a fragment of the expression. Suppress only the reviewed
+# parser spelling after verifying the installed version and metadata exactly.
+LICENSE_PARSER_EXCEPTIONS = {
+    "pyvips-binary": LicenseParserException(
+        version="8.18.4",
+        metadata_license="LGPL-3.0-or-later",
+        ignored_fragment="GNU LESSER GENERAL PUBLIC LICENSE V3",
+        evidence_url="https://github.com/kleisauke/pyvips-binary/blob/v8.18.4/pyproject.toml",
+    ),
+}
+
+
+def _require_uv() -> None:
+    """Prevent licensecheck from silently falling back to its incomplete resolver."""
+
+    if shutil.which("uv") is None:
+        raise SystemExit(
+            "uv is required for dependency-license auditing so the complete `all` "
+            "extra and its transitive dependencies are resolved"
+        )
+
 
 def _verify_overrides() -> None:
     for package, override in LICENSE_OVERRIDES.items():
@@ -47,9 +78,24 @@ def _verify_overrides() -> None:
                 f"license override for {package} covers {override.version}, "
                 f"but {installed_version} is installed; review {override.evidence_url}"
             )
+    for package, exception in LICENSE_PARSER_EXCEPTIONS.items():
+        try:
+            installed = importlib.metadata.distribution(package)
+        except importlib.metadata.PackageNotFoundError as error:
+            raise SystemExit(
+                f"license parser exception package {package} is not installed; install the `all` extra before auditing"
+            ) from error
+        actual_license = installed.metadata.get("License")
+        if installed.version != exception.version or actual_license != exception.metadata_license:
+            raise SystemExit(
+                f"license parser exception for {package} covers {exception.version} "
+                f"with {exception.metadata_license}, but found {installed.version} with {actual_license!r}; "
+                f"review {exception.evidence_url}"
+            )
 
 
 def main() -> None:
+    _require_uv()
     _verify_overrides()
     subprocess.run(
         [
@@ -65,6 +111,8 @@ def main() -> None:
             "--zero",
             "--ignore-packages",
             *sorted(LICENSE_OVERRIDES),
+            "--ignore-licenses",
+            *(exception.ignored_fragment for exception in LICENSE_PARSER_EXCEPTIONS.values()),
         ],
         check=True,
     )

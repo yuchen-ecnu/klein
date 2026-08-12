@@ -19,10 +19,10 @@ Use any public Ray Data file reader exposed by the installed compatible Ray
 version:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-events = ray.klein.read_parquet(
+pipeline = klein.pipeline(name="normalize-events")
+events = pipeline.ray_data.read_parquet(
     "s3://warehouse/events/",
     columns=["event_id", "payload"],
 )
@@ -42,7 +42,7 @@ events.write_parquet(
     max_rows_per_file=1_000_000,
     max_bytes_per_file=128 * 1024 * 1024,
     concurrency=8,
-)
+).wait()
 ```
 
 Call `write_json`, `write_csv`, `write_parquet`, `write_text`, or the common
@@ -94,7 +94,10 @@ returns a serializable committable. The coordinator then:
 
 Recovery reloads persisted committables and retries publication. An already
 published target completes successfully instead of producing another part.
-Klein aborts prepared files from an abandoned checkpoint when possible.
+If a checkpoint is abandoned while the job continues, Klein carries its
+prepared files into the same checkpoint domain's next successful cut because
+their input has already been consumed. Terminal teardown aborts undurable
+carry-over when possible.
 
 This provides **exactly-once file visibility relative to Klein checkpoints**.
 Use durable shared storage for both `execution.checkpointing.dir` and output.

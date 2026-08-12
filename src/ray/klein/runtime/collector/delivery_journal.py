@@ -17,8 +17,9 @@ The sequence travels with the batch without allowing rerouting to leave gaps:
    and, when enabled, appends to its replay FIFO. A put that is
    rerouted to another target never commits this index, so reroute punches no
    hole that would wedge the watermark.
-4. the downstream echoes its forwarded watermark on the put ack;
-   ``acknowledge`` drops every entry at or below the forwarded sequence.
+4. The downstream echoes its forwarded watermark on the put ack;
+   ``acknowledge`` drops every covered entry. An acknowledgement may race or
+   precede ``record_delivery``, which then skips an already-covered sequence.
 
 Thread-safety: the inline (source) emit path mutates this on the executor thread
 while replay-command extraction may read it on the actor loop, so a lock guards the
@@ -141,7 +142,11 @@ class DeliveryJournal:
         the worker process.
         """
         with self._lock:
-            if self._enabled:
+            # A downstream push acknowledgement can race the put response, and
+            # the response itself may already carry a watermark covering this
+            # just-landed sequence. Never append an entry that the monotonic
+            # forwarded watermark has already made obsolete.
+            if self._enabled and sequence > self._forwarded[target_index]:
                 retained_records = tuple(records)
                 row_count = sum(1 if record.num_rows is None else record.num_rows for record in retained_records)
                 size_bytes = estimate_retained_size(retained_records)

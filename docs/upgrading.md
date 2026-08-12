@@ -64,7 +64,7 @@ Review every dimension below before attempting a stateful restore.
 | Dimension | Compatible requirement | Unsafe or unsupported change |
 | --- | --- | --- |
 | Completed checkpoint | Restore from the full URI of one `chk-N` directory whose version 4 `_metadata` is readable. Preserve every referenced state object in the job prefix. | An incomplete directory, only a copied `_metadata` file, edited metadata, legacy pickle metadata, or an object whose checksum/size no longer matches. |
-| Graph identity | Rebuild streams in the same construction order and preserve sources, stateful operators, sinks, names, partition edges, and chaining-sensitive layout. After registering the terminals, save and compare `ray.klein.explain("<job-name>")` output. | Adding, removing, or reordering even a stateless stream can shift downstream numeric operator IDs. A same-numbered but different operator can receive the wrong checkpoint entry. |
+| Graph identity | Rebuild streams in the same construction order and preserve sources, stateful operators, sinks, names, partition edges, and chaining-sensitive layout. Capture the terminals in a `StatementSet`, then save and compare `statements.explain()` output. | Adding, removing, or reordering even a stateless stream can shift downstream numeric operator IDs. A same-numbered but different operator can receive the wrong checkpoint entry. |
 | Managed state | Preserve `state.keyed.max-parallelism`, descriptor names, key type/serialization, value shape/serializer, namespaces, timer representation, and stateful operator meaning. | Changing max parallelism, renaming descriptors/classes/modules, incompatible value or key serialization, or assuming arbitrary Python objects will migrate automatically. |
 | State backend | Keep `state.backend.type` and its dependency unchanged for the upgrade unless a separately tested migration is provided. Node-local state remains disposable; durable checkpoint data is authoritative. | Treating a memory-to-RocksDB or RocksDB-to-memory change as a documented migration path. Klein does not currently promise cross-backend restore. |
 | Ordinary concurrency | Keyed operator concurrency may change only when it remains at or below the unchanged max parallelism and a rehearsal proves key-group redistribution. | Changing source or sink concurrency without connector-specific evidence, or changing concurrency together with unreviewed topology and state-schema changes. |
@@ -73,6 +73,13 @@ Review every dimension below before attempting a stateful restore.
 | Event time and SQL | Preserve timestamp units/types, watermark and idleness assumptions, state TTL meaning, changelog schema, join/window keys, and UDF semantics unless the change has an explicit data migration plan. | A change that makes existing timers/state semantically wrong even if deserialization succeeds. |
 | Configuration | Use canonical keys and preserve recovery-critical values. Compare the effective configuration, not only source defaults. | Relying on an unknown or misspelled key: Klein retains unknown keys as metadata but does not apply them. |
 | External effects | Preserve deduplication keys and identify effects produced between the rollback checkpoint and the cutover. | Assuming checkpoint restore reverses Kafka, SQL, Redis, RocketMQ, console, or other already-visible external writes. |
+
+The incremental streaming aggregate and Top-N implementation has one narrow
+migration: after restoring its earlier list-backed value under the same state
+descriptor, the first subsequent record rewrites it into the versioned compact
+form. This does not migrate legacy checkpoint metadata, graph identities,
+backends, arbitrary managed state, or changed SQL semantics. Prove the exact
+restore in rehearsal before relying on it.
 
 There is no general “stateless edit is safe” rule because source and sink
 checkpoint keys also depend on graph identity. For a job whose old state can be
@@ -87,7 +94,7 @@ Keep the following rollback bundle before touching the running job:
 - old wheel/application and immutable worker-image digest;
 - complete dependency lock and Python/Ray versions;
 - canonical configuration with secret references, not secret values;
-- saved `ray.klein.explain("<job-name>")` output for the fully registered graph;
+- saved `StatementSet.explain()` output for the fully registered graph;
 - job name, namespace, source identities, sink destinations, and checkpoint root;
 - exact URI of a completed pre-upgrade `chk-N` directory;
 - evidence that the checkpoint's referenced objects remain retained;
@@ -170,22 +177,22 @@ Build the compatible graph and set the complete checkpoint URI:
 
 ```python
 import ray
-import ray.klein
+import ray.klein as klein
 
 ray.init(address="auto")
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "execution.runtime.mode": "streaming",
         "execution.checkpointing.dir": "s3://platform/klein-checkpoints",
         "execution.savepoint.path": ("s3://platform/klein-checkpoints/orders-production/chk-42"),
         "state.keyed.max-parallelism": 128,
         "job.namespace": "orders-production-v2",
-    }
+    },
+    name="orders",
 )
 
-# Rebuild the reviewed graph in the same construction order.
-build_pipeline()
-handle = ray.klein.execute("orders")
+# Rebuild the reviewed graph and return its single terminal handle.
+handle = build_pipeline(pipeline)
 print(handle.namespace)
 handle.wait()
 ```

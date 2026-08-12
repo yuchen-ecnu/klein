@@ -49,7 +49,7 @@ async def test_finished_status_returns_before_scheduled_teardown() -> None:
     teardown_started = asyncio.Event()
     allow_teardown = asyncio.Event()
 
-    async def teardown() -> None:
+    async def teardown(**_kwargs) -> None:
         teardown_started.set()
         await allow_teardown.wait()
 
@@ -68,7 +68,7 @@ async def test_finished_status_returns_before_scheduled_teardown() -> None:
         allow_teardown.set()
         await completion_task
         assert manager.job_status() is JobStatus.FINISHED
-        manager._stop_job.assert_awaited_once_with()
+        manager._stop_job.assert_awaited_once_with(graceful_completion=True)
     finally:
         allow_teardown.set()
         if manager._completion_task_obj is not None:
@@ -111,6 +111,47 @@ async def test_stop_job_propagates_writer_queue_timeout() -> None:
             await manager._stop_job(timeout=1)
 
         manager.run_exclusive.assert_awaited_once()
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_forced_stop_releases_collect_queue_before_worker_teardown() -> None:
+    manager = JobManager(Configuration(), namespace="job-a")
+    queue = Mock()
+    manager.execution_graph = Mock(
+        job_vertices={
+            1: Mock(operator_spec=Mock(collecting=True), output_queue=queue),
+        }
+    )
+    manager.job_master = Mock()
+    manager.stop = AsyncMock()
+    manager.run_exclusive = AsyncMock()
+    try:
+        await manager._stop_job(force=True, timeout=1)
+
+        queue.shutdown.assert_called_once_with(force=True)
+        manager.run_exclusive.assert_awaited_once()
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_graceful_completion_keeps_collect_queue_for_driver_drain() -> None:
+    manager = JobManager(Configuration(), namespace="job-a")
+    queue = Mock()
+    manager.execution_graph = Mock(
+        job_vertices={
+            1: Mock(operator_spec=Mock(collecting=True), output_queue=queue),
+        }
+    )
+    manager.job_master = Mock()
+    manager.stop = AsyncMock()
+    manager.run_exclusive = AsyncMock()
+    try:
+        await manager._stop_job(timeout=1, graceful_completion=True)
+
+        queue.shutdown.assert_not_called()
     finally:
         manager._writer.shutdown(wait=False)
 

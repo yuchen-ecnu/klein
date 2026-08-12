@@ -97,6 +97,24 @@ def test_ai_function_binding_rejects_missing_unsupported_nested_and_aggregate_ca
         session.sql("SELECT AI_GENERATE(prompt, '{}', 'extra') FROM rows", tables={"rows": rows})
 
 
+@pytest.mark.parametrize("argument", ["*", "rows.*", "MAP(*)"])
+@pytest.mark.parametrize("runtime_mode", ["batch", "streaming"])
+def test_ai_function_binding_rejects_wildcard_arguments(argument: str, runtime_mode: str) -> None:
+    context = KleinContext(Configuration(f"execution.runtime.mode={runtime_mode}"))
+    rows = (
+        context.data.source(lambda: FakeDataset())
+        if runtime_mode == "batch"
+        else context.from_items([{"prompt": "hello"}])
+    )
+    context.sql_session.register_ai_function("ai_generate", _generate)
+
+    with pytest.raises(SQLQueryError, match="wildcard expressions"):
+        context.sql(
+            f"SELECT AI_GENERATE({argument}) AS answer FROM rows",
+            tables={"rows": rows},
+        )
+
+
 def test_ai_function_bindings_are_snapshotted_and_inherited_by_top_level_sql(monkeypatch) -> None:
     context = KleinContext()
     rows = context.data.source(lambda: FakeDataset())

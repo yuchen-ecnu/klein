@@ -112,6 +112,7 @@ class JobClient:
         mode: RuntimeExecutionMode,
         lineage_tracker: KleinLineageTracker,
     ) -> "JobHandle":
+        collecting, collect_limit, collect_truncate = self._collect_options(logical_graph)
         # The streaming path is the only one that needs a live cluster and a
         # remote JobManager actor, so the heavyweight setup lives here rather
         # than in __init__.
@@ -184,7 +185,28 @@ class JobClient:
             runtime_mode=mode,
             namespace=namespace,
             lineage_tracker=lineage_tracker,
+            collecting=collecting,
+            collect_limit=collect_limit,
+            collect_truncate=collect_truncate,
         )
+
+    @staticmethod
+    def _collect_options(logical_graph: LogicalGraph) -> tuple[bool, int | None, bool]:
+        take_vertices = logical_graph.take_vertices
+        if not take_vertices:
+            return False, None, False
+        operator = logical_graph.vertices[take_vertices[0]].operator
+        candidates = [operator]
+        while candidates:
+            candidate = candidates.pop()
+            if candidate.children:
+                candidates.extend(reversed(candidate.children))
+                continue
+            if not candidate.collecting or candidate.logical_function is None:
+                continue
+            options = candidate.logical_function.constructor_kwargs
+            return True, options.get("limit"), bool(options.get("truncate", False))
+        raise ValueError("collecting terminal is missing its CollectFunction options")
 
     def explain(
         self,

@@ -75,6 +75,13 @@ class PipelineOptions:
         description="Maximum detached output batches waiting in a task's FIFO emit queue.",
     )
 
+    COLLECT_QUEUE_MAX_ROWS = ConfigOption(
+        "pipeline.collect-queue.max-rows",
+        1000,
+        int,
+        description="Maximum collected rows buffered in the cluster before take/take_all applies backpressure.",
+    )
+
     OPERATOR_CHAINING = ConfigOption(
         "pipeline.operator-chaining.enabled",
         True,

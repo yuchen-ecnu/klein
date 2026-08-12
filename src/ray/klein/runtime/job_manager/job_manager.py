@@ -905,7 +905,7 @@ class JobManager(AsyncWorker):
                 if self._job_status.is_terminal:
                     return
                 try:
-                    await self._stop_job()
+                    await self._stop_job(graceful_completion=True)
                 except Exception as error:
                     self._submission_error = f"{type(error).__name__}: {error}"
                     log_event(
@@ -925,12 +925,20 @@ class JobManager(AsyncWorker):
             if self._completion_task_obj is asyncio.current_task():
                 self._completion_task_obj = None
 
-    async def _stop_job(self, force: bool = False, timeout: int | None = None) -> None:
+    async def _stop_job(
+        self,
+        force: bool = False,
+        timeout: int | None = None,
+        *,
+        graceful_completion: bool = False,
+    ) -> None:
         # One Deadline bounds the whole teardown (supervisor stop + writer queue +
         # stop_job) so it can't hang. None => the configured job.stop.timeout.
         budget = timeout if timeout is not None else self.config.get(JobManagerOptions.STOP_TIMEOUT)
         deadline = Deadline(budget)
 
+        if not graceful_completion:
+            self._shutdown_collecting_output_queue()
         await self.stop(timeout=deadline.remaining())
         # Wake any inner backoff in restart() so it observes the stop request.
         self._wake_event.set()
@@ -939,7 +947,12 @@ class JobManager(AsyncWorker):
         if self.job_master is not None:
             try:
                 await asyncio.wait_for(
-                    self.run_exclusive(self.job_master.stop_job, force, deadline),
+                    self.run_exclusive(
+                        self.job_master.stop_job,
+                        force,
+                        deadline,
+                        graceful_completion,
+                    ),
                     timeout=deadline.remaining(),
                 )
             except asyncio.TimeoutError:
@@ -953,6 +966,19 @@ class JobManager(AsyncWorker):
                     job_name=self.job_name,
                 )
                 raise
+
+    def _shutdown_collecting_output_queue(self) -> None:
+        """Release a blocked collect put before terminal/forced worker teardown."""
+
+        if self.execution_graph is None:
+            return
+        for job_vertex in self.execution_graph.job_vertices.values():
+            if not job_vertex.operator_spec.collecting or job_vertex.output_queue is None:
+                continue
+            try:
+                job_vertex.output_queue.shutdown(force=True)
+            except Exception:
+                logger.warning("Failed to release collecting output queue during job teardown", exc_info=True)
 
     async def output_queue(self) -> Queue:
         take_list = self.logical_graph.take_vertices

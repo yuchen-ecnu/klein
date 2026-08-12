@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { operatorFixture } from "../../test/fixtures";
@@ -20,6 +20,7 @@ beforeEach(() => {
   mocks.useKleinOperatorRescale.mockReturnValue({
     clearFeedback,
     isRescaling: false,
+    operationPending: false,
     requestError: undefined,
     rescale,
     result: undefined,
@@ -65,3 +66,47 @@ it("explains why an operator cannot be rescaled", () => {
   expect(screen.getByText("Transactional sink is active.")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Rescale" })).toBeDisabled();
 });
+
+it.each(["ACCEPTED", "RUNNING", "STABILIZING"] as const)(
+  "shows and disables controls for a %s rescale operation",
+  (status) => {
+    mocks.useKleinOperatorRescale.mockReturnValue({
+      clearFeedback,
+      isRescaling: false,
+      operationPending: true,
+      requestError: undefined,
+      rescale,
+      result: {
+        operation_id: "resize-1",
+        job_id: "job-1",
+        operator_id: 1,
+        parallelism: 4,
+        target_parallelism: 4,
+        status,
+        phase:
+          status === "ACCEPTED"
+            ? "QUEUED"
+            : status === "RUNNING"
+              ? "COORDINATING"
+              : "STABILIZING",
+      },
+    });
+
+    const { container } = render(
+      <KleinOperatorRescaleControl
+        jobId="job-1"
+        onRefresh={vi.fn()}
+        operator={operatorFixture({ parallelism: 2 })}
+      />,
+    );
+
+    expect(
+      within(container).getByText(
+        new RegExp(`rescale is ${status.toLowerCase()}`),
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(container).getByRole("button", { name: "Rescaling…" }),
+    ).toBeDisabled();
+  },
+);

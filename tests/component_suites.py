@@ -31,10 +31,13 @@ _CORE_UNIT_MODULES = {
     "test_observability_state_api.py",
     "test_resource_plan.py",
     "test_resource_plan_generator.py",
+    "test_release_evidence.py",
+    "test_ray_namespace_policy.py",
     "test_resources.py",
     "test_runtime_info.py",
     "test_source_release.py",
     "test_transform.py",
+    "test_versioned_docs.py",
 }
 
 _SQL_UNIT_MODULES = {

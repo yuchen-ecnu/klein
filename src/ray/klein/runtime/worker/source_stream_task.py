@@ -55,6 +55,7 @@ class SourceStreamTask(StreamTask):
         # operator.run() returns so a concurrent rescale cannot arm a source
         # whose producer loop has already exited but is still reporting status.
         self._source_exhausted = threading.Event()
+        self._source_drain_requested = threading.Event()
         self._requested_checkpoint_ids: deque[int] = deque()
         self._checkpoint_request_lock = threading.Lock()
         self._resolved_checkpoint_floor = 0
@@ -79,6 +80,8 @@ class SourceStreamTask(StreamTask):
         source_shutdown.clear()
         self._checkpoint_wait_stop.clear()
         source_operator = self._source_operator
+        if self._source_drain_requested.is_set():
+            source_operator.interrupt()
         source_operator.bind_record_emitter(self._on_records_emitted)
         self._source_rescale_loop = asyncio.get_running_loop()
         # Restore progress from the coordinator — works identically on a fresh
@@ -93,7 +96,15 @@ class SourceStreamTask(StreamTask):
     async def _run(self) -> None:
         # Run the (blocking) source loop on the executor thread. It returns when
         # the source is exhausted (bounded) or never (unbounded, until cancel).
-        await asyncio.get_running_loop().run_in_executor(self._state.executor, self._run_source)
+        # A source chained directly to ``take(0)`` is already complete before
+        # the producer loop starts; request the normal job-wide drain first.
+        state = self._runtime_state
+        if not self._drain_requested and state.operator.end_of_stream:
+            await asyncio.get_running_loop().run_in_executor(
+                state.executor,
+                self._check_end_of_stream,
+            )
+        await asyncio.get_running_loop().run_in_executor(state.executor, self._run_source)
         if self._eof_reached:
             await self.report_eof_finished()
         await self.stop()
@@ -211,6 +222,10 @@ class SourceStreamTask(StreamTask):
         emits a normal EndOfData and the standard alignment chain drives the job
         to FINISHED. Idempotent and cheap — safe to call from the JobManager RPC.
         """
+        self._source_drain_requested.set()
+        state = self._state
+        if state is None or state.operator is None:
+            return
         self._source_operator.interrupt()
 
     def request_checkpoint(self, checkpoint_id: int | None = None) -> bool:
@@ -295,6 +310,11 @@ class SourceStreamTask(StreamTask):
         if coordinated_barrier_id == barrier_id and self._running and not self._eof_reached:
             self._forced_checkpoint_requested.set()
         self._resume_coordinated_checkpoint(barrier_id)
+        # Connector-owned per-checkpoint state is separate from the task's
+        # source-state snapshot. Notify even for an idempotent local no-op: a
+        # previous RPC may have completed the local cleanup but lost its response
+        # before the connector callback result reached the coordinator.
+        self._notify_source_checkpoint_aborted(barrier_id)
         if existed:
             logger.debug("Discarded source state for checkpoint barrier %s", barrier_id)
         return existed
@@ -317,8 +337,11 @@ class SourceStreamTask(StreamTask):
         an id <= that floor; the scheduler passes the floor here. Returns the
         number reclaimed. Idempotent and cheap.
         """
-        stale = [barrier_id for barrier_id in self._inflight_source_states if barrier_id <= cutoff_barrier_id]
+        stale = sorted(barrier_id for barrier_id in self._inflight_source_states if barrier_id <= cutoff_barrier_id)
         for barrier_id in stale:
+            # Notify before dropping the retry key. If the connector callback
+            # fails, a later coordinator recovery attempt can deliver it again.
+            self._notify_source_checkpoint_aborted(barrier_id)
             self._inflight_source_states.pop(barrier_id, None)
             self._discard_requested_checkpoint(barrier_id)
         queue = getattr(self, "_requested_checkpoint_ids", None)
@@ -493,3 +516,9 @@ class SourceStreamTask(StreamTask):
             self._remember_resolved_checkpoint(checkpoint_id)
             self._resume_coordinated_checkpoint(checkpoint_id)
         return callback_succeeded
+
+    def _notify_source_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        # This callback intentionally has at-least-once delivery. A lost RPC
+        # response must not suppress cleanup on a retry, and aborting a newer
+        # checkpoint does not subsume connector state retained for an older one.
+        self._source_operator.notify_checkpoint_aborted(checkpoint_id)

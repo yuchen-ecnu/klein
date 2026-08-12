@@ -40,5 +40,8 @@ class ChainedSourceOperator(ChainedOperator, SourceOperator):
     def notify_checkpoint_complete(self, checkpoint_id: int) -> None:
         self._root_operator.notify_checkpoint_complete(checkpoint_id)
 
+    def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        self._root_operator.notify_checkpoint_aborted(checkpoint_id)
+
     def bind_record_emitter(self, on_record_emitted: Callable) -> None:
         self._root_operator.bind_record_emitter(on_record_emitted)

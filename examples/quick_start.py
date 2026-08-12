@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-from ray.klein import Pipeline
+import ray.klein as klein
 
 
 def main() -> None:
-    pipeline = Pipeline(name="quick-start")
+    pipeline = klein.pipeline(name="quick-start")
     rows = (
         pipeline.from_items(
             [

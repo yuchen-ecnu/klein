@@ -14,10 +14,13 @@ import asyncio
 import ipaddress
 import json
 import logging
+import re
 import socket
+import threading
 import time
 import uuid
 from collections.abc import Callable, Collection
+from contextlib import suppress
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -32,6 +35,8 @@ from ray.klein._internal.logging import get_logger, log_event
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 _PROXY_READ_CHUNK_BYTES = 64 * 1024
+_REQUEST_SOCKET_TIMEOUT_SECONDS = 10
+_MAX_CONCURRENT_REQUESTS = 64
 _PROXY_CONTENT_TYPES = {
     "application/javascript": "text/javascript; charset=utf-8",
     "application/json": "application/json; charset=utf-8",
@@ -48,8 +53,10 @@ _PROXY_CONTENT_TYPES = {
     "text/html": "text/html",
     "text/javascript": "text/javascript; charset=utf-8",
 }
+_HOST_LABEL = re.compile(r"^[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?$")
 
 logger = get_logger(__name__)
+_SocketRequest = socket.socket | tuple[bytes, socket.socket]
 
 
 class _ProxyResponseError(OSError):
@@ -105,6 +112,7 @@ class _PublishedState:
 class _DashboardHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
+    request_queue_size = 128
 
     def __init__(
         self,
@@ -121,7 +129,48 @@ class _DashboardHTTPServer(ThreadingHTTPServer):
             server_address[0],
             trusted_hosts,
         )
+        self._request_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_REQUESTS)
         super().__init__(server_address, _DashboardRequestHandler)
+
+    def get_request(self) -> tuple[socket.socket, Any]:
+        request, client_address = super().get_request()
+        request.settimeout(_REQUEST_SOCKET_TIMEOUT_SECONDS)
+        return request, client_address
+
+    def process_request(self, request: _SocketRequest, client_address: Any) -> None:
+        if not self._request_slots.acquire(blocking=False):
+            self._reject_busy_request(request)
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._request_slots.release()
+            raise
+
+    def process_request_thread(self, request: _SocketRequest, client_address: Any) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._request_slots.release()
+
+    @staticmethod
+    def _reject_busy_request(request: _SocketRequest) -> None:
+        payload = b'{"error":"Dashboard request concurrency limit reached","status":503}'
+        response = (
+            b"HTTP/1.1 503 Service Unavailable\r\n"
+            b"Content-Type: application/json; charset=utf-8\r\n"
+            + f"Content-Length: {len(payload)}\r\n".encode("ascii")
+            + b"Cache-Control: no-store\r\n"
+            b"X-Content-Type-Options: nosniff\r\n"
+            b"X-Frame-Options: DENY\r\n"
+            b"Referrer-Policy: no-referrer\r\n"
+            b"Content-Security-Policy: default-src 'none'; frame-ancestors 'none'\r\n"
+            b"Connection: close\r\n\r\n" + payload
+        )
+        request_socket = request[1] if isinstance(request, tuple) else request
+        with suppress(OSError):
+            request_socket.sendall(response)
 
     def is_trusted_host(self, authority: str | None) -> bool:
         host = _authority_hostname(authority)
@@ -409,7 +458,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type or "application/octet-stream")
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
+        self._send_security_headers()
         self.send_header("X-Request-ID", self._request_id())
         self.end_headers()
         self.wfile.write(payload)
@@ -451,6 +500,10 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return None
         try:
             value = json.loads(self.rfile.read(length))
+        except TimeoutError:
+            self.close_connection = True
+            self._send_error_json(HTTPStatus.REQUEST_TIMEOUT, "Request body timed out")
+            return None
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._send_error_json(HTTPStatus.BAD_REQUEST, "Request body must be valid JSON")
             return None
@@ -494,16 +547,26 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Cache-Control", cache_control)
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
+        self._send_security_headers()
         self.send_header("X-Request-ID", self._request_id())
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; connect-src 'self'; font-src 'self' data:; img-src 'self' data:; "
-            "script-src 'self'; style-src 'self' 'unsafe-inline'",
-        )
+
         self.end_headers()
         self.wfile.write(payload)
+
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        connect_sources = "'self'"
+        if self.server.frontend_url is not None:
+            frontend = urlsplit(self.server.frontend_url)
+            websocket_scheme = "wss" if frontend.scheme == "https" else "ws"
+            connect_sources += f" {websocket_scheme}://{frontend.netloc}"
+        self.send_header(
+            "Content-Security-Policy",
+            f"default-src 'self'; connect-src {connect_sources}; font-src 'self' data:; img-src 'self' data:; "
+            "script-src 'self'; style-src 'self' 'unsafe-inline'",
+        )
 
     def send_response(self, code: int, message: str | None = None) -> None:
         self._response_status = code
@@ -740,11 +803,32 @@ def _normalize_ray_dashboard_url(value: str) -> str:
     ):
         raise ValueError("ray_dashboard_url must be an absolute HTTP(S) URL without credentials, query, or fragment")
     try:
-        _ = parsed.port
+        port = parsed.port
     except ValueError as error:
         raise ValueError("ray_dashboard_url contains an invalid port") from error
+    authority = _canonical_http_authority(parsed.hostname, port)
     path = parsed.path.rstrip("/")
-    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+    return urlunsplit((parsed.scheme, authority, path, "", ""))
+
+
+def _canonical_http_authority(hostname: str | None, port: int | None) -> str:
+    """Return a header-safe URL authority for an HTTP(S) upstream."""
+
+    if hostname is None or "%" in hostname:
+        raise ValueError("ray_dashboard_url contains an invalid host")
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            host = hostname.rstrip(".").encode("idna").decode("ascii")
+        except UnicodeError as error:
+            raise ValueError("ray_dashboard_url contains an invalid host") from error
+        labels = host.split(".")
+        if not host or len(host) > 253 or any(_HOST_LABEL.fullmatch(label) is None for label in labels):
+            raise ValueError("ray_dashboard_url contains an invalid host") from None
+    else:
+        host = f"[{address.compressed}]" if address.version == 6 else address.compressed
+    return host if port is None else f"{host}:{port}"
 
 
 def _normalize_frontend_url(value: str) -> str:
@@ -853,10 +937,17 @@ def _find_timeout_error(error: BaseException) -> BaseException | None:
             for attribute in ("cause", "__cause__", "__context__")
             if isinstance((nested := getattr(candidate, attribute, None)), BaseException)
         ]
-        if isinstance(candidate, (TimeoutError, asyncio.TimeoutError)):
+        if _is_timeout_error(candidate):
             return next(
-                (nested for nested in nested_errors if isinstance(nested, (TimeoutError, asyncio.TimeoutError))),
+                (nested for nested in nested_errors if _is_timeout_error(nested)),
                 candidate,
             )
         pending.extend(nested_errors)
     return None
+
+
+def _is_timeout_error(error: BaseException) -> bool:
+    if isinstance(error, (TimeoutError, asyncio.TimeoutError)):
+        return True
+    error_type = type(error)
+    return error_type.__name__ == "GetTimeoutError" and error_type.__module__.startswith("ray.")

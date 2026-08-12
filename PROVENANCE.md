@@ -57,3 +57,10 @@ contains the corresponding
 [Apache-2.0 license](https://github.com/apache/rocketmq-client-python/blob/master/LICENSE).
 Klein therefore applies a version-exact licensecheck override. Any dependency
 version change must remove or re-review that override before CI can pass.
+
+The tagged `pyvips-binary==8.18.4`
+[build metadata](https://github.com/kleisauke/pyvips-binary/blob/v8.18.4/pyproject.toml)
+declares `LGPL-3.0-or-later`. The pinned licensecheck version misparses part of
+that expression as `UNKNOWN` before accepting it, so the audit suppresses that
+single parser warning only after verifying the exact installed version and
+metadata. The optional native binary retains its upstream license terms.

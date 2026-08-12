@@ -53,7 +53,7 @@ another.
 
 | Owner | Responsible for | Not provided by that layer |
 | --- | --- | --- |
-| Klein | Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; liveness/readiness probes; correlated sanitized access and control events; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries. | Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, or a durable audit log independent of Ray. |
+| Klein | Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request sizes, concurrency, and socket-read time; security headers; liveness/readiness probes; correlated sanitized access and control events; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries. | Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, checkpoint signatures, record-level encryption, proxy-grade rate limiting, or a durable audit log independent of Ray. |
 | Ray | Running actors/tasks, namespaces, runtime environments, Object Store, worker/actor logs, metrics, cluster connectivity, and the authentication/TLS features configured by the Ray operator. | Klein-specific authorization or isolation between mutually untrusted Klein jobs. A Ray namespace avoids actor-name collisions; it is not an access-control boundary. |
 | Platform operator | Network isolation, firewall and ingress policy, TLS termination, Ray authentication, Kubernetes/cloud IAM, node and container hardening, image provenance, secret delivery, object-store IAM/encryption/versioning, log/metric access, backups, and separation of security domains. | Correct UDF behavior, safe application logging, connector semantics, or sink idempotency. |
 | Application owner | Trusted dependencies and code review; input validation; UDF/resource limits; connector credential use; state/schema choices; sensitive-data classification; safe job/operator names; output authorization, idempotency, and retention. | Cluster isolation or platform controls that were never configured. |
@@ -124,7 +124,7 @@ range for an approved internal service; avoid the broader
 `sql.download.allow-private-network=true`.
 
 The byte bound is cumulative across downloads in one SQL projection or batch
-row. A standalone streaming `stream.data.with_column(..., download(...))`
+row. A standalone streaming `stream.ray_data.with_column(..., download(...))`
 operator has the same per-response bound; separate chained operators each have
 their own budget. HTTP connection, redirect, and body reads share the configured
 I/O budget. Python's synchronous system resolver cannot be interrupted by that
@@ -166,6 +166,12 @@ If remote access is required:
 6. do not rely on the built-in Host-header, same-origin, CSP, or frame checks as
    substitutes for authentication.
 
+The current built-in server admits at most 64 active request handlers, keeps a
+128-connection accept backlog, and applies a 10-second socket timeout. Saturated
+requests receive HTTP 503, while a timed-out JSON request body receives HTTP
+408. Treat these as defense-in-depth limits; the reverse proxy still owns
+identity, policy, rate limits, and abuse protection.
+
 The Python state API and CLI connect through Ray to a detached state actor and
 JobManager. Any principal with sufficient Ray access to use those actors must
 already be trusted to observe and control the jobs. Protect Ray Client, Ray
@@ -188,7 +194,8 @@ specific source, sink, and checkpoint resources it needs.
 Klein applies limited, key-name-based redaction:
 
 - published configuration recursively redacts keys resembling passwords,
-  secrets, tokens, credentials, access keys, private keys, and API keys;
+  secrets, tokens, credentials, authorization values, cookies, access keys,
+  private keys, and API keys;
 - structured Klein log fields redact a similar set of names;
 - Redis omits its password from the configuration object's representation.
 

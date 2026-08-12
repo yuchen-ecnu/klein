@@ -13,13 +13,13 @@ failures are often consequences of the first error.
 
 ```python
 import ray
-import ray.klein
+import ray.klein as klein
 
 print(ray.__version__)
-print(ray.klein.__version__)
-print(ray.klein.get_config().to_dict())
-# After registering the graph's terminal operations:
-print(ray.klein.explain("diagnostic-plan"))
+print(klein.__version__)
+print(pipeline.config.to_dict())
+# After capturing the graph's terminals in a StatementSet:
+print(statements.explain("diagnostic-plan"))
 ```
 
 Never paste credentials, complete connector configuration, arbitrary records,
@@ -45,12 +45,12 @@ RocketMQ additionally needs a compatible native `librocketmq`. A Python wheel
 being importable on the driver does not prove the native library exists on a
 remote worker.
 
-### Dynamic `read_*` or `stream.data` method is unavailable
+### Dynamic `read_*` or `stream.ray_data` method is unavailable
 
 Check the installed Ray API before building the graph:
 
 ```python
-if "read_parquet" not in dir(ray.klein):
+if "read_parquet" not in pipeline.ray_data.available:
     raise RuntimeError("read_parquet is unavailable in this Ray version")
 ```
 
@@ -71,14 +71,14 @@ implementation.
 
 Source boundedness does not prove that a custom `SourceFunction` has a Ray Data
 lowering. `auto` selects streaming when that lowering is absent. Use a Ray Data
-factory or `from_ray_dataset()` when batch execution is required; forcing
-`batch` cannot add a missing lowering.
+factory or `pipeline.ray_data.from_dataset()` when batch execution is required;
+forcing `batch` cannot add a missing lowering.
 
 ### Streams from different pipelines cannot be combined
 
-Every graph belongs to one internal pipeline. Rebuild all branches from the
-same module-level construction scope; do not join or union those streams with
-streams built by an explicitly isolated advanced context.
+Every graph belongs to one owner. Build all branches from the same explicit
+`Pipeline`; do not join or union them with streams from another pipeline or a
+deferred compatibility context.
 
 ### SQL fails during planning
 
@@ -196,7 +196,7 @@ startup time can change.
 Include:
 
 - minimal graph code and whether the source is bounded;
-- `ray.klein.explain()` output;
+- `StatementSet.explain()` output captured before submission;
 - Klein, Ray, Python, operating system, and connector versions;
 - sanitized explicit configuration;
 - namespace and job status transitions;

@@ -22,9 +22,9 @@ Typical control flow
 
 .. code-block:: python
 
-   from ray.klein import Pipeline
+   import ray.klein as klein
 
-   pipeline = Pipeline({"execution.runtime.mode": "streaming"}, name="orders")
+   pipeline = klein.pipeline({"execution.runtime.mode": "streaming"}, name="orders")
    stream = pipeline.from_values({"order_id": 1})
    handle = stream.show()
    print(handle.namespace)
@@ -34,7 +34,10 @@ Typical control flow
 ``wait()`` blocks until a terminal state and is the normal choice for jobs with
 one or more side-effect sinks. ``result()`` is the preferred spelling for one
 result-producing terminal; ``get()`` remains as a compatibility alias.
-``take()`` or ``take_all()`` must be executed alone. ``cancel(timeout=...)``
-requests a cooperative stop and returns whether cancellation completed inside
-the time budget. A live handle's ``namespace`` is the Ray namespace accepted by
-the ``ray-klein status``, ``attach``, and ``stop`` commands.
+``take()``, ``take_all()``, or ``collect()`` must be executed alone.
+``take(limit)`` truncates, while ``take_all(limit=...)`` and
+``collect(limit=...)`` raise if the complete result exceeds the bound.
+``cancel(timeout=...)`` requests a cooperative stop and returns whether
+cancellation completed inside the time budget. A live handle's ``namespace``
+is the Ray namespace accepted by the ``ray-klein status``, ``attach``, and
+``stop`` commands.

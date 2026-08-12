@@ -11,7 +11,7 @@ import threading
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import pytest
 from click.testing import CliRunner
@@ -174,6 +174,8 @@ def test_dashboard_serves_the_bundled_frontend(dashboard_server) -> None:
 
     assert status == 200
     assert headers["Content-Type"] == "text/html; charset=utf-8"
+    assert "connect-src 'self';" in headers["Content-Security-Policy"]
+    assert " ws:" not in headers["Content-Security-Policy"]
     assert b'<div id="root"></div>' in page
     assert b'src="__klein/navigation.js"' in page
 
@@ -342,8 +344,8 @@ def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        status, _, page = _request(server, "GET", "/")
-        script_status, _, script = _request(server, "GET", "/static/js/bundle.js")
+        status, page_headers, page = _request(server, "GET", "/")
+        script_status, script_headers, script = _request(server, "GET", "/static/js/bundle.js")
         bridge_status, _, bridge = _request(server, "GET", "/__klein/navigation.js")
         jobs_status, _, jobs = _request(server, "GET", "/api/klein/jobs")
         job_status, _, job = _request(server, "GET", f"/api/klein/jobs/{quote(state.job_id, safe='')}")
@@ -355,6 +357,14 @@ def test_dashboard_reuses_ray_frontend_and_injects_external_navigation(frontend_
         assert b"https://ray.example.com/base" in bridge
         assert b'"jobs"' in jobs
         assert json.loads(job) == {"job": state.snapshot}
+        for headers in (page_headers, script_headers):
+            assert headers["X-Frame-Options"] == "DENY"
+            assert headers["Referrer-Policy"] == "no-referrer"
+            assert headers["Content-Security-Policy"].startswith("default-src 'self'")
+            frontend_authority = urlsplit(frontend_server).netloc
+            assert f"connect-src 'self' ws://{frontend_authority};" in headers["Content-Security-Policy"]
+            assert " ws: " not in headers["Content-Security-Policy"]
+            assert " wss: " not in headers["Content-Security-Policy"]
     finally:
         server.shutdown()
         server.server_close()
@@ -424,7 +434,17 @@ def test_dashboard_supports_ray_frontend_cancel_endpoint(dashboard_server) -> No
 
 @pytest.mark.parametrize(
     "url",
-    ["", "127.0.0.1:8265", "ftp://ray.example.com", "https://user@ray.example.com", "https://ray.example.com/#/jobs"],
+    [
+        "",
+        "127.0.0.1:8265",
+        "ftp://ray.example.com",
+        "https://user@ray.example.com",
+        "https://ray.example.com/#/jobs",
+        "http://ray.example.com; script-src *",
+        "http://ray.example.com other",
+        "http://ray.example.com,https://other.example",
+        "http://ray.example.com%0aX-Test:1",
+    ],
 )
 def test_dashboard_rejects_invalid_ray_dashboard_url(url) -> None:
     with pytest.raises((TypeError, ValueError)):
@@ -626,6 +646,78 @@ def test_dashboard_maps_ray_wrapped_asyncio_timeout_to_gateway_timeout(dashboard
 
     assert status == 504
     assert "operator rescale timed out" in json.loads(payload)["error"]
+
+
+def test_dashboard_maps_ray_get_timeout_to_gateway_timeout(dashboard_server) -> None:
+    server, state = dashboard_server
+    get_timeout_type = type("GetTimeoutError", (Exception,), {"__module__": "ray.exceptions"})
+
+    def timed_out():
+        raise get_timeout_type("state actor response timed out")
+
+    state.list_jobs = timed_out
+    status, _, payload = _request(server, "GET", "/api/jobs")
+
+    assert status == 504
+    assert "state actor response timed out" in json.loads(payload)["error"]
+
+
+def test_dashboard_times_out_slow_request_bodies(monkeypatch) -> None:
+    monkeypatch.setattr("ray.klein.observability.dashboard.server._REQUEST_SOCKET_TIMEOUT_SECONDS", 0.05)
+    server = create_dashboard_server("127.0.0.1", 0, state=_FakeState())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    client = socket.create_connection(("127.0.0.1", server.server_port), timeout=2)
+    try:
+        client.sendall(
+            b"POST /api/jobs/job/operators/7/rescale HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: 17\r\n\r\n{"
+        )
+        chunks = []
+        while chunk := client.recv(4096):
+            chunks.append(chunk)
+        response = b"".join(chunks)
+        assert b"408 Request Timeout" in response
+        assert b"Request body timed out" in response
+    finally:
+        client.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_dashboard_rejects_requests_over_the_concurrency_limit(monkeypatch) -> None:
+    monkeypatch.setattr("ray.klein.observability.dashboard.server._MAX_CONCURRENT_REQUESTS", 1)
+    state = _FakeState()
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocked_list_jobs():
+        started.set()
+        assert release.wait(timeout=2)
+        return []
+
+    state.list_jobs = blocked_list_jobs
+    server = create_dashboard_server("127.0.0.1", 0, state=state)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    first_result = []
+    first_thread = threading.Thread(target=lambda: first_result.append(_request(server, "GET", "/readyz")))
+    server_thread.start()
+    first_thread.start()
+    try:
+        assert started.wait(timeout=1)
+        status, _, payload = _request(server, "GET", "/healthz")
+        assert status == 503
+        assert json.loads(payload)["error"] == "Dashboard request concurrency limit reached"
+    finally:
+        release.set()
+        first_thread.join(timeout=2)
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=2)
+    assert first_result[0][0] == 200
 
 
 def test_cli_dashboard_starts_bound_server(monkeypatch) -> None:

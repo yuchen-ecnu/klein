@@ -30,10 +30,10 @@ client protocol are not supported by this format.
 ## Read binlog changes
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-orders = ray.klein.read_kafka(
+pipeline = klein.pipeline(name="canal-orders")
+orders = pipeline.read_kafka(
     "canal-orders",
     bootstrap_servers="kafka:9092",
     trigger="continuous",
@@ -48,9 +48,10 @@ orders = ray.klein.read_kafka(
 )
 ```
 
-For convenience, `ray.klein.read_canal(...)` is a thin typed wrapper around
-this call. It selects continuous Kafka and supplies `value_format` and
-`format_options`; it does not introduce a Canal connector or a second source
+For convenience, `pipeline.read_canal(...)` is a thin typed wrapper around this
+call. The module-level `klein.read_canal(...)` compatibility form builds the
+implicit deferred pipeline. Both select continuous Kafka and supply
+`value_format` and `format_options`; neither introduces a second source
 implementation.
 
 The format is continuous-only and uses the Kafka connector's deterministic

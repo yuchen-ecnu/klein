@@ -93,11 +93,13 @@ def _rocketmq_source_class() -> type[SourceFunction]:
 
 
 class KleinContext:
-    """Advanced configuration and graph owner for one isolated pipeline.
+    """Compatibility graph owner with deferred terminal registration.
 
-    Ordinary applications use the module-level source, terminal, and
-    :func:`execute` APIs. Direct construction remains available when one
-    process must build explicitly isolated pipelines.
+    New applications should use :func:`ray.klein.pipeline`, whose explicit
+    :class:`~ray.klein.Pipeline` submits one terminal directly and groups
+    multiple side-effect terminals with :class:`~ray.klein.StatementSet`.
+    Construct ``KleinContext`` only when a process needs an isolated builder
+    with the legacy deferred ``execute()`` contract.
     """
 
     _scoped_current: ClassVar[ContextVar["KleinContext | None"]] = ContextVar(

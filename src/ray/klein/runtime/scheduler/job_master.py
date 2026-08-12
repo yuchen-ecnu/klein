@@ -174,7 +174,12 @@ class JobMaster:
         thread). Delegates to the RecoveryManager; returns True if a recovery ran."""
         return self._recovery.recover_coordinator_if_needed()
 
-    def stop_job(self, force: bool = False, deadline: Deadline | None = None) -> None:
+    def stop_job(
+        self,
+        force: bool = False,
+        deadline: Deadline | None = None,
+        graceful_completion: bool = False,
+    ) -> None:
         # None => default budget (internal callers like restart()).
         if deadline is None:
             deadline = Deadline(self._stop_timeout)
@@ -186,7 +191,10 @@ class JobMaster:
             force=force,
         )
         teardown_errors = self._stop_workers_and_placement(force, deadline)
-        coordinator_error = self._stop_coordinator(deadline)
+        coordinator_error = self._stop_coordinator(
+            deadline,
+            graceful_completion=graceful_completion,
+        )
         if coordinator_error is not None:
             teardown_errors.append(coordinator_error)
         if teardown_errors:
@@ -225,15 +233,27 @@ class JobMaster:
                 teardown_errors.append(error)
         return teardown_errors
 
-    def _stop_coordinator(self, deadline: Deadline) -> Exception | None:
+    def _stop_coordinator(
+        self,
+        deadline: Deadline,
+        *,
+        graceful_completion: bool = False,
+    ) -> Exception | None:
         if self.coordinator is None or not self._coordinator_alive():
+            if graceful_completion:
+                return RuntimeError(
+                    "checkpoint coordinator is unavailable; sink transactions cannot be verified before FINISHED"
+                )
             return None
-        # Terminal flush is best-effort because force kill may have removed sources.
+        flush_error: Exception | None = None
+        # Cancellation/recovery abort undurable transactions. Natural EOF must
+        # prove that every transaction is committed before reporting FINISHED.
         try:
             klein.get(
                 self.coordinator.persist_now(
                     notify_sources=False,
-                    abort_inflight_sinks=True,
+                    abort_inflight_sinks=not graceful_completion,
+                    require_resolved_sinks=graceful_completion,
                 ),
                 timeout=deadline.step(self._coordinator_rpc_timeout),
             )
@@ -246,13 +266,15 @@ class JobMaster:
                 error,
                 exc_info=True,
             )
+            if graceful_completion:
+                flush_error = error
         logger.info("Stopping the checkpoint coordinator")
         rpc_timeout = deadline.step(self._coordinator_rpc_timeout)
         try:
             klein.get(self.coordinator.stop(timeout=rpc_timeout), timeout=rpc_timeout)
         except Exception as error:
             return error
-        return None
+        return flush_error
 
     def restart(self, force: bool = False) -> RestartResult:
         # The strategy's suppression window is NOT reset on a successful reschedule,

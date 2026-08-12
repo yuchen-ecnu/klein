@@ -49,6 +49,9 @@ def test_state_api_resolves_remote_calls(monkeypatch) -> None:
     actor.cancel_job.remote.assert_called_once_with("j", 9)
     actor.rescale_operator.remote.assert_called_once_with("j", 2, 4, 9)
     actor.submit_operator_rescale.remote.assert_called_once_with("j", 2, 4, 3)
+    assert ray_get.call_args_list[0].kwargs == {"timeout": 15}
+    assert ray_get.call_args_list[1].kwargs == {"timeout": 15}
+    assert ray_get.call_args_list[2].kwargs == {"timeout": 29}
     assert ray_get.call_args_list[-2].args == ("rescale-ref",)
     assert ray_get.call_args_list[-2].kwargs == {"timeout": 14}
     ray_get.assert_called_with("submit-rescale-ref", timeout=8)
@@ -63,6 +66,16 @@ def test_state_api_rejects_empty_job_id(function) -> None:
 def test_cancel_job_rejects_non_positive_timeout() -> None:
     with pytest.raises(ValueError, match="greater than zero"):
         state_api.cancel_job("j", timeout=0)
+
+
+@pytest.mark.parametrize(
+    "function",
+    [state_api.list_job_snapshots, lambda **kwargs: state_api.get_job_snapshot("j", **kwargs)],
+)
+@pytest.mark.parametrize("timeout", [0, float("nan"), float("inf")])
+def test_state_reads_reject_invalid_timeout(function, timeout) -> None:
+    with pytest.raises(ValueError, match="finite and greater than zero"):
+        function(timeout=timeout)
 
 
 @pytest.mark.parametrize(

@@ -228,6 +228,15 @@ class CheckpointCoordinator(AsyncWorker):
         self._pending_sink_committables: dict[tuple[str, int, str], SinkCommittableCheckpointEntry] = {}
         self._durable_sink_committables: dict[tuple[str, int, str], SinkCommittableCheckpointEntry] = {}
         self._inflight_sink_committables: dict[int, dict[str, SinkCommittableCheckpointEntry]] = {}
+        # A timed-out/failed checkpoint must not abort an already prepared sink
+        # transaction while its tasks continue running: those input records will
+        # not be replayed unless the job itself restarts. Keep such transactions
+        # scoped to their checkpoint domain and attach them to that domain's next
+        # successful cut, whose source state safely covers the carried records.
+        self._carried_sink_committables: dict[
+            str | None,
+            dict[tuple[str, int, str], SinkCommittableCheckpointEntry],
+        ] = {}
         self._execution_graph: ExecutionGraph | None = None
         self._required_acknowledgements: dict[ExecutionVertexId, int] = {}
         self._inflight_checkpoints: dict[int, Checkpoint] = {}
@@ -371,6 +380,7 @@ class CheckpointCoordinator(AsyncWorker):
         }
         self._durable_sink_committables = dict(self._pending_sink_committables)
         self._inflight_sink_committables = {}
+        self._carried_sink_committables = {}
         self._update_pending_sink_transaction_metric()
         self._inflight_operator_states = {}
         self._inflight_checkpoints = {}
@@ -475,7 +485,7 @@ class CheckpointCoordinator(AsyncWorker):
             checkpoint = self._inflight_checkpoints.pop(barrier_id)
             self._release_domain_slot(checkpoint)
             self._inflight_operator_states.pop(barrier_id, None)
-            await self._abort_inflight_sink_committables(barrier_id)
+            self._carry_inflight_sink_committables(checkpoint)
             checkpoint.mark_failed(f"checkpoint timed out after {self._checkpoint_timeout}s")
             self._checkpoints_failed.inc()
             self._checkpoints_in_progress.set(len(self._inflight_checkpoints))
@@ -1132,7 +1142,7 @@ class CheckpointCoordinator(AsyncWorker):
             raise
         except Exception:
             self._inflight_operator_states.pop(barrier_id, None)
-            await self._abort_inflight_sink_committables(barrier_id)
+            self._carry_inflight_sink_committables(checkpoint)
             await self._release_checkpoint_sources(barrier_id, checkpoint.trigger_sources)
             logger.exception(
                 "Checkpoint completion notification failed for barrier %s",
@@ -1216,6 +1226,13 @@ class CheckpointCoordinator(AsyncWorker):
                 barrier_id,
                 self._inflight_sink_committables.get(barrier_id, {}),
             )
+            carried_domains = self._carried_domains_for_checkpoint(checkpoint)
+            carried_entries = tuple(
+                entry
+                for domain_id in carried_domains
+                for entry in self._carried_sink_committables.get(domain_id, {}).values()
+            )
+            carried_committables = self._coalesce_carried_sink_committables(carried_entries)
             for source_vertex_id, source_state in source_states.items():
                 self._update_latest_source_state(
                     SourceCheckpointEntry(
@@ -1230,13 +1247,17 @@ class CheckpointCoordinator(AsyncWorker):
             else:
                 self._merge_checkpoint_operator_states(completed_states)
             self._inflight_sink_committables.pop(barrier_id, None)
+            for identity, entry in carried_committables.items():
+                self._pending_sink_committables[identity] = entry
             for entry in completed_committables.values():
                 self._pending_sink_committables[self._sink_committable_identity(entry)] = entry
             self._update_pending_sink_transaction_metric()
-            if completed_committables:
+            if carried_committables or completed_committables:
                 self._state_revision += 1
             stabilization_ready = self._record_rescale_stabilization_progress(checkpoint)
-        return bool(completed_committables), stabilization_ready
+            for domain_id in carried_domains:
+                self._carried_sink_committables.pop(domain_id, None)
+        return bool(carried_committables or completed_committables), stabilization_ready
 
     async def _fail_checkpoint(
         self,
@@ -1249,7 +1270,7 @@ class CheckpointCoordinator(AsyncWorker):
         """Release non-durable task state and mark a checkpoint failed."""
 
         self._inflight_operator_states.pop(barrier_id, None)
-        await self._abort_inflight_sink_committables(barrier_id)
+        self._carry_inflight_sink_committables(checkpoint)
         await self._release_checkpoint_sources(barrier_id, checkpoint.trigger_sources)
         await self._abort_checkpoint_tasks(
             barrier_id,
@@ -1578,6 +1599,85 @@ class CheckpointCoordinator(AsyncWorker):
                 )
         self._update_pending_sink_transaction_metric()
 
+    def _carry_inflight_sink_committables(self, checkpoint: Checkpoint) -> None:
+        """Roll prepared data from a failed epoch into its domain's next cut."""
+
+        entries = self._inflight_sink_committables.pop(checkpoint.barrier_id, {})
+        if not entries:
+            self._update_pending_sink_transaction_metric()
+            return
+        carried = self._carried_sink_committables.setdefault(checkpoint.domain_id, {})
+        for entry in entries.values():
+            carried[self._sink_committable_identity(entry)] = entry
+        self._update_pending_sink_transaction_metric()
+        logger.info(
+            "Carrying %d sink transaction(s) from failed checkpoint %s into the next successful cut for domain %s",
+            len(entries),
+            checkpoint.barrier_id,
+            checkpoint.domain_id,
+        )
+
+    def _carried_domains_for_checkpoint(self, checkpoint: Checkpoint) -> tuple[str | None, ...]:
+        """Return every carry-over bucket covered by one successful source cut."""
+
+        if not checkpoint.coordinated:
+            return (checkpoint.domain_id,)
+        if self._execution_graph is None:
+            return (None,) if checkpoint.domain_id is None else (None, checkpoint.domain_id)
+        domain_ids = {
+            domain.id
+            for source_id in checkpoint.trigger_sources
+            if (domain := self._checkpoint_domain_for_source(source_id)) is not None
+        }
+        if checkpoint.domain_id is not None:
+            domain_ids.add(checkpoint.domain_id)
+        # ``None`` is the conservative bucket for a carried writer whose old
+        # physical subtask disappeared during rescale. Only the coordinated
+        # stabilization cut spans enough source progress to consume it safely.
+        return (None, *sorted(domain_ids))
+
+    def _remap_carried_sink_domains(self, execution_graph: ExecutionGraph) -> None:
+        """Follow physical checkpoint domains across an in-place topology change."""
+
+        if not self._carried_sink_committables:
+            return
+        remapped: dict[str | None, dict[tuple[str, int, str], SinkCommittableCheckpointEntry]] = {}
+        find_domain = getattr(execution_graph, "find_checkpoint_domain", None)
+        for previous_domain_id, entries in self._carried_sink_committables.items():
+            for identity, entry in entries.items():
+                domain_id = previous_domain_id
+                task_parts = entry.task_key.split(":", 1)
+                try:
+                    vertex_id = ExecutionVertexId(int(task_parts[0]), int(task_parts[1]))
+                except (IndexError, ValueError):
+                    vertex_id = None
+                if vertex_id is not None and callable(find_domain):
+                    domain = find_domain(vertex_id)
+                    domain_id = domain.id if isinstance(domain, CheckpointDomain) else None
+                remapped.setdefault(domain_id, {})[identity] = entry
+        self._carried_sink_committables = remapped
+        self._update_pending_sink_transaction_metric()
+
+    async def _abort_carried_sink_committables(self) -> None:
+        """Abort undurable carry-over during terminal job teardown."""
+
+        carried, self._carried_sink_committables = self._carried_sink_committables, {}
+        for entries in carried.values():
+            for entry in entries.values():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(entry.committable.abort),
+                        timeout=self._checkpoint_operation_timeout(),
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to abort carried sink transaction %s from checkpoint %s",
+                        entry.transaction_id,
+                        entry.checkpoint_id,
+                        exc_info=True,
+                    )
+        self._update_pending_sink_transaction_metric()
+
     def _coalesce_sink_committables(
         self,
         barrier_id: int,
@@ -1591,15 +1691,39 @@ class CheckpointCoordinator(AsyncWorker):
             job_id=self._job_id,
         )
 
+    def _coalesce_carried_sink_committables(
+        self,
+        entries: tuple[SinkCommittableCheckpointEntry, ...],
+    ) -> dict[tuple[str, int, str], SinkCommittableCheckpointEntry]:
+        """Preserve each failed epoch's global-writer commit boundary."""
+
+        by_checkpoint: dict[int, dict[str, SinkCommittableCheckpointEntry]] = {}
+        for entry in entries:
+            checkpoint_entries = by_checkpoint.setdefault(entry.checkpoint_id, {})
+            existing = checkpoint_entries.get(entry.task_key)
+            if existing is not None and existing.transaction_id != entry.transaction_id:
+                raise ValueError(
+                    f"sink {entry.task_key} carried different transactions for checkpoint {entry.checkpoint_id}"
+                )
+            checkpoint_entries[entry.task_key] = entry
+
+        coalesced: dict[tuple[str, int, str], SinkCommittableCheckpointEntry] = {}
+        for checkpoint_id, checkpoint_entries in sorted(by_checkpoint.items()):
+            for entry in self._coalesce_sink_committables(checkpoint_id, checkpoint_entries).values():
+                coalesced[self._sink_committable_identity(entry)] = entry
+        return coalesced
+
     def _update_pending_sink_transaction_metric(self) -> None:
         inflight_count = sum(len(entries) for entries in self._inflight_sink_committables.values())
-        self._sink_transactions_pending.set(len(self._pending_sink_committables) + inflight_count)
+        carried_count = sum(len(entries) for entries in self._carried_sink_committables.values())
+        self._sink_transactions_pending.set(len(self._pending_sink_committables) + inflight_count + carried_count)
 
     async def persist_now(
         self,
         *,
         notify_sources: bool = True,
         abort_inflight_sinks: bool = False,
+        require_resolved_sinks: bool = False,
     ) -> str | None:
         """Persist the latest progress immediately (terminal flush).
 
@@ -1609,10 +1733,28 @@ class CheckpointCoordinator(AsyncWorker):
         The scheduler disables source callbacks because workers have already
         stopped; explicit calls keep callbacks enabled for normal checkpoints.
         """
+        if abort_inflight_sinks and require_resolved_sinks:
+            raise ValueError("cannot abort and require sink transactions in the same terminal flush")
         if abort_inflight_sinks:
             for barrier_id in tuple(self._inflight_sink_committables):
                 await self._abort_inflight_sink_committables(barrier_id)
-        await self._persist_checkpoint_metadata(notify_sources=notify_sources)
+            await self._abort_carried_sink_committables()
+        elif require_resolved_sinks:
+            unresolved_count = len(self._carried_sink_committables) + len(self._inflight_sink_committables)
+            if unresolved_count:
+                raise RuntimeError("cannot finish the job with sink transactions whose checkpoint cut did not complete")
+        await self._persist_checkpoint_metadata(
+            notify_sources=notify_sources,
+            strict=require_resolved_sinks,
+        )
+        if require_resolved_sinks:
+            # A write makes pending transactions durable before trying their
+            # external commits. The ordinary path retries commit failures on a
+            # later maintenance tick; natural EOF has no later tick, so require
+            # the retry to succeed before the job can report FINISHED.
+            await self._commit_durable_sink_committables(strict=True)
+            if self._pending_sink_committables:
+                raise RuntimeError("cannot finish the job with uncommitted sink transactions")
         return self._checkpoint_path
 
     def latest_checkpoint_path(self) -> str | None:
@@ -1642,7 +1784,8 @@ class CheckpointCoordinator(AsyncWorker):
                 "state_size_bytes": state_size,
                 "last_persisted_revision": self._metadata_revision,
                 "pending_sink_transactions": len(self._pending_sink_committables)
-                + sum(len(entries) for entries in self._inflight_sink_committables.values()),
+                + sum(len(entries) for entries in self._inflight_sink_committables.values())
+                + sum(len(entries) for entries in self._carried_sink_committables.values()),
             },
             "history": history,
             "latest_path": self._checkpoint_path,
@@ -1848,6 +1991,7 @@ class CheckpointCoordinator(AsyncWorker):
         if self._inflight_checkpoints or self._completing_checkpoints:
             raise RuntimeError("cannot reconfigure checkpoint topology with checkpoints in flight")
         self._execution_graph = execution_graph
+        self._remap_carried_sink_domains(execution_graph)
         self._required_acknowledgements = checkpoint_io.coordinator_ack_counts(execution_graph)
         self._active_checkpoint_by_domain = {}
         live_sources = {vertex.id for vertex in execution_graph.source_execution_vertices}

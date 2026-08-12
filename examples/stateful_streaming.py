@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 from typing import Any
 
-from ray.klein import KeyedProcessFunction, Pipeline
+import ray.klein as klein
 from ray.klein.state import KeyedStateContext, ValueStateDescriptor
 
 
-class RunningTotal(KeyedProcessFunction):
+class RunningTotal(klein.KeyedProcessFunction):
     total = ValueStateDescriptor("running-total")
 
     def process(self, row: dict[str, Any], context: KeyedStateContext) -> dict[str, Any]:
@@ -16,7 +16,7 @@ class RunningTotal(KeyedProcessFunction):
 
 
 def run() -> list[dict]:
-    pipeline = Pipeline({"execution.runtime.mode": "streaming"}, name="stateful-streaming")
+    pipeline = klein.pipeline({"execution.runtime.mode": "streaming"}, name="stateful-streaming")
     return (
         pipeline.from_items(
             [

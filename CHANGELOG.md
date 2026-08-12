@@ -10,6 +10,9 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Added
 
+- `ray.klein.pipeline()` provides the recommended namespace-oriented factory
+  for an isolated job, while the `Pipeline` class remains available for type
+  annotations, subclassing, and compatibility.
 - A user-facing `Pipeline` owner now defaults to strict configuration. Single
   terminals submit directly (`collect().result()` or `write_*().wait()`), while
   `StatementSet` groups multiple DataStream sinks or SQL inserts into one job.
@@ -34,6 +37,26 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
+- `collect(limit=...)` and `take_all(limit=...)` now reject invalid limits and
+  fail when the complete result exceeds the bound; `take(limit)` remains the
+  explicitly truncating terminal.
+- Dashboard connections now have bounded request concurrency and socket-read
+  timeouts, overload returns HTTP 503, security headers cover every normal
+  response, and redaction also recognizes authorization and cookie fields.
+- State snapshot reads now have finite client timeouts, cancellation reserves
+  a response grace period, and concurrent EOF, drain, and actor-shutdown paths
+  share one shielded stream-task teardown.
+- Ray Serve clients and deployments now bound request/response bytes and row
+  counts before retaining or decoding them.
+- A prepared sink transaction from a failed or timed-out checkpoint is carried
+  into that checkpoint domain's next successful cut instead of being discarded
+  while its already-consumed input continues; terminal teardown still aborts
+  undurable carry-over. Sources receive an idempotent checkpoint-abort callback
+  for connector-owned cleanup.
+- Replay journaling no longer retains a batch already covered by a racing
+  downstream acknowledgement.
+- SQL AI calls now reject wildcard arguments during planning instead of
+  allowing an invalid call shape to reach execution.
 - Restricted snapshot decoding now rejects sparse pickle memo indexes and
   oversized frames before they can trigger disproportionate allocation.
 - Dashboard proxy, asset, and request-correlation response headers now use
@@ -74,6 +97,13 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
+- Insert-only streaming `COUNT`, `SUM`, and `AVG` use constant-size
+  per-group accumulators, and insert-only `ORDER BY ... LIMIT n` retains only
+  the sorted prefix. Retraction-capable inputs retain the additional
+  multiplicity/candidate state needed to process deletes. Existing list-backed
+  aggregate and Top-N values are migrated on their first subsequent record.
+- Dependency-license auditing now resolves the complete `all` extra with the
+  pinned `uv` test dependency instead of silently auditing a partial graph.
 - Mypy now covers additional checkpoint, rescale, worker-lifecycle, and Iceberg
   transaction modules with fully typed definitions. Coverage gates include all
   Dashboard source and file-level floors for failure-sensitive runtime modules;
