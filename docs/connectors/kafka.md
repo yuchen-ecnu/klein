@@ -32,6 +32,24 @@ events = ray.klein.read_kafka(
 )
 ```
 
+Decode ordinary UTF-8 JSON object values without a separate map:
+
+```python
+orders = ray.klein.read_kafka(
+    "orders",
+    bootstrap_servers="kafka:9092",
+    trigger="continuous",
+    value_format="json",
+    format_options={"include_metadata": True},
+)
+```
+
+The decoded object is the output row. With `include_metadata`, the Kafka
+envelope is available as `__kafka_topic`, `__kafka_partition`,
+`__kafka_offset`, `__kafka_timestamp`, `__kafka_key`, and `__kafka_headers`.
+Set `metadata_prefix` in `format_options` to change the prefix. Invalid UTF-8,
+invalid JSON, and non-object JSON values fail the normal operator retry path.
+
 Set `trigger="once"` for bounded Ray Data input or `"continuous"` for a
 long-running checkpoint-aware source.
 
@@ -49,8 +67,8 @@ long-running checkpoint-aware source.
 | `concurrency` | `None` | Continuous source subtasks. Not accepted by `trigger="once"`. |
 | `partition_discovery_interval_ms` | `30000` | Continuous partition refresh interval. |
 | `max_batch_size` | `1000` | Maximum records emitted by a continuous poll batch. |
-| `value_format` | `"raw"` | `raw` or the continuous-only `canal-json` value format. |
-| `format_options` | `None` | Format-specific options; for `canal-json`, `include_metadata` and `ddl_handling`. |
+| `value_format` | `"raw"` | `raw`, portable `json`, or the continuous-only `canal-json` value format. |
+| `format_options` | `None` | Format-specific options; `json` supports `include_metadata` and `metadata_prefix`. |
 | `timeout_ms` | `None` | Poll/read timeout; continuous input uses 1000 ms when unset. |
 | `num_cpus`, `num_gpus` | `None` | Source task resources. |
 | `memory`, `ray_remote_args` | `None` | Bounded Ray Data resource options; unsupported for continuous input. |

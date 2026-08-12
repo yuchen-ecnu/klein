@@ -10,6 +10,14 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Added
 
+- A user-facing `Pipeline` owner now defaults to strict configuration. Single
+  terminals submit directly (`collect().result()` or `write_*().wait()`), while
+  `StatementSet` groups multiple DataStream sinks or SQL inserts into one job.
+  Explicit `ray_data` namespaces, `with_event_time()`, inferred window
+  timestamps, and ordinary Kafka `value_format="json"` reduce common pipeline
+  boilerplate while the existing module-level, `execute()`, `.data`, and
+  `get()` APIs remain valid.
+
 - Transactional connectors can implement the public
   `SinkCommittableCombiner` protocol to coalesce parallel writer transactions
   without coupling the checkpoint runtime to a connector implementation.

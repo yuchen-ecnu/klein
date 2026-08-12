@@ -7,11 +7,14 @@ from threading import Barrier
 import pytest
 
 import ray.klein as klein
+from ray.klein.api.completed_job_handle import CompletedJobHandle
 from ray.klein.api.job_client import JobClient
 from ray.klein.api.klein_context import KleinContext
+from ray.klein.api.pipeline import Pipeline
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
+from ray.klein.api.statement_set import StatementSet
 from ray.klein.api.stream_sink import StreamSink
 from ray.klein.config.configuration import Configuration
 from ray.klein.config.execution_options import ExecutionOptions
@@ -145,6 +148,220 @@ class TestKleinContext:
         with pytest.raises(ValueError, match="cannot be combined"):
             klein.execute("ambiguous-results")
         assert context.sinks == (collected, side_effect)
+
+    def test_pipeline_collect_submits_single_sink_immediately(self, monkeypatch) -> None:
+        pipeline = Pipeline(name="fluent-collect")
+        captured = {}
+
+        def execute(_client, job_name, sinks):
+            captured.update(job_name=job_name, sinks=tuple(sinks))
+            return CompletedJobHandle([{"id": 1}])
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        handle = pipeline.from_values({"id": 1}).collect()
+        rows = handle.result()
+
+        assert rows == [{"id": 1}]
+        assert captured["job_name"] == "fluent-collect"
+        assert len(captured["sinks"]) == 1
+        assert isinstance(captured["sinks"][0], StreamSink)
+        assert pipeline.sinks == ()
+
+    def test_legacy_terminal_result_submits_only_that_sink(self, monkeypatch) -> None:
+        context = KleinContext()
+        selected = context.from_values({"id": 1}).collect()
+        pending = context.from_values({"id": 2}).show()
+        captured = {}
+
+        def execute(_client, job_name, sinks):
+            captured.update(job_name=job_name, sinks=tuple(sinks))
+            return CompletedJobHandle([{"id": 1}])
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        assert selected.result("selected") == [{"id": 1}]
+        assert captured == {"job_name": "selected", "sinks": (selected,)}
+        assert context.sinks == (pending,)
+
+    def test_pipeline_side_effect_terminal_submits_immediately(self, monkeypatch) -> None:
+        pipeline = Pipeline(name="show-one")
+        calls = []
+        monkeypatch.setattr(
+            JobClient,
+            "execute",
+            lambda _client, job_name, sinks: calls.append((job_name, tuple(sinks))) or CompletedJobHandle(None),
+        )
+
+        handle = pipeline.from_values({"id": 1}).show()
+
+        assert handle.status.name == "FINISHED"
+        assert len(calls) == 1
+        assert calls[0][0] == "show-one"
+        assert pipeline.sinks == ()
+
+    def test_statement_set_defers_and_submits_multiple_sinks_once(self, monkeypatch) -> None:
+        pipeline = Pipeline(name="fanout")
+        first = pipeline.from_values({"id": 1})
+        second = pipeline.from_values({"id": 2})
+        statements = pipeline.create_statement_set()
+        calls = []
+
+        def execute(_client, job_name, sinks):
+            calls.append((job_name, tuple(sinks)))
+            return CompletedJobHandle(None)
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        statements.add(first.show).add(second.show)
+
+        assert calls == []
+        assert len(statements.sinks) == 2
+        handle = statements.execute()
+
+        assert handle.status.name == "FINISHED"
+        assert len(calls) == 1
+        assert calls[0][0] == "fanout"
+        assert len(calls[0][1]) == 2
+        assert statements.sinks == ()
+        assert pipeline.sinks == ()
+
+    def test_statement_set_context_captures_writes(self, monkeypatch) -> None:
+        pipeline = Pipeline()
+        statements = pipeline.create_statement_set()
+        calls = []
+        monkeypatch.setattr(
+            JobClient,
+            "execute",
+            lambda _client, job_name, sinks: calls.append((job_name, tuple(sinks))) or CompletedJobHandle(None),
+        )
+
+        with statements:
+            pipeline.from_values({"id": 1}).show()
+            pipeline.from_values({"id": 2}).show()
+
+        assert calls == []
+        assert len(statements.sinks) == 2
+        statements.execute("context-fanout")
+        assert calls[0][0] == "context-fanout"
+        assert len(calls[0][1]) == 2
+
+    def test_statement_set_owned_sink_cannot_bypass_the_set(self, monkeypatch) -> None:
+        pipeline = Pipeline(name="fanout")
+        statements = pipeline.create_statement_set()
+        statements.add(pipeline.from_values({"id": 1}).show)
+        sink = statements.sinks[0]
+        calls = []
+        monkeypatch.setattr(
+            JobClient,
+            "execute",
+            lambda _client, job_name, sinks: calls.append((job_name, tuple(sinks))) or CompletedJobHandle(None),
+        )
+
+        with pytest.raises(RuntimeError, match="through that StatementSet"):
+            pipeline.execute()
+        with pytest.raises(RuntimeError, match="through that StatementSet"):
+            sink.run()
+
+        statements.execute()
+        assert len(calls) == 1
+
+    def test_statement_set_failed_submission_remains_retryable(self, monkeypatch) -> None:
+        pipeline = Pipeline(name="retry-fanout")
+        statements = pipeline.create_statement_set()
+        statements.add(pipeline.from_values({"id": 1}).show)
+        attempts = 0
+
+        def execute(_client, _job_name, _sinks):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("submission failed")
+            return CompletedJobHandle(None)
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        with pytest.raises(RuntimeError, match="submission failed"):
+            statements.execute()
+        assert len(statements.sinks) == 1
+
+        statements.execute()
+        assert attempts == 2
+        assert statements.sinks == ()
+        assert pipeline.sinks == ()
+
+    def test_statement_set_rolls_back_context_on_construction_failure(self) -> None:
+        pipeline = Pipeline()
+        statements = pipeline.create_statement_set()
+
+        with pytest.raises(RuntimeError, match="builder failed"), statements:
+            pipeline.from_values({"id": 1}).show()
+            raise RuntimeError("builder failed")
+
+        assert statements.sinks == ()
+        assert pipeline.sinks == ()
+
+    def test_sink_cannot_belong_to_two_statement_sets(self) -> None:
+        pipeline = Pipeline()
+        first = pipeline.create_statement_set()
+        second = pipeline.create_statement_set()
+        first.add(pipeline.from_values({"id": 1}).show)
+
+        with pytest.raises(ValueError, match="already belongs"):
+            second.add_sink(first.sinks[0])
+
+        assert len(first.sinks) == 1
+        assert second.sinks == ()
+
+    def test_statement_set_rejects_collecting_terminals_without_leaking_them(self) -> None:
+        pipeline = Pipeline()
+        statements = pipeline.create_statement_set()
+
+        with pytest.raises(ValueError, match="side-effect sinks"):
+            statements.add(pipeline.from_values({"id": 1}).collect)
+
+        assert statements.sinks == ()
+        assert pipeline.sinks == ()
+
+    def test_pipeline_ray_data_consumer_submits_single_sink(self, monkeypatch) -> None:
+        pipeline = Pipeline(name="ray-data-take")
+        captured = {}
+
+        def execute(_client, job_name, sinks):
+            captured.update(job_name=job_name, sinks=tuple(sinks))
+            return CompletedJobHandle([{"id": 1}])
+
+        monkeypatch.setattr(JobClient, "execute", execute)
+
+        rows = pipeline.from_values({"id": 1}).ray_data.take_all().result()
+
+        assert rows == [{"id": 1}]
+        assert captured["job_name"] == "ray-data-take"
+        assert len(captured["sinks"]) == 1
+
+    def test_pipeline_uses_strict_configuration_by_default(self) -> None:
+        with pytest.raises(ValueError, match="unknown Klein configuration option"):
+            Pipeline({"execution.runtime.mod": "streaming"})
+
+        pipeline = Pipeline({"execution.runtime.mode": "batch"})
+        assert pipeline.config.strict is True
+
+    @pytest.mark.parametrize("name", ["", "   "])
+    def test_pipeline_rejects_empty_job_name(self, name) -> None:
+        with pytest.raises(ValueError, match="must not be empty"):
+            Pipeline(name=name)
+
+        with pytest.raises(TypeError, match="string or None"):
+            Pipeline(name=1)  # type: ignore[arg-type]
+
+    def test_statement_set_requires_a_pipeline(self) -> None:
+        with pytest.raises(TypeError, match="must be a Pipeline"):
+            StatementSet(KleinContext())  # type: ignore[arg-type]
+
+    def test_pipeline_can_opt_into_application_metadata(self) -> None:
+        pipeline = Pipeline({"application.owner": "analytics"}, strict_config=False)
+
+        assert pipeline.config.to_dict() == {"application.owner": "analytics"}
 
     def test_ray_data_collecting_sink_must_be_executed_alone(self) -> None:
         context = KleinContext.reset()

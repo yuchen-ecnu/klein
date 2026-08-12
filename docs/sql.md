@@ -328,7 +328,10 @@ Catalog tables follow Flink Table DDL: the schema is logical metadata and the
 not open files, create Kafka consumers, or launch Ray tasks.
 
 ```python
-ray.klein.execute_sql("""
+from ray.klein import Pipeline
+
+pipeline = Pipeline(name="table-insert")
+pipeline.execute_sql("""
     CREATE TEMPORARY TABLE input_events (
         event_id BIGINT NOT NULL,
         payload STRING
@@ -342,7 +345,7 @@ ray.klein.execute_sql("""
     )
 """)
 
-ray.klein.execute_sql("""
+pipeline.execute_sql("""
     CREATE TABLE output_rows (
         event_id BIGINT,
         payload STRING
@@ -353,11 +356,26 @@ ray.klein.execute_sql("""
     )
 """)
 
-ray.klein.execute_sql("""
+handle = pipeline.execute_sql("""
     INSERT INTO output_rows
     SELECT event_id, payload FROM input_events
 """)
-ray.klein.execute("table-insert").wait()
+handle.wait()
+```
+
+A single `INSERT INTO` submits directly. Group multiple inserts with one
+statement set when they must share a job:
+
+```python
+pipeline.execute_sql("""
+    CREATE TABLE audit_rows (event_id BIGINT, payload STRING) WITH (
+        'connector' = 'print'
+    )
+""")
+statements = pipeline.create_statement_set()
+statements.add_insert_sql("INSERT INTO output_rows SELECT * FROM input_events")
+statements.add_insert_sql("INSERT INTO audit_rows SELECT * FROM input_events")
+statements.execute().wait()
 ```
 
 In streaming mode, the filesystem sink is checkpoint-transactional. Part files

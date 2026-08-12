@@ -45,3 +45,9 @@ def source(operation: str | Callable[..., Any], /, *args: Any, **kwargs: Any) ->
 
 def from_ray_dataset(dataset: Dataset) -> DataStream:
     return KleinContext.current().data.from_dataset(dataset)
+
+
+def from_ray_data(dataset: Dataset) -> DataStream:
+    """Adapt an existing Ray Dataset using explicit boundary vocabulary."""
+
+    return KleinContext.current().data.from_dataset(dataset)

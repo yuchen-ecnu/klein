@@ -109,21 +109,24 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 
 ## Quick start
 
-Klein builds the bounded graph lazily. A terminal operation registers its sink,
-and `execute("job-name")` runs all registered sinks explicitly:
+Klein builds the bounded graph lazily. `Pipeline` gives one job an explicit
+owner, while a single terminal submits itself directly:
 
 ```python
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
-stream = ray.klein.from_items(
-    [
-        {"name": "Ada", "amount": 4},
-        {"name": "Grace", "amount": 7},
-    ]
-).map(lambda row: {**row, "amount": row["amount"] * 2})
-stream.take_all()
-rows = ray.klein.execute("quick-start").get()
+pipeline = Pipeline(name="quick-start")
+rows = (
+    pipeline.from_items(
+        [
+            {"name": "Ada", "amount": 4},
+            {"name": "Grace", "amount": 7},
+        ]
+    )
+    .map(lambda row: {**row, "amount": row["amount"] * 2})
+    .collect()
+    .result()
+)
 
 print(rows)
 ```
@@ -132,10 +135,15 @@ print(rows)
 [{'name': 'Ada', 'amount': 8}, {'name': 'Grace', 'amount': 14}]
 ```
 
-Source construction follows `ray.data`: for example,
-`ray.klein.read_parquet(...)` creates a bounded stream using the installed Ray
-Data reader. Native methods such as `stream.map(...)` use Klein semantics;
-`stream.data.map(...)` delegates to the installed Ray Data implementation.
+The module-level `ray.klein` API and `execute()` remain supported when one
+implicit, deferred pipeline is convenient. Multiple sinks on an explicit
+pipeline can be grouped with `pipeline.create_statement_set()`. Source
+construction follows `ray.data`: for
+example, `pipeline.ray_data.read_parquet(...)` creates a bounded stream using
+the installed Ray Data reader. Native methods such as `stream.map(...)` use
+Klein semantics; `stream.ray_data.map(...)` explicitly delegates to the
+installed Ray Data implementation. The shorter `.data` spelling remains
+available for compatibility.
 
 For continuous execution, see the
 [Kafka walkthrough](docs/getting-started.md#submit-a-dataflow) and the complete

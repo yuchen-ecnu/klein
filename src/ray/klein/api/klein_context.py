@@ -63,12 +63,16 @@ def _normalize_kafka_value_format(
     *,
     trigger: str,
 ) -> dict[str, Any] | None:
-    if value_format not in {"raw", "canal-json"}:
-        raise ValueError("value_format must be 'raw' or 'canal-json'")
+    if value_format not in {"raw", "json", "canal-json"}:
+        raise ValueError("value_format must be 'raw', 'json', or 'canal-json'")
     if value_format == "raw":
         if format_options:
             raise ValueError("format_options require a non-raw value_format")
         return None
+    if value_format == "json":
+        from ray.klein.formats.kafka_json import _normalize_kafka_json_options
+
+        return _normalize_kafka_json_options(format_options)
     if trigger != "continuous":
         raise ValueError("value_format='canal-json' requires trigger='continuous'")
     from ray.klein.formats.canal_json import _normalize_canal_json_options
@@ -101,9 +105,18 @@ class KleinContext:
         default=None,
     )
 
-    def __init__(self, configuration: ConfigInput = None) -> None:
+    def __init__(
+        self,
+        configuration: ConfigInput = None,
+        *,
+        strict_config: bool | None = None,
+    ) -> None:
         self._lock = RLock()
-        self._config = configuration if isinstance(configuration, Configuration) else Configuration(configuration)
+        self._config = (
+            configuration
+            if isinstance(configuration, Configuration) and strict_config is None
+            else Configuration(configuration, strict=strict_config)
+        )
         self._sinks: list[StreamSink] = []
         self._inflight_sink_ids: set[int] = set()
         self._last_stream_id = 0
@@ -173,10 +186,17 @@ class KleinContext:
         with self._lock:
             return tuple(self._sinks)
 
-    def configure(self, options: ConfigInput = None) -> "KleinContext":
+    def configure(
+        self,
+        options: ConfigInput = None,
+        *,
+        strict: bool | None = None,
+    ) -> "KleinContext":
         """Overlay explicit code configuration and return this context."""
 
         with self._lock:
+            if strict is not None and strict != self._config.strict:
+                self._config = Configuration(self._config, strict=strict)
             self._config.update(options)
         return self
 
@@ -185,6 +205,12 @@ class KleinContext:
         """Public, version-adaptive bridge to the installed ``ray.data`` API."""
 
         return RayDataContextAdapter(self)
+
+    @property
+    def ray_data(self) -> RayDataContextAdapter:
+        """Explicitly enter the lazy Ray Data source namespace."""
+
+        return self.data
 
     @property
     def sql_session(self) -> "SQLSession":
@@ -285,7 +311,7 @@ class KleinContext:
         concurrency: int | None = None,
         partition_discovery_interval_ms: int = 30_000,
         max_batch_size: int = 1_000,
-        value_format: Literal["raw", "canal-json"] = "raw",
+        value_format: Literal["raw", "json", "canal-json"] = "raw",
         format_options: dict[str, Any] | None = None,
     ) -> "DataStream":
         """Read a bounded Kafka snapshot or an unbounded Kafka stream.
@@ -293,7 +319,9 @@ class KleinContext:
         ``trigger="once"`` preserves :func:`ray.data.read_kafka` semantics.
         ``trigger="continuous"`` runs a checkpoint-aware Klein source and
         keeps polling until the job is drained. ``value_format="raw"`` emits
-        Ray Data's byte-oriented Kafka schema. ``value_format="canal-json"``
+        Ray Data's byte-oriented Kafka schema. ``value_format="json"``
+        decodes an ordinary UTF-8 JSON object in both execution modes.
+        ``value_format="canal-json"``
         is continuous-only and expands Canal FlatMessage values into native
         INSERT/UPDATE/DELETE changelog rows.
         """
@@ -305,8 +333,9 @@ class KleinContext:
             format_options,
             trigger=trigger,
         )
+        source_value_format = "raw" if value_format == "json" else value_format
         if trigger == "continuous":
-            return self._read_continuous_kafka(
+            stream = self._read_continuous_kafka(
                 topics,
                 bootstrap_servers=bootstrap_servers,
                 start_offset=start_offset,
@@ -321,30 +350,39 @@ class KleinContext:
                 concurrency=concurrency,
                 partition_discovery_interval_ms=partition_discovery_interval_ms,
                 max_batch_size=max_batch_size,
-                value_format=value_format,
-                format_options=normalized_format_options,
+                value_format=source_value_format,
+                format_options=None if value_format == "json" else normalized_format_options,
             )
+        else:
+            if concurrency is not None:
+                raise ValueError("concurrency is only supported when trigger='continuous'")
+            if partition_discovery_interval_ms != 30_000 or max_batch_size != 1_000:
+                raise ValueError("partition discovery and poll batch options require trigger='continuous'")
 
-        if concurrency is not None:
-            raise ValueError("concurrency is only supported when trigger='continuous'")
-        if partition_discovery_interval_ms != 30_000 or max_batch_size != 1_000:
-            raise ValueError("partition discovery and poll batch options require trigger='continuous'")
+            stream = self.data.source(
+                "read_kafka",
+                topics,
+                bootstrap_servers=bootstrap_servers,
+                trigger=trigger,
+                start_offset=start_offset,
+                end_offset=end_offset,
+                consumer_config=consumer_config,
+                num_cpus=num_cpus,
+                num_gpus=num_gpus,
+                memory=memory,
+                ray_remote_args=ray_remote_args,
+                override_num_blocks=override_num_blocks,
+                timeout_ms=timeout_ms,
+            )
+        if value_format == "json":
+            from ray.klein.formats.kafka_json import KafkaJSONDecoder
 
-        return self.data.source(
-            "read_kafka",
-            topics,
-            bootstrap_servers=bootstrap_servers,
-            trigger=trigger,
-            start_offset=start_offset,
-            end_offset=end_offset,
-            consumer_config=consumer_config,
-            num_cpus=num_cpus,
-            num_gpus=num_gpus,
-            memory=memory,
-            ray_remote_args=ray_remote_args,
-            override_num_blocks=override_num_blocks,
-            timeout_ms=timeout_ms,
-        )
+            return stream.map(
+                KafkaJSONDecoder,
+                fn_constructor_kwargs=normalized_format_options,
+                name="DecodeKafkaJSON",
+            )
+        return stream
 
     def _read_continuous_kafka(
         self,
@@ -686,6 +724,16 @@ class KleinContext:
             self._inflight_sink_ids.difference_update(selected_ids)
         return handle
 
+    def run(
+        self,
+        job_name: str | None = None,
+        *,
+        sinks: Sequence[StreamSink] | None = None,
+    ) -> "JobHandle":
+        """Run pending terminals using the more concise pipeline vocabulary."""
+
+        return self.execute(job_name, sinks=sinks)
+
     def explain(
         self,
         job_name: str | None = None,
@@ -726,6 +774,19 @@ class KleinContext:
         with self._lock:
             self._sinks.append(sink)
 
+    def _discard_sink(self, sink: StreamSink) -> None:
+        """Remove one unsubmitted terminal after construction is rolled back."""
+
+        with self._lock:
+            self._sinks = [pending for pending in self._sinks if pending is not sink]
+
+    def _finalize_sink(self, sink: StreamSink, *, job_name: str | None = None) -> Any:
+        """Return a lazy legacy terminal, or its interactive result."""
+
+        if self.interactive_mode_enabled:
+            return self.execute(job_name or sink.name, sinks=(sink,)).result()
+        return sink
+
 
 def current_context() -> KleinContext:
     return KleinContext.current()
@@ -744,10 +805,14 @@ def reset_context(configuration: ConfigInput = None) -> KleinContext:
     return KleinContext.reset(configuration)
 
 
-def configure(options: ConfigInput = None) -> Configuration:
+def configure(
+    options: ConfigInput = None,
+    *,
+    strict: bool | None = None,
+) -> Configuration:
     """Configure subsequent graph construction and return the effective config."""
 
-    return KleinContext.current().configure(options).config
+    return KleinContext.current().configure(options, strict=strict).config
 
 
 def get_config() -> Configuration:
@@ -775,6 +840,16 @@ def execute(
         raise TypeError("sinks must contain only StreamSink terminal operations")
     context = selected_sinks[0].context if selected_sinks else KleinContext.current()
     return context.execute(job_name, sinks=selected_sinks)
+
+
+def run(
+    job_name: str | None = None,
+    *,
+    sinks: Sequence[StreamSink] | None = None,
+) -> JobHandle:
+    """Run module-level terminal operations; alias of :func:`execute`."""
+
+    return execute(job_name, sinks=sinks)
 
 
 def explain(

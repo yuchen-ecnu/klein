@@ -31,6 +31,15 @@ class JobHandle(ABC):
         sinks. A collecting ``take``/``take_all`` terminal must execute alone.
         """
 
+    def result(self) -> Any:
+        """Block and return a collecting terminal's result.
+
+        This is the preferred user-facing spelling of :meth:`get`; ``get`` is
+        retained for compatibility.
+        """
+
+        return self.get()
+
     @property
     @abstractmethod
     def status(self) -> JobStatus:

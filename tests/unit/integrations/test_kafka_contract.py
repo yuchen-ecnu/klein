@@ -6,6 +6,7 @@ from ray.klein.api.job_client import JobClient
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.api.row_kind import RowKind
 from ray.klein.config.runtime_execution_mode import RuntimeExecutionMode
+from ray.klein.formats.kafka_json import KafkaJSONDecoder, decode_kafka_json
 from ray.klein.integrations.kafka import KafkaSink, KafkaSource
 from ray.klein.runtime.graph.logical_graph import LogicalGraph
 
@@ -187,3 +188,44 @@ def test_canal_json_value_format_requires_continuous_kafka() -> None:
             bootstrap_servers="localhost:9092",
             value_format="canal-json",
         )
+
+
+def test_kafka_json_value_format_builds_a_portable_decode_operator() -> None:
+    context = KleinContext()
+    stream = context.read_kafka(
+        "orders",
+        bootstrap_servers="localhost:9092",
+        trigger="continuous",
+        value_format="json",
+        format_options={"include_metadata": True},
+    )
+
+    function = stream.stream_operator.logical_function
+    source_function = stream.input_streams[0].stream_operator.logical_function
+    assert function.function is KafkaJSONDecoder
+    assert function.constructor_kwargs == {
+        "include_metadata": True,
+        "metadata_prefix": "__kafka_",
+    }
+    assert source_function.function is KafkaSource
+    assert "value_format" not in source_function.constructor_kwargs
+
+
+def test_decode_kafka_json_returns_payload_with_optional_metadata() -> None:
+    record = {
+        "topic": "orders",
+        "partition": 2,
+        "offset": 7,
+        "timestamp": 123,
+        "key": b"o-1",
+        "headers": {},
+        "value": b'{"order_id":"o-1","amount":12.5}',
+    }
+
+    assert decode_kafka_json(record) == {"order_id": "o-1", "amount": 12.5}
+    assert decode_kafka_json(record, include_metadata=True)["__kafka_offset"] == 7
+
+
+def test_decode_kafka_json_rejects_non_object_values() -> None:
+    with pytest.raises(ValueError, match="must be an object"):
+        decode_kafka_json({"value": b"[1, 2]"})

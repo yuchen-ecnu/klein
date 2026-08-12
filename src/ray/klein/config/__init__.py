@@ -18,11 +18,14 @@ _EXPORTS = {
     "JobManagerOptions": ("ray.klein.config.job_manager_options", "JobManagerOptions"),
     "EnvironmentVariables": ("ray.klein.config.environment_variables", "EnvironmentVariables"),
     "ObservabilityOptions": ("ray.klein.config.observability_options", "ObservabilityOptions"),
+    "PipelineOptions": ("ray.klein.config.pipeline_options", "PipelineOptions"),
+    "RestartStrategyOptions": ("ray.klein.config.restart_strategy_options", "RestartStrategyOptions"),
     "RuntimeExecutionMode": ("ray.klein.config.runtime_execution_mode", "RuntimeExecutionMode"),
     "ServeOptions": ("ray.klein.config.serve_options", "ServeOptions"),
     "SQLDownloadOptions": ("ray.klein.config.sql_download_options", "SQLDownloadOptions"),
     "StateOptions": ("ray.klein.config.state_options", "StateOptions"),
     "UDFOptions": ("ray.klein.config.udf_options", "UDFOptions"),
+    "TableOptions": ("ray.klein.config.table_options", "TableOptions"),
 }
 
 __all__ = sorted(_EXPORTS)

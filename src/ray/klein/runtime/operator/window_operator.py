@@ -22,7 +22,7 @@ class WindowOperator(ManagedStateOperator):
         logical_function=None,
         *,
         key_selector: Callable[[Mapping[str, Any]], Any],
-        timestamp_selector: Callable[[Mapping[str, Any]], int],
+        timestamp_selector: Callable[[Mapping[str, Any]], int] | None = None,
         assigner: WindowAssigner,
         reduce_function: Callable[[Any, Any], Any],
         allowed_lateness: timedelta = timedelta(0),
@@ -51,7 +51,9 @@ class WindowOperator(ManagedStateOperator):
     ) -> None:
         timestamp = context.timestamp
         if timestamp is None or timestamp < 0:
-            raise ValueError("window timestamp_selector must return a non-negative integer")
+            raise ValueError(
+                "window timestamp_selector must return a non-negative integer, or event time must be assigned upstream"
+            )
         dropped_from_window = False
         for window in self._assigner.assign_windows(timestamp):
             target, overlapping = self._session_merge_plan(window)

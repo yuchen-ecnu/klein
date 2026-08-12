@@ -17,6 +17,7 @@ Sink API
    TwoPhaseCommitSinkFunction
 
 .. autoclass:: StreamSink
+   :members: run, wait, result, explain
 
 .. autoclass:: SinkFunction
    :members:

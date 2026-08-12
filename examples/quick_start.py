@@ -1,17 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
 
 def main() -> None:
-    stream = ray.klein.from_items(
-        [
-            {"name": "Ada", "amount": 4},
-            {"name": "Grace", "amount": 7},
-        ]
-    ).map(lambda row: {**row, "amount": row["amount"] * 2})
-    stream.take_all()
-    rows = ray.klein.execute("quick-start").get()
+    pipeline = Pipeline(name="quick-start")
+    rows = (
+        pipeline.from_items(
+            [
+                {"name": "Ada", "amount": 4},
+                {"name": "Grace", "amount": 7},
+            ]
+        )
+        .map(lambda row: {**row, "amount": row["amount"] * 2})
+        .collect()
+        .result()
+    )
     print(rows)
 
 

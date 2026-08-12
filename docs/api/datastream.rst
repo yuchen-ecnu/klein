@@ -20,6 +20,7 @@ DataStream API
    DataStream.filter
    DataStream.union
    DataStream.assign_timestamps_and_watermarks
+   DataStream.with_event_time
    DataStream.key_by
    DataStream.group_by
    DataStream.join
@@ -30,9 +31,11 @@ DataStream API
    DataStream.adaptive_shuffle
    DataStream.partition_by
    DataStream.data
+   DataStream.ray_data
    DataStream.sql
    DataStream.show
    DataStream.take_all
+   DataStream.collect
    DataStream.take
    DataStream.schema
    DataStream.write_files

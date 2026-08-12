@@ -25,6 +25,7 @@ from ray.klein.runtime.operator.map_operator import MapOperator
 from ray.klein.runtime.operator.reduce_operator import ReduceOperator
 from ray.klein.runtime.operator.sink import SinkOperator
 from ray.klein.runtime.operator.source import SourceFunctionOperator
+from ray.klein.runtime.operator.watermark_operator import WatermarkOperator
 from ray.klein.runtime.operator.window_operator import WindowOperator
 from ray.klein.runtime.partitioning.adaptive_partitioner import AdaptivePartitioner
 from ray.klein.runtime.partitioning.broadcast_partitioner import BroadcastPartitioner
@@ -214,6 +215,31 @@ def test_from_values_is_a_bounded_dual_mode_source() -> None:
     assert source.stream_operator.bounded is True
     assert function is not None
     assert function.batch_supported is True
+
+
+def test_event_time_field_flows_into_a_window_without_a_repeated_selector() -> None:
+    timed = (
+        KleinContext()
+        .from_values({"key": "a", "timestamp": 1, "value": 2})
+        .with_event_time(
+            "timestamp",
+            max_out_of_orderness=timedelta(seconds=1),
+            idleness=timedelta(seconds=5),
+        )
+    )
+    result = timed.key_by(_key).window(TumblingWindow(timedelta(seconds=10))).reduce(lambda left, right: left)
+
+    assert isinstance(timed.stream_operator, WatermarkOperator)
+    assert isinstance(result.stream_operator, WindowOperator)
+    assert result.stream_operator._timestamp_selector is None
+
+
+def test_ray_data_namespace_has_an_explicit_alias() -> None:
+    context = KleinContext()
+    stream = context.from_values({"id": 1})
+
+    assert context.ray_data.available == context.data.available
+    assert stream.ray_data.available == stream.data.available
 
 
 def test_map_reduce_forwards_each_stage_configuration() -> None:
