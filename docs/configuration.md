@@ -61,9 +61,12 @@ events = klein.read_kafka(...)
 Use a JSON object string when values contain dictionaries or lists:
 
 ```python
-pipeline = klein.pipeline("""{
+pipeline = klein.pipeline(
+    """{
   "execution.checkpointing.storage-options": {"region": "us-west-2"}
-}""", name="orders")
+}""",
+    name="orders",
+)
 ```
 
 When you call `Configuration.set()` with a `ConfigOption`, pass the final typed
