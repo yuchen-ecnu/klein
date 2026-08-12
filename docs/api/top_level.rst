@@ -7,9 +7,10 @@ Application code normally imports both ``ray`` and ``ray.klein`` and then
 accesses ``ray.klein``. The following categories are documented application
 contracts:
 
-* graph construction and execution: :class:`~ray.klein.DataStream`,
-  ``from_items``, ``from_values``, ``source``, ``execute``, ``explain``, and
-  ``sql``;
+* graph construction and execution: :class:`~ray.klein.Pipeline`,
+  :class:`~ray.klein.StatementSet`, :class:`~ray.klein.DataStream`,
+  ``from_items``, ``from_values``, ``source``, ``run``, ``execute``,
+  ``explain``, and ``sql``;
 * jobs and runtime context: :class:`~ray.klein.JobHandle`,
   :class:`~ray.klein.JobStatus`, :class:`~ray.klein.RuntimeContext`, and
   :class:`~ray.klein.RuntimeInfo`;
@@ -28,7 +29,7 @@ Dynamic Ray Data names
 Public factories discovered from the installed compatible ``ray.data`` module,
 such as ``ray.klein.read_parquet``, are created lazily and are not enumerated in
 ``ray.klein.__all__``. Their signatures and documentation come from that Ray
-version. Use ``dir(ray.klein)`` and ``stream.data.available`` when an
+version. Use ``dir(ray.klein)`` and ``stream.ray_data.available`` when an
 application must support more than one compatible Ray patch.
 
 Runtime bridge exports
@@ -55,7 +56,7 @@ contracts:
 .. code-block:: python
 
    import ray
-   from ray.klein import DataStream, JobHandle
+   from ray.klein import DataStream, JobHandle, Pipeline, StatementSet
    from ray.klein.api import RuntimeContext, SinkFunction, SourceFunction
    from ray.klein.config import ExecutionOptions, RuntimeExecutionMode
    from ray.klein.state import StateTTLConfig, ValueStateDescriptor

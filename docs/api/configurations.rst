@@ -17,6 +17,8 @@ Configuration API
    Configuration.set
    Configuration.update
    Configuration.unset
+   Configuration.strict
+   Configuration.known_keys
    Configuration.to_dict
    Configuration.convert_value
 

@@ -6,9 +6,11 @@ from typing import Any
 import pytest
 from sqlglot import parse_one
 
-from ray.klein import KleinContext, SQLQueryError, SQLSession, TableFactory, sql
+from ray.klein import KleinContext, Pipeline, SQLQueryError, SQLSession, TableFactory, sql
 from ray.klein._internal.sql.execution import _apply_order_and_limit, _build_aggregate_plan, _shuffle_partitions
 from ray.klein._internal.sql.kafka_table_factory import KafkaTableFactory
+from ray.klein.api.completed_job_handle import CompletedJobHandle
+from ray.klein.api.job_client import JobClient
 from ray.klein.api.source_context import SourceContext
 from ray.klein.api.source_function import SourceFunction
 from ray.klein.integrations.filesystem.streaming_file_sink import StreamingFileSink
@@ -424,11 +426,36 @@ def test_canal_json_is_a_kafka_format_and_validates_options() -> None:
         "ddl_handling": "fail",
     }
     assert source.stream_operator.bounded is False
-    with pytest.raises(SQLQueryError, match="must be 'raw' or 'canal-json'"):
+    with pytest.raises(SQLQueryError, match="must be 'raw', 'json', or 'canal-json'"):
         session.execute_sql(
             "CREATE TABLE bad_canal (id STRING) WITH ("
             "'connector'='kafka', 'topic'='events', 'bootstrap_servers'='kafka:9092', 'format'='protobuf')"
         )
+
+
+def test_kafka_json_table_format_builds_the_portable_decoder() -> None:
+    context = KleinContext()
+    table = context.sql_session.execute_sql(
+        """
+        CREATE TABLE json_orders (id STRING) WITH (
+            'connector' = 'kafka',
+            'format' = 'json',
+            'topic' = 'orders',
+            'bootstrap_servers' = 'kafka:9092',
+            'trigger' = 'continuous',
+            'json.include-metadata' = 'true',
+            'json.metadata-prefix' = '_meta_'
+        )
+        """
+    )
+
+    source = KafkaTableFactory().create_source(context, table)
+
+    assert source.name == "DecodeKafkaJSON"
+    assert source.stream_operator.logical_function.constructor_kwargs == {
+        "include_metadata": True,
+        "metadata_prefix": "_meta_",
+    }
 
 
 def test_filesystem_insert_builds_transactional_stream_sink(tmp_path) -> None:
@@ -457,6 +484,68 @@ def test_filesystem_insert_builds_transactional_stream_sink(tmp_path) -> None:
     assert logical_function.constructor_kwargs["filename_prefix"] == "events"
     assert logical_function.constructor_kwargs["max_bytes_per_file"] == 64 * (1 << 20)
     assert sink.resources.effective_concurrency == 2
+
+
+def test_statement_set_defers_sql_inserts_until_one_submission(tmp_path, monkeypatch) -> None:
+    pipeline = Pipeline(name="sql-fanout")
+    session = pipeline.sql_session
+    session.create_temp_view("source_events", pipeline.from_items([{"id": 1}]))
+    for name in ("first_output", "second_output"):
+        session.execute_sql(
+            f"""
+            CREATE TABLE {name} (id BIGINT) WITH (
+                'connector'='filesystem',
+                'path'='{tmp_path / name}',
+                'format'='json'
+            )
+            """
+        )
+    calls = []
+    monkeypatch.setattr(
+        JobClient,
+        "execute",
+        lambda _client, job_name, sinks: calls.append((job_name, tuple(sinks))) or CompletedJobHandle(None),
+    )
+    statements = pipeline.create_statement_set()
+
+    statements.add_insert_sql("INSERT INTO first_output SELECT id FROM source_events")
+    statements.add_insert_sql("INSERT INTO second_output SELECT id FROM source_events")
+
+    assert calls == []
+    assert len(statements.sinks) == 2
+    statements.execute()
+    assert len(calls) == 1
+    assert calls[0][0] == "sql-fanout"
+    assert len(calls[0][1]) == 2
+
+
+def test_pipeline_submits_one_sql_insert_directly(tmp_path, monkeypatch) -> None:
+    pipeline = Pipeline(name="sql-insert")
+    session = pipeline.sql_session
+    session.create_temp_view("source_events", pipeline.from_items([{"id": 1}]))
+    session.execute_sql(
+        f"""
+        CREATE TABLE output_events (id BIGINT) WITH (
+            'connector'='filesystem',
+            'path'='{tmp_path / "output"}',
+            'format'='json'
+        )
+        """
+    )
+    calls = []
+    monkeypatch.setattr(
+        JobClient,
+        "execute",
+        lambda _client, job_name, sinks: calls.append((job_name, tuple(sinks))) or CompletedJobHandle(None),
+    )
+
+    handle = session.execute_sql("INSERT INTO output_events SELECT id FROM source_events")
+
+    assert handle.status.name == "FINISHED"
+    assert len(calls) == 1
+    assert calls[0][0] == "sql-insert"
+    assert len(calls[0][1]) == 1
+    assert pipeline.sinks == ()
 
 
 class _RecordingFactory(TableFactory):

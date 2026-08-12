@@ -133,6 +133,20 @@ their own metadata beside Klein settings. Klein doesn't validate or act on
 unknown keys. Use the [configuration reference](configuration-reference.md) to
 distinguish active Klein options from application-defined values.
 
+An explicit `Pipeline` uses strict configuration by default. This catches
+misspellings at construction time while keeping the legacy module-level API
+permissive for compatibility:
+
+```python
+from ray.klein import Pipeline
+
+pipeline = Pipeline({"execution.runtime.mode": "streaming"})
+```
+
+Use `Configuration(..., strict=True)` or `ray.klein.configure(..., strict=True)`
+to request the same validation without a `Pipeline`. Set `strict_config=False`
+only when a pipeline mapping deliberately contains application metadata.
+
 ## Inspect configuration before submission
 
 Build a `Configuration`, inspect or update it with typed options, and then

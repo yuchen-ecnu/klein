@@ -65,10 +65,17 @@ class KeyedStream:
         self,
         assigner: WindowAssigner,
         *,
-        timestamp_selector: Callable[[dict[str, Any]], int],
+        timestamp_selector: Callable[[dict[str, Any]], int] | None = None,
         allowed_lateness: timedelta = timedelta(0),
         state_ttl: timedelta | None = None,
     ) -> WindowedStream:
+        """Create an event-time window.
+
+        ``timestamp_selector`` is optional after
+        :meth:`~ray.klein.DataStream.with_event_time` or
+        :meth:`~ray.klein.DataStream.assign_timestamps_and_watermarks`.
+        """
+
         from ray.klein.api.windowed_stream import WindowedStream
 
         return WindowedStream(

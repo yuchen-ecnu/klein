@@ -9,36 +9,36 @@ myst:
 
 A Klein job has two distinct lifetimes:
 
-1. On the driver, module-level APIs build a lazy graph ending in one or more
-   sinks; an internal pipeline owner keeps their shared state.
-2. `execute()` compiles that graph and either runs a Ray Data batch job to
-   completion or submits a native streaming job to a detached `JobManager`.
+1. On the driver, transformations build a lazy graph. An explicit `Pipeline`
+   submits a single terminal directly, while `StatementSet` groups multiple
+   side-effect terminals.
+2. Terminal submission compiles that graph and either runs a Ray Data batch job
+   to completion or submits a native streaming job to a detached `JobManager`.
 
 Keeping the builder, submitted job, and returned handle separate makes
 deployment and cleanup predictable. This page describes those boundaries.
 
-## Build one graph, then execute it
+## Submit one terminal directly
 
 Streams created together share graph configuration, identifiers, and SQL
 session state. Streams from different isolated pipelines cannot be combined.
 
-The normal API keeps that owner out of application code:
+An explicit pipeline gives the job a stable name. A single result or write
+terminal submits only its own graph:
 
 ```python
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
-ray.klein.configure({"execution.runtime.mode": "batch"})
-events = ray.klein.from_items([{"id": 1}, {"id": 2}])
+pipeline = Pipeline({"execution.runtime.mode": "batch"}, name="multiply-ids")
+events = pipeline.from_items([{"id": 1}, {"id": 2}])
 result = events.map(lambda row: {"id": row["id"] * 10})
-result.take_all()
-handle = ray.klein.execute("multiply-ids")
+rows = result.collect().result()
 ```
 
-### Advanced isolation
+### Deferred compatibility API
 
-Create an explicit context only when one process must build independent
-pipelines or needs isolated configuration:
+The module-level API and `KleinContext` retain deferred registration for
+compatibility and advanced selective execution:
 
 ```python
 from ray.klein import KleinContext
@@ -49,17 +49,17 @@ events.show()
 handle = ctx.execute("show-events")
 ```
 
-Creating a terminal operation such as `show()`, `take_all()`, or `write_*()`
-constructs a `StreamSink` and immediately registers it with that context. The
-graph remains lazy: registration does not read records or create workers.
+With `KleinContext`, creating a terminal operation such as `show()`,
+`take_all()`, or `write_*()` constructs a `StreamSink` and registers it with
+that context. Registration does not read records or create workers.
 
 `execute("job-name")` uses every terminal currently registered in the
 pipeline. A successful submission consumes those registrations; an exception
 keeps them available for inspection or retry. A retry can repeat side effects
 that completed before a batch failure, so connector delivery guarantees still
 apply. Register all branches first, then call `execute()` once to submit them
-as one job. Use a fresh `KleinContext` only for an independently configured
-logical job.
+as one job. New code should use `Pipeline.create_statement_set()` for that
+grouping.
 
 `reset_context()` remains a deprecated compatibility helper for ambient
 module-level pipelines. New module-level code should finish graph construction
@@ -68,18 +68,18 @@ context only for the advanced isolation case.
 
 ## Explain before execution
 
-`explain()` compiles the registered graph and returns its resource plan as
-JSON. It does not initialize Ray, create a `JobManager`, run a source, or invoke
-a sink:
+`StatementSet.explain()` compiles the grouped graph and returns its resource
+plan as JSON. It does not initialize Ray, create a `JobManager`, run a source,
+or invoke a sink:
 
 ```python
-print(ray.klein.explain("multiply-ids"))
+print(statements.explain())
 ```
 
-Attach every intended sink before calling `explain`; the plan includes every
-terminal currently registered in that pipeline. Explaining does not consume
-the registrations, so the following `execute("multiply-ids")` submits the same
-graph as long as no other terminals are added in between.
+Add every intended sink before calling `explain`; the plan includes every
+terminal in that statement set. Explaining does not consume the statements, so
+the following `statements.execute()` submits the same graph. The deferred
+module-level `ray.klein.explain()` API remains available for compatibility.
 
 Plan construction includes the Ray Serve graph rewrite and any resource plan
 loaded through the environment. It can also persist the resulting resource
@@ -127,11 +127,12 @@ The two handle types intentionally have different meanings:
 |---|---|---|
 | `status` | Always `JobStatus.FINISHED`. | RPC to the job's `JobManager`. |
 | `wait()` | Returns immediately. | Blocks without polling until a terminal state; raises `KleinError` for `FAILED`. |
-| `get()` | Returns the in-memory batch result or compile-only logical graph. | Waits for terminal state; drains one collecting sink only after `FINISHED`, and raises `KleinError` for `FAILED` or `CANCELLED`. |
+| `result()` / `get()` | Returns the in-memory batch result or compile-only logical graph. | Waits for terminal state; drains one collecting sink only after `FINISHED`, and raises `KleinError` for `FAILED` or `CANCELLED`. |
 | `cancel(timeout=60)` | Returns `True`; there is no live work to stop. | Requests coordinated teardown and returns whether cancellation completed. |
 | `namespace` | `None`. | The Ray namespace/job identifier. |
 
-Use `get()` only when the job contains one result-producing terminal. Klein
+Use `result()` only when the job contains one result-producing terminal;
+`get()` remains a compatibility alias. Klein
 enforces that `take()` or `take_all()` is the job's only terminal in both batch
 and streaming modes, so collection has one consistent contract. Use `wait()`
 for one or more side-effect terminals. Batch errors have already been raised by
@@ -224,16 +225,23 @@ status`, `attach`, and `cancel` use after the original driver exits. See
 
 ## Execute multiple sinks as one graph
 
-Register every terminal before the final call when branches must share upstream
-work and one job lifecycle:
+Use a `StatementSet` when branches must share upstream work and one job
+lifecycle:
 
 ```python
-prepared = events.map(normalize, name="Normalize")
-prepared.show()
-prepared.write_json("s3://bucket/orders/")
+from ray.klein import Pipeline
 
-plan = ray.klein.explain("orders")
-handle = ray.klein.execute("orders")
+pipeline = Pipeline(name="orders")
+prepared = pipeline.from_items([{"id": 1}, {"id": 2}]).map(
+    lambda row: row,
+    name="Normalize",
+)
+statements = pipeline.create_statement_set()
+statements.add(prepared.show)
+statements.add(prepared.write_json, "s3://bucket/orders/")
+
+plan = statements.explain()
+handle = statements.execute()
 ```
 
 In batch mode, a shared fan-out may materialize the common `Dataset` so its
@@ -261,10 +269,10 @@ preview_handle = ray.klein.execute("orders-preview", sinks=(preview_sink,))
 archive_handle = ray.klein.execute("orders-archive", sinks=(archive_sink,))
 ```
 
-An isolated context exposes the equivalent advanced form as
+An isolated legacy context exposes the equivalent advanced form as
 `ctx.execute("orders-preview", sinks=(preview_sink,))`. Keep explicit root
 selection local to code that genuinely needs multiple submission boundaries;
-the normal multi-sink path is to register all terminals and execute once.
+the normal multi-sink path for a `Pipeline` is `StatementSet`.
 
 ## Cancel and drain safely
 

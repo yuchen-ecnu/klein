@@ -16,23 +16,23 @@ API. Instead, source factories are exposed directly from `ray.klein`:
 
 - `ray.klein.read_csv`, `read_parquet`, `range`, and other factories resolve
   their installed `ray.data` counterpart dynamically.
-- `stream.data` resolves public `ray.data.Dataset` methods.
+- `stream.ray_data` resolves public `ray.data.Dataset` methods. The shorter
+  `stream.data` alias remains available for compatibility.
 
 Resolution happens against the installed Ray version when the graph executes.
 Arguments are forwarded unchanged, while `help()`, `inspect.signature()`, and
 the docstring come from that same Ray installation.
 
 ```python
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
-stream = ray.klein.read_csv("s3://bucket/input").data.random_shuffle(seed=7)
-stream.data.take(10)
-rows = ray.klein.execute("ray-data-read").get()
+pipeline = Pipeline(name="ray-data-read")
+stream = pipeline.ray_data.read_csv("s3://bucket/input").ray_data.random_shuffle(seed=7)
+rows = stream.ray_data.take(10).result()
 ```
 
 New Ray factories and Dataset methods are available automatically. Inspect the
-current installation with `dir(ray.klein)` and `stream.data.available`.
+current installation with `dir(ray.klein)` and `stream.ray_data.available`.
 
 ## Ray Data expressions
 
@@ -89,17 +89,21 @@ explicit forms cover third-party connectors and multi-step Ray objects such as
 `GroupedData` without requiring Klein to understand those types:
 
 ```python
-source = ray.klein.source(my_dataset_factory, config)
+from ray.klein import Pipeline
+
+pipeline = Pipeline(name="customer-summary")
+source = pipeline.ray_data.source(my_dataset_factory, config)
 
 aggregated = source.data.transform(lambda ds: ds.groupby("customer_id").mean("amount"))
 
-aggregated.data.consume(lambda ds: ds.summary())
-summary = ray.klein.execute("customer-summary").get()
+summary = aggregated.data.consume(lambda ds: ds.summary()).result()
 ```
 
 A transform callable must return exactly one `Dataset`. A consumer may return
-any value. Consumers remain lazy: the terminal call registers the consumer and
-`ray.klein.execute("job-name").get()` returns its result.
+any value. On an explicit `Pipeline`, the consumer submits its single terminal
+and returns a job handle. The module-level API remains deferred: its terminal
+registers the consumer, and `ray.klein.execute("job-name").result()` returns
+the value.
 
 Other Klein streams passed anywhere inside positional or keyword arguments are
 automatically compiled into Dataset dependencies. This supports methods such

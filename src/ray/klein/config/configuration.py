@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import difflib
 import enum
 import json
 import math
@@ -136,13 +137,18 @@ class Configuration:
         *,
         environment: Mapping[str, str] | None = None,
         include_environment: bool = True,
+        strict: bool | None = None,
     ) -> None:
         self._values: dict[str, Any] = {}
         self._environment: dict[str, str]
+        self._strict: bool
         if isinstance(options, Configuration):
+            self._strict = options._strict if strict is None else _validate_strict(strict)
             self._environment = dict(options._environment)
-            self._values.update(options._values)
+            for key, value in options._values.items():
+                self._set_value(key, value)
             return
+        self._strict = False if strict is None else _validate_strict(strict)
         self._environment = (
             {
                 key.upper(): value
@@ -224,7 +230,36 @@ class Configuration:
         return self._environment.get(environment_variable_for(canonical), _MISSING)
 
     def _set_value(self, key: str, value: Any) -> None:
-        self._values[normalize_config_key(key)] = value
+        canonical = normalize_config_key(key)
+        if self._strict:
+            self._validate_known_key(canonical)
+        self._values[canonical] = value
+
+    @property
+    def strict(self) -> bool:
+        """Whether unknown framework configuration keys are rejected."""
+
+        return self._strict
+
+    @staticmethod
+    def known_keys() -> tuple[str, ...]:
+        """Return the canonical configuration keys owned by Klein."""
+
+        from ray.klein.config.option_registry import known_config_options
+
+        return tuple(known_config_options())
+
+    @classmethod
+    def _validate_known_key(cls, key: str) -> None:
+        known = cls.known_keys()
+        if key in known:
+            return
+        matches = difflib.get_close_matches(key, known, n=1, cutoff=0.6)
+        suggestion = f" Did you mean {matches[0]!r}?" if matches else ""
+        raise ValueError(
+            f"unknown Klein configuration option {key!r}.{suggestion} "
+            "Use strict=False only when application metadata must share the configuration mapping."
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self._values)
@@ -266,3 +301,9 @@ class Configuration:
             return _validate_typed_value(target, converted)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"unable to convert {raw_value!r} for {option.key!r} to {target.__name__}") from exc
+
+
+def _validate_strict(value: bool) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError("strict must be a boolean")
+    return value

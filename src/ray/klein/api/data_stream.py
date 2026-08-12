@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from ray.data.datasource import Connection
     from ray.data.expressions import Expr
 
+    from ray.klein.api.job_handle import JobHandle
     from ray.klein.api.keyed_stream import KeyedStream
     from ray.klein.api.klein_context import KleinContext
     from ray.klein.api.row_kind import RowKind
@@ -164,6 +165,12 @@ class DataStream(Stream):
         """Public, version-adaptive bridge to ``ray.data.Dataset`` methods."""
 
         return RayDataStreamAdapter(self)
+
+    @property
+    def ray_data(self) -> RayDataStreamAdapter:
+        """Explicitly enter the lazy Ray Data Dataset-method namespace."""
+
+        return self.data
 
     def sql(
         self,
@@ -310,9 +317,7 @@ class DataStream(Stream):
             node_type=NodeType.TAKE if call.dataset_method_name in {"take", "take_all"} else None,
             name=f"RayData.{call.display_name}",
         )
-        if self.context.interactive_mode_enabled:
-            return input_streams[0].context.execute(sink.name, sinks=(sink,)).get()
-        return sink
+        return input_streams[0].context._finalize_sink(sink)
 
     @public_api
 
@@ -951,6 +956,47 @@ class DataStream(Stream):
         )
 
     @public_api
+    def with_event_time(
+        self,
+        timestamp: str | Callable[[Mapping[str, Any]], int],
+        *,
+        max_out_of_orderness: timedelta = timedelta(0),
+        idleness: timedelta | None = None,
+    ) -> "DataStream":
+        """Assign event time with a field name or timestamp callable.
+
+        A downstream keyed window can then use the attached record timestamp
+        without repeating a ``timestamp_selector``.
+        """
+
+        from operator import itemgetter
+
+        from ray.klein.api.watermark_strategy import WatermarkStrategy
+
+        if isinstance(timestamp, str):
+            if not timestamp:
+                raise ValueError("timestamp field must not be empty")
+            selector = itemgetter(timestamp)
+        elif callable(timestamp):
+            selector = timestamp
+        else:
+            raise TypeError("timestamp must be a field name or callable")
+        if not isinstance(max_out_of_orderness, timedelta):
+            raise TypeError("max_out_of_orderness must be a timedelta")
+        if max_out_of_orderness < timedelta(0):
+            raise ValueError("max_out_of_orderness must not be negative")
+        if idleness is not None and not isinstance(idleness, timedelta):
+            raise TypeError("idleness must be a timedelta or None")
+
+        strategy = WatermarkStrategy.for_bounded_out_of_orderness(
+            max_out_of_orderness,
+            selector,
+        )
+        if idleness is not None:
+            strategy = strategy.with_idleness(idleness)
+        return self.assign_timestamps_and_watermarks(strategy)
+
+    @public_api
     def key_by(self, fn: Callable[[dict[str, Any]], Any]) -> "KeyedStream":
         """Hash-partition this branch and expose managed keyed operations."""
 
@@ -1124,7 +1170,7 @@ class DataStream(Stream):
         batch_size: int | None = None,
         batch_timeout: timedelta = timedelta(seconds=3),
         name: str | None = None,
-    ) -> "StreamSink | None":
+    ) -> "JobHandle | StreamSink | None":
         """Print up to the given number of rows from the :class:`DataStream`.
 
         Args:
@@ -1136,9 +1182,9 @@ class DataStream(Stream):
             name: The name of show operator, defaults to "Show".
 
         Returns:
-            A terminal :class:`StreamSink` outside interactive mode. In
-            interactive mode the bounded graph runs immediately and the
-            terminal operation returns ``None`` after printing.
+            A job handle for an explicit :class:`~ray.klein.Pipeline`, or a
+            lazy terminal for the legacy deferred context. Interactive mode
+            returns ``None`` after printing.
         """
         from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 
@@ -1159,17 +1205,17 @@ class DataStream(Stream):
         )
 
     @public_api
-    def take_all(self, limit: int | None = None) -> "StreamSink | list[dict[str, Any]]":
+    def take_all(self, limit: int | None = None) -> "JobHandle | StreamSink | list[dict[str, Any]]":
         """Attach a sink that collects all rows from this :class:`DataStream`.
 
         Args:
             limit: Raise an error if the size exceeds the specified limit.
 
         Returns:
-            The registered terminal sink. Collection must be its own job;
-            then call :func:`ray.klein.execute` and
-            :meth:`~ray.klein.JobHandle.get` to retrieve the rows. The
-            deprecated interactive mode returns the rows directly.
+            A submitted job handle for an explicit
+            :class:`~ray.klein.Pipeline`, or a lazy terminal for the legacy
+            deferred context. Both expose ``result()``. Deprecated interactive
+            mode returns the rows directly.
         """
         return self.write(
             CollectFunction,
@@ -1186,17 +1232,38 @@ class DataStream(Stream):
         )
 
     @public_api
-    def take(self, limit: int = 20) -> "StreamSink | list[dict[str, Any]]":
+    def collect(self, limit: int | None = None) -> "JobHandle | StreamSink | list[dict[str, Any]]":
+        """Submit or attach a terminal whose ``result()`` returns all rows.
+
+        Examples:
+            .. code-block:: python
+
+                rows = stream.collect().result()
+
+        Args:
+            limit: Raise an error if the result contains more rows.
+
+        Returns:
+            An explicit :class:`~ray.klein.Pipeline` submits this single
+            terminal immediately and returns its job handle. The legacy
+            module-level context returns a lazy terminal sink; both expose
+            ``result()``. Deprecated interactive mode returns the rows.
+        """
+
+        return self.take_all(limit=limit)
+
+    @public_api
+    def take(self, limit: int = 20) -> "JobHandle | StreamSink | list[dict[str, Any]]":
         """Attach a sink that collects up to ``limit`` rows.
 
         Args:
             limit: The maximum number of rows to return.
 
         Returns:
-            The registered terminal sink. Collection must be its own job;
-            then call :func:`ray.klein.execute` and
-            :meth:`~ray.klein.JobHandle.get` to retrieve the rows. The
-            deprecated interactive mode returns the rows directly.
+            A submitted job handle for an explicit
+            :class:`~ray.klein.Pipeline`, or a lazy terminal for the legacy
+            deferred context. Both expose ``result()``. Deprecated interactive
+            mode returns the rows directly.
         """
         return self.write(
             CollectFunction,
@@ -1222,8 +1289,9 @@ class DataStream(Stream):
                 Default is True.
 
         Returns:
-            A terminal :class:`StreamSink` outside interactive mode. In
-            interactive mode, returns the schema reported by Ray Data.
+            A submitted job handle for an explicit
+            :class:`~ray.klein.Pipeline`, a lazy terminal for the legacy
+            deferred context, or the schema value in interactive mode.
         """
         from ray.klein.integrations.console.console_sink import ConsoleSinkFunction
 
@@ -1259,7 +1327,7 @@ class DataStream(Stream):
         ray_remote_args: dict[str, Any] | None = None,
         concurrency: int | None = None,
         ray_data_options: Mapping[str, Any] | None = None,
-    ) -> "StreamSink":
+    ) -> "JobHandle | StreamSink":
         """Write a stream to checkpoint-transactional part files.
 
         Streaming execution keeps files private until their checkpoint metadata
@@ -1311,19 +1379,19 @@ class DataStream(Stream):
         )
 
     @public_api
-    def write_json(self, path: str, **options: Any) -> "StreamSink":
+    def write_json(self, path: str, **options: Any) -> "JobHandle | StreamSink":
         """Write newline-delimited JSON files in batch or streaming mode."""
 
         return self.write_files(path, "json", **options)
 
     @public_api
-    def write_csv(self, path: str, **options: Any) -> "StreamSink":
+    def write_csv(self, path: str, **options: Any) -> "JobHandle | StreamSink":
         """Write CSV files in batch or streaming mode."""
 
         return self.write_files(path, "csv", **options)
 
     @public_api
-    def write_parquet(self, path: str, **options: Any) -> "StreamSink":
+    def write_parquet(self, path: str, **options: Any) -> "JobHandle | StreamSink":
         """Write Parquet files in batch or streaming mode."""
 
         return self.write_files(path, "parquet", **options)
@@ -1340,7 +1408,7 @@ class DataStream(Stream):
         overwrite_kwargs: dict[str, Any] | None = None,
         ray_remote_args: dict[str, Any] | None = None,
         concurrency: int | None = None,
-    ) -> "StreamSink":
+    ) -> "JobHandle | StreamSink":
         """Write this stream to an existing Iceberg table.
 
         Batch execution delegates the full public argument contract to
@@ -1392,7 +1460,7 @@ class DataStream(Stream):
         connection_factory: Callable[[], "Connection"],
         ray_remote_args: dict[str, Any] | None = None,
         concurrency: int | None = None,
-    ) -> "StreamSink":
+    ) -> "JobHandle | StreamSink":
         """Write this stream using a DB-API 2.0 SQL sink.
 
         The arguments match :meth:`ray.data.Dataset.write_sql`. Batch jobs use
@@ -1423,7 +1491,7 @@ class DataStream(Stream):
         )
 
     @public_api
-    def write_text(self, path: str, **options: Any) -> "StreamSink":
+    def write_text(self, path: str, **options: Any) -> "JobHandle | StreamSink":
         """Write one-column UTF-8 text files in streaming mode."""
 
         return self.write_files(path, "text", **options)
@@ -1439,7 +1507,7 @@ class DataStream(Stream):
         *,
         ray_remote_args: dict[str, Any] | None = None,
         concurrency: int | None = None,
-    ) -> "StreamSink":
+    ) -> "JobHandle | StreamSink":
         """Write records to Kafka in batch or streaming execution.
 
         Batch jobs lower to :meth:`ray.data.Dataset.write_kafka`. Streaming
@@ -1500,7 +1568,7 @@ class DataStream(Stream):
         batch_size: int | None = None,
         batch_timeout: timedelta = timedelta(seconds=3),
         name: str | None = None,
-    ) -> "StreamSink":
+    ) -> "JobHandle | StreamSink":
         """Write records to Redis using extracted keys and values.
 
         Args:
@@ -1516,7 +1584,9 @@ class DataStream(Stream):
             name: Operator name.
 
         Returns:
-            :class:`StreamSink`.
+            A submitted job handle for an explicit
+            :class:`~ray.klein.Pipeline`, or a lazy terminal for the legacy
+            deferred context.
         """
         try:
             from ray.klein.integrations.redis.sink import RedisSink
@@ -1576,7 +1646,9 @@ class DataStream(Stream):
             name: operator name
 
         Returns:
-            :class:`StreamSink`.
+            A submitted job handle for an explicit
+            :class:`~ray.klein.Pipeline`, or a lazy terminal for the legacy
+            deferred context.
         """
         from ray.klein.api.stream_sink import StreamSink
 
@@ -1603,6 +1675,4 @@ class DataStream(Stream):
             node_type=node_type,
             name=name,
         )
-        if self.context.interactive_mode_enabled:
-            return data_stream.context.execute(name, sinks=(stream_sink,)).get()
-        return stream_sink
+        return data_stream.context._finalize_sink(stream_sink)

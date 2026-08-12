@@ -8,7 +8,7 @@ myst:
 (klein-getting-started)=
 # Get started with Klein
 
-This guide creates a bounded `DataStream`, executes it explicitly, and shows how to submit a long-running pipeline.
+This guide creates an explicit `Pipeline`, runs a bounded `DataStream`, and shows how to submit a long-running dataflow.
 
 ## Install Klein
 
@@ -32,21 +32,25 @@ integration development environment. RocketMQ also requires the native
 
 ## Run a bounded pipeline
 
-A terminal operation such as `take_all()` registers a sink. Call
-`execute("job-name")` to run every registered sink in the bounded graph:
+`Pipeline` isolates one logical job and rejects misspelled Klein configuration
+keys by default. A single terminal submits itself; `result()` waits for and
+returns collected rows:
 
 ```python
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
-stream = ray.klein.from_items(
-    [
-        {"name": "Ada", "amount": 4},
-        {"name": "Grace", "amount": 7},
-    ]
-).map(lambda row: {**row, "amount": row["amount"] * 2})
-stream.take_all()
-rows = ray.klein.execute("quick-start").get()
+pipeline = Pipeline(name="quick-start")
+rows = (
+    pipeline.from_items(
+        [
+            {"name": "Ada", "amount": 4},
+            {"name": "Grace", "amount": 7},
+        ]
+    )
+    .map(lambda row: {**row, "amount": row["amount"] * 2})
+    .collect()
+    .result()
+)
 
 print(rows)
 ```
@@ -57,74 +61,89 @@ The completed job handle returns these rows:
 [{'name': 'Ada', 'amount': 8}, {'name': 'Grace', 'amount': 14}]
 ```
 
-Klein creates a lazy graph through the registered terminal sinks. `execute()`
-selects batch execution for the bounded source and lowers the graph to Ray Data.
+Klein keeps transformations lazy until `collect()` creates and submits the
+single terminal. Batch execution lowers the graph to Ray Data. The module-level
+`ray.klein` builders plus `execute()` and `JobHandle.get()` remain available
+for applications that prefer one implicit, deferred pipeline.
 
 ## Read data with Ray Data
 
-Source construction follows `ray.data`. Call a reader directly from `ray.klein`, then choose Klein or Ray Data transformations:
+Source construction follows `ray.data`. Use the explicit `ray_data` namespace
+when calling an installed Ray Data reader or Dataset method:
 
 ```python
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
-events = ray.klein.read_parquet("s3://<bucket>/events/")
+pipeline = Pipeline(name="inspect-events")
+events = pipeline.ray_data.read_parquet("s3://<bucket>/events/")
 
 # Use Klein's DataStream semantics.
 filtered = events.filter(lambda row: row["status"] == "ready")
 
 # Use the installed Ray Data Dataset implementation.
-shuffled = filtered.data.random_shuffle(seed=7)
-shuffled.data.take(10)
-rows = ray.klein.execute("inspect-events").get()
+shuffled = filtered.ray_data.random_shuffle(seed=7)
+rows = shuffled.ray_data.take(10).result()
 ```
 
 Klein forwards reader and Dataset arguments to the installed Ray version. See [Ray Data interoperability](ray-data-interop.md) for the execution boundary and advanced adapters, or the [connector catalog](connectors/index.md) to choose an input or output and review all of its options.
 
 ## Submit a dataflow
 
-Register one or more terminal sinks, then submit them together:
+Use a `StatementSet` when multiple side-effect sinks must share one job:
 
 ```python
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
-events = ray.klein.from_items([{"id": 1}, {"id": 2}, {"id": 3}])
+pipeline = Pipeline(name="doubled-events")
+events = pipeline.from_items([{"id": 1}, {"id": 2}, {"id": 3}])
 doubled = events.map(lambda row: {"id": row["id"] * 2})
-doubled.show()
-doubled.filter(lambda row: row["id"] >= 4).show()
+statements = pipeline.create_statement_set()
+statements.add(doubled.show)
+statements.add(doubled.filter(lambda row: row["id"] >= 4).show)
 
-print(ray.klein.explain("doubled-events"))
-job = ray.klein.execute("doubled-events")
+print(statements.explain())
+job = statements.execute()
 job.wait()
 ```
 
-`explain()` returns the dataflow plan without submitting it. `execute()` returns a job handle that you can use to wait for completion or inspect status.
+`StatementSet.explain()` returns the combined dataflow plan without submitting
+it. `StatementSet.execute()` submits every added sink as one job. Calling a
+single `write_*()` outside a statement set submits that sink directly.
 
-Bounded sources complete after producing all records. Streaming sources, such as Kafka or a custom `SourceFunction`, keep the job active until you stop it or the source terminates.
+Bounded sources complete after producing all records. Streaming sources, such
+as Kafka or a custom `SourceFunction`, keep the job active until you stop it or
+the source terminates.
 
 ```python
-events = ray.klein.read_kafka(
+from ray.klein import Pipeline
+
+pipeline = Pipeline(
+    {"execution.runtime.mode": "streaming"},
+    name="processed-events",
+)
+events = pipeline.read_kafka(
     "events",
     bootstrap_servers="localhost:9092",
     trigger="continuous",
     start_offset="latest",
     concurrency=4,
+    value_format="json",
 )
 
-events.write_kafka(
+job = events.write_kafka(
     "processed-events",
     "localhost:9092",
     key_field="event_id",
     value_serializer="json",
     concurrency=4,
 )
-job = ray.klein.execute("processed-events")
 ```
 
-The Kafka source emits the same raw byte schema as `ray.data.read_kafka`. It
-discovers new partitions while running, marks empty inputs idle for watermark
-progress, and resumes from the next offsets stored in the latest checkpoint.
+With `value_format="json"`, the source decodes each UTF-8 JSON object value.
+The default `raw` format emits the same byte schema as `ray.data.read_kafka`.
+The source discovers new partitions while running, marks empty inputs idle for
+watermark progress, and resumes from the next offsets stored in the latest
+checkpoint.
 For bounded jobs, `write_kafka` uses Ray Data. For streaming jobs, Klein owns a
 producer per sink subtask and waits for Kafka delivery acknowledgements before
 advancing checkpoint and replay watermarks. This provides at-least-once
@@ -150,6 +169,23 @@ ray.klein.configure(
 
 This example selects the optional RocksDB backend; install `.[rocksdb]` first.
 The dependency-free default is `memory`.
+
+New code can put the same options on an explicit pipeline. Strict validation
+then reports unknown keys immediately and suggests close canonical names:
+
+```python
+from ray.klein import Pipeline
+
+pipeline = Pipeline(
+    {
+        "execution.runtime.mode": "streaming",
+        "state.backend.type": "rocksdb",
+    }
+)
+```
+
+Use `strict_config=False` only when the mapping intentionally includes
+application-owned metadata alongside Klein options.
 
 See [Configure Klein](configuration.md) for precedence and value conversion,
 then use the [configuration reference](configuration-reference.md) to find every

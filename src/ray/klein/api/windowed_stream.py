@@ -21,7 +21,7 @@ class WindowedStream:
         self,
         stream: DataStream,
         key_selector: Callable[[dict[str, Any]], Any],
-        timestamp_selector: Callable[[dict[str, Any]], int],
+        timestamp_selector: Callable[[dict[str, Any]], int] | None,
         assigner: WindowAssigner,
         allowed_lateness: timedelta,
         state_ttl: timedelta | None,

@@ -5,15 +5,21 @@
 Pipeline configuration and compatibility API
 ============================================
 
-Application code should build streams with module-level ``from_*`` and
-``read_*`` functions, attach terminal sinks, and call ``execute("job-name")``
-after the complete graph has been registered. ``KleinContext`` remains for
-advanced isolation; selective sink roots are documented in the advanced
-section of :doc:`../job-lifecycle`.
+New application code can use :class:`Pipeline` as an explicit, strictly
+configured graph owner. A single terminal submits directly; a
+:class:`StatementSet` groups multiple side-effect sinks. Module-level
+``from_*``, ``read_*``, and ``execute`` remain supported for one implicit,
+deferred pipeline. ``KleinContext`` remains the permissive advanced-isolation
+contract.
 
 .. currentmodule:: ray.klein
 
 .. autoclass:: KleinContext
+
+.. autoclass:: Pipeline
+
+.. autoclass:: StatementSet
+   :members: pipeline, sinks, add, add_sink, add_insert_sql, execute, explain
 
 .. autosummary::
    :nosignatures:
@@ -22,6 +28,7 @@ section of :doc:`../job-lifecycle`.
    KleinContext.sinks
    KleinContext.configure
    KleinContext.data
+   KleinContext.ray_data
    KleinContext.sql_session
    KleinContext.sql
    KleinContext.execute_sql
@@ -32,7 +39,10 @@ section of :doc:`../job-lifecycle`.
    KleinContext.read_canal
    KleinContext.read_rocketmq
    KleinContext.execute
+   KleinContext.run
    KleinContext.explain
+   Pipeline.name
+   Pipeline.create_statement_set
 
 .. autosummary::
    :nosignatures:
@@ -40,6 +50,7 @@ section of :doc:`../job-lifecycle`.
    configure
    get_config
    execute
+   run
    explain
    execute_sql
    register_scalar_function
@@ -48,6 +59,7 @@ section of :doc:`../job-lifecycle`.
    from_items
    from_values
    from_ray_dataset
+   from_ray_data
    source
    dataset_factory
    read_kafka

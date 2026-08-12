@@ -29,6 +29,27 @@ tracks delivered batches rather than event time.
 
 ## Assign timestamps and watermarks
 
+For the common field-based case, assign event time directly and let downstream
+windows reuse the attached timestamp:
+
+```python
+from datetime import timedelta
+from ray.klein import SlidingWindow
+
+timed = events.with_event_time(
+    "event_time_ms",
+    max_out_of_orderness=timedelta(seconds=5),
+    idleness=timedelta(seconds=30),
+)
+
+rolling = timed.key_by(lambda row: row["customer_id"]).window(
+    SlidingWindow(size=timedelta(minutes=10), slide=timedelta(minutes=1))
+)
+```
+
+Use an explicit `WatermarkStrategy` when the timestamp requires a custom
+callable or the strategy is shared across pipelines:
+
 ```python
 from datetime import timedelta
 
@@ -66,10 +87,12 @@ stateful window or join. A later transform preserves the attached record
 timestamp, but an explicit timestamp selector on the stateful operator remains
 the authoritative timestamp for that operator.
 
-Stateful window and join timestamp selectors remain supported and can use the
-same timestamp field. Their event-time timers fire only when the aggregate
-watermark advances. A bounded source emits the maximum watermark before
-`EndOfData`, closing all event-time windows in normal control-message order.
+Stateful window and join timestamp selectors remain supported. A window can
+omit its selector after event time has been assigned; an explicit selector
+overrides the attached record timestamp. Event-time timers fire only when the
+aggregate watermark advances. A bounded source emits the maximum watermark
+before `EndOfData`, closing all event-time windows in normal control-message
+order.
 
 ## Windows, allowed lateness, and late records
 

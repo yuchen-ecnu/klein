@@ -55,14 +55,25 @@ class KafkaTableFactory(TableFactory):
             table.options,
             connector=self.identifier,
             supported=self._OPTIONS,
-            prefixes=("canal-json.",),
+            prefixes=("canal-json.", "json."),
         )
         value_format = self._option(table, "format", "raw")
-        if value_format not in {"raw", "canal-json"}:
-            raise SQLQueryError("Kafka source 'format' must be 'raw' or 'canal-json'")
-        format_options = self._format_options(table)
-        if value_format == "raw" and format_options:
+        if value_format not in {"raw", "json", "canal-json"}:
+            raise SQLQueryError("Kafka source 'format' must be 'raw', 'json', or 'canal-json'")
+        json_options = prefixed_options(table.options, "json.")
+        canal_options = prefixed_options(table.options, "canal-json.")
+        if json_options and value_format != "json":
+            raise SQLQueryError("json.* options require 'format'='json'")
+        if canal_options and value_format != "canal-json":
             raise SQLQueryError("canal-json.* options require 'format'='canal-json'")
+        format_options = self._format_options(table, value_format)
+        if value_format == "json":
+            from ray.klein.formats.kafka_json import _normalize_kafka_json_options
+
+            try:
+                _normalize_kafka_json_options(format_options)
+            except (TypeError, ValueError) as error:
+                raise SQLQueryError(str(error)) from error
         if value_format == "canal-json":
             from ray.klein.formats.canal_json import _normalize_canal_json_options
 
@@ -77,8 +88,11 @@ class KafkaTableFactory(TableFactory):
         return default if value is None else parse_option_value(value)
 
     @staticmethod
-    def _format_options(table: CatalogTable) -> dict[str, Any]:
-        return {name.replace("-", "_"): value for name, value in prefixed_options(table.options, "canal-json.").items()}
+    def _format_options(table: CatalogTable, value_format: str) -> dict[str, Any]:
+        if value_format not in {"json", "canal-json"}:
+            return {}
+        prefix = f"{value_format}."
+        return {name.replace("-", "_"): value for name, value in prefixed_options(table.options, prefix).items()}
 
     def create_source(self, context: KleinContext, table: CatalogTable) -> DataStream:
         topics = self._option(table, "topics", self._option(table, "topic"))
@@ -99,7 +113,7 @@ class KafkaTableFactory(TableFactory):
             "partition_discovery_interval_ms": self._option(table, "partition_discovery_interval_ms", 30_000),
             "max_batch_size": self._option(table, "max_batch_size", 1_000),
             "value_format": value_format,
-            "format_options": self._format_options(table),
+            "format_options": self._format_options(table, value_format),
         }
         return context.read_kafka(topics, bootstrap_servers=bootstrap_servers, **options)
 

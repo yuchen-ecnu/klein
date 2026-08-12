@@ -114,6 +114,25 @@ def test_configuration_accepts_pair_strings_and_json_objects() -> None:
     }
 
 
+def test_strict_configuration_rejects_unknown_keys_with_a_suggestion() -> None:
+    with pytest.raises(ValueError, match=r"Did you mean 'execution\.runtime\.mode'"):
+        Configuration({"execution.runtime.mod": "streaming"}, strict=True)
+
+
+def test_permissive_configuration_retains_application_metadata() -> None:
+    config = Configuration({"application.owner": "analytics"}, strict=False)
+
+    assert config.to_dict() == {"application.owner": "analytics"}
+    assert config.strict is False
+
+
+def test_strict_configuration_exposes_framework_owned_keys() -> None:
+    config = Configuration({"execution.runtime.mode": "streaming"}, strict=True)
+
+    assert config.strict is True
+    assert "execution.runtime.mode" in config.known_keys()
+
+
 def test_environment_is_typed_snapshotted_and_lower_priority(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RAY_KLEIN_EXECUTION_RUNTIME_MODE", "streaming")
     monkeypatch.setenv("RAY_KLEIN_PIPELINE_OPERATOR_CHAINING_ENABLED", "false")

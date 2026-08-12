@@ -469,6 +469,11 @@ msgstr ""
 "映射用于选择和配置连接器工厂。创建表不会打开文件、创建 Kafka consumer 或启动 Ray 任务。"
 
 msgid ""
+"A single `INSERT INTO` submits directly. Group multiple inserts with one "
+"statement set when they must share a job:"
+msgstr "单条 `INSERT INTO` 会直接提交。当多条插入必须共享一个作业时，请用 statement set 将它们组合起来："
+
+msgid ""
 "In streaming mode, the filesystem sink is checkpoint-transactional. Part "
 "files remain below a hidden `.klein-staging` path until their committable"
 " is present in durable checkpoint metadata, then the coordinator "

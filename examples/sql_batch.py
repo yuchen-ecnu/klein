@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-import ray
-import ray.klein
+from ray.klein import Pipeline
 
 
 def run() -> list[dict]:
-    orders = ray.klein.from_items(
+    pipeline = Pipeline(name="sql-batch")
+    orders = pipeline.from_items(
         [
             {"customer": "Ada", "amount": 4},
             {"customer": "Ada", "amount": 7},
             {"customer": "Grace", "amount": 3},
         ]
     )
-    result = ray.klein.sql(
+    result = pipeline.sql(
         """
         SELECT customer, SUM(amount) AS total
         FROM orders
@@ -19,8 +19,7 @@ def run() -> list[dict]:
         """,
         tables={"orders": orders},
     )
-    result.take_all()
-    rows = ray.klein.execute("sql-batch").get()
+    rows = result.collect().result()
     return sorted(rows, key=lambda row: row["customer"])
 
 
