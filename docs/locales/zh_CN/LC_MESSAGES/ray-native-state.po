@@ -254,14 +254,6 @@ msgid ""
 "Ray reference counting releases superseded hot snapshots."
 msgstr "任务重启时优先使用当前热引用。如果协调器、所有者或集群丢失，任务会恢复最新的持久快照。检查点保留策略会释放旧的独占 blob；常规 Ray 引用计数会释放被取代的热快照。"
 
-msgid ""
-"On rescale, every prior fragment for the logical operator is available "
-"through the coordinator. A new subtask selects only the key groups in its "
-"newly assigned range and merges those groups into an empty local backend. "
-"Scale-up and scale-down therefore preserve keyed state, TTL indexes, and "
-"timers without rehashing keys or depending on the previous subtask count."
-msgstr "扩缩容时，逻辑算子之前的每个分片都可通过协调器获得。新子任务只选择其新分配范围内的键组，并将这些键组合并到空的本地后端。因此，扩容和缩容都能保留键控状态、TTL 索引和定时器，无需重新哈希键，也不依赖之前的子任务数量。"
-
 msgid "Configure managed state"
 msgstr "配置托管状态"
 

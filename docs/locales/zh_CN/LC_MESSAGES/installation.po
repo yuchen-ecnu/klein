@@ -86,14 +86,6 @@ msgid "Public APIs and checkpoint formats can still change before 1.0."
 msgstr "公共 API 和 checkpoint 格式在 1.0 之前仍可能发生变化。"
 
 msgid ""
-"The base installation also constrains NumPy to `<3`, pandas to `<3`, "
-"protobuf to `<7`, and SQLGlot to `>=30.12,<31`. Let the package resolver "
-"install these dependencies instead of overriding them independently. Read"
-" [Compatibility](compatibility.md) before changing Python, Ray, protobuf,"
-" or checkpoint-producing Klein versions."
-msgstr "基础安装还将 NumPy 限制为 `<3`、pandas 限制为 `<3`、protobuf 限制为 `<7`，并将 SQLGlot 限制为 `>=30.12,<31`。请让包解析器安装这些依赖，不要单独覆盖其版本。在更改 Python、Ray、protobuf 或生成 checkpoint 的 Klein 版本前，请阅读[兼容性](compatibility.md)。"
-
-msgid ""
 "Use an isolated environment so another Ray application cannot silently "
 "widen the supported Ray range:"
 msgstr "请使用隔离环境，避免其他 Ray 应用悄然放宽受支持的 Ray 版本范围："
@@ -193,17 +185,11 @@ msgstr "Iceberg catalog 访问，以及批处理或基于 checkpoint 的追加�
 msgid "`media`"
 msgstr "`media`"
 
-msgid "`pyvips[binary]>=3,<4`, `Pillow>=10,<13`, `pypdf>=5,<7`, and `pypdfium2>=4.30,<6`"
-msgstr "`pyvips[binary]>=3,<4`、`Pillow>=10,<13`、`pypdf>=5,<7` 和 `pypdfium2>=4.30,<6`"
-
 msgid "SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering."
 msgstr "SQL 图像与 PDF 函数：优先使用原生 libvips 处理，并以 Pillow 作为兼容回退；同时支持 PDF 拆分与 PDFium 渲染。"
 
 msgid "`rocketmq`"
 msgstr "`rocketmq`"
-
-msgid "`rocketmq-client-python>=2,<3`"
-msgstr "`rocketmq-client-python>=2,<3`"
 
 msgid ""
 "Continuous RocketMQ input. A compatible native `librocketmq` is also "
@@ -230,9 +216,6 @@ msgstr "节点本地的 RocksDB 托管状态后端。"
 
 msgid "`serve`"
 msgstr "`serve`"
-
-msgid "`aiohttp>=3.13.3`, `orjson>=3.9`, and compatible `ray[serve]`"
-msgstr "`aiohttp>=3.13.3`、`orjson>=3.9` 和兼容的 `ray[serve]`"
 
 msgid "Ray Serve execution regions and the embedded proxy client."
 msgstr "Ray Serve 执行区域和嵌入式代理客户端。"

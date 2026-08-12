@@ -27,6 +27,10 @@ _EXPORTS = {
     "RowKind": ("ray.klein.api.row_kind", "RowKind"),
     "SinkFunction": ("ray.klein.api.sink_function", "SinkFunction"),
     "SinkCommittable": ("ray.klein.api.sink_committable", "SinkCommittable"),
+    "SinkCommittableCombiner": (
+        "ray.klein.api.sink_committable_combiner",
+        "SinkCommittableCombiner",
+    ),
     "SQLQueryError": ("ray.klein.api.sql_query_error", "SQLQueryError"),
     "SQLSession": ("ray.klein.api.sql_session", "SQLSession"),
     "SourceFunction": ("ray.klein.api.source_function", "SourceFunction"),

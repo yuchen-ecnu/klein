@@ -457,11 +457,6 @@ msgstr ""
 "与网络边界保护每条控制路径。"
 
 msgid ""
-"The detached state actor keeps a bounded in-memory job history. It is not"
-" an audit log, durable metric store, or source of checkpoint truth."
-msgstr "分离的状态 actor 保留有界的内存作业历史。它不是审计日志、持久指标存储或检查点事实来源。"
-
-msgid ""
 "Klein relies on Ray and the deployment platform for cluster "
 "authentication, network isolation, process isolation, secret delivery, "
 "and multi-tenant policy."

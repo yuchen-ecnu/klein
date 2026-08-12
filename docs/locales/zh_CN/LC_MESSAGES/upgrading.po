@@ -37,18 +37,6 @@ msgstr ""
 "Sink 事务是否仍然兼容。"
 
 msgid ""
-"Klein is currently `0.1.0.dev0` alpha software. Before 1.0, Semantic "
-"Versioning compatibility is not promised, only the latest release is "
-"eligible for security fixes, and checkpoint formats can change between "
-"releases. Klein currently ships no automatic checkpoint migration tool "
-"and no user-triggered command for creating an independently named "
-"savepoint."
-msgstr ""
-"Klein 当前是 `0.1.0.dev0` alpha 软件。1.0 "
-"之前不承诺语义化版本兼容性，只有最新版本符合获得安全修复的条件，而且检查点格式可能在版本之间发生变化。Klein "
-"目前既没有自动检查点迁移工具，也没有用于创建独立具名 savepoint 的用户触发命令。"
-
-msgid ""
 "The supported maintenance path is a controlled stop and new submission "
 "from a completed checkpoint. Replacing packages in live Ray actors, "
 "mixing Klein versions within one job, or performing a rolling worker-by-"
@@ -68,9 +56,6 @@ msgstr "Python 3.10--3.12；"
 
 msgid "`ray>=2.56.1,<2.57` with the `data` extra;"
 msgstr "`ray>=2.56.1,<2.57`，并包含 `data` 可选依赖；"
-
-msgid "`protobuf>=3.20.3,<7`;"
-msgstr "`protobuf>=3.20.3,<7`；"
 
 msgid "connector dependencies within the ranges in `pyproject.toml`."
 msgstr "连接器依赖须处于 `pyproject.toml` 中声明的范围内。"
@@ -98,16 +83,6 @@ msgstr ""
 msgid "Preserve the checkpoint contract"
 msgstr "保留检查点契约"
 
-msgid ""
-"The current restore implementation accepts only its current versioned "
-"checkpoint metadata and managed-state formats. It rejects an unknown "
-"format instead of guessing a migration. Checkpoint metadata and "
-"application state use pickle, so class/module availability is also part "
-"of compatibility."
-msgstr ""
-"当前恢复实现只接受当前版本的检查点元数据和托管状态格式。它会拒绝未知格式，而不是猜测迁移方式。检查点元数据和应用状态使用 "
-"pickle，因此类/模块是否可用也是兼容性的一部分。"
-
 msgid "Review every dimension below before attempting a stateful restore."
 msgstr "尝试有状态恢复前，请审查以下每个维度。"
 
@@ -122,16 +97,6 @@ msgstr "不安全或不受支持的变更"
 
 msgid "Completed checkpoint"
 msgstr "已完成的检查点"
-
-msgid ""
-"Restore from the full URI of one `chk-N` directory whose `_metadata` is "
-"readable. Preserve every referenced state object in the job prefix."
-msgstr "从 `_metadata` 可读的某个 `chk-N` 目录完整 URI 恢复。保留作业前缀中所有被引用的状态对象。"
-
-msgid ""
-"An incomplete directory, only a copied `_metadata` file, edited pickle "
-"metadata, or an object whose checksum/size no longer matches."
-msgstr "不完整目录、只复制的 `_metadata` 文件、编辑过的 pickle 元数据，或校验和/大小不再匹配的对象。"
 
 msgid "Graph identity"
 msgstr "图标识"

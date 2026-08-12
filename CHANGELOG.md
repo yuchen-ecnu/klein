@@ -10,6 +10,11 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Added
 
+- Transactional connectors can implement the public
+  `SinkCommittableCombiner` protocol to coalesce parallel writer transactions
+  without coupling the checkpoint runtime to a connector implementation.
+- `make doctor` validates supported Python and Node versions plus the local
+  development commands before contributors run repository targets.
 - A scheduled Atheris workflow now fuzzes the restricted framework-snapshot
   Pickle decoder, with bounded campaigns on relevant pull requests and pushes.
 - SQL now supports registered `AI_GENERATE` and `AI_EMBED` backends with
@@ -61,6 +66,12 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
+- Mypy now covers additional checkpoint, rescale, worker-lifecycle, and Iceberg
+  transaction modules with fully typed definitions. Coverage gates include all
+  Dashboard source and file-level floors for failure-sensitive runtime modules;
+  the long real-Ray rescale suite runs in a dedicated parallel CI shard.
+- Documentation translation checks reject obsolete active messages, and the
+  Chinese catalogs no longer retain superseded source text.
 - Maintainer-controlled Git history was sanitized across all branches to
   replace legacy private-registry coordinates and corporate-domain commit
   metadata; provider-retained pull-request refs are tracked in `PROVENANCE.md`,

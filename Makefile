@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-.PHONY: audit benchmark build clean coverage docs docs-check-i18n docs-en docs-gettext docs-zh external format integration integration-connectors integration-runtime source-release \
+.PHONY: audit benchmark build clean coverage docs docs-check-i18n docs-en docs-gettext docs-zh doctor external format integration integration-connectors integration-runtime source-release \
 	integration-sql integration-state lint test unit unit-connectors unit-core unit-runtime unit-sql unit-state
 
 format:
 	ruff format .
 	ruff check --fix .
+
+doctor:
+	python scripts/check_development_environment.py
 
 lint:
 	ruff format --check .

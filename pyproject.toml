@@ -133,6 +133,7 @@ required_plugins = ["pytest-asyncio>=0.23.7", "pytest-timeout>=2.3.1"]
 markers = [
   "integration: exercises a managed local Ray cluster",
   "external: requires Docker or an external service and is opt-in",
+  "runtime_rescale: heavy real-Ray runtime rescale integration shard",
   "slow: takes more than a few seconds",
   "component_core: public API, configuration, graph, and architecture contracts",
   "component_runtime: actor runtime, scheduling, data plane, and failover",
@@ -182,6 +183,10 @@ files = [
   "src/ray/klein/api/api_stability.py",
   "src/ray/klein/api/live_job_handle.py",
   "src/ray/klein/api/runtime_info.py",
+  "src/ray/klein/api/sink_committable.py",
+  "src/ray/klein/api/sink_committable_combiner.py",
+  "src/ray/klein/integrations/iceberg/iceberg_global_committable.py",
+  "src/ray/klein/integrations/iceberg/iceberg_sink_committable.py",
   "src/ray/klein/observability/dashboard/serialization.py",
   "src/ray/klein/observability/dashboard/server.py",
   "src/ray/klein/observability/state_api.py",
@@ -199,10 +204,20 @@ files = [
   "src/ray/klein/state/state_snapshot.py",
   "src/ray/klein/state/state_snapshot_reference.py",
   "src/ray/klein/runtime/coordinator/checkpoint_io.py",
+  "src/ray/klein/runtime/coordinator/barrier_id_generator.py",
+  "src/ray/klein/runtime/coordinator/checkpoint_registration.py",
+  "src/ray/klein/runtime/coordinator/checkpoint_trigger.py",
+  "src/ray/klein/runtime/coordinator/sink_committable_coalescer.py",
   "src/ray/klein/runtime/execution_graph/execution_vertex.py",
+  "src/ray/klein/runtime/job_manager/progress.py",
   "src/ray/klein/runtime/job_manager/rescale_operation.py",
   "src/ray/klein/runtime/event_time/input_watermark_tracker.py",
+  "src/ray/klein/runtime/partitioning/channel_topology.py",
+  "src/ray/klein/runtime/scheduler/rescale_plan.py",
+  "src/ray/klein/runtime/worker/async_ordered_runner.py",
+  "src/ray/klein/runtime/worker/async_worker.py",
   "src/ray/klein/runtime/worker/input_batch_accumulator.py",
+  "src/ray/klein/runtime/worker/task_runtime.py",
   "src/ray/klein/runtime/worker/weighted_queue.py",
 ]
 mypy_path = "src"
@@ -210,6 +225,7 @@ namespace_packages = true
 explicit_package_bases = true
 follow_imports = "skip"
 check_untyped_defs = true
+disallow_untyped_defs = true
 disallow_incomplete_defs = true
 ignore_missing_imports = true
 no_implicit_optional = true
@@ -252,3 +268,6 @@ ignore = ["B008", "E501", "PERF203"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN201", "ANN202", "ANN204", "ANN205", "B017"]
+# ``make doctor`` must still parse far enough to explain an unsupported
+# pre-3.10 interpreter, so this one script deliberately uses typing aliases.
+"scripts/check_development_environment.py" = ["UP006", "UP021", "UP035", "UP045"]

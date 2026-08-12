@@ -12,6 +12,7 @@ Sink API
 
    SinkFunction
    SinkCommittable
+   SinkCommittableCombiner
    StreamSink
    TwoPhaseCommitSinkFunction
 
@@ -21,6 +22,9 @@ Sink API
    :members:
 
 .. autoclass:: SinkCommittable
+   :members:
+
+.. autoclass:: SinkCommittableCombiner
    :members:
 
 .. autoclass:: TwoPhaseCommitSinkFunction

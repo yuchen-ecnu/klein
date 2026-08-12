@@ -23,6 +23,10 @@ _EXPORTS = {
     "SQLSession": ("ray.klein.api.sql_session", "SQLSession"),
     "SessionWindow": ("ray.klein.api.session_window", "SessionWindow"),
     "SinkCommittable": ("ray.klein.api.sink_committable", "SinkCommittable"),
+    "SinkCommittableCombiner": (
+        "ray.klein.api.sink_committable_combiner",
+        "SinkCommittableCombiner",
+    ),
     "SinkFunction": ("ray.klein.api.sink_function", "SinkFunction"),
     "SlidingWindow": ("ray.klein.api.sliding_window", "SlidingWindow"),
     "SourceFunction": ("ray.klein.api.source_function", "SourceFunction"),

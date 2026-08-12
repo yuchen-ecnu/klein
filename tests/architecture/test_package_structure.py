@@ -147,6 +147,17 @@ def test_source_respects_forbidden_namespace_boundaries():
     assert violations == []
 
 
+def test_runtime_does_not_depend_on_connector_implementations() -> None:
+    violations = []
+    for path in (PACKAGE_ROOT / "runtime").rglob("*.py"):
+        violations.extend(
+            f"{path.relative_to(PACKAGE_ROOT)}: {imported_name}"
+            for imported_name in _top_level_imports(path)
+            if imported_name == "ray.klein.integrations" or imported_name.startswith("ray.klein.integrations.")
+        )
+    assert violations == []
+
+
 def test_stable_modules_define_at_most_one_public_class():
     violations = []
     for package in STABLE_PACKAGES:

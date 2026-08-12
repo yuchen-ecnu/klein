@@ -56,12 +56,6 @@ msgid ""
 msgstr "同时固定 Klein 和已经测试的 Ray 次版本。仅在 driver 和每个符合条件的 worker 上安装图所需的额外依赖："
 
 msgid ""
-"Connector-specific native dependencies also belong in the worker image. For "
-"example, RocketMQ requires a compatible `librocketmq`; RocksDB uses "
-"`rocksdict`; Serve needs `ray[serve]`, `aiohttp`, and `orjson`."
-msgstr "连接器专用的原生依赖也必须包含在 worker 镜像中。例如，RocketMQ 需要兼容的 `librocketmq`；RocksDB 使用 `rocksdict`；Serve 需要 `ray[serve]`、`aiohttp` 和 `orjson`。"
-
-msgid ""
 "Build the image or runtime environment before submission. Do not install "
 "dependencies dynamically inside a UDF: that makes worker startup "
 "nondeterministic and can exceed deployment timeouts."
