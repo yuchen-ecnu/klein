@@ -1359,8 +1359,8 @@ msgstr "观测经过的单调时间，并返回以毫秒为单位的时长。"
 msgid "Context manager for synchronous operations measured in milliseconds."
 msgstr "用于以毫秒计量同步操作的上下文管理器。"
 
-msgid "An enumeration."
-msgstr "一个枚举。"
+msgid "The kind of metric instrument."
+msgstr "指标工具的类型。"
 
 msgid "The stable contract of one built-in metric."
 msgstr "一个内置指标的稳定契约。"
@@ -1551,6 +1551,9 @@ msgstr "在固定下游任务集合上进行背压驱动的轮询。"
 
 msgid ":py:obj:`ChannelPattern <ray.klein.runtime.partitioning.ChannelPattern>`"
 msgstr ":py:obj:`ChannelPattern <ray.klein.runtime.partitioning.ChannelPattern>`"
+
+msgid "Physical channel relationship between upstream and downstream subtasks."
+msgstr "上游与下游子任务之间的物理通道关系。"
 
 msgid ":py:obj:`ChannelTopology <ray.klein.runtime.partitioning.ChannelTopology>`"
 msgstr ":py:obj:`ChannelTopology <ray.klein.runtime.partitioning.ChannelTopology>`"
@@ -2234,11 +2237,20 @@ msgstr ":py:obj:`StateTTLConfig <ray.klein.state.StateTTLConfig>`"
 msgid ":py:obj:`StateTTLUpdateType <ray.klein.state.StateTTLUpdateType>`"
 msgstr ":py:obj:`StateTTLUpdateType <ray.klein.state.StateTTLUpdateType>`"
 
+msgid "Controls when state access refreshes its time-to-live timestamp."
+msgstr "控制状态访问何时刷新其生存时间时间戳。"
+
 msgid ":py:obj:`StateVisibility <ray.klein.state.StateVisibility>`"
 msgstr ":py:obj:`StateVisibility <ray.klein.state.StateVisibility>`"
 
+msgid "Controls whether expired state remains visible before cleanup."
+msgstr "控制过期状态在清理前是否仍然可见。"
+
 msgid ":py:obj:`TimerDomain <ray.klein.state.TimerDomain>`"
 msgstr ":py:obj:`TimerDomain <ray.klein.state.TimerDomain>`"
+
+msgid "Clock domain used to schedule a stateful timer."
+msgstr "用于调度有状态定时器的时钟域。"
 
 msgid ":py:obj:`TimerEvent <ray.klein.state.TimerEvent>`"
 msgstr ":py:obj:`TimerEvent <ray.klein.state.TimerEvent>`"

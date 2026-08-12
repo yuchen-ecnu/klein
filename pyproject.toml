@@ -73,6 +73,7 @@ all = [
   "rocketmq-client-python==2.0.0",
 ]
 test = [
+  "babel>=2.13,<3",
   "build>=1.2.1,<2",
   "hypothesis>=6.100,<7",
   "licensecheck>=2025.1,<2027",

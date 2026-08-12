@@ -9,6 +9,8 @@ from enum import Enum
 
 
 class MetricKind(str, Enum):
+    """The kind of metric instrument."""
+
     COUNTER = "counter"
     GAUGE = "gauge"
     HISTOGRAM = "histogram"
