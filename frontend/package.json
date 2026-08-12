@@ -21,7 +21,6 @@
     "@emotion/styled": "^11.11.0",
     "@mui/material": "^9.2.0",
     "@xyflow/react": "12.11.2",
-    "axios": "1.19.0",
     "dayjs": "^1.9.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

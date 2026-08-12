@@ -4,6 +4,7 @@
 # Dependabot updates this file; the supported lower-bound job is intentionally
 # separate from this known-good toolchain.
 atheris==3.1.0
+babel==2.18.0
 build==1.5.0
 click==8.4.2
 confluent-kafka==2.15.0
@@ -29,6 +30,7 @@ pytest-asyncio==1.4.0
 pytest-cov==7.1.0
 pytest-timeout==2.4.0
 pyvips==3.1.1
+pyvips-binary==8.18.4
 PyYAML==6.0.3
 ray==2.56.1
 redis==8.1.0
@@ -43,3 +45,4 @@ sqlglot==30.15.0
 testcontainers==4.15.0
 tomli==2.4.1; python_version < "3.11"
 twine==7.0.0
+uv==0.11.31

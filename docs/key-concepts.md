@@ -22,10 +22,14 @@ control-plane, data-plane, and recovery components.
 
 A `DataStream` is a logical collection of records and the operations needed to produce them. Methods such as `map()`, `filter()`, `key_by()`, and `join()` add operators to the graph. They don't run work when you call them.
 
-A stream belongs to one internal pipeline owner. Module-level `ray.klein`
-functions hide that bookkeeping, matching Ray Data's source-construction
-style. Direct `KleinContext` construction is an advanced escape hatch for a
-process that must build isolated pipelines.
+A stream belongs to one pipeline owner. New applications should create it with
+`ray.klein.pipeline()`: transformations remain lazy, and one terminal submits
+that terminal's graph directly. Use a `StatementSet` to group multiple
+side-effect terminals into one job.
+
+The module-level `ray.klein` functions retain one implicit, deferred pipeline
+for compatibility. Direct `KleinContext` construction is an advanced escape
+hatch for isolated builders that need that same deferred `execute()` contract.
 
 ## How does Klein choose an execution mode?
 
@@ -77,6 +81,13 @@ Klein provides at-least-once progress semantics. A non-transactional sink can ob
 
 ## How does Klein relate to Ray Data?
 
-Klein doesn't copy Ray Data reader or `Dataset` method signatures. `ray.klein.read_csv`, `read_parquet`, and other bounded readers resolve their installed `ray.data` functions dynamically. `stream.data` exposes compatible Dataset operations.
+Klein doesn't copy Ray Data reader or `Dataset` method signatures. An explicit
+pipeline exposes installed readers through `pipeline.ray_data`; a stream
+exposes compatible Dataset operations through `stream.ray_data`. The shorter
+`.data` spelling and module-level readers remain compatibility aliases.
 
-Use native `DataStream` methods for streaming semantics. Use `stream.data` when the operation is a bounded Ray Data operation. See [Ray Data interoperability](ray-data-interop.md) for details and the [connector catalog](connectors/index.md) for each connector's supported mode and guarantees.
+Use native `DataStream` methods for streaming semantics. Use `stream.ray_data`
+when the operation is a bounded Ray Data operation. See [Ray Data
+interoperability](ray-data-interop.md) for details and the [connector
+catalog](connectors/index.md) for each connector's supported mode and
+guarantees.

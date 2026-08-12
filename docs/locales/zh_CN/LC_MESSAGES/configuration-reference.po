@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Klein 0.1.0a1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-21 01:05+0800\n"
+"POT-Creation-Date: 2026-08-13 01:07+0800\n"
 "PO-Revision-Date: 2026-07-20 11:04+0800\n"
 "Last-Translator: Automatically generated\n"
 "Language: zh_CN\n"
@@ -102,6 +102,12 @@ msgstr "`table.*`"
 
 msgid "Stateful Table and continuous SQL execution."
 msgstr "有状态 Table 与持续 SQL 执行。"
+
+msgid "`sql.download.*`"
+msgstr "`sql.download.*`"
+
+msgid "URI, network, redirect, timeout, and byte limits for SQL `DOWNLOAD`."
+msgstr "SQL `DOWNLOAD` 的 URI、网络、重定向、超时和字节限制。"
 
 msgid "`observability.*`"
 msgstr "`observability.*`"
@@ -503,7 +509,9 @@ msgid ""
 "plane. Increase them only when metrics show sustained capacity pressure "
 "and the Ray workers have enough memory for the larger worst-case "
 "footprint."
-msgstr "这些值是原生流式数据平面按任务或边实施的硬上限。只有当指标显示持续容量压力，且 Ray worker 有足够内存承担更大的最坏情况占用时，才应提高它们。"
+msgstr ""
+"这些值是原生流式数据平面按任务或边实施的硬上限。只有当指标显示持续容量压力，且 Ray worker "
+"有足够内存承担更大的最坏情况占用时，才应提高它们。"
 
 msgid "`pipeline.input-buffer.size`"
 msgstr "`pipeline.input-buffer.size`"
@@ -570,6 +578,17 @@ msgid ""
 "Maximum detached output batches waiting in the FIFO emit queue. Must be "
 "positive."
 msgstr "FIFO 发出队列中等待的最大分离输出批次数。必须为正数。"
+
+msgid "`pipeline.collect-queue.max-rows`"
+msgstr "`pipeline.collect-queue.max-rows`"
+
+msgid ""
+"Maximum rows buffered by a streaming `take()`/`take_all()` terminal "
+"before producer backpressure is applied. Must be positive; the driver "
+"drains this queue while waiting."
+msgstr ""
+"流式 `take()`/`take_all()` 终端在触发生产者背压前可缓冲的最大行数。必须为"
+"正数；驱动程序会在等待期间持续排空此队列。"
 
 msgid "Batching and data transport"
 msgstr "批处理与数据传输"
@@ -866,6 +885,111 @@ msgstr ""
 "若为 `true`，记录用户函数异常并继续处理后续记录。在 `auto` 模式下，这会选择原生流处理，使 Klein "
 "能够保留记录级错误处理和指标语义。如果丢弃失败记录会破坏正确性，请保持禁用。"
 
+msgid "SQL DOWNLOAD network boundary"
+msgstr "SQL DOWNLOAD 网络边界"
+
+msgid ""
+"These options are captured with the query graph and apply to batch and "
+"streaming SQL `DOWNLOAD`, including downloads used as media-function "
+"inputs. Host and IP rules are conjunctive: a host allowlist never "
+"authorizes a private resolved address by itself."
+msgstr ""
+"这些选项随查询图一同捕获，并适用于批处理和流式 SQL `DOWNLOAD`，包括作为媒体函数输入的下载。主机规则和 IP "
+"规则须同时满足：仅将主机加入允许列表绝不会自动授权解析到的私有地址。"
+
+msgid "`sql.download.allowed-schemes`"
+msgstr "`sql.download.allowed-schemes`"
+
+msgid "`[\"file\", \"local\", \"memory\", \"s3\", \"gs\", \"http\", \"https\"]`"
+msgstr "`[\"file\", \"local\", \"memory\", \"s3\", \"gs\", \"http\", \"https\"]`"
+
+msgid "sequence"
+msgstr "序列"
+
+msgid ""
+"URI schemes accepted by `DOWNLOAD`. A path without a scheme is treated as"
+" local. Unknown schemes are rejected."
+msgstr "`DOWNLOAD` 接受的 URI scheme。没有 scheme 的路径按本地路径处理；未知 scheme 会被拒绝。"
+
+msgid "`sql.download.allowed-hosts`"
+msgstr "`sql.download.allowed-hosts`"
+
+msgid "`[]`"
+msgstr "`[]`"
+
+msgid ""
+"Optional exact or `*.suffix` HTTP(S) host allowlist. Empty permits any "
+"host that passes all IP rules."
+msgstr "可选的 HTTP(S) 主机允许列表，支持精确主机名或 `*.suffix`。留空时允许任何通过全部 IP 规则的主机。"
+
+msgid "`sql.download.denied-hosts`"
+msgstr "`sql.download.denied-hosts`"
+
+msgid ""
+"Exact or `*.suffix` HTTP(S) hosts rejected before resolution. Deny rules "
+"take precedence."
+msgstr "在解析前拒绝精确主机名或 `*.suffix` HTTP(S) 主机；拒绝规则优先。"
+
+msgid "`sql.download.allowed-ip-ranges`"
+msgstr "`sql.download.allowed-ip-ranges`"
+
+msgid ""
+"Optional IP/CIDR allowlist applied to every address returned for a host. "
+"Explicit ranges can authorize approved private destinations."
+msgstr "应用于主机所返回每个地址的可选 IP/CIDR 允许列表。显式范围可授权获准的私有目标。"
+
+msgid "`sql.download.denied-ip-ranges`"
+msgstr "`sql.download.denied-ip-ranges`"
+
+msgid ""
+"IP/CIDR denylist applied to every resolved address. Deny rules take "
+"precedence over allow ranges."
+msgstr "应用于每个解析地址的 IP/CIDR 拒绝列表。拒绝规则优先于允许范围。"
+
+msgid "`sql.download.allow-private-network`"
+msgstr "`sql.download.allow-private-network`"
+
+msgid ""
+"Allows HTTP(S) addresses that are loopback, private, link-local, "
+"reserved, or otherwise not globally routable. Prefer narrow `allowed-ip-"
+"ranges`."
+msgstr "允许环回、私有、链路本地、保留或其他不可全局路由的 HTTP(S) 地址。应优先使用范围更窄的 `allowed-ip-ranges`。"
+
+msgid "`sql.download.max-bytes`"
+msgstr "`sql.download.max-bytes`"
+
+msgid ""
+"Maximum retained bytes for one download operator and row. Multiple SQL "
+"`DOWNLOAD` expressions in one projection or batch row share this budget; "
+"separate chained `stream.ray_data.with_column(..., download(...))` "
+"operators each have their own budget."
+msgstr ""
+"单个下载算子和单行可保留的最大字节数。同一投影或批次行中的多个 SQL `DOWNLOAD` 表达式共享此预算；分开串联的 "
+"`stream.ray_data.with_column(..., download(...))` 算子各自拥有独立预算。"
+
+msgid "`sql.download.timeout`"
+msgstr "`sql.download.timeout`"
+
+msgid "`30s`"
+msgstr "`30s`"
+
+msgid ""
+"HTTP(S) connect, redirect, and response-read budget. Synchronous "
+"operating-system DNS resolution cannot be interrupted by this timer; "
+"storage-filesystem timeouts remain provider-specific."
+msgstr "HTTP(S) 连接、重定向和响应读取的时间预算。此计时器无法中断操作系统的同步 DNS 解析；存储文件系统的超时仍由具体提供方决定。"
+
+msgid "`sql.download.max-redirects`"
+msgstr "`sql.download.max-redirects`"
+
+msgid "`5`"
+msgstr "`5`"
+
+msgid ""
+"Maximum HTTP(S) redirects. Every destination is revalidated, redirects "
+"cannot leave HTTP(S), and HTTPS cannot downgrade to HTTP."
+msgstr "HTTP(S) 的最大重定向次数。每个目标都会重新验证；重定向不能离开 HTTP(S)，且 HTTPS 不能降级为 HTTP。"
+
 msgid "Compatibility-only adaptive partitioner options"
 msgstr "仅兼容的自适应分区器选项"
 
@@ -996,9 +1120,6 @@ msgstr "内嵌代理客户端缓冲的最大待处理异步请求数。"
 msgid "`serve.client.batch-timeout`"
 msgstr "`serve.client.batch-timeout`"
 
-msgid "`5`"
-msgstr "`5`"
-
 msgid "Maximum time spent accumulating a proxy batch."
 msgstr "累积一个代理批次所用的最长时间。"
 
@@ -1014,6 +1135,40 @@ msgstr "`serve.client.max-attempts`"
 msgid "Maximum HTTP attempts for one proxy request."
 msgstr "一个代理请求的最大 HTTP 尝试次数。"
 
+msgid "`serve.client.max-request-bytes`"
+msgstr "`serve.client.max-request-bytes`"
+
+msgid "`16777216` (16 MiB)"
+msgstr "`16777216`（16 MiB）"
+
+msgid ""
+"Maximum encoded JSON request body retained by the embedded client. Must "
+"be positive."
+msgstr "嵌入式客户端保留的 JSON 编码请求体上限。必须为正数。"
+
+msgid "`serve.client.max-response-bytes`"
+msgstr "`serve.client.max-response-bytes`"
+
+msgid ""
+"Maximum HTTP response body retained before JSON decoding. Both `Content-"
+"Length` and streamed bytes are checked. Must be positive."
+msgstr "JSON 解码前保留的 HTTP 响应体上限。同时检查 `Content-Length` 和流式字节数。必须为正数。"
+
+msgid "`serve.client.max-rows`"
+msgstr "`serve.client.max-rows`"
+
+msgid "`100000`"
+msgstr "`100000`"
+
+msgid "Maximum logical rows in one proxy request. Must be positive."
+msgstr "单个代理请求的逻辑行数上限。必须为正数。"
+
+msgid "`serve.client.max-result-rows`"
+msgstr "`serve.client.max-result-rows`"
+
+msgid "Maximum logical rows accepted from one proxy result. Must be positive."
+msgstr "单个代理结果可接受的逻辑行数上限。必须为正数。"
+
 msgid "`serve.client.slow-request-warning`"
 msgstr "`serve.client.slow-request-warning`"
 
@@ -1023,8 +1178,8 @@ msgstr "请求经过此时长后，Klein 会发出慢请求警告。"
 msgid "`serve.client.http-timeout`"
 msgstr "`serve.client.http-timeout`"
 
-msgid "Total timeout for each HTTPX request attempt."
-msgstr "每次 HTTPX 请求尝试的总超时时间。"
+msgid "Total logical call timeout across attempts and retry backoff."
+msgstr "涵盖所有尝试和重试退避的逻辑调用总超时时间。"
 
 msgid "`serve.client.http-connect-timeout`"
 msgstr "`serve.client.http-connect-timeout`"
@@ -1051,6 +1206,34 @@ msgid ""
 "Maximum randomized exponential retry delay. The runtime also caps this "
 "value at `10s`."
 msgstr "随机指数重试延迟的最大值。运行时还会将此值限制为不超过 `10s`。"
+
+msgid "`serve.deployment.max-request-bytes`"
+msgstr "`serve.deployment.max-request-bytes`"
+
+msgid ""
+"Maximum request body accepted by one Klein Serve deployment replica. Must"
+" be positive."
+msgstr "单个 Klein Serve 部署副本可接受的请求体上限。必须为正数。"
+
+msgid "`serve.deployment.max-response-bytes`"
+msgstr "`serve.deployment.max-response-bytes`"
+
+msgid ""
+"Maximum encoded response body emitted by one deployment request. Must be "
+"positive."
+msgstr "单个部署请求发出的编码响应体上限。必须为正数。"
+
+msgid "`serve.deployment.max-rows`"
+msgstr "`serve.deployment.max-rows`"
+
+msgid "Maximum logical rows accepted in one deployment request. Must be positive."
+msgstr "单个部署请求可接受的逻辑行数上限。必须为正数。"
+
+msgid "`serve.deployment.max-result-rows`"
+msgstr "`serve.deployment.max-result-rows`"
+
+msgid "Maximum logical rows emitted by one deployment request. Must be positive."
+msgstr "单个部署请求发出的逻辑行数上限。必须为正数。"
 
 msgid "Direct environment variables"
 msgstr "直接读取的环境变量"
@@ -1151,161 +1334,3 @@ msgid ""
 "Conventional terminal setting; any non-empty value also disables Klein's "
 "rich progress table."
 msgstr "约定俗成的终端设置；任何非空值也会禁用 Klein 的富文本进度表。"
-
-#~ msgid "Total HTTP request timeout passed to `aiohttp`."
-#~ msgstr "传给 `aiohttp` 的 HTTP 请求总超时。"
-
-#~ msgid "Execution, recovery, and checkpointing"
-#~ msgstr "执行、恢复与检查点"
-
-#~ msgid ""
-#~ "These options primarily affect the "
-#~ "streaming runtime. A bounded job "
-#~ "compiled to Ray Data doesn't create "
-#~ "Klein checkpoint, restart, or task-"
-#~ "deployment components."
-#~ msgstr "这些选项主要影响流式运行时。编译到 Ray Data 的有界作业不会创建 Klein 检查点、重启或任务部署组件。"
-
-#~ msgid "Meaning and constraints"
-#~ msgstr "含义与约束"
-
-#~ msgid ""
-#~ "Maximum time an in-flight checkpoint "
-#~ "may take before it is discarded. "
-#~ "Must be at least `0`; `0` disables"
-#~ " checkpoint expiry."
-#~ msgstr "进行中的检查点在被丢弃前允许花费的最长时间。必须至少为 `0`；`0` 会禁用检查点过期。"
-
-#~ msgid "Pipeline buffers, placement, and data plane"
-#~ msgstr "流水线缓冲区、放置与数据平面"
-
-#~ msgid "`67108864`"
-#~ msgstr "`67108864`"
-
-#~ msgid "`4194304`"
-#~ msgstr "`4194304`"
-
-#~ msgid "`131072`"
-#~ msgstr "`131072`"
-
-#~ msgid ""
-#~ "Tries to gang-schedule the streaming "
-#~ "job in a Ray placement group. If"
-#~ " reservation fails, Klein falls back "
-#~ "to round-robin and then native "
-#~ "placement. Ignored by `balanced` deployment"
-#~ " mode and local debug mode."
-#~ msgstr ""
-#~ "尝试在 Ray placement group "
-#~ "中对流式作业进行成组调度。若资源预留失败，Klein 会回退到轮询放置，再回退到原生放置。`balanced` "
-#~ "部署模式和本地调试模式会忽略此选项。"
-
-#~ msgid ""
-#~ "Ray placement-group strategy. Klein "
-#~ "documents and tests `PACK` and `SPREAD`;"
-#~ " invalid values are rejected by Ray."
-#~ msgstr "Ray placement group 策略。Klein 记录并测试了 `PACK` 和 `SPREAD`；无效值会被 Ray 拒绝。"
-
-#~ msgid "`268435456`"
-#~ msgstr "`268435456`"
-
-#~ msgid "Managed state, SQL state, event time, and UDFs"
-#~ msgstr "托管状态、SQL 状态、事件时间与 UDF"
-
-#~ msgid "`128`"
-#~ msgstr "`128`"
-
-#~ msgid "Adaptive partitioner compatibility options"
-#~ msgstr "自适应分区器兼容性选项"
-
-#~ msgid "Intended meaning"
-#~ msgstr "预期含义"
-
-#~ msgid ""
-#~ "Total logical request budget across all"
-#~ " HTTP attempts and retry backoff."
-#~ msgstr "所有 HTTP 尝试与重试退避共用的逻辑请求总预算。"
-
-#~ msgid "HTTP connection-establishment timeout passed to `aiohttp`."
-#~ msgstr "传给 `aiohttp` 的 HTTP 连接建立超时。"
-
-#~ msgid "Meaning"
-#~ msgstr "含义"
-
-msgid "`sql.download.*`"
-msgstr "`sql.download.*`"
-
-msgid "URI, network, redirect, timeout, and byte limits for SQL `DOWNLOAD`."
-msgstr "SQL `DOWNLOAD` 的 URI、网络、重定向、超时和字节限制。"
-
-msgid "SQL DOWNLOAD network boundary"
-msgstr "SQL DOWNLOAD 网络边界"
-
-msgid "These options are captured with the query graph and apply to batch and streaming SQL `DOWNLOAD`, including downloads used as media-function inputs. Host and IP rules are conjunctive: a host allowlist never authorizes a private resolved address by itself."
-msgstr "这些选项随查询图一同捕获，并适用于批处理和流式 SQL `DOWNLOAD`，包括作为媒体函数输入的下载。主机规则和 IP 规则须同时满足：仅将主机加入允许列表绝不会自动授权解析到的私有地址。"
-
-msgid "`sql.download.allowed-schemes`"
-msgstr "`sql.download.allowed-schemes`"
-
-msgid "`[\"file\", \"local\", \"memory\", \"s3\", \"gs\", \"http\", \"https\"]`"
-msgstr "`[\"file\", \"local\", \"memory\", \"s3\", \"gs\", \"http\", \"https\"]`"
-
-msgid "sequence"
-msgstr "序列"
-
-msgid "URI schemes accepted by `DOWNLOAD`. A path without a scheme is treated as local. Unknown schemes are rejected."
-msgstr "`DOWNLOAD` 接受的 URI scheme。没有 scheme 的路径按本地路径处理；未知 scheme 会被拒绝。"
-
-msgid "`sql.download.allowed-hosts`"
-msgstr "`sql.download.allowed-hosts`"
-
-msgid "`[]`"
-msgstr "`[]`"
-
-msgid "Optional exact or `*.suffix` HTTP(S) host allowlist. Empty permits any host that passes all IP rules."
-msgstr "可选的 HTTP(S) 主机允许列表，支持精确主机名或 `*.suffix`。留空时允许任何通过全部 IP 规则的主机。"
-
-msgid "`sql.download.denied-hosts`"
-msgstr "`sql.download.denied-hosts`"
-
-msgid "Exact or `*.suffix` HTTP(S) hosts rejected before resolution. Deny rules take precedence."
-msgstr "在解析前拒绝精确主机名或 `*.suffix` HTTP(S) 主机；拒绝规则优先。"
-
-msgid "`sql.download.allowed-ip-ranges`"
-msgstr "`sql.download.allowed-ip-ranges`"
-
-msgid "Optional IP/CIDR allowlist applied to every address returned for a host. Explicit ranges can authorize approved private destinations."
-msgstr "应用于主机所返回每个地址的可选 IP/CIDR 允许列表。显式范围可授权获准的私有目标。"
-
-msgid "`sql.download.denied-ip-ranges`"
-msgstr "`sql.download.denied-ip-ranges`"
-
-msgid "IP/CIDR denylist applied to every resolved address. Deny rules take precedence over allow ranges."
-msgstr "应用于每个解析地址的 IP/CIDR 拒绝列表。拒绝规则优先于允许范围。"
-
-msgid "`sql.download.allow-private-network`"
-msgstr "`sql.download.allow-private-network`"
-
-msgid "Allows HTTP(S) addresses that are loopback, private, link-local, reserved, or otherwise not globally routable. Prefer narrow `allowed-ip-ranges`."
-msgstr "允许环回、私有、链路本地、保留或其他不可全局路由的 HTTP(S) 地址。应优先使用范围更窄的 `allowed-ip-ranges`。"
-
-msgid "`sql.download.max-bytes`"
-msgstr "`sql.download.max-bytes`"
-
-msgid "Maximum retained bytes for one download operator and row. Multiple SQL `DOWNLOAD` expressions in one projection or batch row share this budget; separate chained `stream.data.with_column(..., download(...))` operators each have their own budget."
-msgstr "单个下载算子和单行可保留的最大字节数。同一投影或批处理行中的多个 SQL `DOWNLOAD` 表达式共享此预算；独立串联的 `stream.data.with_column(..., download(...))` 算子各自拥有预算。"
-
-msgid "`sql.download.timeout`"
-msgstr "`sql.download.timeout`"
-
-msgid "`30s`"
-msgstr "`30s`"
-
-msgid "HTTP(S) connect, redirect, and response-read budget. Synchronous operating-system DNS resolution cannot be interrupted by this timer; storage-filesystem timeouts remain provider-specific."
-msgstr "HTTP(S) 连接、重定向和响应读取的时间预算。此计时器无法中断操作系统的同步 DNS 解析；存储文件系统的超时仍由具体提供方决定。"
-
-msgid "`sql.download.max-redirects`"
-msgstr "`sql.download.max-redirects`"
-
-msgid "Maximum HTTP(S) redirects. Every destination is revalidated, redirects cannot leave HTTP(S), and HTTPS cannot downgrade to HTTP."
-msgstr "HTTP(S) 的最大重定向次数。每个目标都会重新验证；重定向不能离开 HTTP(S)，且 HTTPS 不能降级为 HTTP。"

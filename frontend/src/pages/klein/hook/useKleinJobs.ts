@@ -1,5 +1,4 @@
-import axios from "axios";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
 import { API_REFRESH_INTERVAL_MS } from "../../../common/constants";
 import {
@@ -8,7 +7,18 @@ import {
   getKleinJobs,
   rescaleKleinOperator,
 } from "../../../service/klein";
+import { isAPIRequestError } from "../../../service/requestHandlers";
 import { KleinOperatorRescaleResult } from "../../../type/klein";
+
+const ACTIVE_RESCALE_STATUSES = new Set([
+  "ACCEPTED",
+  "RUNNING",
+  "STABILIZING",
+]);
+
+const isPendingOperation = (
+  operation: KleinOperatorRescaleResult | null | undefined,
+) => operation !== null && operation !== undefined && ACTIVE_RESCALE_STATUSES.has(operation.status);
 
 export const useKleinJobs = () => {
   const { data, error, isLoading, mutate } = useSWR(
@@ -43,6 +53,7 @@ export const useKleinJob = (jobId: string | undefined) => {
 export const useKleinOperatorRescale = (
   jobId: string | undefined,
   refresh: () => Promise<unknown>,
+  operation?: KleinOperatorRescaleResult | null,
 ) => {
   const [isRescaling, setIsRescaling] = useState(false);
   const [result, setResult] = useState<KleinOperatorRescaleResult>();
@@ -71,8 +82,8 @@ export const useKleinOperatorRescale = (
         setResult(nextResult);
         return nextResult;
       } catch (error) {
-        const responseMessage = axios.isAxiosError<{ error?: string }>(error)
-          ? error.response?.data?.error
+        const responseMessage = isAPIRequestError<{ error?: string }>(error)
+          ? error.response.data?.error
           : undefined;
         setRequestError(
           responseMessage ||
@@ -92,5 +103,38 @@ export const useKleinOperatorRescale = (
     [clearFeedback, jobId, refresh],
   );
 
-  return { clearFeedback, isRescaling, requestError, rescale, result };
+  const currentResult =
+    operation &&
+    (isPendingOperation(operation) || operation.operation_id === result?.operation_id)
+      ? operation
+      : result;
+  const operationPending = isPendingOperation(currentResult);
+
+  useEffect(() => {
+    if (!operationPending) {
+      return undefined;
+    }
+    let cancelled = false;
+    let timer: number;
+    const poll = async () => {
+      await refresh().catch(() => undefined);
+      if (!cancelled) {
+        timer = window.setTimeout(() => void poll(), 1_000);
+      }
+    };
+    timer = window.setTimeout(() => void poll(), 1_000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [currentResult?.operation_id, currentResult?.status, operationPending, refresh]);
+
+  return {
+    clearFeedback,
+    isRescaling,
+    operationPending,
+    requestError,
+    rescale,
+    result: currentResult,
+  };
 };

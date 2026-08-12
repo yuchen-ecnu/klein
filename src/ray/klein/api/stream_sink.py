@@ -32,7 +32,7 @@ class StreamSink(Stream):
             NodeType.SINK if node_type is None else node_type,
             resources=resources,
         )
-        self._statement_set_owner_id: int | None = None
+        self._statement_set_owner_token: str | None = None
         self.context.add_sink(self)
 
     def run(self, job_name: str | None = None) -> JobHandle:

@@ -14,7 +14,7 @@ from ray.klein._internal.streaming_expression import (
     StreamingWithColumn,
 )
 from ray.klein.api.api_stability import public_api
-from ray.klein.api.collect_function import CollectFunction
+from ray.klein.api.collect_function import CollectFunction, _validate_collect_limit
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.functions.ray_data_lowering import (
     lower_filter,
@@ -1217,9 +1217,10 @@ class DataStream(Stream):
             deferred context. Both expose ``result()``. Deprecated interactive
             mode returns the rows directly.
         """
+        limit = _validate_collect_limit(limit)
         return self.write(
             CollectFunction,
-            fn_constructor_kwargs={"limit": limit},
+            fn_constructor_kwargs={"limit": limit, "truncate": False},
             lowering=RayDataCall.dataset_method(
                 "take_all",
                 (),
@@ -1265,13 +1266,16 @@ class DataStream(Stream):
             deferred context. Both expose ``result()``. Deprecated interactive
             mode returns the rows directly.
         """
+        validated_limit = _validate_collect_limit(limit)
+        if validated_limit is None:
+            raise TypeError("limit must be an integer")
         return self.write(
             CollectFunction,
-            fn_constructor_kwargs={"limit": limit},
+            fn_constructor_kwargs={"limit": validated_limit, "truncate": True},
             lowering=RayDataCall.dataset_method(
                 "take",
                 (),
-                {"limit": limit},
+                {"limit": validated_limit},
                 expects_dataset=False,
             ),
             concurrency=1,

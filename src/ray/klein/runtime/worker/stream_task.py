@@ -154,6 +154,8 @@ class StreamTask(AsyncWorker):
         self._checkpoint_gate_loop: asyncio.AbstractEventLoop | None = None
         self._checkpoint_gate_resolved_through = -1
         self._failure_report_task_obj: asyncio.Task[None] | None = None
+        self._stream_stop_task_obj: asyncio.Task[None] | None = None
+        self._stream_stop_initiator_task_obj: asyncio.Task[object] | None = None
         self._force_stop_requested = False
 
     # --- small accessors used by the components / subclass ---
@@ -181,12 +183,17 @@ class StreamTask(AsyncWorker):
     async def setup_and_run(self) -> None:
         if self._running:
             return
+        previous_stop = getattr(self, "_stream_stop_task_obj", None)
+        if previous_stop is not None:
+            await asyncio.shield(previous_stop)
         # Ray may retain the actor process after a terminal status RPC fails
         # and ask this same instance to bootstrap again.  These flags describe
         # one runtime incarnation; carrying them forward would make the fresh
         # runtime stop immediately or suppress a new drain request.
         self._eof_reached = False
         self._drain_requested = False
+        self._stream_stop_task_obj = None
+        self._stream_stop_initiator_task_obj = None
         runtime = await self._build_runtime(self._descriptor)
         self._install_runtime(runtime)
         try:
@@ -705,7 +712,18 @@ class StreamTask(AsyncWorker):
             return
         if not isinstance(committable, SinkCommittable):
             raise TypeError("transactional sink prepare_checkpoint() must return a SinkCommittable or None")
-        if self._runtime_state.checkpoint_strategy.register_sink_committable(barrier_id, committable):
+        try:
+            registered = self._runtime_state.checkpoint_strategy.register_sink_committable(barrier_id, committable)
+        except Exception:
+            try:
+                committable.abort()
+            except Exception:
+                logger.exception(
+                    "Failed to abort sink transaction after registration failed for barrier %s",
+                    barrier_id,
+                )
+            raise
+        if registered:
             return
         committable.abort()
         raise RuntimeError(f"failed to register sink transaction for barrier {barrier_id}")
@@ -1069,7 +1087,20 @@ class StreamTask(AsyncWorker):
         if self._committed_event_time_controls is not None:
             await self._apply_committed_event_time_controls()
             return
-        await self._pump.run_once()
+        # A zero-length bounded terminal is at end-of-stream before its first
+        # input arrives. Check once before blocking on the inbox so ``take(0)``
+        # can request source drain even for an idle or unbounded source.
+        state = self._runtime_state
+        if not self._drain_requested and state.operator.end_of_stream:
+            await asyncio.get_running_loop().run_in_executor(
+                state.executor,
+                self._check_end_of_stream,
+            )
+            return
+        pump = self._pump
+        if pump is None:
+            raise RuntimeError(f"{self._task_name}: input pump is unavailable")
+        await pump.run_once()
 
     async def _apply_committed_event_time_controls(self) -> None:
         """Forward topology-released progress before post-commit input."""
@@ -2099,7 +2130,11 @@ class StreamTask(AsyncWorker):
                 )
             )
         finally:
-            await self.stop()
+            # An external stop owns teardown once its shared task exists.  Do
+            # not await that task from the reporter: force-stop teardown may be
+            # waiting for this reporter to settle, which would form a cycle.
+            if getattr(self, "_stream_stop_task_obj", None) is None:
+                await self.stop()
 
     def prepare_force_stop(self) -> None:
         """Drop buffered delivery before debug mode emulates ``ray.kill``."""
@@ -2135,6 +2170,30 @@ class StreamTask(AsyncWorker):
         return True
 
     async def _stop_stream_task(self, timeout: float, *, release_rescale: bool) -> None:
+        """Run teardown once even when EOF, drain, and actor shutdown race.
+
+        Source tasks may request their own stop while the JobManager concurrently
+        stops every task.  Keeping cleanup in an independently shielded task
+        prevents cancellation of the worker loop from interrupting operator and
+        state-backend close halfway through.
+        """
+
+        # A later full-stop caller must be able to release a rescale waiter even
+        # when a scale-in retirement created the shared teardown task first.
+        rescale_resume = getattr(self, "_rescale_resume_obj", None)
+        if release_rescale and rescale_resume is not None:
+            rescale_resume.set()
+        stop_task = getattr(self, "_stream_stop_task_obj", None)
+        if stop_task is None:
+            self._stream_stop_initiator_task_obj = asyncio.current_task()
+            stop_task = asyncio.create_task(
+                self._run_stream_task_stop(timeout, release_rescale=release_rescale),
+                name=f"{self._task_name}-stop",
+            )
+            self._stream_stop_task_obj = stop_task
+        await asyncio.shield(stop_task)
+
+    async def _run_stream_task_stop(self, timeout: float, *, release_rescale: bool) -> None:
         logger.debug("Stopping stream task %s", self._task_name)
         deadline = asyncio.get_running_loop().time() + max(0.0, timeout)
 
@@ -2160,7 +2219,8 @@ class StreamTask(AsyncWorker):
         if not self._force_stop_requested:
             return
         report_task = self._failure_report_task_obj
-        if report_task is None or report_task is asyncio.current_task():
+        stop_initiator = getattr(self, "_stream_stop_initiator_task_obj", None)
+        if report_task is None or report_task is asyncio.current_task() or report_task is stop_initiator:
             return
         report_task.cancel()
         try:

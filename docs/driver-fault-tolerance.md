@@ -16,17 +16,18 @@ or crashing the client process does not cancel the server-side dataflow.
 Record the namespace returned by `handle.namespace`, or configure a stable one:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-ray.klein.configure({"job.namespace": "orders-production"})
-events = ray.klein.read_kafka(
+pipeline = klein.pipeline(
+    {"job.namespace": "orders-production"},
+    name="orders",
+)
+events = pipeline.read_kafka(
     "orders",
     bootstrap_servers="kafka.internal:9092",
     trigger="continuous",
 )
-events.show()
-handle = ray.klein.execute("orders")
+handle = events.show()
 print(handle.namespace)
 ```
 

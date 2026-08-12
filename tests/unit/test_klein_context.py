@@ -104,6 +104,23 @@ class TestKleinContext:
 
         assert isinstance(stream.take(), StreamSink)
 
+    @pytest.mark.parametrize("method", ["take", "take_all", "collect"])
+    @pytest.mark.parametrize(
+        ("limit", "error"),
+        [(True, TypeError), (1.5, TypeError), (-1, ValueError)],
+    )
+    def test_collecting_terminals_validate_limits_before_submission(self, method, limit, error) -> None:
+        stream = KleinContext().from_values({"id": 1})
+
+        with pytest.raises(error, match="limit"):
+            getattr(stream, method)(limit)
+
+    def test_take_rejects_none_limit(self) -> None:
+        stream = KleinContext().from_values({"id": 1})
+
+        with pytest.raises(TypeError, match="limit"):
+            stream.take(None)  # type: ignore[arg-type]
+
     def test_top_level_execute_accepts_explicit_sink_roots(self, monkeypatch) -> None:
         context = KleinContext()
         selected = context.from_values({"id": 1}).take_all()
@@ -345,6 +362,28 @@ class TestKleinContext:
 
         pipeline = Pipeline({"execution.runtime.mode": "batch"})
         assert pipeline.config.strict is True
+
+    def test_namespace_pipeline_factory_matches_the_class_contract(self) -> None:
+        pipeline = klein.pipeline(
+            {"execution.runtime.mode": "streaming"},
+            name="orders",
+        )
+
+        assert isinstance(pipeline, Pipeline)
+        assert pipeline.name == "orders"
+        assert pipeline.config.strict is True
+        assert pipeline.config.get(ExecutionOptions.MODE) is RuntimeExecutionMode.STREAMING
+
+    def test_namespace_pipeline_factory_forwards_validation_options(self) -> None:
+        pipeline = klein.pipeline(
+            {"application.owner": "analytics"},
+            strict_config=False,
+        )
+
+        assert pipeline.config.to_dict() == {"application.owner": "analytics"}
+
+        with pytest.raises(ValueError, match="must not be empty"):
+            klein.pipeline(name=" ")
 
     @pytest.mark.parametrize("name", ["", "   "])
     def test_pipeline_rejects_empty_job_name(self, name) -> None:

@@ -2,6 +2,7 @@
 import hashlib
 import pickle
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -14,6 +15,7 @@ from ray.klein.runtime.coordinator import checkpoint_coordinator as coordinator_
 from ray.klein.runtime.coordinator import checkpoint_io
 from ray.klein.runtime.coordinator.checkpoint import Checkpoint
 from ray.klein.runtime.coordinator.checkpoint_coordinator import CheckpointCoordinator
+from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.state.checkpoint_file_system import CheckpointFileSystem
 from ray.klein.state.checkpoint_layout import CheckpointLayout
@@ -253,6 +255,200 @@ async def test_terminal_flush_aborts_inflight_sink_transactions(tmp_path: Path) 
 
     assert not output_filesystem.exists(pending_path)
     assert not output_filesystem.exists("part-00000.json")
+
+
+@pytest.mark.asyncio
+async def test_timed_out_sink_transaction_is_committed_with_next_successful_checkpoint(tmp_path: Path) -> None:
+    output_uri = (tmp_path / "output").as_uri()
+    output_filesystem = CheckpointFileSystem(output_uri)
+    pending_path = ".klein-staging/job/part.pending"
+    output_filesystem.write_bytes(pending_path, b'{"id":1}\n')
+    committable = FileSinkCommittable(
+        root_uri=output_uri,
+        storage_options=None,
+        parts=(FilePart(pending_path, "part-00000.json"),),
+        _transaction_id="job-0-chk-7",
+    )
+    config = Configuration()
+    config.set(CheckpointOptions.DIRECTORY, (tmp_path / "checkpoints").as_uri())
+    config.set(CheckpointOptions.TIMEOUT, 1)
+    coordinator = CheckpointCoordinator(config, job_id="job-a")
+    execution_graph = Mock()
+    execution_graph.execution_vertices = []
+    execution_graph.barrier_splits = {}
+    execution_graph.checkpoint_domains = ()
+    execution_graph.sink_execution_vertices = []
+    execution_graph.source_execution_vertices = []
+    await coordinator.open(execution_graph, restore_path=None)
+
+    timed_out = Checkpoint(7, 1, (), domain_id="domain-a")
+    timed_out.mark_in_progress()
+    timed_out.triggered_at_ms = 1
+    coordinator._inflight_checkpoints[7] = timed_out
+    coordinator._active_checkpoint_by_domain["domain-a"] = 7
+    coordinator._inflight_sink_committables[7] = {"2:0": SinkCommittableCheckpointEntry("2:0", 7, committable)}
+
+    await coordinator._expire_stale_checkpoints()
+
+    assert output_filesystem.exists(pending_path)
+    assert not output_filesystem.exists("part-00000.json")
+    assert len(coordinator._carried_sink_committables["domain-a"]) == 1
+
+    unrelated = Checkpoint(8, 1, (), domain_id="domain-b")
+    has_transactions, _stabilization_ready = await coordinator._merge_aligned_checkpoint_progress(
+        unrelated,
+        8,
+        {},
+    )
+    assert has_transactions is False
+    assert len(coordinator._carried_sink_committables["domain-a"]) == 1
+
+    following = Checkpoint(9, 1, (), domain_id="domain-a")
+    following.mark_in_progress()
+    assert await coordinator._complete_aligned_checkpoint(following, 9)
+
+    assert following.status.name == "COMPLETED"
+    assert coordinator._carried_sink_committables == {}
+    assert output_filesystem.read_bytes("part-00000.json") == b'{"id":1}\n'
+    assert not output_filesystem.exists(pending_path)
+
+
+@pytest.mark.asyncio
+async def test_failed_eof_checkpoint_cannot_silently_finish_or_abort_its_sink_data(tmp_path: Path) -> None:
+    output_uri = (tmp_path / "output").as_uri()
+    output_filesystem = CheckpointFileSystem(output_uri)
+    pending_path = ".klein-staging/job/final.pending"
+    output_filesystem.write_bytes(pending_path, b'{"id":1}\n')
+    committable = FileSinkCommittable(
+        root_uri=output_uri,
+        storage_options=None,
+        parts=(FilePart(pending_path, "part-final.json"),),
+        _transaction_id="job-0-chk-7",
+    )
+    coordinator = CheckpointCoordinator(Configuration(), job_id="job-a")
+    source_id = ExecutionVertexId(1, 0)
+    checkpoint = Checkpoint(7, 1, (source_id,), domain_id="domain-a")
+    assert checkpoint.mark_source_started(source_id, is_eof=True) is True
+    coordinator._inflight_sink_committables[7] = {"2:0": SinkCommittableCheckpointEntry("2:0", 7, committable)}
+    coordinator._carry_inflight_sink_committables(checkpoint)
+
+    with pytest.raises(RuntimeError, match="checkpoint cut did not complete"):
+        await coordinator.persist_now(
+            notify_sources=False,
+            require_resolved_sinks=True,
+        )
+
+    assert output_filesystem.exists(pending_path)
+    assert not output_filesystem.exists("part-final.json")
+    assert len(coordinator._carried_sink_committables["domain-a"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_graceful_terminal_persistence_failure_keeps_sink_transaction_recoverable(tmp_path: Path) -> None:
+    output_uri = (tmp_path / "output").as_uri()
+    output_filesystem = CheckpointFileSystem(output_uri)
+    pending_path = ".klein-staging/job/final.pending"
+    output_filesystem.write_bytes(pending_path, b'{"id":1}\n')
+    entry = SinkCommittableCheckpointEntry(
+        "2:0",
+        7,
+        FileSinkCommittable(
+            output_uri,
+            None,
+            (FilePart(pending_path, "part-final.json"),),
+            "job-0-chk-7",
+        ),
+    )
+    config = Configuration()
+    config.set(CheckpointOptions.DIRECTORY, (tmp_path / "checkpoints").as_uri())
+    coordinator = CheckpointCoordinator(config, job_id="job-a")
+    coordinator._ensure_locks()
+    coordinator._pending_sink_committables[coordinator._sink_committable_identity(entry)] = entry
+    coordinator._state_revision = 1
+
+    with (
+        pytest.MonkeyPatch.context() as monkeypatch,
+        pytest.raises(RuntimeError, match="persist checkpoint metadata"),
+    ):
+        monkeypatch.setattr(checkpoint_io, "write_checkpoint", Mock(side_effect=OSError("storage unavailable")))
+        await coordinator.persist_now(
+            notify_sources=False,
+            require_resolved_sinks=True,
+        )
+
+    assert output_filesystem.exists(pending_path)
+    assert not output_filesystem.exists("part-final.json")
+    assert coordinator._pending_sink_committables == {coordinator._sink_committable_identity(entry): entry}
+
+
+def test_carried_sink_transactions_are_coalesced_within_their_original_epoch(tmp_path: Path) -> None:
+    coordinator = CheckpointCoordinator(Configuration(), job_id="job-a")
+    first = SinkCommittableCheckpointEntry(
+        "4:0",
+        7,
+        FileSinkCommittable(tmp_path.as_uri(), None, (), "writer-a"),
+    )
+    second = SinkCommittableCheckpointEntry(
+        "4:1",
+        7,
+        FileSinkCommittable(tmp_path.as_uri(), None, (), "writer-b"),
+    )
+    coordinator._coalesce_sink_committables = Mock(return_value={"4:global": first})
+
+    result = coordinator._coalesce_carried_sink_committables((first, second))
+
+    coordinator._coalesce_sink_committables.assert_called_once_with(
+        7,
+        {"4:0": first, "4:1": second},
+    )
+    assert result == {coordinator._sink_committable_identity(first): first}
+
+
+def test_carried_sink_transactions_follow_a_rescaled_checkpoint_domain(tmp_path: Path) -> None:
+    coordinator = CheckpointCoordinator(Configuration(), job_id="job-a")
+    sink_id = ExecutionVertexId(4, 0)
+    entry = SinkCommittableCheckpointEntry(
+        "4:0",
+        7,
+        FileSinkCommittable(tmp_path.as_uri(), None, (), "writer-a"),
+    )
+    coordinator._carried_sink_committables = {"old-domain": {coordinator._sink_committable_identity(entry): entry}}
+    new_domain = CheckpointDomain("new-domain", (sink_id,), (), (sink_id,))
+    graph = SimpleNamespace(find_checkpoint_domain=lambda vertex_id: new_domain if vertex_id == sink_id else None)
+
+    coordinator._remap_carried_sink_domains(graph)
+
+    assert coordinator._carried_sink_committables == {
+        "new-domain": {coordinator._sink_committable_identity(entry): entry}
+    }
+
+
+def test_retired_sink_carry_waits_for_the_coordinated_rescale_cut(tmp_path: Path) -> None:
+    coordinator = CheckpointCoordinator(Configuration(), job_id="job-a")
+    live_source = ExecutionVertexId(1, 0)
+    entry = SinkCommittableCheckpointEntry(
+        "4:1",
+        7,
+        FileSinkCommittable(tmp_path.as_uri(), None, (), "writer-b"),
+    )
+    coordinator._carried_sink_committables = {"old-domain": {coordinator._sink_committable_identity(entry): entry}}
+    new_domain = CheckpointDomain("new-domain", (live_source,), (live_source,), ())
+    graph = SimpleNamespace(
+        find_checkpoint_domain=lambda vertex_id: new_domain if vertex_id == live_source else None,
+    )
+
+    coordinator._remap_carried_sink_domains(graph)
+    coordinator._execution_graph = graph
+    coordinated = Checkpoint(
+        8,
+        1,
+        (live_source,),
+        coordinated=True,
+        domain_id="new-domain",
+    )
+
+    assert coordinator._carried_sink_committables == {None: {coordinator._sink_committable_identity(entry): entry}}
+    assert coordinator._carried_domains_for_checkpoint(coordinated) == (None, "new-domain")
 
 
 def test_coordinator_rejects_zero_retained_checkpoints(tmp_path: Path):

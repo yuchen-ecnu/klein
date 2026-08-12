@@ -109,7 +109,14 @@ def instantiate_job_vertex(
     deployer rather than on :class:`ExecutionJobVertex`.
     """
 
-    job_vertex.output_queue = Queue() if job_vertex.operator_spec.collecting else None
+    if job_vertex.operator_spec.collecting:
+        collect_queue_max_rows = job_vertex.config.get(PipelineOptions.COLLECT_QUEUE_MAX_ROWS)
+        if collect_queue_max_rows <= 0:
+            raise ValueError("pipeline.collect-queue.max-rows must be positive")
+        if job_vertex.output_queue is None:
+            job_vertex.output_queue = Queue(maxsize=collect_queue_max_rows)
+    else:
+        job_vertex.output_queue = None
     for vertex in select_vertices(job_vertex, vertices):
         vertex.reset()
         vertex.renew_task_generation()

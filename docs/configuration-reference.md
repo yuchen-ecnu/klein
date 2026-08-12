@@ -136,6 +136,7 @@ the Ray workers have enough memory for the larger worst-case footprint.
 | `pipeline.output-buffer.max-rows` | `1000` | int | Hard per-edge bound on logical rows retained before transfer to the emit queue. Exceeding it fails fast instead of growing task memory without limit. |
 | `pipeline.output-buffer.max-bytes` | `67108864` (64 MiB) | int | Hard per-edge estimated-byte bound before transfer to the emit queue. One oversized block is allowed only when exclusive. |
 | `pipeline.emit-queue.max-batches` | `2` | int | Maximum detached output batches waiting in the FIFO emit queue. Must be positive. |
+| `pipeline.collect-queue.max-rows` | `1000` | int | Maximum rows buffered by a streaming `take()`/`take_all()` terminal before producer backpressure is applied. Must be positive; the driver drains this queue while waiting. |
 
 ## Batching and data transport
 
@@ -219,7 +220,7 @@ resolved address by itself.
 | `sql.download.allowed-ip-ranges` | `[]` | sequence | Optional IP/CIDR allowlist applied to every address returned for a host. Explicit ranges can authorize approved private destinations. |
 | `sql.download.denied-ip-ranges` | `[]` | sequence | IP/CIDR denylist applied to every resolved address. Deny rules take precedence over allow ranges. |
 | `sql.download.allow-private-network` | `false` | bool | Allows HTTP(S) addresses that are loopback, private, link-local, reserved, or otherwise not globally routable. Prefer narrow `allowed-ip-ranges`. |
-| `sql.download.max-bytes` | `67108864` (64 MiB) | int | Maximum retained bytes for one download operator and row. Multiple SQL `DOWNLOAD` expressions in one projection or batch row share this budget; separate chained `stream.data.with_column(..., download(...))` operators each have their own budget. |
+| `sql.download.max-bytes` | `67108864` (64 MiB) | int | Maximum retained bytes for one download operator and row. Multiple SQL `DOWNLOAD` expressions in one projection or batch row share this budget; separate chained `stream.ray_data.with_column(..., download(...))` operators each have their own budget. |
 | `sql.download.timeout` | `30s` | duration | HTTP(S) connect, redirect, and response-read budget. Synchronous operating-system DNS resolution cannot be interrupted by this timer; storage-filesystem timeouts remain provider-specific. |
 | `sql.download.max-redirects` | `5` | int | Maximum HTTP(S) redirects. Every destination is revalidated, redirects cannot leave HTTP(S), and HTTPS cannot downgrade to HTTP. |
 
@@ -264,12 +265,20 @@ deployment configuration, request behavior, and retries.
 | `serve.client.batch-timeout` | `5` | int, seconds | Maximum time spent accumulating a proxy batch. |
 | `serve.client.batch-size` | `2` | int | Records per proxy request batch. |
 | `serve.client.max-attempts` | `30` | int | Maximum HTTP attempts for one proxy request. |
-| `serve.client.slow-request-warning` | `600` | int, seconds | Elapsed request time after which Klein emits a slow-request warning. |
-| `serve.client.http-timeout` | `300` | int, seconds | Total timeout for each HTTPX request attempt. |
+| `serve.client.max-request-bytes` | `16777216` (16 MiB) | int | Maximum encoded JSON request body retained by the embedded client. Must be positive. |
+| `serve.client.max-response-bytes` | `16777216` (16 MiB) | int | Maximum HTTP response body retained before JSON decoding. Both `Content-Length` and streamed bytes are checked. Must be positive. |
+| `serve.client.max-rows` | `100000` | int | Maximum logical rows in one proxy request. Must be positive. |
+| `serve.client.max-result-rows` | `100000` | int | Maximum logical rows accepted from one proxy result. Must be positive. |
+| `serve.client.slow-request-warning` | `60` | int, seconds | Elapsed request time after which Klein emits a slow-request warning. |
+| `serve.client.http-timeout` | `300` | int, seconds | Total logical call timeout across attempts and retry backoff. |
 | `serve.client.http-connect-timeout` | `5` | int, seconds | HTTPX connection-establishment and pool-acquisition timeout. |
 | `serve.client.http-limit-per-host` | `1000` | int | Maximum pooled HTTP connections to one host. |
 | `serve.client.http-connection-limit` | `1000` | int | Maximum total pooled HTTP connections. |
 | `serve.client.retry-backoff-max` | `3.0` | float, seconds | Maximum randomized exponential retry delay. The runtime also caps this value at `10s`. |
+| `serve.deployment.max-request-bytes` | `16777216` (16 MiB) | int | Maximum request body accepted by one Klein Serve deployment replica. Must be positive. |
+| `serve.deployment.max-response-bytes` | `16777216` (16 MiB) | int | Maximum encoded response body emitted by one deployment request. Must be positive. |
+| `serve.deployment.max-rows` | `100000` | int | Maximum logical rows accepted in one deployment request. Must be positive. |
+| `serve.deployment.max-result-rows` | `100000` | int | Maximum logical rows emitted by one deployment request. Must be positive. |
 
 ## Direct environment variables
 

@@ -61,6 +61,7 @@ _EXPORTS = {
     "get_config": ("ray.klein.api.klein_context", "get_config"),
     "install_context": ("ray.klein.api.klein_context", "install_context"),
     "list_job_snapshots": ("ray.klein.observability.state_api", "list_job_snapshots"),
+    "pipeline": ("ray.klein.api.pipeline", "pipeline"),
     "read_kafka": ("ray.klein.api.read_api", "read_kafka"),
     "read_canal": ("ray.klein.api.read_api", "read_canal"),
     "read_rocketmq": ("ray.klein.api.read_api", "read_rocketmq"),

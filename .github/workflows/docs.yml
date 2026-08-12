@@ -5,33 +5,35 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - ".github/workflows/docs.yml"
       - "Makefile"
       - "docs/**"
+      - "scripts/build_versioned_docs.py"
       - "scripts/check_doc_translations.py"
       - "src/**"
       - "pyproject.toml"
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
+    permissions:
+      contents: read
+      pages: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
@@ -39,13 +41,38 @@ jobs:
           cache: pip
       - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,docs]"
-      - run: make docs
+      - name: Import the release-tag verification key
         env:
-          KLEIN_DOCS_OFFLINE: "1"
+          RELEASE_GPG_PUBLIC_KEY: ${{ vars.RELEASE_GPG_PUBLIC_KEY }}
+        run: |
+          if test -n "$RELEASE_GPG_PUBLIC_KEY"; then
+            printf '%s' "$RELEASE_GPG_PUBLIC_KEY" | gpg --batch --import
+          elif git tag --list 'v[0-9]*' | grep -q .; then
+            echo 'RELEASE_GPG_PUBLIC_KEY is required to verify documentation release tags' >&2
+            exit 1
+          fi
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+        id: pages
+      - name: Build latest and retained release documentation
+        run: >-
+          python scripts/build_versioned_docs.py
+          --output "$RUNNER_TEMP/klein-pages"
+          --base-url "${{ steps.pages.outputs.base_url }}"
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:
-          path: docs/_build/html
+          path: ${{ runner.temp }}/klein-pages
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128

@@ -23,7 +23,9 @@ Advanced discovery contracts
 
 The following functions support adapters that need to inspect the public API
 of the installed compatible Ray version. Ordinary graph code should prefer
-``name in ctx.data.available`` and ``name in stream.data.available``.
+``name in pipeline.ray_data.available`` and
+``name in stream.ray_data.available``. The shorter ``.data`` spelling remains
+a compatibility alias.
 
 .. autosummary::
    :nosignatures:

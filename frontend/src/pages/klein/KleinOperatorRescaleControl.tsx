@@ -39,10 +39,11 @@ export const KleinOperatorRescaleControl = ({
   const {
     clearFeedback,
     isRescaling,
+    operationPending,
     requestError,
     rescale,
     result,
-  } = useKleinOperatorRescale(jobId, onRefresh);
+  } = useKleinOperatorRescale(jobId, onRefresh, operator.rescale_operation);
 
   useEffect(() => {
     setParallelismInput(String(operator.parallelism));
@@ -67,7 +68,7 @@ export const KleinOperatorRescaleControl = ({
         ? "Choose a value different from the current parallelism."
         : "The running job stays online while this operator is rescaled.";
   const businessFailure =
-    result && result.status !== "COMPLETED" && result.status !== "NOOP";
+    result && ["REJECTED", "FAILED"].includes(result.status);
 
   const confirm = async () => {
     if (targetParallelism === undefined) {
@@ -101,7 +102,7 @@ export const KleinOperatorRescaleControl = ({
           </Typography>
         </Box>
         <TextField
-          disabled={!operator.can_rescale || isRescaling}
+          disabled={!operator.can_rescale || isRescaling || operationPending}
           error={!unavailableReason && invalidParallelism}
           helperText={helperText}
           label="Parallelism"
@@ -119,15 +120,18 @@ export const KleinOperatorRescaleControl = ({
             !operator.can_rescale ||
             invalidParallelism ||
             unchangedParallelism ||
-            isRescaling
+            isRescaling ||
+            operationPending
           }
           onClick={() => setConfirmRescale(true)}
           startIcon={
-            isRescaling ? <CircularProgress color="inherit" size={16} /> : null
+            isRescaling || operationPending ? (
+              <CircularProgress color="inherit" size={16} />
+            ) : null
           }
           variant="contained"
         >
-          {isRescaling ? "Rescaling…" : "Rescale"}
+          {isRescaling || operationPending ? "Rescaling…" : "Rescale"}
         </Button>
       </Stack>
       {isRescaling && (
@@ -149,13 +153,15 @@ export const KleinOperatorRescaleControl = ({
       )}
       {result && !businessFailure && (
         <Alert
-          onClose={clearFeedback}
+          onClose={operationPending ? undefined : clearFeedback}
           severity={result.status === "COMPLETED" ? "success" : "info"}
           sx={{ marginTop: 2 }}
         >
           {result.status === "COMPLETED"
             ? `Operator parallelism changed from ${result.previous_parallelism ?? operator.parallelism} to ${result.parallelism}.`
-            : `Operator parallelism is already ${result.parallelism}.`}
+            : result.status === "NOOP"
+              ? `Operator parallelism is already ${result.parallelism}.`
+              : `Operator rescale is ${result.status.toLowerCase()} (${(result.phase || result.status).toLowerCase()}). Monitoring progress…`}
         </Alert>
       )}
       <Dialog

@@ -24,6 +24,7 @@ class _MutableStateSource(SourceFunction):
     def __init__(self) -> None:
         self.state: Any = {"offset": 1}
         self.completed: list[int] = []
+        self.aborted: list[int] = []
 
     def run(self, context: SourceContext) -> None:
         return None
@@ -39,6 +40,9 @@ class _MutableStateSource(SourceFunction):
 
     def notify_checkpoint_complete(self, checkpoint_id: int) -> None:
         self.completed.append(checkpoint_id)
+
+    def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        self.aborted.append(checkpoint_id)
 
 
 def _opened_operator(source: _MutableStateSource) -> SourceFunctionOperator:
@@ -74,6 +78,15 @@ def test_source_completion_callback_receives_only_the_durable_checkpoint_id() ->
     operator.notify_checkpoint_complete(3)
 
     assert source.completed == [3]
+
+
+def test_source_abort_callback_receives_the_discarded_checkpoint_id() -> None:
+    source = _MutableStateSource()
+    operator = _opened_operator(source)
+
+    operator.notify_checkpoint_aborted(3)
+
+    assert source.aborted == [3]
 
 
 class _LifecycleSource(SourceFunction):

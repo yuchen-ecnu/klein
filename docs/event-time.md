@@ -53,15 +53,15 @@ callable or the strategy is shared across pipelines:
 ```python
 from datetime import timedelta
 
-import ray
-import ray.klein
+import ray.klein as klein
 
-strategy = ray.klein.WatermarkStrategy.for_bounded_out_of_orderness(
+pipeline = klein.pipeline(name="event-time-orders")
+strategy = klein.WatermarkStrategy.for_bounded_out_of_orderness(
     timedelta(seconds=5),
     lambda row: row["event_time_ms"],
 ).with_idleness(timedelta(seconds=30))
 
-events = ray.klein.read_kafka(...).assign_timestamps_and_watermarks(strategy)
+events = pipeline.read_kafka(...).assign_timestamps_and_watermarks(strategy)
 ```
 
 The strategy attaches the assigned timestamp to the record, emits monotonically

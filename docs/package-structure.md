@@ -33,15 +33,16 @@ Applications should start with the short, stable imports:
 
 ```python
 import ray
-import ray.klein
-from ray.klein import Configuration, DataStream
+import ray.klein as klein
+from ray.klein import Configuration, DataStream, Pipeline, StatementSet
 from ray.klein.api import RuntimeContext, SinkFunction, SourceFunction
 from ray.klein.config import ExecutionOptions, RuntimeExecutionMode
 ```
 
 `StreamSink` remains public for advanced selective execution, but ordinary
-applications register terminals and call `ray.klein.execute("job-name")`
-without importing it.
+applications create a `klein.pipeline()`. One terminal submits directly, and a
+`StatementSet` groups multiple side-effect terminals without exposing sink
+tokens.
 
 The package `__init__` modules lazily resolve public names. Internal modules
 continue to import from the module that defines a symbol; they do not import

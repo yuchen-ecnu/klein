@@ -78,6 +78,17 @@ class DeliveryJournalTest(unittest.TestCase):
 
         self.assertEqual(_sequences(output, "d0"), [3, 4])
 
+    def test_ack_covering_current_landing_is_not_recorded_afterwards(self):
+        downstream = MockDownstream(forwarded=1)
+        output = _new_output([downstream], ["d0"])
+
+        output.collect(Record({"id": 1}))
+
+        self.assertEqual(_sequences(output, "d0"), [])
+        downstream.forwarded = 1
+        output.collect(Record({"id": 2}))
+        self.assertEqual(_sequences(output, "d0"), [2])
+
     def test_disabled_journal_retains_nothing(self):
         output = _new_output([MockDownstream()], ["d0"], enabled=False)
         for record in _records(3):

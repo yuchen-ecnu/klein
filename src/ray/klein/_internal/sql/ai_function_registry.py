@@ -181,6 +181,8 @@ def _validate_ai_call(call: exp.Expression, identifier: str) -> None:
         raise SQLQueryError(f"{identifier.upper()} requires one input and accepts one optional config argument")
     for argument in arguments:
         for node in argument.walk():
+            if isinstance(node, (exp.Star, exp.StarMap)):
+                raise SQLQueryError(f"{identifier.upper()} arguments cannot contain wildcard expressions")
             if not is_ray_data_only_node(node):
                 continue
             parent = node.parent

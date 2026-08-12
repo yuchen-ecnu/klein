@@ -17,49 +17,49 @@ does not embed DuckDB.
 
 | Entry point | Use it for | Catalog lifetime |
 |---|---|---|
-| `ray.klein.sql(query, tables=...)` | A one-off query with explicit or caller-scope bindings. | One query |
+| `pipeline.sql(query, tables=...)` | A query with explicit or caller-scope bindings. | The explicit pipeline session |
 | `stream.sql(query)` | A query rooted at one stream, bound as `self` by default. | The stream context's persistent session |
-| `ray.klein.execute_sql(statement)` | `SELECT`, Table DDL, and `INSERT INTO`. | The current pipeline's persistent session |
+| `pipeline.execute_sql(statement)` | `SELECT`, Table DDL, and `INSERT INTO`. | The explicit pipeline session |
 
-Use `ray.klein.execute_sql()` for a catalog workflow. The top-level
-`ray.klein.sql()` creates a fresh session for its one query, so it does not see
-tables previously created through `execute_sql()`. It does inherit scalar
-functions and AI-function backends registered on the current context.
+Use `pipeline.execute_sql()` for a catalog workflow. The module-level `sql()`,
+`execute_sql()`, and registration functions remain available on the implicit
+deferred pipeline. A top-level `sql()` call creates a fresh query session, so
+it does not see tables previously created through module-level `execute_sql()`;
+it does inherit functions registered on the current context.
 
 ## Query DataStreams from Python
 
-The top-level `sql` function discovers named `DataStream` variables in
-the caller's Python scope:
+When `tables` is omitted, `pipeline.sql()` discovers named `DataStream`
+variables in the caller's Python scope:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-orders = ray.klein.from_items([{"customer_id": 1, "amount": 10}])
-customers = ray.klein.from_items([{"customer_id": 1, "name": "Ada"}])
+pipeline = klein.pipeline(name="customer-totals")
+orders = pipeline.from_items([{"customer_id": 1, "amount": 10}])
+customers = pipeline.from_items([{"customer_id": 1, "name": "Ada"}])
 
-result = ray.klein.sql("""
+result = pipeline.sql("""
     SELECT c.name, SUM(o.amount) AS total
     FROM orders AS o
     JOIN customers AS c USING (customer_id)
     GROUP BY c.name
 """)
-result.data.take_all()
-rows = ray.klein.execute("customer-totals").get()
+rows = result.collect().result()
 print(rows)
 ```
 
 Explicit bindings are preferable in library code:
 
 ```python
-result = ray.klein.sql(
+result = pipeline.sql(
     "SELECT * FROM orders WHERE amount >= 10",
     tables={"orders": orders},
 )
 ```
 
-For reusable catalog state, `ray.klein.execute_sql()` keeps temporary tables in
-the current pipeline session. A stream can use the conventional `self`
+For reusable catalog state, `pipeline.execute_sql()` keeps temporary tables in
+the explicit pipeline session. A stream can use the conventional `self`
 relation:
 
 ```python
@@ -148,21 +148,21 @@ def normalize_prompt(value, prefix):
     return prefix + value.strip().lower()
 
 
-ray.klein.register_scalar_function("normalize_prompt", normalize_prompt)
-prepared = ray.klein.sql(
+pipeline.sql_session.register_scalar_function(
+    "normalize_prompt",
+    normalize_prompt,
+)
+prepared = pipeline.sql(
     "SELECT id, NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
     tables={"inputs": inputs},
 )
 ```
 
-For an explicitly isolated `KleinContext`, register through
-`context.sql_session.register_scalar_function()` instead.
-
-For a one-off `ray.klein.sql()` query, pass query-local bindings. They override
+For a one-off query, pass query-local bindings. They override
 same-named session functions without changing the session:
 
 ```python
-prepared = ray.klein.sql(
+prepared = pipeline.sql(
     "SELECT NORMALIZE_PROMPT(prompt, 'query: ') AS prompt FROM inputs",
     tables={"inputs": inputs},
     functions={"normalize_prompt": normalize_prompt},
@@ -206,7 +206,7 @@ class GenerateBackend:
         return self.model.generate(prompts)
 
 
-ray.klein.register_ai_function(
+pipeline.sql_session.register_ai_function(
     "AI_GENERATE",
     GenerateBackend,
     fn_constructor_kwargs={"model_name": "my-model"},
@@ -215,7 +215,7 @@ ray.klein.register_ai_function(
     num_gpus=1,
 )
 
-generated = ray.klein.sql(
+generated = pipeline.sql(
     "SELECT id, AI_GENERATE(prompt) AS answer FROM inputs",
     tables={"inputs": inputs},
 )
@@ -245,15 +245,16 @@ boundaries:
 - The call must be a top-level `SELECT` expression, optionally with an alias;
   it cannot be nested in another expression, used in a predicate, or used by an
   aggregate query.
+- Arguments cannot contain `*`, a qualified wildcard such as `inputs.*`, or a
+  wildcard nested inside another expression such as `MAP(*)`.
 - Streaming input must be insert-only. Updating/retracting changelog streams
   are rejected before execution.
 - `AI_CLASSIFY`, `AI_SIMILARITY`, `AI_AGG`, and `AI_SUMMARIZE_AGG` are reserved
   for later versions and currently raise a planning error.
 
-For an isolated context, call
-`context.sql_session.register_ai_function()`. Registrations are session-local;
-the top-level `ray.klein.sql()` inherits the current context's registered AI
-backends, just as it does scalar functions.
+Registrations are session-local. Register and query through the same explicit
+pipeline. Compatibility code can instead use the module-level
+`register_ai_function()` and `sql()` functions on the same current context.
 
 ## Run a continuous query
 
@@ -262,18 +263,20 @@ model. An ordinary mapping is an `INSERT` row. Updating queries emit
 `ChangelogRow` values whose `row_kind` is `+I`, `-U`, `+U`, or `-D`.
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-ray.klein.configure("execution.runtime.mode=streaming")
-orders = ray.klein.from_items(
+pipeline = klein.pipeline(
+    {"execution.runtime.mode": "streaming"},
+    name="streaming-sql",
+)
+orders = pipeline.from_items(
     [
         {"name": "Ada", "amount": 10},
         {"name": "Ada", "amount": 15},
     ]
 )
 
-changes = ray.klein.sql(
+changes = pipeline.sql(
     """
     SELECT name, SUM(amount) AS total
     FROM orders
@@ -282,8 +285,7 @@ changes = ray.klein.sql(
     tables={"orders": orders},
 )
 
-changes.take_all()
-for row in ray.klein.execute("streaming-sql").get():
+for row in changes.collect().result():
     print(row.row_kind.value, dict(row))
 ```
 
@@ -313,13 +315,24 @@ as native stateful operators.
 Flink does not allow an arbitrary global sort over an unbounded table. Klein
 therefore rejects streaming `ORDER BY` unless it is paired with `LIMIT`;
 time-attribute ordering is not implemented yet. `ORDER BY ... LIMIT n` is
-planned as a continuously maintained Top-N table and emits insert/delete
-changes when rows enter or leave the result.
+maintained as a Top-N table and emits insert/delete changes when rows enter or
+leave the result.
 
-Regular joins, non-windowed aggregates, and Top-N are stateful. Without a TTL,
-their state can grow for the lifetime of an unbounded input. A global Top-N is
-also a single keyed partition, so increasing unrelated operator parallelism
-does not remove that bottleneck.
+Regular joins, non-windowed aggregates, and Top-N are stateful, but their state
+shape depends on the input changelog. For insert-only input, `COUNT`, `SUM`, and
+`AVG` keep constant-size accumulators per group, while global Top-N retains at
+most `n` sorted rows. `MIN` and `MAX` retain value multiplicities, and a
+retraction-capable aggregate or Top-N retains row multiplicities or candidate
+rows so a later delete can expose the correct result. Those forms and regular
+joins can grow for the lifetime of an unbounded input unless TTL is configured.
+A global Top-N is still a single keyed partition, so increasing unrelated
+operator parallelism does not remove that bottleneck.
+
+The incremental aggregate and Top-N values are versioned. When the operator
+first processes a record after restoring the earlier list-backed value, it
+migrates that value in place to the compact representation. This is a narrow
+state-value migration, not a general pre-1.0 checkpoint compatibility promise;
+rehearse the exact graph and checkpoint before an upgrade.
 
 ## Define connectors with Flink-style Table DDL
 
@@ -328,9 +341,9 @@ Catalog tables follow Flink Table DDL: the schema is logical metadata and the
 not open files, create Kafka consumers, or launch Ray tasks.
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(name="table-insert")
+pipeline = klein.pipeline(name="table-insert")
 pipeline.execute_sql("""
     CREATE TEMPORARY TABLE input_events (
         event_id BIGINT NOT NULL,

@@ -17,31 +17,31 @@ class CoveragePolicy:
 
 
 COMPONENT_POLICIES = {
-    "api": CoveragePolicy("src/ray/klein/api/", 82.0),
-    "collector": CoveragePolicy("src/ray/klein/runtime/collector/", 75.0),
-    "configuration": CoveragePolicy("src/ray/klein/config/", 82.0),
-    "connectors": CoveragePolicy("src/ray/klein/integrations/", 75.0),
-    "coordinator": CoveragePolicy("src/ray/klein/runtime/coordinator/", 70.0),
-    "event-time": CoveragePolicy("src/ray/klein/runtime/event_time/", 85.0),
-    "execution-graph": CoveragePolicy("src/ray/klein/runtime/execution_graph/", 80.0),
-    "job-manager": CoveragePolicy("src/ray/klein/runtime/job_manager/", 80.0),
-    "observability": CoveragePolicy("src/ray/klein/observability/", 75.0),
-    "partitioning": CoveragePolicy("src/ray/klein/runtime/partitioning/", 82.0),
-    "scheduler": CoveragePolicy("src/ray/klein/runtime/scheduler/", 73.0),
-    "sql": CoveragePolicy("src/ray/klein/_internal/sql/", 76.0),
-    "state": CoveragePolicy("src/ray/klein/state/", 82.0),
-    "worker": CoveragePolicy("src/ray/klein/runtime/worker/", 70.0),
+    "api": CoveragePolicy("src/ray/klein/api/", 85.0),
+    "collector": CoveragePolicy("src/ray/klein/runtime/collector/", 78.0),
+    "configuration": CoveragePolicy("src/ray/klein/config/", 90.0),
+    "connectors": CoveragePolicy("src/ray/klein/integrations/", 81.0),
+    "coordinator": CoveragePolicy("src/ray/klein/runtime/coordinator/", 76.0),
+    "event-time": CoveragePolicy("src/ray/klein/runtime/event_time/", 87.0),
+    "execution-graph": CoveragePolicy("src/ray/klein/runtime/execution_graph/", 85.0),
+    "job-manager": CoveragePolicy("src/ray/klein/runtime/job_manager/", 84.0),
+    "observability": CoveragePolicy("src/ray/klein/observability/", 87.0),
+    "partitioning": CoveragePolicy("src/ray/klein/runtime/partitioning/", 86.0),
+    "scheduler": CoveragePolicy("src/ray/klein/runtime/scheduler/", 75.0),
+    "sql": CoveragePolicy("src/ray/klein/_internal/sql/", 80.0),
+    "state": CoveragePolicy("src/ray/klein/state/", 84.0),
+    "worker": CoveragePolicy("src/ray/klein/runtime/worker/", 72.0),
 }
 
 FILE_POLICIES = {
     "checkpoint-coordinator": CoveragePolicy(
         "src/ray/klein/runtime/coordinator/checkpoint_coordinator.py",
-        70.0,
+        74.0,
     ),
-    "emit-pipeline": CoveragePolicy("src/ray/klein/runtime/worker/emit_pipeline.py", 58.0),
-    "job-master": CoveragePolicy("src/ray/klein/runtime/scheduler/job_master.py", 55.0),
-    "stream-task": CoveragePolicy("src/ray/klein/runtime/worker/stream_task.py", 55.0),
-    "streaming-rules": CoveragePolicy("src/ray/klein/runtime/graph/rules.py", 50.0),
+    "emit-pipeline": CoveragePolicy("src/ray/klein/runtime/worker/emit_pipeline.py", 59.0),
+    "job-master": CoveragePolicy("src/ray/klein/runtime/scheduler/job_master.py", 57.0),
+    "stream-task": CoveragePolicy("src/ray/klein/runtime/worker/stream_task.py", 57.5),
+    "streaming-rules": CoveragePolicy("src/ray/klein/runtime/graph/rules.py", 53.0),
 }
 
 

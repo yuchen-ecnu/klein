@@ -5,8 +5,8 @@
 Pipeline configuration and compatibility API
 ============================================
 
-New application code can use :class:`Pipeline` as an explicit, strictly
-configured graph owner. A single terminal submits directly; a
+New application code should use :func:`pipeline` to create an explicit,
+strictly configured graph owner. A single terminal submits directly; a
 :class:`StatementSet` groups multiple side-effect sinks. Module-level
 ``from_*``, ``read_*``, and ``execute`` remain supported for one implicit,
 deferred pipeline. ``KleinContext`` remains the permissive advanced-isolation
@@ -15,6 +15,8 @@ contract.
 .. currentmodule:: ray.klein
 
 .. autoclass:: KleinContext
+
+.. autofunction:: pipeline
 
 .. autoclass:: Pipeline
 

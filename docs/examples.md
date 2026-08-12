@@ -50,7 +50,7 @@ python examples/stateful_streaming.py
 
 This example explicitly selects streaming because managed keyed state has no
 Ray Data batch lowering. The finite collection source reaches end-of-data, the
-job completes, and ``JobHandle.get()`` returns the collected rows.
+job completes, and ``JobHandle.result()`` returns the collected rows.
 
 ## Explore feature examples
 

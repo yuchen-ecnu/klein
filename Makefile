@@ -64,6 +64,7 @@ external:
 audit:
 	reuse lint
 	pip-audit --local --skip-editable --progress-spinner off
+	python scripts/check_ray_namespace.py
 	python scripts/check_dependency_licenses.py
 	python scripts/check_public_source.py
 

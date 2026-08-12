@@ -2,7 +2,7 @@
 
 from ray.util.queue import Queue
 
-from ray.klein.api.collect_function import CollectFunction
+from ray.klein.api.collect_function import CollectFunction, _CollectLimitExceeded
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.sink_committable import SinkCommittable
 from ray.klein.api.sink_function import SinkFunction
@@ -55,6 +55,8 @@ class CollectOperator(SinkOperator):
         super().__init__(logical_function)
         self.output_queue: Queue | None = None
         self._limit: int | None = None
+        self._truncate = False
+        self._limit_exceeded = False
         self._processed_records: int = 0
 
     def assign_output_queue(self, output_queue: Queue | None) -> None:
@@ -67,16 +69,22 @@ class CollectOperator(SinkOperator):
         if not isinstance(function, CollectFunction):
             raise TypeError("collect operator requires a CollectFunction")
         self._limit = function.limit
+        self._truncate = function.truncate
         return function
 
     def process_element(self, record: Record) -> None:
-        if self._limit is None or self._processed_records < self._limit:
-            self.sink_function.write(record.block)
-            self._processed_records += 1
+        if self._limit is not None and self._processed_records >= self._limit:
+            if not self._truncate and not self._limit_exceeded:
+                self.sink_function.write(_CollectLimitExceeded(self._limit))
+                self._limit_exceeded = True
+            return
+        self.sink_function.write(record.block)
+        self._processed_records += 1
 
     @property
     def end_of_stream(self) -> bool:
-        return self._limit is not None and self._processed_records >= self._limit
+        reached_prefix = self._truncate and self._limit is not None and self._processed_records >= self._limit
+        return reached_prefix or self._limit_exceeded
 
     @property
     def operator_type(self) -> OperatorType:

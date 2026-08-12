@@ -26,8 +26,8 @@ This separation keeps three concerns independent:
 
 The diagram groups components by ownership:
 
-1. The public API creates operator and edge specifications; it does not start
-   Ray work immediately.
+1. Sources, transformations, and statement capture create operator and edge
+   specifications without starting Ray work; terminal submission starts it.
 2. Klein's planning and control components validate the graph, select a
    runtime, deploy work, and coordinate checkpoints.
 3. The streaming data plane owns long-lived stream tasks and managed state.
@@ -36,10 +36,11 @@ The diagram groups components by ownership:
 
 ## Plan once, choose one runtime
 
-`KleinContext.execute()` hands its registered terminal sinks to `JobClient`.
-`JobClient` walks upstream from those terminals to create one immutable
-`LogicalGraph`, applies an optional Ray Serve rewrite and resource plan, and
-then selects a backend.
+A directly submitted `Pipeline` terminal, `StatementSet.execute()`, and the
+deferred `KleinContext.execute()` compatibility path all hand selected terminal
+sinks to `JobClient`. `JobClient` walks upstream from those terminals to create
+one immutable `LogicalGraph`, applies an optional Ray Serve rewrite and
+resource plan, and then selects a backend.
 
 ![Runtime selection from one logical graph](_static/runtime-selection.png)
 

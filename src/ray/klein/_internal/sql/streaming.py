@@ -481,6 +481,7 @@ def _apply_streaming_aggregate(
     functions: Mapping[str, ScalarFunction],
     num_cpus: float,
 ) -> DataStream:
+    retractable = any(row_kind.is_retraction for row_kind in stream.changelog_mode)
     group = select.args.get("group")
     original_groups = tuple(group.expressions) if group is not None else ()
     aggregate_arguments = tuple(
@@ -522,6 +523,7 @@ def _apply_streaming_aggregate(
             group_expressions=group_expressions,
             projections=rewritten_projections,
             state_ttl=max(hinted_ttls, default=None),
+            retractable=retractable,
         ),
         "SQLGroupAggregate",
         NodeType.TRANSFORM,
@@ -633,10 +635,11 @@ def _state_ttl_hints(select: exp.Select) -> dict[str, timedelta]:
 def _apply_streaming_top_n(stream: DataStream, select: exp.Select, *, num_cpus: float) -> DataStream:
     order = select.args["order"]
     limit = _parse_limit_literal(select.args["limit"].expression)
+    retractable = any(row_kind.is_retraction for row_kind in stream.changelog_mode)
     stream.partition_by(KeyPartitioner(key_selector=global_top_n_key))
     result = DataStream(
         stream,
-        SQLTopNOperator(order=order.expressions, limit=limit),
+        SQLTopNOperator(order=order.expressions, limit=limit, retractable=retractable),
         "SQLTopN",
         NodeType.TRANSFORM,
         resources=Resources(num_cpus, None, 1),

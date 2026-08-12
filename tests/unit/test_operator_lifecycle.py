@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 
-from ray.klein.api.collect_function import CollectFunction
+from ray.klein.api.collect_function import CollectFunction, _CollectLimitExceeded
 from ray.klein.api.collector import Collector
 from ray.klein.api.functions.logical_function import LogicalFunction
 from ray.klein.api.runtime_info import RuntimeInfo
@@ -61,6 +61,65 @@ def test_collect_operator_materializes_one_lifecycle_instance() -> None:
 
     assert len(_CountingCollect.instances) == 1
     assert (_CountingCollect.instances[0].open_count, _CountingCollect.instances[0].close_count) == (1, 1)
+
+
+@pytest.mark.parametrize("truncate", [False, True])
+def test_collect_operator_distinguishes_take_all_safety_limit_from_take_prefix(truncate: bool) -> None:
+    values = []
+    operator = CollectOperator(
+        LogicalFunction(
+            CollectFunction,
+            fn_constructor_kwargs={"limit": 1, "truncate": truncate},
+        )
+    )
+    operator.id, operator.name = 1, "collect"
+    operator.assign_output_queue(SimpleNamespace(put=values.append))
+    context = TaskRuntimeContext(
+        "collect",
+        0,
+        1,
+        Configuration(),
+        JobMetricGroup("test").add_task_group("1:0", "collect", 0),
+        SimpleNamespace(),
+        RuntimeInfo(),
+        "test",
+    )
+    operator.open(None, context)
+
+    operator.process_element(Record({"id": 1}))
+    assert operator.end_of_stream is truncate
+    operator.process_element(Record({"id": 2}))
+    assert operator.end_of_stream is True
+    if truncate:
+        assert values == [{"id": 1}]
+    else:
+        assert values[0] == {"id": 1}
+        assert values[1] == _CollectLimitExceeded(1)
+
+
+@pytest.mark.parametrize("truncate", [False, True])
+def test_collect_operator_zero_limit_is_initially_at_end_of_stream(truncate: bool) -> None:
+    operator = CollectOperator(
+        LogicalFunction(
+            CollectFunction,
+            fn_constructor_kwargs={"limit": 0, "truncate": truncate},
+        )
+    )
+    operator.id, operator.name = 1, "collect"
+    operator.assign_output_queue(SimpleNamespace(put=lambda _value: None))
+    context = TaskRuntimeContext(
+        "collect",
+        0,
+        1,
+        Configuration(),
+        JobMetricGroup("test").add_task_group("1:0", "collect", 0),
+        SimpleNamespace(),
+        RuntimeInfo(),
+        "test",
+    )
+    operator.open(None, context)
+
+    assert operator.end_of_stream is truncate
 
 
 class _LifecycleOperator(StreamOperator, OneInputOperator):

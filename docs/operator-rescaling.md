@@ -35,8 +35,7 @@ their concurrency setting. A callable class uses Ray actors, so a `(min, max)`
 range gives Ray Data an autoscaling actor pool:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
 
 class Enrich:
@@ -44,11 +43,16 @@ class Enrich:
         return {**row, "normalized": row["value"] / 100}
 
 
-ray.klein.configure({"execution.runtime.mode": "batch"})
-
-stream = ray.klein.from_items([{"value": 10}, {"value": 30}]).map(Enrich, concurrency=(2, 8), num_cpus=1)
-stream.take_all()
-rows = ray.klein.execute("batch-enrichment").get()
+pipeline = klein.pipeline(
+    {"execution.runtime.mode": "batch"},
+    name="batch-enrichment",
+)
+stream = pipeline.from_items([{"value": 10}, {"value": 30}]).map(
+    Enrich,
+    concurrency=(2, 8),
+    num_cpus=1,
+)
+rows = stream.collect().result()
 ```
 
 Ray Data owns the utilization policy and the actor lifecycle. The range limits
@@ -80,12 +84,13 @@ The request is accepted only when all of these conditions hold:
 Set `state.keyed.max-parallelism` before the first checkpoint and keep it stable:
 
 ```python
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "execution.runtime.mode": "streaming",
         "execution.checkpointing.dir": "s3://data-platform/klein-checkpoints",
         "state.keyed.max-parallelism": 128,
-    }
+    },
+    name="rescalable-orders",
 )
 ```
 
@@ -144,11 +149,11 @@ synchronous state API:
 
 ```python
 import ray
-import ray.klein
+import ray.klein as klein
 
 ray.init(address="auto")
 
-jobs = ray.klein.list_job_snapshots()
+jobs = klein.list_job_snapshots()
 job = next((item for item in jobs if item["status"] == "RUNNING"), None)
 if job is None:
     raise RuntimeError("No published RUNNING Klein job")
@@ -170,7 +175,7 @@ target = next(
 if target is None:
     raise RuntimeError(f"No rescalable operator named {target_name!r}")
 
-result = ray.klein.rescale_operator(
+result = klein.rescale_operator(
     job["job_id"],
     operator_id=target["op_id"],
     parallelism=4,

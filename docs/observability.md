@@ -36,12 +36,18 @@ Operations integrations can consume the stable Python state API:
 
 ```python
 import ray
-import ray.klein
+import ray.klein as klein
 
 ray.init(address="auto")
-jobs = ray.klein.list_job_snapshots()
-job = ray.klein.get_job_snapshot(jobs[0]["job_id"])
+jobs = klein.list_job_snapshots()
+job = klein.get_job_snapshot(jobs[0]["job_id"])
 ```
+
+Both snapshot calls accept a keyword-only `timeout`; the default is 15 seconds.
+The value must be a positive, finite number. `cancel_job(job_id, timeout=60)`
+uses its timeout for coordinated cancellation and allows a short additional
+response grace period on the client. If any control call times out, refresh the
+snapshot before retrying because the remote operation may still complete.
 
 Snapshots include job and operator status, task metrics, checkpoint history,
 configuration with credential-like values redacted, and a
@@ -51,14 +57,14 @@ Terminal history is in memory and is distinct from durable checkpoints.
 Configure publication and retention with:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "observability.dashboard.enabled": True,
         "observability.dashboard.history-size": 100,
-    }
+    },
+    name="observed-job",
 )
 ```
 
@@ -101,7 +107,7 @@ disabled control shows the runtime-provided reason. The same operation remains
 available through the stable Python state API:
 
 ```python
-result = ray.klein.rescale_operator(job_id, operator_id, parallelism=4)
+result = klein.rescale_operator(job_id, operator_id, parallelism=4)
 ```
 
 A stale or terminal job is read-only. Rescaling changes only the physical
@@ -180,10 +186,17 @@ is loopback-only, and a non-loopback listener requires
 `--allow-unauthenticated`. Expose both Klein and Ray through the cluster's
 authenticated operations proxy.
 
+The built-in HTTP server limits active request handlers to 64, keeps a
+128-connection accept backlog, and applies a 10-second socket timeout. A request
+that arrives while all handler slots are occupied receives HTTP 503; a timed-out
+JSON body receives HTTP 408. These are local exhaustion guardrails, not a
+replacement for proxy authentication, authorization, and rate limiting.
+
 For orchestrators, `GET /healthz` reports that the HTTP process is alive and
 `GET /readyz` verifies that the published state service can answer. Every HTTP
-response includes a server-generated `X-Request-ID`; caller-provided values are
-not reflected. Access events use bounded route names instead of raw job paths.
+normal response includes CSP, frame, MIME-sniffing, referrer, and cache-policy
+headers plus a server-generated `X-Request-ID`; caller-provided values are not
+reflected. Access events use bounded route names instead of raw job paths.
 Cancel and rescale actions emit paired
 `dashboard.control.*.requested` and `.completed` events. Export these Ray logs
 to durable storage when they are part of an audit requirement.
@@ -196,10 +209,9 @@ the normal Ray driver, worker, and actor logging pipeline. Call
 `configure_logging()` when the process needs a dedicated text or JSON stream:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-ray.klein.configure_logging(level="INFO", log_format="json")
+klein.configure_logging(level="INFO", log_format="json")
 ```
 
 The equivalent environment settings are:
@@ -218,8 +230,9 @@ and thread identity, plus available context such as `job_id`, `operator_id`,
 `task_id`, `subtask_index`, and `checkpoint_id`. Stable event names use dotted
 verbs, for example `job.status.changed`, `checkpoint.completed`, and
 `failover.global.started`. Dashboard events additionally carry `request_id`,
-HTTP route/status, duration, and control result. Structured fields whose names look like passwords,
-tokens, credentials, secrets, or API keys are redacted.
+HTTP route/status, duration, and control result. Structured fields whose names
+look like passwords, tokens, credentials, secrets, authorization values,
+cookies, or API keys are redacted.
 
 ## Keep logs and data separate
 

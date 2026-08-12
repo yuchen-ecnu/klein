@@ -540,6 +540,40 @@ class StopJobTest(unittest.TestCase):
         ):
             s.stop_job()
         self._coord.persist_now.assert_called_once()
+        self._coord.persist_now.assert_called_once_with(
+            notify_sources=False,
+            abort_inflight_sinks=True,
+            require_resolved_sinks=False,
+        )
+        self._coord.stop.assert_called_once()
+
+    def test_natural_completion_requires_all_sink_transactions_before_stop(self):
+        s = self._scheduler()
+        with (
+            self._patch_stop_workers(),
+            mock.patch.object(js_mod.klein, "get_actor_status", return_value=StreamTaskStatus.ALIVE),
+            mock.patch.object(js_mod.klein, "get", return_value=None),
+        ):
+            s.stop_job(graceful_completion=True)
+
+        self._coord.persist_now.assert_called_once_with(
+            notify_sources=False,
+            abort_inflight_sinks=False,
+            require_resolved_sinks=True,
+        )
+        self._coord.stop.assert_called_once()
+
+    def test_natural_completion_propagates_terminal_sink_flush_failure(self):
+        s = self._scheduler()
+        self._coord.persist_now.side_effect = RuntimeError("unresolved sink transaction")
+        with (
+            self._patch_stop_workers(),
+            mock.patch.object(js_mod.klein, "get_actor_status", return_value=StreamTaskStatus.ALIVE),
+            mock.patch.object(js_mod.klein, "get", side_effect=lambda value, **_kwargs: value),
+            self.assertRaisesRegex(RuntimeError, "job teardown was incomplete.*unresolved sink transaction"),
+        ):
+            s.stop_job(graceful_completion=True)
+
         self._coord.stop.assert_called_once()
 
     def test_persistence_fails_but_continues_to_stop(self):
@@ -564,6 +598,22 @@ class StopJobTest(unittest.TestCase):
             ),
         ):
             s.stop_job()
+        self._coord.persist_now.assert_not_called()
+        self._coord.stop.assert_not_called()
+
+    def test_natural_completion_fails_when_coordinator_cannot_verify_sinks(self):
+        s = self._scheduler()
+        with (
+            self._patch_stop_workers(),
+            mock.patch.object(
+                js_mod.klein,
+                "get_actor_status",
+                return_value=StreamTaskStatus.NOT_EXIST,
+            ),
+            self.assertRaisesRegex(RuntimeError, "sink transactions cannot be verified"),
+        ):
+            s.stop_job(graceful_completion=True)
+
         self._coord.persist_now.assert_not_called()
         self._coord.stop.assert_not_called()
 

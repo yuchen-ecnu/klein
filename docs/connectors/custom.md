@@ -17,15 +17,17 @@ internal Ray Data lowering.
 
 A source class implements `run`, `cancel`, `snapshot_state`, and
 `restore_state`. It may implement `open`, `close`, and
-`notify_checkpoint_complete` for lifecycle and external offset commits.
+`notify_checkpoint_complete` for lifecycle and external offset commits. A
+source that retains per-checkpoint bookkeeping may also implement
+`notify_checkpoint_aborted` to release it.
 
 ```python
-import ray
 from threading import Event
-from ray.klein import SourceFunction
+
+import ray.klein as klein
 
 
-class RecordSource(SourceFunction):
+class RecordSource(klein.SourceFunction):
     def __init__(self, records):
         self.records = tuple(records)
         self.next_index = 0
@@ -47,8 +49,11 @@ class RecordSource(SourceFunction):
         self.next_index = state["next_index"]
 
 
-ray.klein.configure({"execution.runtime.mode": "streaming"})
-stream = ray.klein.source(
+pipeline = klein.pipeline(
+    {"execution.runtime.mode": "streaming"},
+    name="custom-source",
+)
+stream = pipeline.source(
     RecordSource,
     fn_constructor_args=[[{"id": 1}, {"id": 2}]],
     bounded=True,
@@ -77,7 +82,7 @@ The other context methods are:
 | `mark_idle()` | Exclude this input from downstream minimum-watermark calculation. |
 | `mark_active(resume_watermark=None)` | Reactivate before emitting after an idle period. |
 
-`ray.klein.source` registration options are:
+`pipeline.source` registration options are:
 
 | Argument | Default | Meaning |
 |---|---:|---|
@@ -92,18 +97,17 @@ The other context methods are:
 
 Source snapshot state must be pickleable. `notify_checkpoint_complete` is
 at-least-once across coordinator recovery, so use the checkpoint ID as an
-idempotency key when committing offsets externally. `cancel` should only signal
-the run loop; release clients, files, and threads in `close`.
+idempotency key when committing offsets externally. The runtime also delivers
+`notify_checkpoint_aborted(checkpoint_id)` at least once when a captured cut is
+discarded; cleanup in this callback must be idempotent. `cancel` should only
+signal the run loop; release clients, files, and threads in `close`.
 
 ## Implement a sink
 
 Subclass `SinkFunction` for an ordinary streaming sink:
 
 ```python
-from ray.klein import SinkFunction
-
-
-class ClientSink(SinkFunction):
+class ClientSink(klein.SinkFunction):
     def __init__(self, endpoint):
         self.endpoint = endpoint
         self.client = None
@@ -127,9 +131,7 @@ stream.write(
     fn_constructor_args=["https://sink.internal"],
     concurrency=4,
     name="client-output",
-)
-
-ray.klein.execute("custom-source").wait()
+).wait()
 ```
 
 `DataStream.write` accepts the same constructor, resource, concurrency, and
@@ -160,6 +162,14 @@ not capture clients, locks, threads, or open handles. The coordinator persists
 the committable before calling `commit` and may retry either terminal method
 after recovery. The [filesystem connector](filesystem.md) is the reference
 implementation.
+
+When a checkpoint fails or times out but the job keeps processing, the
+coordinator retains that checkpoint's prepared committables inside its physical
+checkpoint domain. It adds them to the domain's next successful durable cut,
+whose source state covers their already-consumed input, and commits them then.
+It calls `abort()` for undurable carry-over during terminal teardown. Connector
+implementations must therefore keep prepared transactions valid across more
+than one checkpoint interval and make both `commit()` and `abort()` idempotent.
 
 When every parallel writer must publish through one external transaction, make
 the writer committable implement `SinkCommittableCombiner`. Its

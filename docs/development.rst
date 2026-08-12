@@ -4,17 +4,24 @@ Developing a pipeline
 =====================
 
 Klein builds one directed dataflow graph and chooses batch or streaming
-execution from its sources. Create sources directly from :mod:`ray.klein`, add
-transforms, attach at least one sink, and execute the current graph.
+execution from its sources. Create an explicit pipeline, add transforms, and
+finish with one terminal. That terminal submits its graph directly.
 
 .. code-block:: python
 
-   import ray
-   import ray.klein
+   import ray.klein as klein
 
-   stream = ray.klein.from_items([{"value": 1}, {"value": 2}, {"value": 3}])
-   stream.map(lambda row: {"value": row["value"] ** 2}).show()
-   ray.klein.execute("squares").wait()
+   pipeline = klein.pipeline(name="squares")
+   rows = (
+       pipeline.from_items([{"value": 1}, {"value": 2}, {"value": 3}])
+       .map(lambda row: {"value": row["value"] ** 2})
+       .collect()
+       .result()
+   )
+
+Use ``pipeline.create_statement_set()`` when multiple side-effect terminals
+must share one job. The module-level builders and ``execute()`` remain a
+deferred compatibility API.
 
 Execution modes
 ---------------
@@ -63,8 +70,8 @@ Resources and partitioning
 Sources, transforms, and sinks accept ``num_cpus``, ``num_gpus``, and
 ``concurrency``. Streaming graphs also support ``round_robin``, ``rescale``,
 ``adaptive_shuffle``, and ``partition_by``. Keep resource requests explicit for
-production graphs and validate them with ``ray.klein.explain`` before
-deployment.
+production graphs. On an explicit pipeline, capture side-effect terminals in a
+``StatementSet`` and call ``StatementSet.explain()`` before execution.
 
 Connectors
 ----------

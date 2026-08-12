@@ -14,23 +14,26 @@ expose it without a Klein wrapper release.
 
 ## Availability and execution mode
 
-Ray Data sources, general `stream.data` transforms, and `stream.data` consumers
-are batch-only. The expression forms `stream.data.with_column(name, expr)` and
-`stream.data.filter(expr=expr)` are dual-mode: streaming execution uses Klein's
-native expression operator. Non-download batch expressions delegate to Ray Data;
-`download()` uses Klein's shared `sql.download.*` network and byte policy in
-both modes, with one in-flight streaming request per task.
+Ray Data sources, general `stream.ray_data` transforms, and
+`stream.ray_data` consumers are batch-only. The expression forms
+`stream.ray_data.with_column(name, expr)` and
+`stream.ray_data.filter(expr=expr)` are dual-mode: streaming execution uses
+Klein's native expression operator. Non-download batch expressions delegate to
+Ray Data; `download()` uses Klein's shared `sql.download.*` network and byte
+policy in both modes, with one in-flight streaming request per task. The
+shorter `.data` namespace is a compatibility alias.
 
 Check availability before relying on an API that differs across Ray versions:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-if "read_parquet" not in dir(ray.klein):
+pipeline = klein.pipeline(name="ray-data-check")
+if "read_parquet" not in pipeline.ray_data.available:
     raise RuntimeError("This Ray version does not expose read_parquet")
 
-if "map_batches" not in stream.data.available:
+stream = pipeline.ray_data.read_parquet("s3://warehouse/events/")
+if "map_batches" not in stream.ray_data.available:
     raise RuntimeError("This Ray version does not expose Dataset.map_batches")
 ```
 
@@ -40,17 +43,18 @@ are not compatibility guarantees.
 
 ## Read data
 
-Call a public Ray Data factory directly from `ray.klein` or through `source`:
+Call a public Ray Data factory through an explicit pipeline's `ray_data`
+namespace:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-parquet = ray.klein.read_parquet("s3://warehouse/events/")
+pipeline = klein.pipeline(name="read-events")
+parquet = pipeline.ray_data.read_parquet("s3://warehouse/events/")
 
-json_rows = ray.klein.read_json("s3://warehouse/events-json/")
+json_rows = pipeline.ray_data.read_json("s3://warehouse/events-json/")
 
-csv_rows = ray.klein.source(
+csv_rows = pipeline.ray_data.source(
     "read_csv",
     "s3://warehouse/events.csv",
     override_num_blocks=32,
@@ -65,13 +69,13 @@ for connector-specific options, credentials, schemas, and return values.
 
 ## Transform data
 
-`stream.data` dynamically exposes public `Dataset` methods:
+`stream.ray_data` dynamically exposes public `Dataset` methods:
 
 ```python
 result = (
-    ray.klein.read_parquet("s3://warehouse/events/")
-    .data.map_batches(normalize, batch_format="pyarrow")
-    .data.filter(lambda row: row["amount"] > 0)
+    pipeline.ray_data.read_parquet("s3://warehouse/events/")
+    .ray_data.map_batches(normalize, batch_format="pyarrow")
+    .ray_data.filter(lambda row: row["amount"] > 0)
 )
 ```
 
@@ -79,7 +83,7 @@ Use `transform` when an operation needs more than one stream or is easier to
 express as a Dataset-to-Dataset function:
 
 ```python
-joined = left.data.transform(
+joined = left.ray_data.transform(
     lambda left_ds, right_ds: left_ds.join(right_ds, num_partitions=64),
     right,
 )
@@ -91,15 +95,13 @@ with their lowered Datasets at execution time.
 
 ## Consume or write data
 
-Public terminal Dataset methods are available through `stream.data`, including
+Public terminal Dataset methods are available through `stream.ray_data`, including
 writers supported by the installed Ray version:
 
 ```python
-stream.data.write_parquet("s3://warehouse/output/")
-ray.klein.execute("write-output").wait()
+stream.ray_data.write_parquet("s3://warehouse/output/").wait()
 
-stream.data.consume(lambda dataset: dataset.count())
-count = ray.klein.execute("count-records").get()
+count = stream.ray_data.consume(lambda dataset: dataset.count()).result()
 ```
 
 Unlike `transform`, `consume` may return any value accepted by the underlying
@@ -124,15 +126,20 @@ database-native upsert when replayed rows must not create duplicates.
 
 ## Adapt an existing Dataset
 
-Use `from_ray_dataset` when another library has already constructed a Dataset:
+Use `pipeline.ray_data.from_dataset()` when another library has already
+constructed a Dataset:
 
 ```python
+import ray.data
+
 dataset = ray.data.from_items([{"id": 1}, {"id": 2}])
-stream = ray.klein.from_ray_dataset(dataset)
+stream = pipeline.ray_data.from_dataset(dataset)
 ```
 
 The Dataset remains bounded and batch-only. Klein does not collect it into the
-driver or convert it to a native streaming source.
+driver or convert it to a native streaming source. The module-level
+`from_ray_data()` function provides the same adapter for the deferred API;
+`from_ray_dataset()` remains its compatibility alias.
 
 ## Configuration and guarantees
 

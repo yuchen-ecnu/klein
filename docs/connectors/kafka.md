@@ -19,10 +19,10 @@ python -m pip install "ray-klein[kafka]"
 ## Read Kafka
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-events = ray.klein.read_kafka(
+pipeline = klein.pipeline(name="billing-pipeline")
+events = pipeline.read_kafka(
     ["orders", "refunds"],
     bootstrap_servers="kafka:9092",
     trigger="continuous",
@@ -35,7 +35,7 @@ events = ray.klein.read_kafka(
 Decode ordinary UTF-8 JSON object values without a separate map:
 
 ```python
-orders = ray.klein.read_kafka(
+orders = pipeline.read_kafka(
     "orders",
     bootstrap_servers="kafka:9092",
     trigger="continuous",
@@ -147,7 +147,7 @@ events.write_kafka(
     value_serializer="json",
     producer_config={"compression.type": "zstd"},
     concurrency=8,
-)
+).wait()
 ```
 
 ### Output options

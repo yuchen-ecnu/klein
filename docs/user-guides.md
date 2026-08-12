@@ -22,7 +22,8 @@ pipeline development and production behavior.
 - {doc}`Develop a pipeline <development>` provides a compact first reference
   for transformations, resources, partitioning, and integrations.
 - [Manage the job lifecycle](job-lifecycle.md) covers contexts, sinks,
-  compilation, submission, handles, namespaces, cancellation, and cleanup.
+  `Pipeline`, `StatementSet`, direct and deferred submission, handles,
+  namespaces, cancellation, and cleanup.
 - [Build a production streaming pipeline](production-streaming.md) follows a
   Kafka job from event-time assignment through checkpointed file output,
   operations, and restore.
@@ -30,8 +31,11 @@ pipeline development and production behavior.
   streaming support, partitioning, changelog behavior, and sink boundaries.
 - [Choose and configure connectors](connectors/index.md) provides a dedicated
   directory tree for every built-in input, output, lookup, and Serve integration.
-- [Use Ray Data operations](ray-data-interop.md) explains bounded readers and the `stream.data` adapter.
-- [Query streams with SQL](sql.md) covers SQLGlot planning, temporary views, and Flink-style Table data definition language (DDL).
+- [Use Ray Data operations](ray-data-interop.md) explains bounded readers and
+  the explicit `stream.ray_data` adapter.
+- [Query streams with SQL](sql.md) covers built-ins, scalar and AI UDFs,
+  multimodal functions, SQLGlot planning, temporary views, and Flink-style
+  Table data definition language (DDL).
 - [Write transactional files](connectors/filesystem.md) covers streaming JSON, CSV, Parquet, text, rolling policies, and two-phase commit.
 
 ## Work with time and state

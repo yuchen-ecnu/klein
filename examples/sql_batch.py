@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-from ray.klein import Pipeline
+import ray.klein as klein
 
 
 def run() -> list[dict]:
-    pipeline = Pipeline(name="sql-batch")
+    pipeline = klein.pipeline(name="sql-batch")
     orders = pipeline.from_items(
         [
             {"customer": "Ada", "amount": 4},

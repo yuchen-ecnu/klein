@@ -18,7 +18,7 @@ model, or choose a feature directly below.
 | Feature | What it adds to a Ray application | Start here | Check before production |
 | --- | --- | --- | --- |
 | One graph for bounded and continuous data | A lazy `DataStream` graph that lowers to Ray Data for compatible bounded work or runs as long-lived Ray actors for streaming work. | [Ray Data interoperation](ray-data-interop.md) | [Operator compatibility](operator-compatibility.md) |
-| Dynamic Ray Data access | Module-level `read_*` factories and `stream.data` adapters derived from the installed compatible Ray version instead of a duplicated wrapper API. | [Ray Data interoperation](ray-data-interop.md) | [Compatibility](compatibility.md) |
+| Dynamic Ray Data access | Explicit `pipeline.ray_data` factories and `stream.ray_data` adapters derived from the installed compatible Ray version instead of a duplicated wrapper API. | [Ray Data interoperation](ray-data-interop.md) | [Compatibility](compatibility.md) |
 | Ray-native managed state | Keyed value, list, and map state; TTL; timers; key groups; RocksDB; checkpoint restore; and rescaling. | [Managed state](ray-native-state.md) | [Checkpoint recovery](checkpoint-recovery.md) |
 | Event time and idle inputs | Watermarks, idleness, event-time timers, windows, interval joins, and late-record handling. | [Event time](event-time.md) | [Delivery semantics](delivery-semantics.md) |
 | Bounded and continuous SQL | SQL and Table APIs backed by SQLGlot planning, with explicit changelog rows for dynamic tables. | [SQL and Table APIs](sql.md) | [SQL execution modes](sql.md#how-does-sql-execute) |
@@ -42,9 +42,10 @@ and forcing a mode cannot add a missing implementation. Use the
 families.
 
 The dynamic adapter exposes public readers and Dataset methods from the
-installed supported Ray release through `ray.klein.read_*`, `ctx.data`, and
-`stream.data`. Ray Data expressions used by `with_column` and `filter` also
-have documented streaming forms; most other arbitrary Dataset operations
+installed supported Ray release through `pipeline.ray_data` and
+`stream.ray_data`. The module-level readers and shorter `.data` spelling remain
+compatibility aliases. Ray Data expressions used by `with_column` and `filter`
+also have documented streaming forms; most other arbitrary Dataset operations
 remain batch-only.
 
 ## Stateful, event-time, and relational streaming

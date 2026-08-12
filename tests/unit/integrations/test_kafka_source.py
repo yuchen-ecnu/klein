@@ -206,6 +206,19 @@ def test_uncompleted_checkpoint_never_commits_kafka_offsets(monkeypatch) -> None
     assert consumer.commits == []
 
 
+def test_aborted_checkpoint_releases_retained_positions() -> None:
+    source = KafkaSource("events", bootstrap_servers="broker:9092")
+    source._positions = {("events", 0): 11}
+    source.snapshot_state(7)
+    source._positions = {("events", 0): 12}
+    source.snapshot_state(8)
+
+    source.notify_checkpoint_aborted(7)
+    source.notify_checkpoint_aborted(7)
+
+    assert source._checkpoint_positions == {8: {("events", 0): 12}}
+
+
 def test_empty_poll_marks_input_idle_without_committing(monkeypatch) -> None:
     consumer = _Consumer([])
     _install_consumer(monkeypatch, consumer)

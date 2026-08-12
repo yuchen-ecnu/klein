@@ -49,6 +49,25 @@ def test_take_stops_after_the_requested_limit() -> None:
     assert actual == [{"idx": 2}, {"idx": 4}, {"idx": 6}, {"idx": 8}, {"idx": 10}]
 
 
+def test_take_zero_drains_an_unbounded_source_without_waiting_for_input() -> None:
+    config = Configuration()
+    config.set(ExecutionOptions.MODE, RuntimeExecutionMode.STREAMING)
+    context = KleinContext(config)
+    stream = context.source(LoopSourceFunction, num_cpus=0.1)
+
+    assert execute_terminal(stream.take(0), job_name="streaming-take-zero") == []
+
+
+def test_take_all_rejects_a_streaming_result_over_its_safety_limit() -> None:
+    config = Configuration()
+    config.set(ExecutionOptions.MODE, RuntimeExecutionMode.STREAMING)
+    context = KleinContext(config)
+    sink = context.from_values({"id": 1}, {"id": 2}).take_all(limit=1)
+
+    with pytest.raises(ValueError, match="exceeds limit 1"):
+        execute_terminal(sink, job_name="streaming-take-all-limit")
+
+
 @pytest.mark.parametrize("limit", [None, 1_000])
 def test_finite_source_take_actions_stop_at_eof(limit) -> None:
     context = _context()

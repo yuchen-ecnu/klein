@@ -47,6 +47,9 @@ class SourceOperator(StreamOperator, ABC):
     def notify_checkpoint_complete(self, checkpoint_id: int) -> None:
         """Notify the source after the captured state becomes durable."""
 
+    def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        """Notify the source that a captured checkpoint was discarded."""
+
     @abstractmethod
     def bind_record_emitter(self, on_record_emitted: Callable) -> None:
         """
@@ -98,6 +101,9 @@ class SourceFunctionOperator(SourceOperator):
 
     def notify_checkpoint_complete(self, checkpoint_id: int) -> None:
         self.source_function.notify_checkpoint_complete(checkpoint_id)
+
+    def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        self.source_function.notify_checkpoint_aborted(checkpoint_id)
 
     def bind_record_emitter(self, on_record_emitted: Callable) -> None:
         if self.source_context is None:

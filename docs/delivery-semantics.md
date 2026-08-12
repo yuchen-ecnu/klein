@@ -36,7 +36,7 @@ Do not describe a job as exactly-once merely because it enables checkpoints.
 | Continuous Kafka | Per-topic/partition next offsets in Klein checkpoint | Group offsets are committed only after the corresponding Klein checkpoint is durable. |
 | Canal JSON over Kafka | Kafka offsets plus the entire decoded FlatMessage | A checkpoint cannot split recovery in the middle of one Kafka message. |
 | RocketMQ | Broker-managed consumer-group progress | Broker acknowledgement can move ahead of the last durable Klein checkpoint; a full job rollback may lose those messages. |
-| Custom `SourceFunction` | Opaque value from `snapshot_state()` | Correctness depends on capturing the next read position and implementing idempotent `notify_checkpoint_complete()`. |
+| Custom `SourceFunction` | Opaque value from `snapshot_state()` | Correctness depends on capturing the next read position and implementing idempotent checkpoint-complete and checkpoint-abort callbacks when the connector owns per-checkpoint state. |
 
 For a custom source, advance the local next-position state before calling
 `SourceContext.collect()`. The checkpoint barrier emitted by that call can then
@@ -63,6 +63,15 @@ upstream task from forgetting data that a failed downstream task had not made
 durable. Disabling `pipeline.replay-buffer.enabled` changes the recovery path to
 a broader job restart; it does not upgrade or downgrade an external sink's
 transaction semantics.
+
+If a checkpoint fails or times out while its tasks continue, already-consumed
+input is not automatically replayed. Klein therefore carries prepared sink
+committables from that failed cut within the same physical checkpoint domain
+and includes them in the domain's next successful durable checkpoint. They are
+committed only after that cut is durable; undurable carry-over is aborted during
+terminal teardown. Checkpoint-abort notifications let sources discard their
+own per-checkpoint bookkeeping independently and may be delivered more than
+once.
 
 ## Sink behavior
 

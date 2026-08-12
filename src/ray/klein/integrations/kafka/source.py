@@ -181,6 +181,14 @@ class KafkaSource(SourceFunction):
             if checkpoint_id in self._checkpoint_positions:
                 self._completed_checkpoints.append(checkpoint_id)
 
+    def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
+        with self._state_lock:
+            self._checkpoint_positions.pop(checkpoint_id, None)
+            if self._completed_checkpoints:
+                self._completed_checkpoints = deque(
+                    completed for completed in self._completed_checkpoints if completed != checkpoint_id
+                )
+
     def cancel(self) -> None:
         self._stop_event.set()
 

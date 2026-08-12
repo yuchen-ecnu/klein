@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import math
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -80,6 +82,188 @@ def test_group_aggregate_emits_flink_retract_changelog() -> None:
         (RowKind.UPDATE_AFTER, {"name": "Ada", "total": 25}),
         (RowKind.UPDATE_BEFORE, {"name": "Ada", "total": 25}),
         (RowKind.UPDATE_AFTER, {"name": "Ada", "total": 15}),
+    ]
+    operator.close()
+
+
+def test_insert_only_aggregate_keeps_incremental_constant_size_state() -> None:
+    statement = parse_one("SELECT COUNT(*) AS count, SUM(amount) AS total, AVG(amount) AS average FROM orders")
+    operator = SQLAggregateOperator(
+        group_expressions=(),
+        projections=statement.expressions,
+        retractable=False,
+    )
+    collector = _open(operator)
+
+    for amount in range(1, 1_001):
+        operator.process_element(Record({"amount": amount}))
+
+    accumulator = operator._backend.get(operator._aggregate_state)
+    assert accumulator["row_count"] == 1_000
+    assert accumulator["row_counts"] is None
+    assert "rows" not in accumulator
+    assert _changes(collector)[-1] == (
+        RowKind.UPDATE_AFTER,
+        {"count": 1_000, "total": 500_500, "average": 500.5},
+    )
+    operator.close()
+
+
+def test_incremental_min_max_and_null_aggregates_handle_retractions() -> None:
+    statement = parse_one("SELECT COUNT(value) AS count, MIN(value) AS minimum, MAX(value) AS maximum FROM orders")
+    operator = SQLAggregateOperator(group_expressions=(), projections=statement.expressions)
+    collector = _open(operator)
+
+    operator.process_element(Record({"value": 3}))
+    operator.process_element(Record({"value": None}))
+    operator.process_element(Record({"value": 1}))
+    operator.process_element(Record(ChangelogRow.delete({"value": 1})))
+
+    assert _changes(collector)[-1] == (
+        RowKind.UPDATE_AFTER,
+        {"count": 1, "minimum": 3, "maximum": 3},
+    )
+    operator.close()
+
+
+def test_incremental_aggregate_tracks_duplicate_rows_as_a_multiset() -> None:
+    statement = parse_one("SELECT COUNT(*) AS count, SUM(value) AS total FROM rows")
+    operator = SQLAggregateOperator(group_expressions=(), projections=statement.expressions)
+    collector = _open(operator)
+
+    operator.process_element(Record({"value": 2}))
+    operator.process_element(Record({"value": 2}))
+    operator.process_element(Record(ChangelogRow.delete({"value": 2})))
+
+    assert _changes(collector)[-1] == (
+        RowKind.UPDATE_AFTER,
+        {"count": 1, "total": 2},
+    )
+    accumulator = operator._backend.get(operator._aggregate_state)
+    assert list(accumulator["row_counts"].values()) == [1]
+    operator.close()
+
+
+def test_incremental_aggregate_supports_decimal_values() -> None:
+    statement = parse_one("SELECT SUM(value) AS total, AVG(value) AS average FROM rows")
+    operator = SQLAggregateOperator(group_expressions=(), projections=statement.expressions)
+    collector = _open(operator)
+
+    operator.process_element(Record({"value": Decimal("1.1")}))
+    operator.process_element(Record({"value": Decimal("2.2")}))
+    operator.process_element(Record(ChangelogRow.delete({"value": Decimal("1.1")})))
+
+    assert _changes(collector)[-1] == (
+        RowKind.UPDATE_AFTER,
+        {"total": Decimal("2.2"), "average": Decimal("2.2")},
+    )
+    operator.close()
+
+
+def test_incremental_float_sum_is_reversible_after_cancellation() -> None:
+    statement = parse_one("SELECT SUM(value) AS total, AVG(value) AS average FROM rows")
+    operator = SQLAggregateOperator(group_expressions=(), projections=statement.expressions)
+    collector = _open(operator)
+
+    operator.process_element(Record({"value": 1e16}))
+    operator.process_element(Record({"value": 1.0}))
+    operator.process_element(Record(ChangelogRow.delete({"value": 1e16})))
+
+    assert _changes(collector)[-1] == (
+        RowKind.UPDATE_AFTER,
+        {"total": 1.0, "average": 1.0},
+    )
+    operator.close()
+
+
+def test_incremental_aggregate_nan_retraction_restores_finite_results() -> None:
+    statement = parse_one(
+        "SELECT SUM(value) AS total, AVG(value) AS average, MIN(value) AS minimum, MAX(value) AS maximum FROM rows"
+    )
+    operator = SQLAggregateOperator(group_expressions=(), projections=statement.expressions)
+    collector = _open(operator)
+
+    operator.process_element(Record({"value": 3.0}))
+    operator.process_element(Record({"value": float("nan")}))
+    with_nan = dict(collector.records[-1].block)
+    assert with_nan["minimum"] == 3.0
+    assert all(math.isnan(with_nan[name]) for name in ("total", "average", "maximum"))
+
+    operator.process_element(Record(ChangelogRow.delete({"value": float("nan")})))
+
+    assert _changes(collector)[-1] == (
+        RowKind.UPDATE_AFTER,
+        {"total": 3.0, "average": 3.0, "minimum": 3.0, "maximum": 3.0},
+    )
+    operator.close()
+
+
+def test_grouped_aggregate_routes_nan_as_one_group() -> None:
+    statement = parse_one("SELECT category, COUNT(*) AS count FROM rows GROUP BY category")
+    operator = SQLAggregateOperator(
+        group_expressions=statement.args["group"].expressions,
+        projections=statement.expressions,
+    )
+    collector = _open(operator)
+
+    operator.process_element(Record({"category": float("nan")}))
+    operator.process_element(Record({"category": float("nan")}))
+    operator.process_element(Record(ChangelogRow.delete({"category": float("nan")})))
+
+    kind, result = _changes(collector)[-1]
+    assert kind is RowKind.UPDATE_AFTER
+    assert math.isnan(result["category"])
+    assert result["count"] == 1
+    operator.close()
+
+
+def test_grouped_nan_key_survives_checkpoint_restore() -> None:
+    statement = parse_one("SELECT category, COUNT(*) AS count FROM rows GROUP BY category")
+    first = SQLAggregateOperator(
+        group_expressions=statement.args["group"].expressions,
+        projections=statement.expressions,
+    )
+    _open(first, "nan-group-restore")
+    first.process_element(Record({"category": float("nan")}))
+    snapshot = first.snapshot_state()
+    first.close()
+
+    restored = SQLAggregateOperator(
+        group_expressions=statement.args["group"].expressions,
+        projections=statement.expressions,
+    )
+    collector = _open(restored, "nan-group-restore")
+    restored.restore_state(snapshot)
+    restored.process_element(Record({"category": float("nan")}))
+
+    kind, result = _changes(collector)[-1]
+    assert kind is RowKind.UPDATE_AFTER
+    assert math.isnan(result["category"])
+    assert result["count"] == 2
+    restored.close()
+
+
+def test_incremental_aggregate_migrates_legacy_list_state() -> None:
+    statement = parse_one("SELECT category, COUNT(*) AS count, SUM(value) AS total FROM rows GROUP BY category")
+    operator = SQLAggregateOperator(
+        group_expressions=statement.args["group"].expressions,
+        projections=statement.expressions,
+    )
+    collector = _open(operator)
+    operator._backend.current_key = ("a",)
+    operator._backend.put(
+        operator._aggregate_state,
+        [{"category": "a", "value": 2}, {"category": "a", "value": 2}],
+    )
+
+    operator.process_element(Record(ChangelogRow.delete({"category": "a", "value": 2})))
+
+    accumulator = operator._backend.get(operator._aggregate_state)
+    assert accumulator["version"] == 1
+    assert accumulator["row_count"] == 1
+    assert _changes(collector) == [
+        (RowKind.UPDATE_BEFORE, {"category": "a", "count": 2, "total": 4}),
+        (RowKind.UPDATE_AFTER, {"category": "a", "count": 1, "total": 2}),
     ]
     operator.close()
 
@@ -300,3 +484,95 @@ def test_streaming_top_n_emits_retractions_when_rank_changes() -> None:
         (RowKind.INSERT, {"name": "Grace", "total": 12}),
     ]
     operator.close()
+
+
+def test_insert_only_top_n_retains_only_the_requested_prefix() -> None:
+    statement = parse_one("SELECT value FROM rows ORDER BY value DESC LIMIT 2")
+    operator = SQLTopNOperator(
+        order=statement.args["order"].expressions,
+        limit=2,
+        retractable=False,
+    )
+    collector = _open(operator)
+
+    for value in range(1_000):
+        operator.process_element(Record({"value": value}))
+
+    state = operator._backend.get(operator._rows_state)
+    assert state["rows"] == [{"value": 999}, {"value": 998}]
+    assert len(state["rows"]) == 2
+    assert _changes(collector)[-2:] == [
+        (RowKind.DELETE, {"value": 997}),
+        (RowKind.INSERT, {"value": 999}),
+    ]
+    operator.close()
+
+
+def test_insert_only_top_n_truncates_migrated_legacy_state() -> None:
+    statement = parse_one("SELECT value FROM rows ORDER BY value DESC LIMIT 2")
+    operator = SQLTopNOperator(
+        order=statement.args["order"].expressions,
+        limit=2,
+        retractable=False,
+    )
+    _open(operator)
+    operator._backend.current_key = "__klein_global_top_n__"
+    operator._backend.put(operator._rows_state, [{"value": value} for value in range(10)])
+
+    operator.process_element(Record({"value": 10}))
+
+    state = operator._backend.get(operator._rows_state)
+    assert state == {"version": 1, "rows": [{"value": 10}, {"value": 9}]}
+    operator.close()
+
+
+def test_streaming_top_n_orders_and_retracts_nan_deterministically() -> None:
+    statement = parse_one("SELECT id, score FROM rows ORDER BY score DESC LIMIT 2")
+    operator = SQLTopNOperator(order=statement.args["order"].expressions, limit=2)
+    collector = _open(operator)
+
+    operator.process_element(Record({"id": "nan", "score": float("nan")}))
+    operator.process_element(Record({"id": "one", "score": 1.0}))
+    operator.process_element(Record({"id": "two", "score": 2.0}))
+    operator.process_element(Record(ChangelogRow.delete({"id": "nan", "score": float("nan")})))
+
+    assert _changes(collector)[-2][0] is RowKind.DELETE
+    assert _changes(collector)[-2][1]["id"] == "nan"
+    assert _changes(collector)[-1] == (
+        RowKind.INSERT,
+        {"id": "one", "score": 1.0},
+    )
+    state = operator._backend.get(operator._rows_state)
+    assert state["rows"] == [
+        {"id": "two", "score": 2.0},
+        {"id": "one", "score": 1.0},
+    ]
+    operator.close()
+
+
+def test_streaming_top_n_respects_explicit_null_ordering() -> None:
+    statement = parse_one("SELECT id, score FROM rows ORDER BY score ASC NULLS FIRST LIMIT 2")
+    operator = SQLTopNOperator(order=statement.args["order"].expressions, limit=2)
+    collector = _open(operator)
+
+    operator.process_element(Record({"id": "null", "score": None}))
+    operator.process_element(Record({"id": "two", "score": 2}))
+    operator.process_element(Record({"id": "one", "score": 1}))
+    operator.process_element(Record(ChangelogRow.delete({"id": "null", "score": None})))
+
+    assert _changes(collector)[-2:] == [
+        (RowKind.DELETE, {"id": "null", "score": None}),
+        (RowKind.INSERT, {"id": "two", "score": 2}),
+    ]
+    operator.close()
+
+
+def test_streaming_planner_marks_insert_only_sql_state_as_bounded_or_incremental() -> None:
+    context = KleinContext(Configuration("execution.runtime.mode=streaming"))
+    rows = context.from_items([{"value": 1}])
+
+    aggregate = context.sql("SELECT SUM(value) AS total FROM rows", tables={"rows": rows})
+    top_n = context.sql("SELECT value FROM rows ORDER BY value DESC LIMIT 2", tables={"rows": rows})
+
+    assert aggregate.stream_operator._retractable is False
+    assert top_n.stream_operator._retractable is False

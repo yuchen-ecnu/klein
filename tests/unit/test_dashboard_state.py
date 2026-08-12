@@ -60,6 +60,15 @@ def test_dashboard_configuration_redacts_credential_like_options() -> None:
                 "access_key": "AKIA-EXAMPLE",
                 "nested": {"client_secret": "deep-secret"},
             },
+            "connector.http.headers": {
+                "Authorization": "Bearer top-secret",
+                "Cookie": "session=top-secret",
+                "nested": [{"Proxy-Authorization": "Basic top-secret"}],
+                "pairs": [["Set-Cookie", "session=top-secret"]],
+            },
+            "connector.http.authorization": "Bearer direct-secret",
+            "connector.http.auth": "Basic bare-secret",
+            "connector.http.authentication": {"username": "user", "password": "secret"},
         }
     )
 
@@ -73,6 +82,15 @@ def test_dashboard_configuration_redacts_credential_like_options() -> None:
         "access_key": "<redacted>",
         "nested": {"client_secret": "<redacted>"},
     }
+    assert safe["connector.http.headers"] == {
+        "Authorization": "<redacted>",
+        "Cookie": "<redacted>",
+        "nested": [{"Proxy-Authorization": "<redacted>"}],
+        "pairs": [["Set-Cookie", "<redacted>"]],
+    }
+    assert safe["connector.http.authorization"] == "<redacted>"
+    assert safe["connector.http.auth"] == "<redacted>"
+    assert safe["connector.http.authentication"] == "<redacted>"
 
 
 def test_interval_metrics_are_derived_from_monotonic_counters() -> None:

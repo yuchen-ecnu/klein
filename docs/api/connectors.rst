@@ -3,8 +3,9 @@
 Connector extension classes
 ===========================
 
-Most applications should use module-level ``ray.klein.read_*`` functions and
-:class:`~ray.klein.DataStream` writer methods. The classes below are public
+New applications should use ``pipeline.ray_data`` for bounded Ray Data readers,
+the explicit pipeline's native reader methods, and
+:class:`~ray.klein.DataStream` writers. The classes below are public
 extension contracts for direct construction, subclassing, or lifecycle tests.
 Install the corresponding optional dependency on the driver and workers before
 importing a connector module.

@@ -15,7 +15,7 @@ failure recovery belong to the backend that executes the graph.
 
 Use the [operator compatibility matrix](operator-compatibility.md) before
 mixing batch-only and streaming-only operations, and inspect the complete graph
-with `ray.klein.explain(...)` before submitting it.
+with `StatementSet.explain()` before submitting a multi-sink job.
 
 ## Records and schemas
 
@@ -85,18 +85,20 @@ Data owns its batch-mode schema inference and conversion rules; see
 | `filter(fn)` | Returns one Boolean per row, or one Boolean sequence per native batch. Retained rows are unchanged. | Row selection. |
 | `map_reduce(...)` | Expands each input, processes expanded rows in batches, regroups them, then emits one postprocessed mapping. | A streaming fan-out, batched inference, fan-in pattern. |
 
-All five operations are lazy. They return another `DataStream`; attach a sink
-and call `execute()` to run them.
+All five operations are lazy and return another `DataStream`. On an explicit
+`Pipeline`, one terminal submits directly; use a `StatementSet` for multiple
+side-effect terminals. The module-level compatibility API stages terminals
+until `execute()`.
 
 ## Map one record to one record
 
 `map` is the default choice for row-wise transformations:
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-events = ray.klein.from_items(
+pipeline = klein.pipeline(name="normalize-amount")
+events = pipeline.from_items(
     [
         {"event_id": "e-17", "amount": 12.5},
         {"event_id": "e-18", "amount": 9.0},
@@ -111,8 +113,7 @@ normalized = events.map(
     name="NormalizeAmount",
     concurrency=4,
 )
-normalized.take_all()
-rows = ray.klein.execute("normalize-amount").get()
+rows = normalized.collect().result()
 ```
 
 The unbatched callable must return exactly one mapping. Returning `None`, a
@@ -132,8 +133,7 @@ mode. Prefer `map_batches` when batching is part of the logical UDF contract.
 from datetime import timedelta
 
 import numpy as np
-import ray
-import ray.klein
+import ray.klein as klein
 
 
 def add_tax(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
@@ -143,7 +143,8 @@ def add_tax(batch: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     }
 
 
-stream = ray.klein.from_items(
+pipeline = klein.pipeline(name="add-tax")
+stream = pipeline.from_items(
     [
         {"event_id": "e-17", "amount": 12.5},
         {"event_id": "e-18", "amount": 9.0},
@@ -155,8 +156,7 @@ stream = ray.klein.from_items(
     batch_format="numpy",
     name="AddTax",
 )
-stream.take_all()
-rows = ray.klein.execute("add-tax").get()
+rows = stream.collect().result()
 ```
 
 `"default"` and `"numpy"` expose batches as
@@ -296,7 +296,10 @@ separate from the job-wide UDF exception policy. `map_reduce` has no Ray Data
 lowering; explicitly select streaming for a bounded graph that uses it:
 
 ```python
-ray.klein.configure({"execution.runtime.mode": "streaming"})
+pipeline = klein.pipeline(
+    {"execution.runtime.mode": "streaming"},
+    name="embed-documents",
+)
 ```
 
 ## Callable forms and worker construction
@@ -413,7 +416,10 @@ Setting the option to `true` logs the error, increments the UDF exception
 metric, and continues with later input:
 
 ```python
-ray.klein.configure({"udf.ignore-exception": True})
+pipeline = klein.pipeline(
+    {"udf.ignore-exception": True},
+    name="best-effort-transform",
+)
 ```
 
 In `auto` mode this setting selects native streaming even for an otherwise
@@ -460,7 +466,7 @@ balanced = events.round_robin().map(transform, concurrency=8)
 stateful processing, windows, joins, and rescaling. Read
 [managed state](ray-native-state.md) before choosing keys or max parallelism.
 These edge methods do not repartition a Ray Data batch; use the matching
-`stream.data` operation for batch partitioning.
+`stream.ray_data` operation for batch partitioning.
 
 `left.union(right, ...)` requires every input to belong to the same internal
 pipeline. It merges the branches but defines no total order between them.

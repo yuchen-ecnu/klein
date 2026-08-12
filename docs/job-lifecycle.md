@@ -18,6 +18,14 @@ A Klein job has two distinct lifetimes:
 Keeping the builder, submitted job, and returned handle separate makes
 deployment and cleanup predictable. This page describes those boundaries.
 
+Choose one submission surface and keep it consistent within a graph:
+
+| Surface | Terminal behavior | Use it for |
+|---|---|---|
+| `Pipeline` | One terminal submits directly and returns a `JobHandle`. | New applications and one result or sink. |
+| `Pipeline` + `StatementSet` | Captures multiple side-effect terminals, then submits them together. | Shared upstream work and one multi-sink lifecycle. |
+| Module-level API or `KleinContext` | Registers lazy `StreamSink` terminals until `execute()` or `StreamSink.run()`. | Compatibility and advanced selective submission. |
+
 ## Submit one terminal directly
 
 Streams created together share graph configuration, identifiers, and SQL
@@ -27,9 +35,9 @@ An explicit pipeline gives the job a stable name. A single result or write
 terminal submits only its own graph:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline({"execution.runtime.mode": "batch"}, name="multiply-ids")
+pipeline = klein.pipeline({"execution.runtime.mode": "batch"}, name="multiply-ids")
 events = pipeline.from_items([{"id": 1}, {"id": 2}])
 result = events.map(lambda row: {"id": row["id"] * 10})
 rows = result.collect().result()
@@ -87,11 +95,12 @@ plan when requested. Operator chaining and physical streaming expansion happen
 later during submission, so use the runtime observability view for the final
 physical task set.
 
-## Execute a job
+## Execute a staged job
 
-At least one sink is required. Without one, `execute()` raises a `ValueError`
-instead of running an unconsumed stream. Pass a stable name to production jobs;
-calling `execute()` without one creates a random display name.
+`StatementSet.execute()` and the deferred compatibility `execute()` require at
+least one sink. Without one, they raise `ValueError` instead of running an
+unconsumed stream. Give production pipelines a stable name; otherwise
+submission creates a random display name.
 
 Execution has three possible paths:
 
@@ -133,19 +142,23 @@ The two handle types intentionally have different meanings:
 
 Use `result()` only when the job contains one result-producing terminal;
 `get()` remains a compatibility alias. Klein
-enforces that `take()` or `take_all()` is the job's only terminal in both batch
-and streaming modes, so collection has one consistent contract. Use `wait()`
-for one or more side-effect terminals. Batch errors have already been raised by
-`execute()`, before the completed handle exists.
+enforces that `take()`, `take_all()`, or its `collect()` alias is the job's only
+terminal in both batch and streaming modes, so collection has one consistent
+contract. `take(limit)` truncates the result and may finish as soon as the limit
+is reached. `take_all(limit=...)` and `collect(limit=...)` instead consume the
+complete result and raise `ValueError` if it contains more rows. Limits must be
+non-negative integers; booleans are rejected. Use `wait()` for one or more
+side-effect terminals. Batch errors have already been raised by `execute()`,
+before the completed handle exists.
 
-Use `wait()` for ordinary streaming sink jobs. `LiveJobHandle.get()` is a
+Use `wait()` for ordinary streaming sink jobs. `LiveJobHandle.result()` is a
 special collection boundary: the graph must contain exactly one collecting
 operator such as `take()` or `take_all()`. It is not a general way to retrieve
 file, Kafka, SQL, or custom sink results. It validates the terminal status
 before accessing the queue: a failed or cancelled job raises `KleinError` and
 does not expose partial queued results.
 
-If either `LiveJobHandle.wait()` or `LiveJobHandle.get()` receives
+If either `LiveJobHandle.wait()` or `LiveJobHandle.result()` receives
 `KeyboardInterrupt` or `SystemExit`, it attempts a five-second cancellation
 and then re-raises the signal exception. Simply allowing the submitting
 process to exit without waiting is different: the detached streaming job
@@ -202,11 +215,12 @@ with the same `job_name` coexist safely.
 Set `job.namespace` only when operations tooling needs a stable identifier:
 
 ```python
-ray.klein.configure(
+pipeline = klein.pipeline(
     {
         "job.namespace": "orders-production",
         "execution.runtime.mode": "streaming",
-    }
+    },
+    name="orders",
 )
 ```
 
@@ -229,9 +243,9 @@ Use a `StatementSet` when branches must share upstream work and one job
 lifecycle:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(name="orders")
+pipeline = klein.pipeline(name="orders")
 prepared = pipeline.from_items([{"id": 1}, {"id": 2}]).map(
     lambda row: row,
     name="Normalize",
@@ -258,21 +272,25 @@ have separate checkpoint domains. Review
 ### Advanced: selective execution
 
 If one pipeline deliberately stages terminals for different submissions,
-select explicit roots for each job. Unselected terminals remain pending:
+use the deferred `KleinContext` API and select explicit roots for each job.
+Unselected terminals remain pending:
 
 ```python
+from ray.klein import KleinContext
+
+ctx = KleinContext({"execution.runtime.mode": "batch"})
+prepared = ctx.from_items([{"id": 1}, {"id": 2}]).map(lambda row: row)
 preview_sink = prepared.show()
 archive_sink = prepared.write_json("s3://bucket/orders/")
 
-preview = ray.klein.explain("orders-preview", sinks=(preview_sink,))
-preview_handle = ray.klein.execute("orders-preview", sinks=(preview_sink,))
-archive_handle = ray.klein.execute("orders-archive", sinks=(archive_sink,))
+preview = ctx.explain("orders-preview", sinks=(preview_sink,))
+preview_handle = ctx.execute("orders-preview", sinks=(preview_sink,))
+archive_handle = ctx.execute("orders-archive", sinks=(archive_sink,))
 ```
 
-An isolated legacy context exposes the equivalent advanced form as
-`ctx.execute("orders-preview", sinks=(preview_sink,))`. Keep explicit root
-selection local to code that genuinely needs multiple submission boundaries;
-the normal multi-sink path for a `Pipeline` is `StatementSet`.
+Keep explicit root selection local to code that genuinely needs multiple
+submission boundaries; an ordinary `Pipeline` submits a single terminal
+immediately, and its normal multi-sink path is `StatementSet`.
 
 ## Cancel and drain safely
 
@@ -317,7 +335,7 @@ The native streaming `JobManager` is a named, detached Ray actor. The process
 that called `execute()` may exit or crash without cancelling the dataflow.
 Connect another driver to the same cluster and use the recorded namespace to
 inspect or cancel it. This does not apply when the first driver is inside
-`handle.wait()` or `handle.get()` and receives an interrupt, because both
+`handle.wait()` or `handle.result()` and receives an interrupt, because both
 methods deliberately try to cancel.
 
 ### JobManager failure
@@ -377,7 +395,7 @@ JSON returned by `explain()`.
 `RAY_KLEIN_COMPILE_ONLY` is enabled by the variable's **presence**, regardless
 of its value. In that mode Klein builds the graph, skips Ray initialization and
 all actors, sources, records, UDFs, and sink effects, and returns a completed
-handle whose `get()` value is the logical graph.
+handle whose `result()` value is the logical graph.
 
 Its `status` is `FINISHED` because compilation finished, not because the data
 job ran. This distinction matters in automation: never treat a compile-only

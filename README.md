@@ -88,6 +88,17 @@ python -m pip install --upgrade pip
 python -m pip install .
 ```
 
+If Ray is supplied by a vendor image or private index, verify that it does not
+already ship `ray.klein` before installing this distribution:
+
+```bash
+python -m pip install "ray[data]>=2.56.1,<2.57"
+python scripts/check_ray_namespace.py
+```
+
+Do not merge two distributions that both own `ray.klein`; use a compatible Ray
+build or the Klein implementation bundled by that Ray distribution.
+
 Install connector dependencies only when needed:
 
 ```bash
@@ -109,13 +120,13 @@ pre-commit install --hook-type pre-commit --hook-type commit-msg
 
 ## Quick start
 
-Klein builds the bounded graph lazily. `Pipeline` gives one job an explicit
-owner, while a single terminal submits itself directly:
+Klein builds the bounded graph lazily. `klein.pipeline()` gives one job an
+explicit owner, while a single terminal submits itself directly:
 
 ```python
-from ray.klein import Pipeline
+import ray.klein as klein
 
-pipeline = Pipeline(name="quick-start")
+pipeline = klein.pipeline(name="quick-start")
 rows = (
     pipeline.from_items(
         [
@@ -135,7 +146,9 @@ print(rows)
 [{'name': 'Ada', 'amount': 8}, {'name': 'Grace', 'amount': 14}]
 ```
 
-The module-level `ray.klein` API and `execute()` remain supported when one
+`klein.pipeline()` is the recommended explicit job boundary; the `Pipeline`
+class remains available for annotations, subclassing, and compatibility. The
+module-level `ray.klein` API and `execute()` remain supported when one
 implicit, deferred pipeline is convenient. Multiple sinks on an explicit
 pipeline can be grouped with `pipeline.create_statement_set()`. Source
 construction follows `ray.data`: for
@@ -168,13 +181,14 @@ ray-klein dashboard --open \
 | [Architecture](docs/architecture.md) | Planning, batch and streaming runtimes, the ordered data plane, checkpoints, recovery, and extension boundaries. |
 | [User guides](docs/user-guides.md) | Production streaming, SQL, state, delivery semantics, recovery, deployment, tuning, and operations. |
 | [DataStream programming](docs/datastream-programming-guide.md) | Records, batches, UDF forms, ordering, errors, resources, partitioning, and external side effects. |
-| [Job lifecycle](docs/job-lifecycle.md) | Contexts, terminal sinks, planning, submission, job handles, cancellation, namespaces, and cleanup. |
+| [Job lifecycle](docs/job-lifecycle.md) | `Pipeline`, `StatementSet`, direct and deferred terminals, job handles, cancellation, namespaces, and cleanup. |
 | [Operator compatibility](docs/operator-compatibility.md) | Batch/streaming support, partitioning, state, changelog, and sink behavior. |
 | [Production walkthrough](docs/production-streaming.md) | Kafka input through event-time state, checkpoints, file output, CLI operations, and restore. |
 | [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
 | [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
 | [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
 | [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the web Dashboard with operator scaling. |
+| [Evaluation](docs/evaluation/index.md) | Reproducible benchmark reports, baselines, correctness checks, neutral results, and engineering decisions. |
 | [Production readiness](docs/production-readiness.md) | A release checklist for compatibility, recovery, capacity, observability, security, and rollback. |
 | [Security](docs/security.md) | Trust boundaries, UDF and pickle risks, control-plane exposure, secrets, and hardening. |
 | [Limits, stability, and upgrades](docs/limitations.md) | Unsupported combinations, API guarantees, checkpoint compatibility, upgrade rehearsal, and rollback. |

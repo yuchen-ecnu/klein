@@ -49,6 +49,7 @@ def _task(*, output=...) -> SourceStreamTask:
     task._resolved_checkpoint_floor = 0
     task._checkpoint_wait_stop = threading.Event()
     task._source_exhausted = threading.Event()
+    task._source_drain_requested = threading.Event()
     task._rescale_operation_id = None
     task._rescale_role = None
     task._rescale_edge_indices = ()
@@ -84,6 +85,7 @@ def test_constructor_initializes_source_coordination_state() -> None:
     assert task._resolved_checkpoint_floor == 0
     assert not task._checkpoint_wait_stop.is_set()
     assert not task._source_exhausted.is_set()
+    assert not task._source_drain_requested.is_set()
 
 
 def test_source_operator_property_rejects_non_source_operator() -> None:
@@ -128,6 +130,20 @@ async def test_run_executes_blocking_source_then_stops() -> None:
     task._run_source.assert_called_once_with()
     task.report_eof_finished.assert_awaited_once_with()
     task.stop.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_run_requests_drain_before_starting_source_at_initial_end_of_stream() -> None:
+    task = _task()
+    task._state.operator.end_of_stream = True
+    task._check_end_of_stream = Mock(return_value=True)
+    task._run_source = Mock()
+    task.stop = AsyncMock()
+
+    await task._run()
+
+    task._check_end_of_stream.assert_called_once_with()
+    task._run_source.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -319,6 +335,25 @@ def test_request_drain_interrupts_source() -> None:
     task._state.operator.interrupt.assert_called_once_with()
 
 
+def test_request_drain_before_setup_is_applied_when_source_opens() -> None:
+    task = _task()
+    task._state = None
+
+    task.request_drain()
+
+    assert task._source_drain_requested.is_set()
+
+
+@pytest.mark.asyncio
+async def test_setup_applies_a_drain_requested_before_runtime_installation() -> None:
+    task = _task()
+    task._source_drain_requested.set()
+
+    await task._on_setup_done(MagicMock())
+
+    task._state.operator.interrupt.assert_called_once_with()
+
+
 @pytest.mark.parametrize("running,eof", [(False, False), (True, True)])
 def test_checkpoint_requests_are_rejected_outside_live_source(running: bool, eof: bool) -> None:
     task = _task()
@@ -406,6 +441,7 @@ async def test_abort_checkpoint_releases_source_owned_state() -> None:
     task._inflight_source_states[5] = object()
     assert await task.abort_checkpoint(5) is True
     assert await task.abort_checkpoint(5) is False
+    assert task._state.operator.notify_checkpoint_aborted.call_args_list == [call(5), call(5)]
 
 
 def test_reset_inflight_before_reclaims_only_old_epoch_state_and_requests() -> None:
@@ -417,6 +453,7 @@ def test_reset_inflight_before_reclaims_only_old_epoch_state_and_requests() -> N
     assert task._inflight_source_states == {5: "new"}
     assert list(task._requested_checkpoint_ids) == [6]
     assert task._resolved_checkpoint_floor == 3
+    task._state.operator.notify_checkpoint_aborted.assert_called_once_with(2)
     assert task.reset_inflight_before(3) == 0
 
 

@@ -90,7 +90,9 @@ Data plane
 
 DataStream
 : A lazy logical stream plus the operations required to produce it. Calling a
-  transformation builds a graph; a sink and terminal execution submit it.
+  transformation builds a graph. On an explicit `Pipeline`, one terminal
+  submits its graph directly; deferred compatibility builders stage terminals
+  until execution.
 
 Detached actor
 : A Ray actor whose lifetime is not owned by the driver that created it. Klein
@@ -98,8 +100,9 @@ Detached actor
   original driver.
 
 Driver
-: The Python process that builds the logical graph through module-level APIs
-  and submits it. The driver is distinct from the streaming JobManager.
+: The Python process that builds and submits a logical graph through an
+  explicit `Pipeline` or a compatibility API. The driver is distinct from the
+  streaming JobManager.
 
 Dynamic table
 : The relational view of a changing stream. Each input change can update the
@@ -122,8 +125,9 @@ Idle input
   processed.
 
 Interactive mode
-: A development mode in which a bounded terminal operation runs its graph and
-  returns a result immediately. It is separate from in-process debug mode.
+: A deprecated legacy-context flag that changes bounded terminal return types.
+  Explicit `Pipeline` submission replaces this behavior for new code. It is
+  separate from in-process debug mode.
 
 Job ID
 : The identifier used by the state API and published snapshots. In the current
@@ -143,8 +147,8 @@ Keyed state
   Klein exposes value, list, and map handles through `KeyedStateContext`.
 
 KleinContext
-: The advanced explicit owner used to isolate graph construction. Ordinary
-  module-level APIs keep this implementation detail out of application code.
+: A permissive compatibility owner that isolates graph construction while
+  retaining deferred terminal registration and `execute()`.
 
 Logical graph
 : The lazy user-facing graph before optimization, chaining, resource planning,
@@ -187,6 +191,11 @@ Partitioner
   policies include forward, round-robin, rescale, broadcast, key, and adaptive
   routing.
 
+Pipeline
+: The recommended explicit owner for one graph, SQL session, and configuration
+  snapshot. A single terminal submits directly; configuration keys are strict
+  by default.
+
 Processing time
 : Time from the task process's clock. It can drive processing-time timers but
   does not describe when an event occurred at the source.
@@ -211,10 +220,9 @@ Row kind
   update-after, or delete.
 
 Sink
-: A terminal operator that publishes or collects a stream. Creating one
-  registers it for the next execution; passing sink roots to `execute()` can
-  select a subset explicitly. The older interactive terminal behavior is
-  deprecated.
+: A terminal operator that publishes or collects a stream. An explicit
+  `Pipeline` submits one immediately unless a `StatementSet` captures it;
+  deferred compatibility builders register it for later execution.
 
 Source
 : An operator that introduces records and source progress into a graph. A
@@ -229,6 +237,11 @@ State TTL
 : A policy that expires keyed state after an idle duration according to its
   update and visibility rules. TTL bounds storage at the cost of forgetting old
   relationships.
+
+StatementSet
+: A group of side-effect terminals or SQL inserts captured from one explicit
+  `Pipeline` and submitted as a single job. Result-producing terminals are not
+  allowed in the group.
 
 Streaming execution
 : Klein's native long-running actor runtime with ordered transport, managed

@@ -15,9 +15,12 @@ queue or a replacement for a production data connector.
 
 | API | Input | Automatic mode | Record requirement | Recovery |
 |---|---|---|---|---|
-| `ray.klein.from_items(items)` | Iterable accepted by Ray Data | Batch | Ray Data-compatible items | Ray Data retry semantics |
-| `ray.klein.from_values(*values)` | Positional values | Streaming | Every value must be a mapping | Restores the next unread index |
-| `ray.klein.from_ray_dataset(dataset)` | Existing Ray `Dataset` | Batch | Dataset schema | Ray Data retry semantics |
+| `pipeline.from_items(items)` | Iterable accepted by Ray Data | Batch | Ray Data-compatible items | Ray Data retry semantics |
+| `pipeline.from_values(*values)` | Positional values | Streaming | Every value must be a mapping | Restores the next unread index |
+| `pipeline.ray_data.from_dataset(dataset)` | Existing Ray `Dataset` | Batch | Dataset schema | Ray Data retry semantics |
+
+The module-level `from_items`, `from_values`, and `from_ray_data` aliases build
+the implicit deferred pipeline for compatibility.
 
 `from_items` has both a native collection source and a Ray Data lowering, so
 automatic mode selects batch under the default UDF exception policy. Setting
@@ -28,24 +31,25 @@ runtime, where values must be mappings because the native
 ## Create a bounded collection
 
 ```python
-import ray
-import ray.klein
+import ray.klein as klein
 
-stream = ray.klein.from_items(
+pipeline = klein.pipeline(name="collection-example")
+stream = pipeline.from_items(
     [
         {"id": 1, "status": "new"},
         {"id": 2, "status": "ready"},
     ]
 )
-stream.show()
-ray.klein.execute("collection-example").wait()
+stream.show().wait()
 ```
 
 Use an existing Dataset without materializing it on the driver:
 
 ```python
+import ray.data
+
 dataset = ray.data.range(1_000)
-stream = ray.klein.from_ray_dataset(dataset)
+stream = pipeline.ray_data.from_dataset(dataset)
 ```
 
 Both forms are batch-only in normal use and can be followed by
@@ -54,7 +58,7 @@ Both forms are batch-only in normal use and can be followed by
 ## Create a finite streaming source
 
 ```python
-stream = ray.klein.from_values(
+stream = pipeline.from_values(
     {"id": 1, "status": "new"},
     {"id": 2, "status": "ready"},
 )
@@ -68,9 +72,10 @@ downstream external sinks can still have their own replay semantics.
 ## Configuration and limits
 
 These APIs have no connector-specific configuration. `from_values` accepts
-only an optional operator `name`; `from_items` and `from_ray_dataset` follow
-their public API signatures. Job-wide runtime and checkpoint settings are in
-the [configuration reference](../configuration-reference.md).
+only an optional operator `name`; `from_items` and
+`pipeline.ray_data.from_dataset` follow their public API signatures. Job-wide
+runtime and checkpoint settings are in the [configuration
+reference](../configuration-reference.md).
 
 The collection is serialized with the submitted job, so large local datasets
 increase driver memory and submission cost. Store production-scale data in a

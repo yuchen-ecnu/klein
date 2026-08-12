@@ -14,7 +14,8 @@ from ray.klein.config.configuration import Configuration
 
 _SECRET_KEY = re.compile(
     r"(?:^|[.\-_])"
-    r"(password|passwd|secret|token|credential|api[.\-_]?key|access[.\-_]?key|private[.\-_]?key)"
+    r"(password|passwd|secret|token|credential|auth|authentication|authorization|cookie|set[.\-_]?cookie|"
+    r"api[.\-_]?key|access[.\-_]?key|private[.\-_]?key)"
     r"(?:$|[.\-_])",
     re.IGNORECASE,
 )
@@ -57,6 +58,8 @@ def _safe_value(key: object, value: Any) -> Any:
         value = dataclasses.asdict(cast(Any, value))
     if isinstance(value, Mapping):
         return {str(nested_key): _safe_value(nested_key, item) for nested_key, item in value.items()}
+    if isinstance(value, (list, tuple)) and len(value) == 2 and _SECRET_KEY.search(str(value[0])):
+        return [dashboard_value(value[0]), "<redacted>"]
     if isinstance(value, (list, tuple, set, frozenset)):
         return [_safe_value("", item) for item in value]
     return dashboard_value(value)

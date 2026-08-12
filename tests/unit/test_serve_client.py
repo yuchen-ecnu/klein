@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -15,6 +16,7 @@ from ray.klein.config.configuration import Configuration
 from ray.klein.config.serve_options import ServeOptions
 from ray.klein.runtime.operator.map_operator import MapOperator
 from ray.klein.runtime.serve_client import EmbeddedProxyClient
+from ray.klein.runtime.serve_deployment import KleinServeDeployment
 
 
 def _client(
@@ -24,6 +26,10 @@ def _client(
     connect_timeout: int = 5,
     limit_per_host: int = 2,
     connection_limit: int = 4,
+    max_request_bytes: int = 16 * 1024 * 1024,
+    max_response_bytes: int = 16 * 1024 * 1024,
+    max_rows: int = 100_000,
+    max_result_rows: int = 100_000,
 ) -> EmbeddedProxyClient:
     config = Configuration()
     config.set(ServeOptions.DEPLOYMENT_NAME, "orders")
@@ -34,6 +40,10 @@ def _client(
     config.set(ServeOptions.HTTP_CONNECT_TIMEOUT, connect_timeout)
     config.set(ServeOptions.HTTP_LIMIT_PER_HOST, limit_per_host)
     config.set(ServeOptions.HTTP_CONNECTION_LIMIT, connection_limit)
+    config.set(ServeOptions.CLIENT_MAX_REQUEST_BYTES, max_request_bytes)
+    config.set(ServeOptions.CLIENT_MAX_RESPONSE_BYTES, max_response_bytes)
+    config.set(ServeOptions.CLIENT_MAX_ROWS, max_rows)
+    config.set(ServeOptions.CLIENT_MAX_RESULT_ROWS, max_result_rows)
     metric_group = Mock()
     metric_group.builtin_histogram.return_value = Mock()
     metric_group.builtin_counter.return_value = Mock()
@@ -286,3 +296,128 @@ async def test_client_close_from_worker_thread_uses_owning_event_loop() -> None:
 def test_client_rejects_non_positive_attempt_count() -> None:
     with pytest.raises(ValueError, match=r"max-attempts.*positive"):
         _client(max_attempts=0)
+
+
+@pytest.mark.asyncio
+async def test_client_rejects_oversized_request_before_network() -> None:
+    client = _client(max_request_bytes=8)
+    with (
+        patch.object(client, "_post", new=AsyncMock()) as post,
+        pytest.raises(ValueError, match="request exceeds"),
+    ):
+        await client.post_request_with_retry({"value": np.array([1, 2])})
+    post.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_client_rejects_request_and_result_row_overflow() -> None:
+    request_client = _client(max_rows=1)
+    with pytest.raises(ValueError, match="Serve request has 2 rows"):
+        await request_client.post_request_with_retry({"value": np.array([1, 2])})
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"value": [1, 2]})
+
+    result_client = _client(max_result_rows=1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as session:
+        result_client._session = session
+        result_client._session_loop = asyncio.get_running_loop()
+        with pytest.raises(ValueError, match="Serve result has 2 rows"):
+            await result_client.post_request_with_retry({"value": np.array([1])})
+
+
+@pytest.mark.asyncio
+async def test_client_bounds_declared_response_body() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=b"{}",
+            headers={"Content-Length": "9", "Content-Type": "application/json"},
+        )
+
+    client = _client(max_response_bytes=8)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as session:
+        client._session = session
+        client._session_loop = asyncio.get_running_loop()
+        with pytest.raises(ValueError, match="response exceeds"):
+            await client.post_request_with_retry({"value": np.array([1])})
+
+
+@pytest.mark.asyncio
+async def test_client_bounds_response_stream_without_content_length() -> None:
+    class _Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"value":'
+            yield b'"too large"}'
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "application/json"},
+            stream=_Stream(),
+        )
+
+    client = _client(max_response_bytes=8)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as session:
+        client._session = session
+        client._session_loop = asyncio.get_running_loop()
+        with pytest.raises(ValueError, match="response exceeds"):
+            await client.post_request_with_retry({"value": np.array([1])})
+
+
+class _DeploymentRequest:
+    def __init__(self, body: bytes, *, declared_length: int | None = None) -> None:
+        self._body = body
+        self.headers = {}
+        if declared_length is not None:
+            self.headers["content-length"] = str(declared_length)
+
+    async def stream(self):
+        yield self._body
+
+
+def _deployment():
+    deployment = KleinServeDeployment.func_or_class()
+    deployment.ready = True
+    deployment.operators = [lambda value: value]
+    return deployment
+
+
+@pytest.mark.asyncio
+async def test_deployment_rejects_declared_and_streamed_request_overflow() -> None:
+    deployment = _deployment()
+    deployment.max_request_bytes = 8
+
+    declared = await deployment(_DeploymentRequest(b"{}", declared_length=9))
+    streamed = await deployment(_DeploymentRequest(b'{"value":[1]}'))
+
+    assert declared.status_code == streamed.status_code == 413
+    assert "request exceeds" in json.loads(declared.body)["error"]
+    assert "request exceeds" in json.loads(streamed.body)["error"]
+
+
+@pytest.mark.asyncio
+async def test_deployment_bounds_request_and_result_rows() -> None:
+    deployment = _deployment()
+    deployment.max_rows = 1
+    request_overflow = await deployment(_DeploymentRequest(b'{"value":[1,2]}'))
+
+    deployment.max_rows = 10
+    deployment.max_result_rows = 1
+    result_overflow = await deployment(_DeploymentRequest(b'{"value":[1,2]}'))
+
+    assert request_overflow.status_code == 413
+    assert "Serve request has 2 rows" in json.loads(request_overflow.body)["error"]
+    assert result_overflow.status_code == 422
+    assert "Serve result has 2 rows" in json.loads(result_overflow.body)["error"]
+
+
+@pytest.mark.asyncio
+async def test_deployment_bounds_encoded_response() -> None:
+    deployment = _deployment()
+    deployment.max_response_bytes = 8
+
+    response = await deployment(_DeploymentRequest(b'{"value":[1]}'))
+
+    assert response.status_code == 422
+    assert "response exceeds" in json.loads(response.body)["error"]

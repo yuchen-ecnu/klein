@@ -45,15 +45,15 @@ independent batch and streaming regions.
 - A bounded custom `SourceFunction` has no public batch lowering by default, so
   `auto` selects streaming. Use a Ray Data source when batch execution is
   required.
-- Most arbitrary `stream.data` Dataset operations are batch-only. Streaming
+- Most arbitrary `stream.ray_data` Dataset operations are batch-only. Streaming
   currently supports the explicitly documented Ray expression forms and native
   `DataStream` operators.
 - Native streaming is record-oriented with ordered micro-batches. It is not a
   replacement for Ray Data's batch optimizer, block formats, or autoscaling
   actor-pool policy.
-- A graph must have at least one sink before `execute()`. The deprecated
-  interactive mode is retained only for compatibility and is not a production
-  materialization protocol.
+- `StatementSet.execute()` and the deferred compatibility `execute()` require
+  at least one sink. An explicit `Pipeline` submits one terminal directly. The
+  deprecated interactive flag is not a production materialization protocol.
 
 See [Key concepts](key-concepts.md), [Ray Data interoperability](ray-data-interop.md),
 and [Operator compatibility](operator-compatibility.md) for the selection and
@@ -73,8 +73,11 @@ The batch and streaming planners also support different subsets.
   names are not implemented.
 - Streaming `ORDER BY` requires `LIMIT` and becomes a continuously maintained
   Top-N. A global Top-N is a single keyed partition.
-- Regular joins, non-windowed aggregations, and Top-N can grow without bound
-  unless state TTL is configured. TTL can make later results incomplete.
+- Regular joins can grow without bound unless state TTL is configured.
+  Insert-only `COUNT`, `SUM`, and `AVG` use compact per-group accumulators, and
+  insert-only Top-N retains at most `n` rows; `MIN`/`MAX` multiplicities and
+  retraction-capable aggregate/Top-N state can still grow with distinct input.
+  TTL can make later results incomplete.
 - Updating queries emit changelog rows. Ordinary append sinks do not
   automatically materialize update-before, update-after, or delete records.
 - SQLGlot parses the query, but Klein owns validation and execution. Installing

@@ -254,9 +254,33 @@ def test_instantiate_collecting_job_vertex_creates_and_describes_output_queue() 
     ):
         task_deployer.instantiate_job_vertex(graph, sink, PlacementPlan())
 
-    queue.assert_called_once_with()
+    queue.assert_called_once_with(maxsize=1000)
     assert sink.output_queue is output_queue
     assert create.call_args.kwargs["construct_args"]["descriptor"].output_queue is output_queue
+
+
+def test_instantiate_collecting_job_vertex_reuses_bounded_output_queue() -> None:
+    graph = _graph(collecting_sink=True)
+    sink = graph.job_vertex(3)
+    existing_queue = object()
+    sink.output_queue = existing_queue
+
+    with (
+        patch.object(task_deployer, "Queue") as queue,
+        patch.object(task_deployer, "create_remote_actor", return_value=object()) as create,
+    ):
+        task_deployer.instantiate_job_vertex(graph, sink, PlacementPlan())
+
+    queue.assert_not_called()
+    assert create.call_args.kwargs["construct_args"]["descriptor"].output_queue is existing_queue
+
+
+def test_instantiate_collecting_job_vertex_rejects_non_positive_queue_bound() -> None:
+    graph = _graph(collecting_sink=True)
+    graph.job_vertex(3).config.set(PipelineOptions.COLLECT_QUEUE_MAX_ROWS, 0)
+
+    with pytest.raises(ValueError, match=r"collect-queue\.max-rows must be positive"):
+        task_deployer.instantiate_job_vertex(graph, graph.job_vertex(3), PlacementPlan())
 
 
 def test_place_workers_instantiates_in_graph_order_and_keeps_successful_plan() -> None:

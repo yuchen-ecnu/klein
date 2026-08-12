@@ -30,8 +30,9 @@ service latency:
 - replay-buffer records and bytes;
 - CPU, memory, Object Store pressure, spilling, and network use per Ray node.
 
-Use `ray.klein.explain()` to save the logical plan with every benchmark. A
-different plan or concurrency topology is a different baseline.
+Use `StatementSet.explain()` to save the complete logical plan with every
+benchmark before submission. A different plan or concurrency topology is a
+different baseline.
 
 ## Diagnose by symptom
 
@@ -83,7 +84,10 @@ required when sparse traffic must not wait indefinitely for a full batch.
 `pipeline.internal.batch-max-bytes` control downstream transport micro-batches;
 they are distinct from a user UDF's batch size. The first reached record, row,
 byte, or idle-time threshold flushes a target lane. Output row/byte limits and
-`pipeline.emit-queue.max-batches` are safety bounds, not throughput targets.
+`pipeline.emit-queue.max-batches` and `pipeline.collect-queue.max-rows` are
+safety bounds, not throughput targets. A streaming collecting handle drains its
+bounded queue while `wait()` or `result()` is active, so slow consumers apply
+backpressure instead of growing cluster memory without limit.
 
 ## Operator chaining and columnar passthrough
 
@@ -115,7 +119,7 @@ the legacy row-oriented wire shape.
 - `adaptive_shuffle()` reacts to downstream write timeouts. It cannot repair a
   logically hot key whose state must stay on one subtask.
 
-For batch execution, use `stream.data.repartition`, sorting, or the matching Ray
+For batch execution, use `stream.ray_data.repartition`, sorting, or the matching Ray
 Data operation; Klein streaming partitioners do not tune Ray Data partitions.
 
 ## State backend and checkpoints
@@ -123,6 +127,13 @@ Data operation; Klein streaming partitioners do not tune Ray Data partitions.
 Memory state has low overhead for moderate state. RocksDB moves mutation-heavy
 state to node-local storage and is usually preferable when state no longer fits
 comfortably in worker memory. Put its local directory on fast disposable SSD.
+
+For streaming SQL, declare an insert-only source accurately. Insert-only
+`COUNT`, `SUM`, and `AVG` keep compact per-group accumulators, and insert-only
+Top-N retains only its requested prefix. A retraction-capable changelog must
+retain row multiplicities or complete Top-N candidates so later deletes remain
+correct; monitor state size and use a justified TTL when that history is
+unbounded. `MIN` and `MAX` also retain value multiplicities.
 
 The Object Store snapshot cache avoids repeatedly moving large immutable
 snapshots through coordinator memory. Lowering its minimum size caches more

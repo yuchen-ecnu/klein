@@ -13,9 +13,11 @@ import sys
 import ray
 ray.__path__.insert(0, {str(source_ray)!r})
 import ray.klein
+import ray.klein.api.pipeline
 for name in ('confluent_kafka', 'httpx', 'orjson', 'pyiceberg', 'redis', 'rocksdict', 'rocketmq'):
     assert name not in sys.modules, name
 assert callable(ray.klein.from_items)
+assert callable(ray.klein.pipeline)
 assert callable(ray.klein.read_canal)
 assert callable(ray.klein.read_rocketmq)
 assert 'confluent_kafka' not in sys.modules

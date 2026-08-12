@@ -87,19 +87,31 @@ export type KleinOperator = {
   last_checkpoint_id?: number;
   can_rescale: boolean;
   rescale_disabled_reason?: string | null;
+  rescale_operation?: KleinOperatorRescaleResult | null;
   subtasks: KleinSubtask[];
 };
 
 export type KleinOperatorRescaleResult = {
+  operation_id: string;
   job_id: string;
   operator_id: number;
   operator_name?: string | null;
   previous_parallelism?: number | null;
   parallelism: number;
   target_parallelism: number;
-  status: "COMPLETED" | "NOOP" | "REJECTED" | "FAILED";
-  started_at_ms: number;
-  ended_at_ms: number;
+  status:
+    | "ACCEPTED"
+    | "RUNNING"
+    | "STABILIZING"
+    | "COMPLETED"
+    | "NOOP"
+    | "REJECTED"
+    | "FAILED";
+  phase?: "QUEUED" | "COORDINATING" | "STABILIZING" | "COMPLETED";
+  accepted_at_ms?: number;
+  started_at_ms?: number | null;
+  updated_at_ms?: number;
+  ended_at_ms?: number | null;
   error?: string | null;
 };
 
@@ -181,6 +193,7 @@ export type KleinJob = {
   edges: { source: number; target: number }[];
   checkpoints: KleinCheckpointDetails;
   configuration: Record<string, unknown>;
+  rescale_operations?: KleinOperatorRescaleResult[];
   status_history: {
     status: KleinJobStatus;
     previous_status?: KleinJobStatus;
