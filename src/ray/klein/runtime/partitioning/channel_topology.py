@@ -8,6 +8,8 @@ from enum import Enum
 
 
 class ChannelPattern(Enum):
+    """Physical channel relationship between upstream and downstream subtasks."""
+
     ALL_TO_ALL = "all-to-all"
     FORWARD = "forward"
     RESCALE = "rescale"
