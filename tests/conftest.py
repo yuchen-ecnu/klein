@@ -56,9 +56,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Assign exactly one CI component and keep external services opt-in."""
 
+    test_root = Path(__file__).resolve().parent
     for item in items:
-        component = component_for_test_path(Path(item.path), Path(__file__).resolve().parent)
+        item_path = Path(item.path)
+        component = component_for_test_path(item_path, test_root)
         item.add_marker(getattr(pytest.mark, f"component_{component}"))
+        if item_path.resolve().relative_to(test_root) == Path("integration/test_runtime_rescale.py"):
+            item.add_marker(pytest.mark.runtime_rescale)
 
     if not config.getoption("--run-external"):
         skip = pytest.mark.skip(reason="requires --run-external")

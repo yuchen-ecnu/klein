@@ -110,14 +110,6 @@ msgid ""
 "surfaces."
 msgstr "不提供兼容性承诺。请勿导入这些接口，也不要针对它们编写自动化。"
 
-msgid ""
-"An object appearing in Python's `dir()` or a package `__all__` is not by "
-"itself a stability declaration. The documentation is the source of truth."
-" Some runtime bridge names remain top-level for the bundled CLI; the "
-"[top-level namespace reference](api/top_level.rst) identifies them as "
-"non-application APIs."
-msgstr "某个对象出现在 Python 的 `dir()` 或包的 `__all__` 中，本身并不代表稳定性声明。文档才是事实依据。为支持随附的 CLI，一些运行时桥接名称仍保留在顶层；[顶层命名空间参考](api/top_level.rst) 会将它们标明为非应用 API。"
-
 msgid "What compatibility means"
 msgstr "兼容性的含义"
 

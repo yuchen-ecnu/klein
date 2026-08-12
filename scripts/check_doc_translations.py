@@ -21,6 +21,23 @@ def _is_translated(message: Message) -> bool:
     return bool(strings) and all(bool(value and value.strip()) for value in strings)
 
 
+def _catalog_drift_errors(
+    template_path: Path,
+    translation_path: Path,
+    translated: dict[str | tuple[str, str], Message],
+) -> list[str]:
+    errors: list[str] = []
+    template_messages = _messages(template_path)
+    for message_id in template_messages:
+        if message_id not in translated:
+            label = message_id[0] if isinstance(message_id, tuple) else message_id
+            errors.append(f"{translation_path}: missing: {label!r}")
+    for message_id in translated.keys() - template_messages.keys():
+        label = message_id[0] if isinstance(message_id, tuple) else message_id
+        errors.append(f"{translation_path}: stale: {label!r}")
+    return errors
+
+
 def check_catalogs(templates_dir: Path, translations_dir: Path) -> list[str]:
     errors: list[str] = []
     templates = sorted(templates_dir.glob("*.pot"))
@@ -45,10 +62,7 @@ def check_catalogs(templates_dir: Path, translations_dir: Path) -> list[str]:
             errors.append(f"missing catalog: {translation_path}")
             continue
 
-        for message_id in _messages(template_path):
-            if message_id not in translated:
-                label = message_id[0] if isinstance(message_id, tuple) else message_id
-                errors.append(f"{translation_path}: missing: {label!r}")
+        errors.extend(_catalog_drift_errors(template_path, translation_path, translated))
     return errors
 
 

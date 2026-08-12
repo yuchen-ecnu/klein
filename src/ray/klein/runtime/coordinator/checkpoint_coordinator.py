@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
-import hashlib
 import logging
 import time
 from collections import deque
@@ -21,6 +20,7 @@ from ray.klein.runtime.coordinator import checkpoint_io
 from ray.klein.runtime.coordinator.barrier_id_generator import BarrierIdGenerator
 from ray.klein.runtime.coordinator.checkpoint import Checkpoint
 from ray.klein.runtime.coordinator.checkpoint_registration import CheckpointRegistration
+from ray.klein.runtime.coordinator.sink_committable_coalescer import coalesce_sink_committables
 from ray.klein.runtime.execution_graph.checkpoint_domain import CheckpointDomain
 from ray.klein.runtime.execution_graph.execution_graph import ExecutionGraph
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
@@ -1583,42 +1583,13 @@ class CheckpointCoordinator(AsyncWorker):
         barrier_id: int,
         entries: dict[str, SinkCommittableCheckpointEntry],
     ) -> dict[str, SinkCommittableCheckpointEntry]:
-        """Collapse parallel Iceberg writers into one logical-sink commit."""
+        """Collapse opt-in parallel writers into one logical-sink commit."""
 
-        if len(entries) < 2:
-            return entries
-        from ray.klein.integrations.iceberg.iceberg_global_committable import (
-            combine_iceberg_committables,
+        return coalesce_sink_committables(
+            entries,
+            checkpoint_id=barrier_id,
+            job_id=self._job_id,
         )
-        from ray.klein.integrations.iceberg.iceberg_sink_committable import IcebergSinkCommittable
-
-        result: dict[str, SinkCommittableCheckpointEntry] = {}
-        iceberg_groups: dict[str, list[SinkCommittableCheckpointEntry]] = {}
-        for task_key, entry in entries.items():
-            if isinstance(entry.committable, IcebergSinkCommittable):
-                logical_sink_id = task_key.partition(":")[0]
-                iceberg_groups.setdefault(logical_sink_id, []).append(entry)
-            else:
-                result[task_key] = entry
-
-        for logical_sink_id, group in iceberg_groups.items():
-            if len(group) == 1:
-                result[group[0].task_key] = group[0]
-                continue
-            global_task_key = f"{logical_sink_id}:global"
-            writer_transaction_ids = sorted(entry.transaction_id for entry in group)
-            transaction_digest = hashlib.sha256("\0".join(writer_transaction_ids).encode()).hexdigest()
-            global_transaction_id = f"klein:iceberg:{self._job_id}:{logical_sink_id}:{barrier_id}:{transaction_digest}"
-            committable = combine_iceberg_committables(
-                tuple(entry.committable for entry in group),
-                transaction_id=global_transaction_id,
-            )
-            result[global_task_key] = SinkCommittableCheckpointEntry(
-                global_task_key,
-                barrier_id,
-                committable,
-            )
-        return result
 
     def _update_pending_sink_transaction_metric(self) -> None:
         inflight_count = sum(len(entries) for entries in self._inflight_sink_committables.values())

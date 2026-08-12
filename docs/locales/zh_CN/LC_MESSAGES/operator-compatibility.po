@@ -133,11 +133,6 @@ msgstr "`stream.data.with_column(name, expr)`"
 msgid "Ray Data"
 msgstr "Ray Data"
 
-msgid ""
-"Streaming evaluates Ray expressions per record; `download()` uses bounded"
-" ordered async I/O."
-msgstr "流处理会逐记录求值 Ray 表达式；`download()` 使用有界、保持顺序的异步 I/O。"
-
 msgid "`stream.data.filter(expr=expr)`"
 msgstr "`stream.data.filter(expr=expr)`"
 

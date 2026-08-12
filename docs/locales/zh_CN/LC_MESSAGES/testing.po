@@ -279,9 +279,6 @@ msgstr "CI 还会在 Python 3.10 和 Python 3.12 上解析精确的最低受支�
 msgid "Atheris coverage-guided fuzzing continuously exercises the restricted Pickle decoder with untrusted bytes. Relevant pull requests and main-branch pushes run a bounded smoke campaign; the weekly schedule runs for ten minutes. Reproduce the smoke campaign locally with:"
 msgstr "Atheris 覆盖引导模糊测试会持续使用不可信字节检验受限 Pickle 解码器。相关拉取请求和主分支推送会运行有界冒烟测试；每周计划任务会运行十分钟。可使用以下命令在本地复现冒烟测试："
 
-msgid "python -m pip install --constraint requirements/ci-constraints.txt atheris\nPYTHONPATH=src python tests/fuzz/fuzz_restricted_pickle.py -runs=50000 -max_len=65536"
-msgstr "python -m pip install --constraint requirements/ci-constraints.txt atheris\nPYTHONPATH=src python tests/fuzz/fuzz_restricted_pickle.py -runs=50000 -max_len=65536"
-
 msgid "Nightly CI runs the real-Ray integration graph, a ten-minute unbounded backpressure soak, and machine-readable data-plane regression benchmarks. The weekly/manual reliability workflow uses a two-hour default soak; its duration can be changed through the workflow input without changing test code."
 msgstr "夜间 CI 会运行真实 Ray 集成图、十分钟无界反压浸泡测试，以及机器可读的数据平面回归基准。每周或手动可靠性工作流默认浸泡两小时；无需修改测试代码，即可通过工作流输入调整持续时间。"
 

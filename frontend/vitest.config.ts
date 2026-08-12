@@ -7,17 +7,18 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      include: [
-        "src/common/formatUtils.ts",
-        "src/pages/klein/KleinFormatUtils.ts",
-        "src/service/*.ts",
-        "src/components/StatusChip.tsx",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/main.tsx",
+        "src/vite-env.d.ts",
+        "src/test/**",
+        "src/**/*.test.{ts,tsx}",
       ],
       thresholds: {
-        branches: 85,
-        functions: 90,
-        lines: 90,
-        statements: 90,
+        branches: 45,
+        functions: 50,
+        lines: 65,
+        statements: 65,
       },
     },
   },

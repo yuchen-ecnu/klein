@@ -71,16 +71,6 @@ msgid ""
 "narrower contract."
 msgstr "除非应用建立了更严格的契约，否则应将数据源记录、连接器服务、基于 Klein 构建的应用用户以及受保护集群边界外的网络客户端视为不受信任。"
 
-msgid ""
-"Do not restore a checkpoint from an untrusted or shared-writable location. Klein checkpoint "
-"metadata, source state, managed state, and prepared sink committables can contain Python pickle "
-"payloads. Deserializing a malicious pickle can execute code with the worker's identity. A stored "
-"checksum detects accidental corruption relative to checkpoint metadata; it is not a signature and"
-" does not make an attacker-controlled checkpoint authentic."
-msgstr ""
-"不要从不受信任或可由多个主体写入的位置恢复检查点。Klein 检查点元数据、数据源状态、托管状态和已预备的 Sink 可提交项可能包含 Python pickle 载荷。反序列化恶意 "
-"pickle 会以 worker 身份执行代码。存储的校验和只能根据检查点元数据检测意外损坏；它不是签名，也不能证明由攻击者控制的检查点可信。"
-
 msgid "Responsibility boundaries"
 msgstr "责任边界"
 
@@ -100,20 +90,6 @@ msgstr "该层不提供"
 
 msgid "Klein"
 msgstr "Klein"
-
-msgid ""
-"Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly "
-"overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based "
-"redaction in published configuration and structured log fields; checkpoint size/checksum "
-"validation before managed-state payload use; documenting source/sink recovery boundaries."
-msgstr ""
-"默认绑定回环地址的 Dashboard；除非显式覆盖，否则拒绝绑定非回环地址；Host 请求头和同源检查；限制 Dashboard "
-"请求正文大小；根据键名对已发布配置和结构化日志字段进行脱敏；使用托管状态载荷前验证检查点大小/校验和；记录数据源/Sink 恢复边界。"
-
-msgid ""
-"Authentication, authorization, TLS, hostile-code sandboxing, secret storage, tenant isolation, "
-"checkpoint signatures, record-level encryption, or an audit log independent of Ray."
-msgstr "身份验证、授权、TLS、恶意代码沙箱、密钥存储、租户隔离、检查点签名、记录级加密，或独立于 Ray 的审计日志。"
 
 msgid "Ray"
 msgstr "Ray"
@@ -242,14 +218,6 @@ msgid ""
 " when possible:"
 msgstr "默认监听地址为 `127.0.0.1:8266`。请保留该默认值，并尽可能使用 SSH 隧道或端口转发："
 
-msgid ""
-"The server refuses a non-loopback listener unless `--allow-unauthenticated` is present. That flag"
-" only acknowledges the risk; it does not add protection. A remote listener exposes job topology "
-"and status and can submit supported operator-rescale actions."
-msgstr ""
-"除非提供 `--allow-"
-"unauthenticated`，否则服务器会拒绝监听非回环地址。该标志只表示已知晓风险，不会增加任何保护。远程监听器会暴露作业拓扑和状态，并可提交受支持的算子扩缩操作。"
-
 msgid "If remote access is required:"
 msgstr "如果必须远程访问："
 
@@ -264,11 +232,6 @@ msgstr "保留 `Host`，或将其重写为监听器信任的主机；"
 
 msgid "enforce request, rate, and session limits at the proxy;"
 msgstr "在代理处实施请求、速率和会话限制；"
-
-msgid ""
-"monitor control requests at the proxy, because Klein suppresses the base HTTP access log to avoid"
-" leaking job identifiers;"
-msgstr "在代理处监控控制请求，因为 Klein 为避免泄漏作业标识符而禁用了基础 HTTP 访问日志；"
 
 msgid ""
 "do not rely on the built-in Host-header, same-origin, CSP, or frame checks as substitutes for "
@@ -435,9 +398,6 @@ msgstr "运维发布门槛请使用[生产就绪检查清单](production-readine
 
 msgid "Do not restore a checkpoint from an untrusted or shared-writable location. Version 4 checkpoint metadata has a non-executable JSON envelope, and Klein validates every embedded payload's declared size and SHA-256 before loading application state. Source state, custom state keys and serializers, generic checkpoint-store values, and prepared sink committables can still contain Python pickle payloads. Deserializing a malicious, otherwise valid application payload can execute code with the worker's identity. A stored checksum detects accidental corruption relative to checkpoint metadata; it is not a signature and does not make an attacker-controlled checkpoint authentic."
 msgstr "不要从不可信或可共享写入的位置恢复 checkpoint。版本 4 的 checkpoint 元数据具有不可执行的 JSON 信封，Klein 会在加载应用状态前校验每个嵌入负载声明的大小和 SHA-256。source 状态、自定义状态 key 和 serializer、通用 checkpoint store 值以及已准备的 sink committable 仍可能包含 Python pickle 负载。反序列化恶意但格式有效的应用负载，可能以 worker 身份执行代码。存储的校验和可发现相对于 checkpoint 元数据的意外损坏；它不是签名，也无法证明攻击者控制的 checkpoint 是真实可信的。"
-
-msgid "Default loopback Dashboard binding; refusal of a non-loopback binding unless explicitly overridden; Host-header and same-origin checks; bounded Dashboard request bodies; key-name-based redaction in published configuration and structured log fields; safe checkpoint-metadata envelopes; restricted decoding of framework-owned state envelopes; size/checksum validation before application payload use; documenting source/sink recovery boundaries."
-msgstr "Dashboard 默认绑定环回地址；除非显式覆盖，否则拒绝非环回绑定；检查 Host header 和同源策略；限制 Dashboard 请求体；按 key 名称遮蔽已发布配置和结构化日志字段；使用安全的 checkpoint 元数据信封；受限解码框架自有状态信封；使用应用负载前校验大小和校验和；记录 source/sink 恢复边界。"
 
 msgid "Framework-owned managed-state envelopes use a restricted unpickler that resolves only the exact Klein classes required by that envelope. This does not make the application-owned bytes nested inside it safe."
 msgstr "框架自有的托管状态信封使用受限 unpickler，只解析该信封所需的确切 Klein 类。这并不会让嵌套其中的应用自有字节变得安全。"

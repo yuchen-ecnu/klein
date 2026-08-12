@@ -138,5 +138,11 @@ def test_ci_workflow_declares_component_dependency_graph() -> None:
         commands = "\n".join(step.get("run", "") for step in job["steps"])
         assert f"component_{component}" in commands
 
+    runtime_integration = jobs["integration-runtime"]
+    shard_matrix = runtime_integration["strategy"]["matrix"]["include"]
+    assert {item["selection"] for item in shard_matrix} == {"not runtime_rescale", "runtime_rescale"}
+    runtime_commands = "\n".join(step.get("run", "") for step in runtime_integration["steps"])
+    assert "${{ matrix.selection }}" in runtime_commands
+
     required_gate = set(jobs["ci-success"]["needs"])
     assert set(expected_needs) <= required_gate

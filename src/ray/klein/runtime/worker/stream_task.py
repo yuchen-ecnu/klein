@@ -30,8 +30,6 @@ import time
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from dataclasses import dataclass
-from enum import Enum, auto
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -46,7 +44,6 @@ from ray.klein.runtime.actor import KleinActorHandle
 from ray.klein.runtime.collector.edge_output import DeliveryMode, EdgeOutput
 from ray.klein.runtime.collector.task_output import TaskOutput
 from ray.klein.runtime.context.runtime_context import TaskRuntimeContext
-from ray.klein.runtime.coordinator.checkpoint_strategy import CheckpointStrategy
 from ray.klein.runtime.event_time.input_watermark_tracker import InputWatermarkTracker
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import (
@@ -73,6 +70,16 @@ from ray.klein.runtime.worker.pump import (
     inbox_envelope_bytes,
     inbox_envelope_rows,
 )
+from ray.klein.runtime.worker.task_runtime import (
+    _CumulativeProgress,
+    _operator_runtime_identity,
+    _OperatorRunner,
+    _runtime_rescale_descriptor_identity,
+    _RuntimeRescaleOutcome,
+    _RuntimeRescaleTransaction,
+    _RuntimeState,
+    _TaskRuntime,
+)
 from ray.klein.runtime.worker.watermark import WatermarkController, WatermarkMode
 from ray.klein.runtime.worker.weighted_queue import WeightedQueue
 from ray.klein.state.object_store_snapshot_cache import ObjectStoreSnapshotCache
@@ -91,179 +98,6 @@ logger = get_logger(__name__)
 _RETIRED_RUNTIME_LIMIT = 8
 _RETIRED_RUNTIME_CLOSE_TIMEOUT_SECONDS = 30.0
 _RETIRED_RUNTIME_RETRY_DELAY_SECONDS = 0.25
-
-
-def _operator_runtime_identity(operator) -> tuple:
-    """Return the stable part of an OperatorSpec across Ray serialization.
-
-    User functions are cloudpickled for every actor RPC, so ordinary dataclass
-    equality can report two copies of the same logical operator as different.
-    The execution-graph identity and operator recipe shape remain stable and
-    are sufficient here; the JobMaster separately guarantees that a rescale
-    changes only parallelism before it sends any descriptor to an actor.
-    """
-
-    operator_class = operator.operator_class
-    return (
-        operator.id,
-        operator.name,
-        operator.operator_type,
-        operator_class.__module__,
-        operator_class.__qualname__,
-        operator.owns_state,
-        tuple(_operator_runtime_identity(child) for child in operator.children),
-    )
-
-
-def _runtime_rescale_descriptor_identity(descriptor: "TaskDeploymentDescriptor") -> tuple:
-    """Stable identity for idempotent prepare retries across serialization."""
-
-    input_channels = getattr(descriptor, "input_channels", None)
-    return (
-        descriptor.vertex_id,
-        descriptor.task_name,
-        descriptor.task_generation,
-        descriptor.task_index,
-        descriptor.parallelism,
-        descriptor.namespace,
-        descriptor.restore_operation_id,
-        _operator_runtime_identity(descriptor.operator),
-        tuple(getattr(descriptor, "input_vertex_ids", ())),
-        None if input_channels is None else tuple(input_channels),
-        tuple(
-            (
-                edge.target_task_names,
-                edge.control_target_indices,
-                edge.topology_epoch,
-            )
-            for edge in getattr(descriptor, "out_edges", ())
-        ),
-    )
-
-
-class _OperatorRunner:
-    """Sync/async record processing and configured UDF error handling."""
-
-    def __init__(self, state: "_RuntimeState") -> None:
-        self._state = state
-
-    def process(self, record: Record) -> None:
-        try:
-            self._state.operator.invoke_process(record)
-        except Exception as error:
-            if not self._state.operator.should_ignore_exception(error):
-                raise
-
-    async def process_async(self, record: Record) -> list[Record]:
-        """Compute the async operator's output for one record (no emit).
-
-        Returns the records the operator would emit; the caller
-        (AsyncOrderedRunner's consumer) is responsible for collecting them in
-        order. A UDF exception that the configured policy ignores yields an empty
-        list (emit nothing); a fatal one propagates so the task can fail.
-        """
-        try:
-            records = await self._state.operator.invoke_process_async(record)
-        except Exception as error:
-            if not self._state.operator.should_ignore_exception(error):
-                raise
-            records = []
-        return records or []
-
-
-@dataclass(slots=True)
-class _RuntimeState:
-    """Components initialized by ``setup_and_run``."""
-
-    inbox: WeightedQueue[InboxEnvelope]
-    operator: StreamOperator
-    output: TaskOutput | None
-    executor: ThreadPoolExecutor
-    input_batches: InputBatchAccumulator
-    checkpoint_strategy: CheckpointStrategy
-    metrics: TaskMetrics
-    is_async_operator: bool = False
-    # Ordered concurrency window for an async operator (None for sync operators);
-    # set in setup_and_run after the pump exists.
-    async_runner: "AsyncOrderedRunner | None" = None
-    pipelined: bool = False
-    # The operator runner, set right after construction.
-    runner: _OperatorRunner | None = None
-    state_snapshot_cache: ObjectStoreSnapshotCache | None = None
-    event_time_tracker: InputWatermarkTracker | None = None
-
-
-@dataclass(slots=True)
-class _TaskRuntime:
-    """One complete operator runtime owned by a StreamTask actor.
-
-    The actor normally exposes exactly one active instance through its legacy
-    ``_state``/``_watermark``/``_emit``/``_pump`` pointers. During retained-actor
-    rescaling a second instance can be built and restored here without changing
-    any of those live pointers.
-    """
-
-    descriptor: "TaskDeploymentDescriptor"
-    context: TaskRuntimeContext
-    state: _RuntimeState
-    watermark: WatermarkController
-    emit: EmitPipeline
-    pump: InboxPump
-    state_backend_task_name: str
-    closed: bool = False
-    async_runner_closed: bool = False
-    emit_closed: bool = False
-    operator_closed: bool = False
-    close_task: asyncio.Task[None] | None = None
-    backend_discarded: bool = False
-
-
-@dataclass(slots=True)
-class _RuntimeRescaleTransaction:
-    operation_id: str
-    previous: _TaskRuntime
-    pending: _TaskRuntime
-
-
-class _RuntimeRescaleOutcome(Enum):
-    COMMITTED = auto()
-    ROLLED_BACK = auto()
-
-
-@dataclass(slots=True)
-class _CumulativeProgress:
-    """Counters retained when one actor swaps to a freshly built runtime."""
-
-    rows_in: int = 0
-    rows_out: int = 0
-    bytes_in: int = 0
-    bytes_out: int = 0
-    busy_ns: int = 0
-    backpressure_ns: int = 0
-    backpressure_events: int = 0
-    barriers_in: int = 0
-    barriers_out: int = 0
-
-    def add_runtime(self, runtime: _TaskRuntime, successor: _TaskRuntime) -> None:
-        operator = runtime.state.operator
-        output = runtime.state.output
-        self.rows_in += operator.records_in
-        self.rows_out += operator.records_out
-        self.bytes_in += operator.bytes_in
-        self.bytes_out += operator.bytes_out
-        self.busy_ns += operator.processing_duration_ns
-        if output is not None:
-            self.backpressure_ns += output.backpressure_duration_ns
-            self.backpressure_events += output.backpressure_events
-        # TaskMetricGroup caches metric handles.  A retained actor can therefore
-        # expose the same readable Counter through both runtimes; blindly adding
-        # the predecessor and then reading the successor would double count it.
-        # Rebase the offset against the successor's raw value instead.  This also
-        # preserves continuity when the successor owns a fresh counter at zero.
-        barriers_in = self.barriers_in + int(runtime.state.metrics.barriers_in.value)
-        barriers_out = self.barriers_out + int(runtime.state.metrics.barriers_out.value)
-        self.barriers_in = max(0, barriers_in - int(successor.state.metrics.barriers_in.value))
-        self.barriers_out = max(0, barriers_out - int(successor.state.metrics.barriers_out.value))
 
 
 class StreamTask(AsyncWorker):

@@ -15,7 +15,9 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 python -m pip install -e ".[dev]"
+npm --prefix frontend ci
 pre-commit install --hook-type pre-commit --hook-type commit-msg
+make doctor
 ```
 
 Before opening a pull request, run:

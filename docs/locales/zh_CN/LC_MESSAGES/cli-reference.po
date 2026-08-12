@@ -83,12 +83,6 @@ msgstr "`stop`"
 msgid "Compatibility alias for `cancel`."
 msgstr "`cancel` 的兼容别名。"
 
-msgid ""
-"Use `ray-klein COMMAND --help` to inspect the installed version. The "
-"command names and defaults below describe the current `0.1.0.dev0` source"
-" tree."
-msgstr "使用 `ray-klein COMMAND --help` 检查已安装版本。以下命令名称和默认值描述当前的 `0.1.0.dev0` 源码树。"
-
 msgid "Connect to the Ray cluster"
 msgstr "连接到 Ray 集群"
 

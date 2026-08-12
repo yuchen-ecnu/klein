@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 from ray.klein.api.sink_committable import SinkCommittable
 
@@ -44,6 +44,28 @@ class IcebergSinkCommittable(SinkCommittable):
         # Prepared rows live only in durable Klein checkpoint metadata. If the
         # checkpoint is aborted, dropping this value discards the transaction.
         return None
+
+    @property
+    def global_commit_namespace(self) -> str:
+        return "iceberg"
+
+    def combine_committables(
+        self,
+        committables: tuple[SinkCommittable, ...],
+        *,
+        transaction_id: str,
+    ) -> SinkCommittable:
+        from ray.klein.integrations.iceberg.iceberg_global_committable import (
+            combine_iceberg_committables,
+        )
+
+        iceberg_committables = tuple(item for item in committables if isinstance(item, IcebergSinkCommittable))
+        if len(iceberg_committables) != len(committables):
+            raise TypeError("all Iceberg writer committables must be IcebergSinkCommittable values")
+        return cast(
+            SinkCommittable,
+            combine_iceberg_committables(iceberg_committables, transaction_id=transaction_id),
+        )
 
 
 def _commit_arrow_payloads(

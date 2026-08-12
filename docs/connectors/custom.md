@@ -161,6 +161,14 @@ the committable before calling `commit` and may retry either terminal method
 after recovery. The [filesystem connector](filesystem.md) is the reference
 implementation.
 
+When every parallel writer must publish through one external transaction, make
+the writer committable implement `SinkCommittableCombiner`. Its
+`global_commit_namespace` must be a stable, colon-free identifier, and
+`combine_committables()` must validate one logical sink's writer values and
+return a single idempotent committable. The runtime discovers this protocol
+without importing the connector implementation. Iceberg is the reference
+global-commit implementation.
+
 ## Add a Table DDL connector
 
 Subclass `TableFactory`, set a non-empty `identifier`, and implement only the
