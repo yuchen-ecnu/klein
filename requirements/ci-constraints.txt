@@ -10,7 +10,7 @@ click==8.4.2
 confluent-kafka==2.15.0
 fsspec==2026.7.0
 httpx==0.28.1
-hypothesis==6.165.2
+hypothesis==6.165.3
 licensecheck==2025.1.0
 mypy==2.3.0
 numpy==2.2.6
@@ -19,7 +19,7 @@ pandas==2.3.3
 Pillow==12.3.0
 pip==26.2.1
 pip-audit==2.10.1
-pre-commit==4.6.1
+pre-commit==4.6.2
 protobuf==7.35.1
 pyarrow==25.0.0
 pyiceberg==0.11.1
@@ -32,7 +32,7 @@ pytest-timeout==2.4.0
 pyvips==3.1.1
 pyvips-binary==8.18.4
 PyYAML==6.0.3
-ray==2.56.1
+ray==2.57.0
 redis==8.1.0
 redislite==6.2.912183
 reuse==6.2.0
@@ -41,8 +41,8 @@ rocksdict==0.3.29
 rocketmq-client-python==2.0.0
 ruff==0.16.2
 setuptools==83.0.0
-sqlglot==30.15.0
+sqlglot==30.16.0
 testcontainers==4.15.0
 tomli==2.4.1; python_version < "3.11"
 twine==7.0.0
-uv==0.11.31
+uv==0.12.3

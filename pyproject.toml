@@ -36,7 +36,7 @@ dependencies = [
   "protobuf>=5.29.6,<8",
   "PyYAML>=6; python_version < '3.12'",
   "PyYAML>=6.0.1; python_version >= '3.12'",
-  "ray[data]>=2.56.1,<2.57",
+  "ray[data]>=2.56.1,<2.58",
   "rich>=13.9.4",
   "sqlglot>=30.12,<31",
 ]
@@ -56,7 +56,7 @@ rocksdb = ["rocksdict>=0.3.29,<0.4"]
 serve = [
   "httpx>=0.28.1,<1",
   "orjson>=3.11.6",
-  "ray[serve]>=2.56.1,<2.57",
+  "ray[serve]>=2.56.1,<2.58",
 ]
 all = [
   "confluent-kafka>=2.3,<3",
@@ -67,7 +67,7 @@ all = [
   "pypdf>=6.15.0,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
-  "ray[serve]>=2.56.1,<2.57",
+  "ray[serve]>=2.56.1,<2.58",
   "redis>=5,<9",
   "rocksdict>=0.3.29,<0.4",
   "rocketmq-client-python==2.0.0",
@@ -90,7 +90,7 @@ test = [
   "testcontainers[kafka,redis]>=4.13,<5",
   "tomli>=2.4.1; python_version < '3.11'",
   "twine>=5,<8",
-  "uv>=0.11.31,<0.12",
+  "uv>=0.11.31,<0.13",
 ]
 dev = [
   "ray-klein[all,docs,test]",
