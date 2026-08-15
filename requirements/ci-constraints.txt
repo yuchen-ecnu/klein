@@ -40,7 +40,7 @@ rich==14.3.4
 rocksdict==0.3.29
 rocketmq-client-python==2.0.0
 ruff==0.16.2
-setuptools==83.0.0
+setuptools==84.0.0
 sqlglot==30.15.0
 testcontainers==4.15.0
 tomli==2.4.1; python_version < "3.11"
