@@ -57,12 +57,13 @@ master_doc = "index"
 html_theme = "pydata_sphinx_theme"
 html_title = "Klein 中文文档" if language == "zh_CN" else "Klein"
 html_static_path = ["_static"]
+html_favicon = "_static/klein-mark.png"
 html_css_files = ["sidebar.css", "configuration.css"]
 html_theme_options = {
     "github_url": "https://github.com/yuchen-ecnu/klein",
     "logo": {
-        "image_light": "_static/klein-logo.svg",
-        "image_dark": "_static/klein-logo-dark.svg",
+        "image_light": "_static/klein-logo.png",
+        "image_dark": "_static/klein-logo-dark.png",
         "alt_text": "Klein",
     },
     "collapse_navigation": True,

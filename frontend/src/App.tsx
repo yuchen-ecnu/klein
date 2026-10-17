@@ -25,7 +25,7 @@ import {
   Routes,
   useParams,
 } from "react-router";
-import KleinMark from "./assets/KleinMark.svg";
+import KleinMark from "./assets/KleinMark.png";
 import { useKleinJob } from "./pages/klein/hook/useKleinJobs";
 
 const KleinJobsPage = lazy(() =>

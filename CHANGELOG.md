@@ -8,6 +8,11 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the Klein logo with blue and mint ribbons across the README,
+  documentation, and Dashboard, including light/dark wordmarks and favicons.
+
 ### Added
 
 - `ray.klein.pipeline()` provides the recommended namespace-oriented factory

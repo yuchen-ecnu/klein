@@ -244,10 +244,10 @@ def test_documentation_uses_a_desktop_section_sidebar() -> None:
     assert "startdepth=0" in sidebar_template
 
     assert '"navbar_center": []' in config
-    assert '"image_light": "_static/klein-logo.svg"' in config
-    assert '"image_dark": "_static/klein-logo-dark.svg"' in config
-    assert (DOCS_ROOT / "_static" / "klein-logo.svg").is_file()
-    assert (DOCS_ROOT / "_static" / "klein-logo-dark.svg").is_file()
+    assert '"image_light": "_static/klein-logo.png"' in config
+    assert '"image_dark": "_static/klein-logo-dark.png"' in config
+    assert (DOCS_ROOT / "_static" / "klein-logo.png").is_file()
+    assert (DOCS_ROOT / "_static" / "klein-logo-dark.png").is_file()
 
     sidebar_css = (DOCS_ROOT / "_static" / "sidebar.css").read_text(encoding="utf-8")
     assert ".navbar-header-items__end" in sidebar_css
@@ -259,7 +259,7 @@ def test_documentation_uses_a_desktop_section_sidebar() -> None:
 
 def test_branding_stays_compact_across_surfaces() -> None:
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    assert '<img alt="Klein" src="docs/_static/klein-logo.svg" width="440">' in readme
+    assert '<img alt="Klein" src="docs/_static/klein-logo.png" width="440">' in readme
 
     sidebar_css = (DOCS_ROOT / "_static" / "sidebar.css").read_text(encoding="utf-8")
     assert "max-width: min(9rem, 38vw);" in sidebar_css

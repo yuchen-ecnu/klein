@@ -2,8 +2,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/klein-logo-dark.svg">
-    <img alt="Klein" src="docs/_static/klein-logo.svg" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/klein-logo-dark.png">
+    <img alt="Klein" src="docs/_static/klein-logo.png" width="440">
   </picture>
 </p>
 
@@ -37,10 +37,10 @@ state or event-time progress.
 ### Name and mark
 
 “Klein” comes from the Klein bottle and the idea of taking a Möbius loop one
-dimension further. The mark turns the bottle's continuous, self-crossing
-surface into a data stream; square waypoints preserve the distributed-node
-language shared by Ray's data products without claiming official project
-status.
+dimension further. The blue and mint ribbons form an abstract folded surface,
+expressing continuous dataflow and the connection between bounded datasets
+and unbounded streams. The mark is inspired by topology rather than a literal
+mathematical projection of a Klein bottle.
 
 | Capability | What Klein provides |
 | --- | --- |
