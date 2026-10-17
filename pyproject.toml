@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
   "click>=8.3.3",
-  "fsspec==2026.7.0",
+  "fsspec==2026.9.0",
   "numpy>=1.24,<3; python_version < '3.12'",
   "numpy>=1.26.2,<3; python_version >= '3.12'",
   "pandas>=2.2.3,<3",
@@ -36,14 +36,14 @@ dependencies = [
   "protobuf>=5.29.6,<8",
   "PyYAML>=6; python_version < '3.12'",
   "PyYAML>=6.0.1; python_version >= '3.12'",
-  "ray[data]>=2.56.1,<2.57",
+  "ray[data]>=2.56.1,<2.60",
   "rich>=13.9.4",
   "sqlglot>=30.12,<31",
 ]
 
 [project.optional-dependencies]
 kafka = ["confluent-kafka>=2.3,<3"]
-iceberg = ["pyiceberg>=0.11.1,<0.12"]
+iceberg = ["pyiceberg>=0.11.1,<0.13"]
 media = [
   "Pillow>=12.3.0,<13",
   "pypdf>=6.19.0,<7",
@@ -56,18 +56,18 @@ rocksdb = ["rocksdict>=0.3.29,<0.4"]
 serve = [
   "httpx>=0.28.1,<1",
   "orjson>=3.11.6",
-  "ray[serve]>=2.56.1,<2.57",
+  "ray[serve]>=2.56.1,<2.60",
 ]
 all = [
   "confluent-kafka>=2.3,<3",
   "httpx>=0.28.1,<1",
   "orjson>=3.11.6",
   "Pillow>=12.3.0,<13",
-  "pyiceberg>=0.11.1,<0.12",
+  "pyiceberg>=0.11.1,<0.13",
   "pypdf>=6.19.0,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
-  "ray[serve]>=2.56.1,<2.57",
+  "ray[serve]>=2.56.1,<2.60",
   "redis>=5,<9",
   "rocksdict>=0.3.29,<0.4",
   "rocketmq-client-python==2.0.0",
@@ -79,7 +79,7 @@ test = [
   "licensecheck>=2025.1,<2027",
   "mypy>=1.11,<3",
   "pip-audit>=2.7,<3",
-  "pyiceberg[sql-sqlite]>=0.11.1,<0.12",
+  "pyiceberg[sql-sqlite]>=0.11.1,<0.13",
   "pytest>=9.0.3,<10",
   "pytest-asyncio>=1.4,<2",
   "pytest-cov>=5,<8",
@@ -90,12 +90,12 @@ test = [
   "testcontainers[kafka,redis]>=4.13,<5",
   "tomli>=2.4.1; python_version < '3.11'",
   "twine>=5,<8",
-  "uv>=0.11.31,<0.12",
+  "uv>=0.11.31,<0.14",
 ]
 dev = [
   "ray-klein[all,docs,test]",
   "pre-commit>=3.7",
-  "ruff>=0.15.22,<0.17",
+  "ruff>=0.15.22,<0.18",
 ]
 docs = [
   "myst-parser==4.0.1",
