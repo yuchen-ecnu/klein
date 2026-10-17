@@ -12,6 +12,13 @@ This section catalogs the inputs, outputs, formats, and integrations shipped
 with Klein. Connector names stay short in the navigation; use the groups below
 to choose the right family before comparing detailed capabilities.
 
+- For Python sources and sinks, start with the [DataStream API guide](../datastream.md)
+  and follow the Python examples on each connector page.
+- For SQL tables, start with [SQL connectors and Table DDL](../sql/connectors.md).
+  Check the **Table DDL** column and each connector's SQL source/sink and
+  execution-mode limits. DDL examples: [Kafka](kafka.md#use-table-ddl),
+  [Filesystem](filesystem.md#use-table-ddl), and [Console](console.md#use-table-ddl).
+
 ## Catalog
 
 | Group | Entries | Purpose |

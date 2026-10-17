@@ -21,17 +21,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-msgid "Install Klein and build your first bounded and streaming data pipelines."
-msgstr "安装 Klein，并构建第一个有界和流式数据管道。"
-
-msgid "Get started with Klein"
-msgstr "Klein 快速入门"
-
-msgid ""
-"This guide creates an explicit `Pipeline`, runs a bounded `DataStream`, "
-"and shows how to submit a long-running dataflow."
-msgstr "本指南将创建一个显式 `Pipeline`、运行有界 `DataStream`，并演示如何提交长时间运行的数据流。"
-
 msgid "Install Klein"
 msgstr "安装 Klein"
 
@@ -190,13 +179,34 @@ msgid ""
 "before mixing Ray Data and native streaming operations."
 msgstr "混用 Ray Data 与原生流式操作前，请查看[算子兼容性矩阵](operator-compatibility.md)。"
 
-msgid ""
-"Follow the [user guides](user-guides.md) to build stateful pipelines and "
-"configure production storage."
-msgstr "按照[用户指南](user-guides.md) 构建有状态管道并配置生产存储。"
-
 #, python-brace-format
 msgid ""
 "Browse the {doc}`API reference <api/api>` for public methods and "
 "configuration options."
 msgstr "浏览 {doc}`API 参考 <api/api>`，了解公共方法和配置选项。"
+
+msgid ""
+"Install Klein and build your first bounded and streaming pipelines with the"
+" Python DataStream API."
+msgstr "安装 Klein，使用 Python DataStream API 构建首个有界管道和流式管道。"
+
+msgid "DataStream API quick start"
+msgstr "DataStream API 快速入门"
+
+msgid ""
+"This guide uses the Python DataStream API to create an explicit `Pipeline`,"
+" run a bounded `DataStream`, and submit a long-running dataflow. For "
+"queries and table DDL, start with the [SQL quick start](sql/getting-"
+"started.md)."
+msgstr ""
+"本指南使用 Python DataStream API 创建显式 `Pipeline`、运行有界 "
+"`DataStream`，并提交长期运行的数据流。查询和表 DDL 的用法请从 [SQL 快速入门](sql/getting-"
+"started.md)开始。"
+
+msgid ""
+"Follow the [DataStream API guide](datastream.md) for transformations, "
+"Python functions, state, and event time, or run the [DataStream API "
+"examples](datastream-examples.md)."
+msgstr ""
+"按照 [DataStream API 使用指南](datastream.md)学习转换、Python 函数、状态和事件时间，或运行 "
+"[DataStream API 示例](datastream-examples.md)。"

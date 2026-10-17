@@ -1,14 +1,14 @@
 ---
 myst:
   html_meta:
-    description: "Install Klein and build your first bounded and streaming data pipelines."
+    description: "Install Klein and build your first bounded and streaming pipelines with the Python DataStream API."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-getting-started)=
-# Get started with Klein
+# DataStream API quick start
 
-This guide creates an explicit `Pipeline`, runs a bounded `DataStream`, and shows how to submit a long-running dataflow.
+This guide uses the Python DataStream API to create an explicit `Pipeline`, run a bounded `DataStream`, and submit a long-running dataflow. For queries and table DDL, start with the [SQL quick start](sql/getting-started.md).
 
 ## Install Klein
 
@@ -189,5 +189,5 @@ supported key, default, constraint, and environment variable.
   transactional file output.
 - Check the [operator compatibility matrix](operator-compatibility.md) before
   mixing Ray Data and native streaming operations.
-- Follow the [user guides](user-guides.md) to build stateful pipelines and configure production storage.
+- Follow the [DataStream API guide](datastream.md) for transformations, Python functions, state, and event time, or run the [DataStream API examples](datastream-examples.md).
 - Browse the {doc}`API reference <api/api>` for public methods and configuration options.
