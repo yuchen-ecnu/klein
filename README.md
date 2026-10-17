@@ -66,7 +66,7 @@ the supported Ray dependency (`ray[data]>=2.56.1,<2.57`).
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install ray-klein==0.1.0a1
+python -m pip install ray-klein==0.1.0a2
 ```
 
 Run a small bounded pipeline:
@@ -100,7 +100,7 @@ this example.
 [SQL quick start](docs/sql/getting-started.md), or
 [checkpointed streaming example](docs/production-streaming.md).
 
-Install only the extras you need, such as `python -m pip install "ray-klein[kafka]==0.1.0a1"`.
+Install only the extras you need, such as `python -m pip install "ray-klein[kafka]==0.1.0a2"`.
 The [installation guide](docs/installation.md) covers all extras, cluster setup,
 and checks for vendor Ray builds that already provide `ray.klein`.
 

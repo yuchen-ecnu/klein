@@ -13,7 +13,7 @@ positions, managed state, timers, and prepared sink transactions remain
 compatible.
 
 :::{danger}
-The current source tree carries the `0.1.0a1` alpha candidate version. Before 1.0, Semantic Versioning
+The current source tree carries the `0.1.0a2` alpha candidate version. Before 1.0, Semantic Versioning
 compatibility is not promised, only the latest release is eligible for security
 fixes, and checkpoint formats can change between releases. Klein currently
 ships no automatic checkpoint migration tool and no user-triggered command for

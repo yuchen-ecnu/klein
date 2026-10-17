@@ -8,14 +8,24 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+## [0.1.0a2] - 2026-10-17
+
+This alpha bugfix release corrects batch SQL joins on nullable keys. See the
+[release notes](.github/release-notes/v0.1.0a2.md) for upgrade guidance and
+known issues.
+
 ### Fixed
 
 - Batch SQL equality joins now keep all matching rows when join keys contain
   NULLs or input blocks infer different nullable types. Outer joins retain
   unmatched NULL-key rows, and both sides' original key columns remain available
-  for projections and subsequent joins.
+  for projections and subsequent joins. ([#100](https://github.com/yuchen-ecnu/klein/pull/100))
+- Empty inputs and intermediate join results retain their schemas, including
+  chained joins with `USING`. Unqualified `USING` keys coalesce values from
+  both sides of an outer join; qualified keys preserve their original values.
+  ([#100](https://github.com/yuchen-ecnu/klein/pull/100))
 - SQL catalog `DROP TABLE` remains compatible with SQLGlot 30.23's target-list
-  representation.
+  representation. ([#100](https://github.com/yuchen-ecnu/klein/pull/100))
 
 ## [0.1.0a1] - 2026-10-17
 

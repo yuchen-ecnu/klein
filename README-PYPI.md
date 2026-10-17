@@ -23,13 +23,13 @@ Use Python **3.10–3.12** on Linux or macOS. Klein includes a supported Ray
 dependency (`ray[data]>=2.56.1,<2.57`).
 
 ```bash
-python -m pip install ray-klein==0.1.0a1
+python -m pip install ray-klein==0.1.0a2
 ```
 
 For Kafka integration:
 
 ```bash
-python -m pip install "ray-klein[kafka]==0.1.0a1"
+python -m pip install "ray-klein[kafka]==0.1.0a2"
 ```
 
 ## Quick start

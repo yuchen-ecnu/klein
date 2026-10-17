@@ -18,7 +18,7 @@ Create an isolated Python environment and install the alpha release from PyPI:
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install ray-klein==0.1.0a1
+python -m pip install ray-klein==0.1.0a2
 ```
 
 Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install

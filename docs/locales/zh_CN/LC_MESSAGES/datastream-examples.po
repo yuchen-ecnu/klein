@@ -8,7 +8,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0a1\n"
+"Project-Id-Version: Klein 0.1.0a2\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-17 13:08+0800\n"
 "PO-Revision-Date: 2026-10-17 04:58+0000\n"
