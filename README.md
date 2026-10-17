@@ -26,15 +26,11 @@
   <a href="docs/examples.md">Examples</a>
 </p>
 
-Klein brings stateful stream processing to Python applications on Ray. Build
-bounded data pipelines and long-running event streams with one `DataStream`
-API, with event time, managed keyed state, and checkpoint recovery.
+Klein is a Python library for stateful stream processing on Ray. Build
+continuous applications with keyed state, event-time windows, and checkpoint
+recovery. The `DataStream` and SQL APIs also support bounded data pipelines.
 
-![Files and event streams enter the DataStream API; each job runs either as compatible Ray Data operations or as stateful Ray Core actors.](docs/_static/klein-overview.png)
-
-A job uses **one runtime**: compatible bounded graphs lower to Ray Data;
-streaming graphs run as long-lived Ray actors. See
-[how runtime selection works](docs/ray-data-interop.md).
+![Events flow through Klein's stateful processing into results, supported by event time, managed state, and checkpoint recovery.](docs/_static/klein-overview.png)
 
 ## Why Klein?
 
@@ -113,6 +109,10 @@ and checks for vendor Ray builds that already provide `ray.klein`.
 | Inputs and outputs | Ray Data, Kafka, RocketMQ, filesystems, Iceberg, Redis, and custom connectors. | [Connector catalog](docs/connectors/index.md) |
 | Ray integration | Ray Data readers and Dataset adapters; eligible transform chains behind Ray Serve. | [Ray Data](docs/ray-data-interop.md) · [Ray Serve](docs/connectors/ray-serve.md) |
 | Operations | Dashboard, metrics, CLI inspection, detached jobs, and supported live operator rescaling. | [Observability](docs/observability.md) · [Rescaling](docs/operator-rescaling.md) |
+
+Runtime selection happens per job: compatible bounded graphs lower to
+Ray Data; streaming graphs run as long-lived Ray actors. See
+[how runtime selection works](docs/ray-data-interop.md).
 
 Delivery guarantees depend on the source and sink. General delivery is
 at least once; checkpoint-aware filesystem and Iceberg outputs have their own

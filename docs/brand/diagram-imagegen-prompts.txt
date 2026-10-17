@@ -3,10 +3,12 @@ SPDX-License-Identifier: Apache-2.0
 Klein README and documentation illustration prompts
 
 Generated with the built-in ImageGen tool on 2026-10-17.
-The overview is a new generation. The five detailed illustrations are edits
-of their previous versions, using the overview as a visual style reference
-and klein-logo-selected.png as the approved brand reference. Original images
-remain available in Git history. Final PNG exports live in docs/_static/.
+The README overview was regenerated to introduce stateful stream processing,
+using klein-logo-selected.png as its brand reference. The five detailed
+illustrations are edits of their previous versions, using the earlier README
+overview as a visual style reference and the same approved brand reference.
+Original images and the earlier overview remain available in Git history.
+Final PNG exports live in docs/_static/.
 Exports are resized to a maximum width of 1600 pixels with ImageMagick,
 stripping metadata and using PNG compression level 9.
 
@@ -14,19 +16,26 @@ klein-overview.png
 ==================
 
 Use case: infographic-diagram.
-Asset type: a contemporary editorial product illustration for Klein's GitHub README, introducing a Python stateful streaming library on Ray.
-Create a beautifully designed wide 1800 x 840 illustration on an opaque near-white background. The style should feel like a refined modern developer-tool website: extremely clean typography, spacious composition, graceful flowing lines, restrained cobalt blue (#3158F5) and mint green (#52B6A0), dark ink labels, a few pale tints and subtle depth only on tiny data objects. Absolutely no rectangular containers, dashboard cards, enclosing borders, swimlanes, grid of boxes, UML styling, chunky arrows, clip-art database cylinders, gears, or corporate PowerPoint aesthetic.
+Asset type: the first product illustration in Klein's open-source GitHub README.
+Primary request: design an exceptionally polished, restrained, modern introduction to a Python stateful stream-processing library built on Ray. It must communicate the product's purpose to a new reader, not its internal runtime selection.
+Input image 1: approved Klein brand reference ONLY. Use its exact blue-and-mint ribbon symbol once at the heart of the illustration, without its black wordmark. Preserve the symbol's silhouette and interweaving; do not invent a new logo.
 
-The conceptual story, left to right:
-At the left, two small visually elegant sources float in open whitespace: an offset stack of thin blue sheets with the label 'Bounded data', and a short flowing sequence of mint dots with the label 'Event streams'.
-Two delicate curved blue/mint stream paths converge towards the middle, where a small minimal code glyph sits above a strong typographic label 'DataStream API'. Below it in smaller type: 'Python · SQL · Tables'. This central object has NO card or enclosure.
-A single output path flows rightward to a branching point and the small caption 'One runtime per job'. The two alternative paths sweep gently apart. Put a quiet 'OR' in the empty space between the alternatives so this is a choice, not two simultaneous runtimes.
-At the upper right endpoint: a small tasteful array of floating cobalt tiles and the large label 'Ray Data', with the smaller caption 'Compatible bounded work'.
-At the lower right endpoint: three minimal mint-and-blue connected circles representing actors, beside the large label 'Ray Core actors' and caption 'Stateful streaming'. Under this endpoint, place the quiet text 'Event time · Managed state · Checkpoints'.
-Use small integrated directional arrowheads only where necessary; routes must not cross labels.
-At the top left, set the short headline 'One API. Two execution paths.' in large elegant sans-serif type. No other title, footer, logos, watermark, badges, or decoration. Avoid a huge top margin.
-Visual hierarchy: the flow and its two alternatives should be immediately understandable; it should read as a designed illustration with flowing forms and carefully typeset labels, not a boxed architecture chart. All supplied English text must be exact, sharp and readable at about 900px rendered width. Technical accuracy: each job selects ONE runtime; continuous streaming runs on Ray Core actors, compatible bounded graphs run on Ray Data. Preserve that distinction.
+Format: wide 1800 x 960 landscape canvas, opaque white background. Beautiful editorial typography, generous but intentional whitespace, strong visual hierarchy. Refined ink-black sans serif, cobalt #3158F5, mint #52B6A0, pale ice-blue and mint accents. Use subtle depth on small data elements, smooth precise curves, and quiet shadows; no glossy 3D render or excessive glow.
 
+At the top, left-aligned, large professional headline on two balanced lines:
+"Stateful stream processing"
+"on Ray"
+A smaller single line below:
+"Process continuous data with state, event time, and recovery."
+
+Below, create a single coherent flowing visual across the full width.
+At left, several fine blue and mint strands carry sparse small circular event particles into the center, suggesting an ongoing stream. Label this area "Events".
+At center, the approved Klein ribbon mark anchors a broader graceful stream loop: particles follow distinct parallel curved paths into and out of the processing area. Do not draw an infinity wordmark, duplicate logos, gears, or a framed component. Label beneath the visual "Stateful processing".
+At right, the paths become a clean outgoing sequence of compact results. Two or three small elegant unframed tally or aggregate glyphs make processed output understandable, without a chart axis, upward trend, or performance implication. Label this area "Results".
+This should feel like one continuous visual composition with streams and an expressive central form, not disconnected stock icons linked by arrows. No boxes, panels, cards, grids, numbered stages, architecture layers, runtime fork, database cylinders, bulky arrows, badges or vendor logos.
+
+Along the lower edge, present three balanced, unframed capability annotations with small consistent fine-line glyphs: a clock with "Event time"; a few subtly layered shapes with "Managed state"; a small snapshot-and-return glyph with "Checkpoint recovery". These are independent capabilities, not sequential processing stages: do not connect them with arrows.
+Keep every text label exact and legible at a 900px rendered width. Keep all text away from paths and graphic elements. Only include the specified text. Do not include "One API", execution paths, runtime details, OR, Ray Data, Ray Core actors, exactly-once claims, benchmark claims, or marketing superlatives. The professional product title and the flowing illustration should dominate.
 
 architecture-overview.png
 =========================
