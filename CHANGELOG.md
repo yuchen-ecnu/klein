@@ -10,12 +10,18 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [0.1.0a2] - 2026-10-17
 
-This alpha bugfix release corrects batch SQL joins on nullable keys. See the
+This alpha bugfix release corrects batch SQL joins on nullable keys and prevents
+resource starvation in complex queries on small clusters. See the
 [release notes](.github/release-notes/v0.1.0a2.md) for upgrade guidance and
 known issues.
 
 ### Fixed
 
+- Complex batch SQL queries no longer starve their input tasks by reserving
+  resources for dependent hash-shuffle stages at the same time. Chained joins,
+  join/aggregate queries, and shuffled CTE or `UNION ALL` branches complete on
+  small clusters by staging intermediate results in Ray's distributed object
+  store. ([#100](https://github.com/yuchen-ecnu/klein/pull/100))
 - Batch SQL equality joins now keep all matching rows when join keys contain
   NULLs or input blocks infer different nullable types. Outer joins retain
   unmatched NULL-key rows, and both sides' original key columns remain available

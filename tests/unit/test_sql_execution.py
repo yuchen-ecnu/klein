@@ -70,6 +70,10 @@ class _Dataset:
         self.calls.append(("union", other))
         return self
 
+    def materialize(self):
+        self.calls.append(("materialize",))
+        return self
+
 
 class _Grouped:
     def __init__(self, dataset: _Dataset) -> None:

@@ -285,7 +285,12 @@ def _apply_joins(
     context: _JoinContext,
 ) -> tuple[Dataset, list[str], int]:
     using_columns: set[str] = set()
-    for join in select.args.get("joins") or ():
+    for index, join in enumerate(select.args.get("joins") or ()):
+        if index:
+            # Ray reserves resources for every hash-shuffle actor pool in a
+            # Dataset DAG up front. Finish the preceding join before another
+            # pool can exhaust the resources needed by its input tasks.
+            dataset = dataset.materialize()
         right, right_alias, right_blocks = _table_relation(
             join.this,
             context.datasets,
@@ -682,6 +687,10 @@ def _execute_select(
         raise SQLQueryError("SELECT DISTINCT is not supported yet")
 
     if _has_aggregates(select):
+        if select.args.get("joins"):
+            # Keep intermediate blocks distributed and spillable while releasing
+            # the join's actor reservations before starting the aggregate.
+            dataset = dataset.materialize()
         dataset = _aggregate_select(
             select,
             dataset,
@@ -704,6 +713,14 @@ def _execute_select(
     return _apply_order_and_limit(select, dataset)
 
 
+def _materialize_shuffled_subquery(query: exp.Query, dataset: Dataset) -> Dataset:
+    """Release a subquery's shuffle actors before a consuming SQL stage."""
+
+    if query.find(exp.Join, exp.Group, exp.AggFunc) is not None:
+        return dataset.materialize()
+    return dataset
+
+
 def _execute_query_ast(
     query: exp.Query,
     datasets: Mapping[str, Dataset],
@@ -722,7 +739,7 @@ def _execute_query_ast(
             raise SQLQueryError("Recursive CTEs are not supported")
         nested_ctes = dict(ctes)
         for cte in with_expression.expressions:
-            nested_ctes[cte.alias] = _execute_query_ast(
+            result = _execute_query_ast(
                 cte.this,
                 datasets,
                 nested_ctes,
@@ -731,6 +748,7 @@ def _execute_query_ast(
                 **_ai_function_options(ai_functions),
                 **_download_policy_options(download_policy),
             )
+            nested_ctes[cte.alias] = _materialize_shuffled_subquery(cte.this, result)
         query = query.copy()
         query.set("with_", None)
         ctes = nested_ctes
@@ -757,6 +775,7 @@ def _execute_query_ast(
             **_ai_function_options(ai_functions),
             **_download_policy_options(download_policy),
         )
+        left = _materialize_shuffled_subquery(query.this, left)
         right = _execute_query_ast(
             query.expression,
             datasets,
@@ -766,6 +785,7 @@ def _execute_query_ast(
             **_ai_function_options(ai_functions),
             **_download_policy_options(download_policy),
         )
+        right = _materialize_shuffled_subquery(query.expression, right)
         return left.union(right)
     raise SQLQueryError(f"Unsupported SQL query form: {query.key.upper()}")
 
@@ -780,7 +800,12 @@ def execute_sql_query(
     ai_functions: Mapping[str, AIFunctionSpec] | None = None,
     download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
-    """Lower a SQLGlot query AST to a native, lazy Ray Dataset DAG."""
+    """Lower SQL to native Ray operators, staging dependent hash shuffles.
+
+    Intermediate shuffle results stay in Ray's distributed object store, where
+    they can spill, instead of holding multiple actor pools' resource
+    reservations for the lifetime of one combined Dataset DAG.
+    """
 
     from ray.klein._internal.sql.validation import validate_read_query
 

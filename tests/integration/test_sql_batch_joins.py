@@ -10,6 +10,16 @@ import pytest
 
 from ray.klein.api.klein_context import KleinContext
 
+# A large development host can hide overlapping hash-shuffle reservations.
+# Advertise a bounded heap budget so chained queries also exercise small nodes.
+pytestmark = pytest.mark.parametrize(
+    "ray_cluster",
+    [{"_memory": 4 * 1024**3, "object_store_memory": 512 * 1024**2}],
+    indirect=True,
+    scope="module",
+    ids=["4GiB"],
+)
+
 
 def _oracle(query, tables):
     with sqlite3.connect(":memory:") as connection:
@@ -205,3 +215,29 @@ def test_using_chain_preserves_empty_intermediate_schema():
     context = KleinContext({"execution.runtime.mode": "batch"})
     tables = {name: context.from_items([{"key": index}]) for index, name in enumerate(("a", "b", "c"))}
     assert _execute(context, "SELECT key FROM a JOIN b USING (key) JOIN c USING (key)", tables) == []
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        """WITH totals AS (SELECT key, SUM(v) AS total FROM a GROUP BY key)
+            SELECT t.key, t.total, b.label FROM totals t JOIN b ON t.key = b.key ORDER BY t.key""",
+        """WITH matched AS (SELECT a.key, a.v FROM a JOIN b ON a.key = b.key)
+            SELECT key, SUM(v) AS total FROM matched GROUP BY key ORDER BY key""",
+        """SELECT a.key, a.v FROM a JOIN b ON a.key = b.key
+            UNION ALL SELECT a.key, a.v FROM a JOIN c ON a.key = c.key""",
+        """WITH matched AS (SELECT a.key, a.v FROM a JOIN b ON a.key = b.key)
+            SELECT a.key, COUNT(*) AS n FROM a JOIN matched m ON a.key = m.key GROUP BY a.key""",
+    ],
+    ids=["aggregate-cte", "join-cte", "joined-union-branches", "join-cte-and-aggregate"],
+)
+def test_shuffled_subqueries_complete_with_limited_memory(query):
+    tables = {
+        "a": [{"key": None if i % 4 == 0 else i % 3, "v": i} for i in range(12)],
+        "b": [{"key": key, "label": str(key)} for key in (1, 2, 4)],
+        "c": [{"key": key} for key in (0, 1, 4)],
+    }
+    expected = _oracle(query, {name: (tuple(rows[0]), rows) for name, rows in tables.items()})
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    actual = _execute(context, query, {name: context.from_items(rows) for name, rows in tables.items()})
+    assert _rows(actual) == _rows(expected)

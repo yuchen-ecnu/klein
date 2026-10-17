@@ -97,7 +97,7 @@ def eventually():
 
 
 @pytest.fixture(scope="module")
-def ray_cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any]]:
+def ray_cluster(request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, Any]]:
     """Start one isolated local Ray runtime per integration-test module."""
 
     import ray
@@ -138,6 +138,7 @@ def ray_cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, 
         # drivers and workers cannot mix different ray.klein installations.
         "runtime_env": {"worker_process_setup_hook": activate_source_klein_worker},
     }
+    options.update(getattr(request, "param", {}))
 
     def shutdown() -> None:
         # Recent Ray versions can finalize reaper pipes during Python 3.12 shutdown.
