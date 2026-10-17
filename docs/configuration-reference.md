@@ -171,7 +171,7 @@ recovery path instead of risking a process out-of-memory failure.
 
 | Key | Default | Type | Description |
 | --- | --- | --- | --- |
-| `pipeline.replay-buffer.enabled` | `true` | bool | Retains emitted records until downstream progress confirms they can be dropped, enabling single-task at-least-once replay. `false` leaves full-job restart as the recovery path. |
+| `pipeline.replay-buffer.enabled` | `true` | bool | Retains emitted records for single-task replay in stateless graphs. Stateful or transactional graphs, source failures, multiple unhealthy tasks, and failed replay require a full-job checkpoint restore. `false` always uses full-job recovery. |
 | `pipeline.replay-buffer.watermark-flush-batches` | `32` | int | Forces the complete input/operator/output durability boundary and advances every pending sender after this many processed input batches. Must be positive. |
 | `pipeline.replay-buffer.max-bytes` | `268435456` (256 MiB) | int | Hard estimated-memory guard for retained replay data. After old acknowledgements are applied, a new batch that would cross the bound fails the task into normal recovery before process OOM. Must be positive while replay is enabled. |
 
