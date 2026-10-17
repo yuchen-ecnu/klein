@@ -75,10 +75,12 @@ import ray.klein as klein
 
 pipeline = klein.pipeline(name="quick-start")
 rows = (
-    pipeline.from_items([
-        {"name": "Ada", "amount": 4},
-        {"name": "Grace", "amount": 7},
-    ])
+    pipeline.from_items(
+        [
+            {"name": "Ada", "amount": 4},
+            {"name": "Grace", "amount": 7},
+        ]
+    )
     .map(lambda row: {**row, "amount": row["amount"] * 2})
     .collect()
     .result()
