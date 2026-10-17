@@ -111,22 +111,19 @@ def test_documented_cli_covers_operations_commands() -> None:
     assert "ray-klein dashboard" in observability
 
 
-def test_feature_guides_have_dedicated_navigation() -> None:
+def test_feature_guides_remain_in_task_navigation() -> None:
     index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
-    assert ":caption: Features" in index
-    feature_tree = index.split(":caption: Features", maxsplit=1)[1].split("```", maxsplit=1)[0]
-    featured_guides = {
-        "features",
-        "ray-data-interop",
-        "ray-native-state",
-        "event-time",
-        "sql",
-        "delivery-semantics",
-        "operator-rescaling",
-        "driver-fault-tolerance",
+    featured_groups = {
+        "Concepts": {"features"},
+        "DataStream API guide": {"ray-data-interop", "ray-native-state", "event-time"},
+        "Klein SQL guide": {"sql"},
+        "Application development": {"delivery-semantics"},
+        "Operations": {"operator-rescaling", "driver-fault-tolerance"},
     }
-    missing = sorted(guide for guide in featured_guides if guide not in feature_tree)
-    assert not missing, f"Feature guides missing from dedicated navigation: {missing}"
+    for caption, guides in featured_groups.items():
+        navigation = index.split(f":caption: {caption}", maxsplit=1)[1].split("```", maxsplit=1)[0]
+        missing = sorted(guides - set(navigation.splitlines()))
+        assert not missing, f"Feature guides missing from {caption}: {missing}"
 
     features = (DOCS_ROOT / "features.md").read_text(encoding="utf-8")
     assert "`udf.ignore-exception=true`" in features
@@ -137,8 +134,9 @@ def test_documentation_navigation_is_grouped_by_user_task() -> None:
     captions = [
         "Getting started",
         "Concepts",
+        "DataStream API guide",
+        "Klein SQL guide",
         "Application development",
-        "Features",
         "Connectors",
         "Deployment",
         "Operations",
@@ -153,7 +151,33 @@ def test_documentation_navigation_is_grouped_by_user_task() -> None:
     def navigation_group(caption: str) -> str:
         return index.split(f":caption: {caption}", maxsplit=1)[1].split("```", maxsplit=1)[0]
 
-    assert "datastream-programming-guide" in navigation_group("Application development")
+    api_guides = {
+        "datastream",
+        "getting-started",
+        "datastream-programming-guide",
+        "development",
+        "datastream-examples",
+        "ray-data-interop",
+        "ray-native-state",
+        "event-time",
+        "production-streaming",
+    }
+    sql_guides = {
+        "sql",
+        "sql/getting-started",
+        "sql/examples",
+        "sql/connectors",
+        "sql/functions",
+        "sql/streaming",
+        "sql/execution",
+    }
+    api_navigation = set(navigation_group("DataStream API guide").splitlines())
+    sql_navigation = set(navigation_group("Klein SQL guide").splitlines())
+    assert api_guides <= api_navigation
+    assert sql_guides <= sql_navigation
+    assert not api_guides & sql_navigation
+    assert not sql_guides & api_navigation
+    assert "job-lifecycle" in navigation_group("Application development")
     assert "connectors/index" in navigation_group("Connectors")
     assert "configuration-reference" in navigation_group("Deployment")
     assert "observability" in navigation_group("Operations")
