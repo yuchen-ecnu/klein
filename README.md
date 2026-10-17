@@ -19,67 +19,45 @@
   <a href="LICENSE"><img alt="Apache License 2.0" src="https://img.shields.io/badge/license-Apache--2.0-3DA639"></a>
 </p>
 
-Klein is a stateful stream-processing library built on Ray. A single
-`DataStream` API handles bounded Ray Data inputs and long-running streams, with
-event time, managed keyed state, checkpoint recovery, and SQL and Table APIs.
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="https://yuchen-ecnu.github.io/klein/latest/">Documentation</a> ·
+  <a href="https://yuchen-ecnu.github.io/klein/latest/zh_CN/">中文文档</a> ·
+  <a href="docs/examples.md">Examples</a>
+</p>
 
-> [!WARNING]
-> Klein is independent alpha software. It is not affiliated with,
-> endorsed by, or maintained by the Ray project. The `ray.klein` namespace is
-> retained as a technical integration point, not as a claim of official status.
+Klein brings stateful stream processing to Python applications on Ray. Build
+bounded data pipelines and long-running event streams with one `DataStream`
+API, with event time, managed keyed state, and checkpoint recovery.
+
+![Files and event streams enter the DataStream API; each job runs either as compatible Ray Data operations or as stateful Ray Core actors.](docs/_static/klein-overview.png)
+
+A job uses **one runtime**: compatible bounded graphs lower to Ray Data;
+streaming graphs run as long-lived Ray actors. See
+[how runtime selection works](docs/ray-data-interop.md).
 
 ## Why Klein?
 
-Klein is for Ray applications that need record-oriented processing and state
-that survives task failures or parallelism changes. Use
-[Ray Data](https://docs.ray.io/en/latest/data/data.html) directly for bounded
-data preparation, inference, or training ingest that does not need streaming
-state or event-time progress.
+- **Process events with state.** Build keyed aggregations, event-time windows,
+  and stateful transformations with managed state, timers, and watermarks.
+- **Recover a running pipeline.** Coordinate source positions and managed
+  state through durable checkpoints, then restore supported jobs after failure.
+- **Stay in your Ray environment.** Use Ray Data readers for bounded inputs,
+  Python or SQL for transformations, and the Dashboard and CLI to operate jobs.
 
-### Name and mark
+Klein fits applications that need continuous processing, event-time progress,
+or recoverable state on Ray. For bounded data preparation or training ingest
+without those requirements, [Ray Data](https://docs.ray.io/en/latest/data/data.html)
+may already cover your needs.
 
-“Klein” comes from the Klein bottle and the idea of taking a Möbius loop one
-dimension further. The blue and mint ribbons form an abstract folded surface,
-expressing continuous dataflow and the connection between bounded datasets
-and unbounded streams. The mark is inspired by topology rather than a literal
-mathematical projection of a Klein bottle.
+> [!NOTE]
+> Klein is an independent **alpha** project, not affiliated with, endorsed by,
+> or maintained by Ray. Public APIs and checkpoint formats may change before 1.0.
 
-| Capability | What Klein provides |
-| --- | --- |
-| Unified dataflows | One lazy `DataStream` graph for bounded and continuous sources. |
-| Native Ray execution | Ray Data lowers compatible bounded work; Ray Core runs long-lived streaming operators. |
-| Event time | Watermarks, idle-input detection, windows, and event-time timers. |
-| Managed state | Keyed state, TTL, key groups, rescaling, and checkpoint restore. |
-| Recovery | Durable checkpoints, source-position restore, and replay-aware sinks. |
-| Relational APIs | Bounded SQL plus dynamic tables and explicit changelog rows for continuous queries. |
-| Connectors | Ray Data, collections, Kafka, RocketMQ, filesystems, Iceberg, Redis, console, custom connectors, Canal JSON, and Ray Serve integration. |
-| Operations | Structured logs, Ray metrics, checkpoint inspection, CLI attach, and a JSON-safe state API. |
+## Quick start
 
-### How Klein fits into Ray
-
-| Ray component | Role in Klein |
-| --- | --- |
-| Ray Core | Runs distributed operators and coordinates streaming recovery. |
-| Ray Data | Executes bounded sources, transformations, shuffles, and sinks. |
-| Ray Object Store | Can cache sufficiently large immutable checkpoint fragments to accelerate recovery. |
-
-![Klein component architecture](docs/_static/architecture-overview.png)
-
-The same lazy graph therefore has two execution paths: bounded-compatible work
-lowers to Ray Data, while continuous work expands into long-lived Ray actors.
-The streaming control plane stays outside the record path; workers exchange
-ordered micro-batches directly and use durable checkpoints for cluster-loss
-recovery. See the [architecture guide](docs/architecture.md) for the planning,
-data-plane, checkpoint, and extension boundaries behind this overview.
-
-The distribution contributes only the `ray.klein` namespace package. It does
-not install `ray/__init__.py` or replace files owned by Ray.
-
-## Installation
-
-Klein currently targets Python 3.10–3.12 and Ray 2.56.x
-(`ray[data]>=2.56.1,<2.57`). The Alpha is currently installed from a source
-checkout or a wheel built from that checkout:
+Use Python **3.10–3.12** on Linux or macOS. Installation from source includes
+the supported Ray dependency (`ray[data]>=2.56.1,<2.57`).
 
 ```bash
 git clone https://github.com/yuchen-ecnu/klein.git
@@ -90,161 +68,107 @@ python -m pip install --upgrade pip
 python -m pip install .
 ```
 
-If Ray is supplied by a vendor image or private index, verify that it does not
-already ship `ray.klein` before installing this distribution:
-
-```bash
-python -m pip install "ray[data]>=2.56.1,<2.57"
-python scripts/check_ray_namespace.py
-```
-
-Do not merge two distributions that both own `ray.klein`; use a compatible Ray
-build or the Klein implementation bundled by that Ray distribution.
-
-Install connector dependencies only when needed:
-
-```bash
-python -m pip install ".[kafka]"   # continuous Kafka source/sink
-python -m pip install ".[iceberg]" # Iceberg catalog and output
-python -m pip install ".[media]"   # image, PDF, and media SQL functions
-python -m pip install ".[rocketmq]" # continuous RocketMQ source
-python -m pip install ".[redis]"   # Redis lookup/sink
-python -m pip install ".[rocksdb]" # local RocksDB state backend
-python -m pip install ".[serve]"   # Ray Serve bridge
-```
-
-For development, install the test, documentation, and tooling dependencies:
-
-```bash
-python -m pip install -e ".[dev]"
-pre-commit install --hook-type pre-commit --hook-type commit-msg
-```
-
-## Quick start
-
-Klein builds the bounded graph lazily. `klein.pipeline()` gives one job an
-explicit owner, while a single terminal submits itself directly:
+Run a small bounded pipeline:
 
 ```python
 import ray.klein as klein
 
 pipeline = klein.pipeline(name="quick-start")
 rows = (
-    pipeline.from_items(
-        [
-            {"name": "Ada", "amount": 4},
-            {"name": "Grace", "amount": 7},
-        ]
-    )
+    pipeline.from_items([
+        {"name": "Ada", "amount": 4},
+        {"name": "Grace", "amount": 7},
+    ])
     .map(lambda row: {**row, "amount": row["amount"] * 2})
     .collect()
     .result()
 )
 
 print(rows)
+# [{'name': 'Ada', 'amount': 8}, {'name': 'Grace', 'amount': 14}]
 ```
 
-```text
-[{'name': 'Ada', 'amount': 8}, {'name': 'Grace', 'amount': 14}]
-```
+Transformations build a lazy graph. `collect()` submits the explicit pipeline;
+`result()` waits for its rows. No broker or external data source is needed for
+this example.
 
-`klein.pipeline()` is the recommended explicit job boundary; the `Pipeline`
-class remains available for annotations, subclassing, and compatibility. The
-module-level `ray.klein` API and `execute()` remain supported when one
-implicit, deferred pipeline is convenient. Multiple sinks on an explicit
-pipeline can be grouped with `pipeline.create_statement_set()`. Source
-construction follows `ray.data`: for
-example, `pipeline.ray_data.read_parquet(...)` creates a bounded stream using
-the installed Ray Data reader. Native methods such as `stream.map(...)` use
-Klein semantics; `stream.ray_data.map(...)` explicitly delegates to the
-installed Ray Data implementation. The shorter `.data` spelling remains
-available for compatibility.
+**Next, connect real data:** follow the
+[Kafka streaming walkthrough](docs/getting-started.md#submit-a-dataflow),
+[SQL quick start](docs/sql/getting-started.md), or
+[checkpointed streaming example](docs/production-streaming.md).
 
-For continuous execution, see the
-[Kafka walkthrough](docs/getting-started.md#submit-a-dataflow) and the complete
-[connector catalog](docs/connectors/index.md).
+Install only the extras you need, such as `python -m pip install ".[kafka]"`.
+The [installation guide](docs/installation.md) covers all extras, cluster setup,
+and checks for vendor Ray builds that already provide `ray.klein`.
 
-Start the self-contained Klein Dashboard on port 8266. Its React application is
-packaged with `ray-klein`; Ray-owned navigation opens the native Dashboard on
-port 8265:
+## What you can build with
+
+| Capability | What it provides | Guide |
+| --- | --- | --- |
+| State and event time | Keyed value, list, and map state; TTL; timers; watermarks; windows. | [Managed state](docs/ray-native-state.md) · [Event time](docs/event-time.md) |
+| Recovery | Durable checkpoints, source-position restore, and replay-aware sinks. | [Checkpoint recovery](docs/checkpoint-recovery.md) |
+| SQL and tables | Bounded queries and continuous queries with explicit changelog rows. | [SQL and Table APIs](docs/sql.md) |
+| Inputs and outputs | Ray Data, Kafka, RocketMQ, filesystems, Iceberg, Redis, and custom connectors. | [Connector catalog](docs/connectors/index.md) |
+| Ray integration | Ray Data readers and Dataset adapters; eligible transform chains behind Ray Serve. | [Ray Data](docs/ray-data-interop.md) · [Ray Serve](docs/connectors/ray-serve.md) |
+| Operations | Dashboard, metrics, CLI inspection, detached jobs, and supported live operator rescaling. | [Observability](docs/observability.md) · [Rescaling](docs/operator-rescaling.md) |
+
+Delivery guarantees depend on the source and sink. General delivery is
+at least once; checkpoint-aware filesystem and Iceberg outputs have their own
+publication contracts. Review [delivery semantics](docs/delivery-semantics.md)
+and [operator compatibility](docs/operator-compatibility.md) for your graph.
+
+### Inspect jobs in the Dashboard
+
+The Dashboard ships with Klein and runs on port **8266**. It provides job
+status, operator graphs, checkpoint inspection, and configuration. Links to
+Ray-owned views open the native Ray Dashboard on port **8265**.
 
 ```bash
 ray-klein dashboard --open \
   --ray-dashboard-url http://127.0.0.1:8265
 ```
 
-## Documentation
+See the [operations guide](docs/observability.md) for connecting to a cluster,
+metrics, and CLI access.
 
-| Start here | What it covers |
+## Go further
+
+| Your next step | Start here |
 | --- | --- |
-| [Installation](docs/installation.md) | Supported environments, base and optional extras, cluster consistency, verification, upgrades, and removal. |
-| [Getting started](docs/getting-started.md) | Installation, bounded pipelines, streaming submission, and configuration. |
-| [Key concepts](docs/key-concepts.md) | Execution modes, state, event time, and recovery. |
-| [Architecture](docs/architecture.md) | Planning, batch and streaming runtimes, the ordered data plane, checkpoints, recovery, and extension boundaries. |
-| [User guides](docs/user-guides.md) | Production streaming, SQL, state, delivery semantics, recovery, deployment, tuning, and operations. |
-| [DataStream programming](docs/datastream-programming-guide.md) | Records, batches, UDF forms, ordering, errors, resources, partitioning, and external side effects. |
-| [Job lifecycle](docs/job-lifecycle.md) | `Pipeline`, `StatementSet`, direct and deferred terminals, job handles, cancellation, namespaces, and cleanup. |
-| [Operator compatibility](docs/operator-compatibility.md) | Batch/streaming support, partitioning, state, changelog, and sink behavior. |
-| [Production walkthrough](docs/production-streaming.md) | Kafka input through event-time state, checkpoints, file output, CLI operations, and restore. |
-| [Connector catalog](docs/connectors/index.md) | Every connector's modes, options, defaults, schemas, and guarantees. |
-| [Configuration reference](docs/configuration-reference.md) | Every supported key, type, default, constraint, and environment variable. |
-| [API reference](docs/api/api.rst) | Public Python classes, functions, and methods. |
-| [Observability](docs/observability.md) | Logs, metrics, checkpoints, CLI attach, and the web Dashboard with operator scaling. |
-| [Evaluation](docs/evaluation/index.md) | Reproducible benchmark reports, baselines, correctness checks, neutral results, and engineering decisions. |
-| [Production readiness](docs/production-readiness.md) | A release checklist for compatibility, recovery, capacity, observability, security, and rollback. |
-| [Security](docs/security.md) | Trust boundaries, UDF and pickle risks, control-plane exposure, secrets, and hardening. |
-| [Limits, stability, and upgrades](docs/limitations.md) | Unsupported combinations, API guarantees, checkpoint compatibility, upgrade rehearsal, and rollback. |
-| [CLI reference](docs/cli-reference.md) | Commands, options, JSON output, exit statuses, terminal behavior, and automation examples. |
-| [FAQ](docs/faq.md) | Short answers about installation, execution, state, SQL, connectors, and operations. |
-| [Troubleshooting](docs/troubleshooting.md) | Installation, planning, connector, watermark, checkpoint, backpressure, and CLI failures. |
+| Learn the programming model | [Key concepts](docs/key-concepts.md) · [DataStream guide](docs/datastream-programming-guide.md) · [Examples](docs/examples.md) |
+| Understand the implementation | [Architecture](docs/architecture.md) · [Feature guides](docs/features.md) |
+| Run a continuous job | [Production walkthrough](docs/production-streaming.md) · [Deployment](docs/deployment.md) |
+| Evaluate a deployment | [Known limitations](docs/limitations.md) · [Production readiness](docs/production-readiness.md) · [Security](docs/security.md) |
+| Look up an API or solve a problem | [API reference](docs/api/api.rst) · [Configuration](docs/configuration-reference.md) · [Troubleshooting](docs/troubleshooting.md) |
 
-### Feature guides
-
-| Feature | Dedicated documentation |
-| --- | --- |
-| Feature overview | [Feature highlights](docs/features.md) maps every distinctive capability to its programming, operations, and limitation guides. |
-| Hybrid Ray execution and dynamic Ray Data access | [Ray Data interoperation](docs/ray-data-interop.md) |
-| Managed keyed state, TTL, timers, and key groups | [Managed state](docs/ray-native-state.md) |
-| Watermarks, idleness, windows, and interval joins | [Event time](docs/event-time.md) |
-| Bounded and continuous relational processing | [SQL and Table APIs](docs/sql.md) |
-| Checkpoint-aware recovery and sink guarantees | [Delivery semantics](docs/delivery-semantics.md) |
-| Ray Data autoscaling and live streaming rescaling | [Autoscaling and live operator rescaling](docs/operator-rescaling.md) |
-| Detached streaming jobs and driver failure | [Driver fault tolerance](docs/driver-fault-tolerance.md) |
-| Independently deployed transform regions | [Ray Serve execution integration](docs/connectors/ray-serve.md) |
-
-Build the documentation locally with:
-
-```bash
-make docs          # English at docs/_build/html, Chinese at docs/_build/html/zh_CN
-make docs-en       # English only
-make docs-zh       # Chinese only
-make docs-gettext  # Refresh translation templates
-KLEIN_DOCS_OFFLINE=1 make docs  # Skip remote intersphinx inventories
-```
-
-## Compatibility and stability
-
-The public API is still evolving and may change before 1.0. Klein pins one
-tested Ray minor release because some Ray Data extension points are Developer
-APIs; read the [compatibility policy](docs/compatibility.md) before changing the
-Ray dependency range.
-
-`state.keyed.max-parallelism` is part of checkpoint compatibility. Do not
-change it after a job creates checkpoints that must remain restorable.
+Browse the full documentation in
+[English](https://yuchen-ecnu.github.io/klein/latest/) or
+[中文](https://yuchen-ecnu.github.io/klein/latest/zh_CN/).
+Klein targets one tested Ray minor release; read the
+[compatibility policy](docs/compatibility.md) before changing dependencies and
+[upgrade guidance](docs/upgrading.md) before restoring existing checkpoints.
 
 ## Contributing and support
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
-test tiers, sign-off, and pull request requirements. For help, use the channels
-in [SUPPORT.md](SUPPORT.md); report vulnerabilities privately as described in
-[SECURITY.md](SECURITY.md).
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, tests,
+and pull requests. See [SUPPORT.md](SUPPORT.md) for questions and bug reports,
+and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-Project decisions follow [GOVERNANCE.md](GOVERNANCE.md), releases are recorded
-in [CHANGELOG.md](CHANGELOG.md), and research users can cite the metadata in
-[CITATION.cff](CITATION.cff).
+[Governance](GOVERNANCE.md) · [Changelog](CHANGELOG.md) · [Citation](CITATION.cff)
+
+<details>
+<summary>Why “Klein”?</summary>
+
+The name comes from the Klein bottle and the idea of taking a Möbius loop one
+dimension further. The blue and mint ribbons suggest continuous dataflow and
+the connection between bounded datasets and unbounded streams. The mark is
+inspired by topology, rather than a literal projection of a Klein bottle.
+[Brand assets and artwork sources](docs/brand/README.txt) are kept in the repository.
+
+</details>
 
 ## License
 
-Klein is licensed under the [Apache License 2.0](LICENSE). See
-[NOTICE](NOTICE), [PROVENANCE.md](PROVENANCE.md), and
-[TRADEMARKS.md](TRADEMARKS.md) for attribution and project identity.
+[Apache License 2.0](LICENSE). See [NOTICE](NOTICE),
+[PROVENANCE.md](PROVENANCE.md), and [TRADEMARKS.md](TRADEMARKS.md) for attribution
+and project identity.
