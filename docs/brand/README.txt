@@ -40,6 +40,27 @@ After changing frontend assets, run npm --prefix frontend run build and
 commit the rebuilt Dashboard files under
 src/ray/klein/observability/dashboard/static/.
 
+README and documentation illustrations
+
+../_static/klein-overview.png introduces the API and the per-job runtime
+choice in the README. It was generated with ImageGen for first-time readers.
+The detailed diagrams below also embed the Klein mark in their pixels:
+
+architecture-overview.png  - docs/architecture.md
+runtime-selection.png     - docs/architecture.md
+streaming-data-plane.png  - docs/architecture.md
+checkpoint-lifecycle.png  - docs/architecture.md
+key-concepts-pipeline.png - docs/key-concepts.md
+
+English and Chinese documentation share those five files under ../_static/.
+Their marks use the approved blue and mint ribbon reference. The figures use
+the overview's open layout, flowing paths, and contemporary blue/mint icons,
+with technical labels and relationships checked against the original figures.
+The prompts for all six illustrations are in diagram-imagegen-prompts.txt.
+When auditing branding, inspect these images visually as well as searching
+source references. Preserve diagram labels, arrows, and runtime boundaries.
+Rebuild both documentation languages after updating the shared images.
+
 The output filenames in imagegen-prompts.txt identify the original generated
 PNG deliverables. Their corresponding checked-in masters are:
 

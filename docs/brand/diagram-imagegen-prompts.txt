@@ -1,0 +1,103 @@
+SPDX-License-Identifier: Apache-2.0
+
+Klein README and documentation illustration prompts
+
+Generated with the built-in ImageGen tool on 2026-10-17.
+The overview is a new generation. The five detailed illustrations are edits
+of their previous versions, using the overview as a visual style reference
+and klein-logo-selected.png as the approved brand reference. Original images
+remain available in Git history. Final PNG exports live in docs/_static/.
+Exports are resized to a maximum width of 1600 pixels with ImageMagick,
+stripping metadata and using PNG compression level 9.
+
+klein-overview.png
+==================
+
+Use case: infographic-diagram.
+Asset type: a contemporary editorial product illustration for Klein's GitHub README, introducing a Python stateful streaming library on Ray.
+Create a beautifully designed wide 1800 x 840 illustration on an opaque near-white background. The style should feel like a refined modern developer-tool website: extremely clean typography, spacious composition, graceful flowing lines, restrained cobalt blue (#3158F5) and mint green (#52B6A0), dark ink labels, a few pale tints and subtle depth only on tiny data objects. Absolutely no rectangular containers, dashboard cards, enclosing borders, swimlanes, grid of boxes, UML styling, chunky arrows, clip-art database cylinders, gears, or corporate PowerPoint aesthetic.
+
+The conceptual story, left to right:
+At the left, two small visually elegant sources float in open whitespace: an offset stack of thin blue sheets with the label 'Bounded data', and a short flowing sequence of mint dots with the label 'Event streams'.
+Two delicate curved blue/mint stream paths converge towards the middle, where a small minimal code glyph sits above a strong typographic label 'DataStream API'. Below it in smaller type: 'Python · SQL · Tables'. This central object has NO card or enclosure.
+A single output path flows rightward to a branching point and the small caption 'One runtime per job'. The two alternative paths sweep gently apart. Put a quiet 'OR' in the empty space between the alternatives so this is a choice, not two simultaneous runtimes.
+At the upper right endpoint: a small tasteful array of floating cobalt tiles and the large label 'Ray Data', with the smaller caption 'Compatible bounded work'.
+At the lower right endpoint: three minimal mint-and-blue connected circles representing actors, beside the large label 'Ray Core actors' and caption 'Stateful streaming'. Under this endpoint, place the quiet text 'Event time · Managed state · Checkpoints'.
+Use small integrated directional arrowheads only where necessary; routes must not cross labels.
+At the top left, set the short headline 'One API. Two execution paths.' in large elegant sans-serif type. No other title, footer, logos, watermark, badges, or decoration. Avoid a huge top margin.
+Visual hierarchy: the flow and its two alternatives should be immediately understandable; it should read as a designed illustration with flowing forms and carefully typeset labels, not a boxed architecture chart. All supplied English text must be exact, sharp and readable at about 900px rendered width. Technical accuracy: each job selects ONE runtime; continuous streaming runs on Ray Core actors, compatible bounded graphs run on Ray Data. Preserve that distinction.
+
+
+architecture-overview.png
+=========================
+
+Use case: precise-object-edit and style-transfer.
+Asset type: an existing Klein technical documentation illustration.
+Input image 1 is the technical-content reference to redesign. Input image 2 is the approved modern style reference (the new README introduction). Input image 3 is the approved blue/mint Klein logo reference; use ONLY its symbol, without the wordmark.
+Redesign the first image in the modern, light, spacious visual language of the second. Use cobalt blue and mint, subtle depth on small floating icons, refined typography, delicate curved directional lines, and generous white space. Keep a white background and wide 16:9 composition.
+Eliminate the large enclosing rectangles, grids of framed cards, heavy borders, UML diamonds and PowerPoint clip art. Communicate through unframed typographic groups, floating symbols and clear flowing connections. Tiny grouping marks for record tokens are permitted when needed for technical meaning. Avoid ornament, excessive glow, illegible microtext or invented capabilities.
+Preserve all technical relationships and labels specified below; the layout and icon style may be modernized. Keep the approved Klein symbol small and accurate with no old square-node loop. Keep Ray's existing separate identity where shown in the content reference. Use crisp readable English text.
+Create an elegant unframed ownership map with four carefully spaced visual groups. Group headings and members must be exact:
+'Public API': 'DataStream', 'SQL'.
+'Planning & Control': 'Logical Graph', 'JobManager', 'JobMaster', 'Checkpoint Coordinator'.
+'Streaming Data Plane': 'Stream Tasks', 'Managed State'.
+'Ray Platform & Storage': 'Ray Data', 'Ray Core', 'Object Store', 'Durable Store'.
+Use a distinct small, contemporary floating glyph for each item, softly colored. Labels are the main hierarchy; NO container boxes or nested panels. Keep the Klein mark above the Klein-owned groups, and the Ray mark above the Ray platform group. These are ownership groups, not a sequential pipeline: do not invent connecting arrows between all items. Balance the many labels with a clean editorial layout and comfortable spacing.
+
+runtime-selection.png
+=====================
+
+Use case: precise-object-edit and style-transfer.
+Asset type: an existing Klein technical documentation illustration.
+Input image 1 is the technical-content reference to redesign. Input image 2 is the approved modern style reference (the new README introduction). Input image 3 is the approved blue/mint Klein logo reference; use ONLY its symbol, without the wordmark.
+Redesign the first image in the modern, light, spacious visual language of the second. Use cobalt blue and mint, subtle depth on small floating icons, refined typography, delicate curved directional lines, and generous white space. Keep a white background and wide 16:9 composition.
+Eliminate the large enclosing rectangles, grids of framed cards, heavy borders, UML diamonds and PowerPoint clip art. Communicate through unframed typographic groups, floating symbols and clear flowing connections. Tiny grouping marks for record tokens are permitted when needed for technical meaning. Avoid ornament, excessive glow, illegible microtext or invented capabilities.
+Preserve all technical relationships and labels specified below; the layout and icon style may be modernized. Keep the approved Klein symbol small and accurate with no old square-node loop. Keep Ray's existing separate identity where shown in the content reference. Use crisp readable English text.
+Express a clear per-job runtime choice with flowing branches:
+From 'Sink Roots' on the far left to a small elegant graph labeled 'Logical Graph'. This leads to a branch captioned 'Runtime Choice'.
+The upper cobalt path is labeled 'Batch' and passes through 'Batch Compiler' then reaches 'Ray Data'.
+The lower mint path is labeled 'Streaming' and passes through 'Graph Optimizer', then 'Physical Subtasks', then 'Ray Actors'.
+Give each stage a small modern floating glyph rather than a framed box, and use graceful directional paths. The runtime alternatives must remain obvious; keep both paths separate and readable. A small Klein mark may sit at top left and the existing Ray identity at top right. Preserve every listed label verbatim and omit new slogans.
+
+key-concepts-pipeline.png
+=========================
+
+Use case: precise-object-edit and style-transfer.
+Asset type: an existing Klein technical documentation illustration.
+Input image 1 is the technical-content reference to redesign. Input image 2 is the approved modern style reference (the new README introduction). Input image 3 is the approved blue/mint Klein logo reference; use ONLY its symbol, without the wordmark.
+Redesign the first image in the modern, light, spacious visual language of the second. Use cobalt blue and mint, subtle depth on small floating icons, refined typography, delicate curved directional lines, and generous white space. Keep a white background and wide 16:9 composition.
+Eliminate the large enclosing rectangles, grids of framed cards, heavy borders, UML diamonds and PowerPoint clip art. Communicate through unframed typographic groups, floating symbols and clear flowing connections. Tiny grouping marks for record tokens are permitted when needed for technical meaning. Avoid ornament, excessive glow, illegible microtext or invented capabilities.
+Preserve all technical relationships and labels specified below; the layout and icon style may be modernized. Keep the approved Klein symbol small and accurate with no old square-node loop. Keep Ray's existing separate identity where shown in the content reference. Use crisp readable English text.
+Create a light, flowing horizontal pipeline with five unboxed stages labeled exactly 'Source', 'Transform', 'Partition', 'Stateful Operator', 'Sink'. Data flows left to right, using small blue/mint particles and fine directional connectors. The partition glyph visibly fans out to three paths; the stateful operator combines a minimal layered-state glyph with a small clock. On the connector AFTER the Stateful Operator and BEFORE the Sink, preserve two control markers: 'Watermark' and 'Checkpoint Barrier', with fine leaders to their positions. Keep their distinction clear. A small approved Klein symbol sits in the header area; a quiet bottom baseline with the Ray mark indicates the Ray platform, without an enclosing bar or border. All labels must remain exact.
+
+checkpoint-lifecycle.png
+========================
+
+Use case: precise-object-edit and style-transfer.
+Asset type: an existing Klein technical documentation illustration.
+Input image 1 is the technical-content reference to redesign. Input image 2 is the approved modern style reference (the new README introduction). Input image 3 is the approved blue/mint Klein logo reference; use ONLY its symbol, without the wordmark.
+Redesign the first image in the modern, light, spacious visual language of the second. Use cobalt blue and mint, subtle depth on small floating icons, refined typography, delicate curved directional lines, and generous white space. Keep a white background and wide 16:9 composition.
+Eliminate the large enclosing rectangles, grids of framed cards, heavy borders, UML diamonds and PowerPoint clip art. Communicate through unframed typographic groups, floating symbols and clear flowing connections. Tiny grouping marks for record tokens are permitted when needed for technical meaning. Avoid ornament, excessive glow, illegible microtext or invented capabilities.
+Preserve all technical relationships and labels specified below; the layout and icon style may be modernized. Keep the approved Klein symbol small and accurate with no old square-node loop. Keep Ray's existing separate identity where shown in the content reference. Use crisp readable English text.
+Create an airy horizontal five-step checkpoint journey with delicate connecting arrows and elegant floating glyphs. Use quiet numbers and unframed labels, no cards. Preserve the exact numbered order and ownership labels:
+'1' — 'Capture Position', with 'Source Task' beneath.
+'2' — 'Align & Snapshot', with 'Transform Task' beneath.
+'3' — 'Prepare Output', with 'Transactional Sink' beneath.
+'4' — 'Publish Metadata', with 'Checkpoint Coordinator' and 'Durable Store' beneath.
+'5' — 'Commit & Notify', with 'Sink and Source' beneath.
+Give each step an appropriate refined glyph (position marker; snapshot; prepared document; durable metadata; completion and notification). Keep only the small approved Klein mark in the header and a quiet Ray platform identity below. Preserve the phase order; no feedback or rollback arrows. Avoid big numbers inside circles, framed columns, dotted divider bars, or an enclosing Ray rectangle.
+
+streaming-data-plane.png
+========================
+
+Use case: precise-object-edit and style-transfer.
+Asset type: an existing Klein technical documentation illustration.
+Input image 1 is the technical-content reference to redesign. Input image 2 is the approved modern style reference (the new README introduction). Input image 3 is the approved blue/mint Klein logo reference; use ONLY its symbol, without the wordmark.
+Redesign the first image in the modern, light, spacious visual language of the second. Use cobalt blue and mint, subtle depth on small floating icons, refined typography, delicate curved directional lines, and generous white space. Keep a white background and wide 16:9 composition.
+Eliminate the large enclosing rectangles, grids of framed cards, heavy borders, UML diamonds and PowerPoint clip art. Communicate through unframed typographic groups, floating symbols and clear flowing connections. Tiny grouping marks for record tokens are permitted when needed for technical meaning. Avoid ornament, excessive glow, illegible microtext or invented capabilities.
+Preserve all technical relationships and labels specified below; the layout and icon style may be modernized. Keep the approved Klein symbol small and accurate with no old square-node loop. Keep Ray's existing separate identity where shown in the content reference. Use crisp readable English text.
+Explain ordered micro-batching with a spacious left-to-right flow and no column boxes.
+Exact main stage labels: 'Upstream Task', 'Edge Output', 'Downstream Task', 'Operator'.
+The upstream emits numbered record tokens 1,2,3,4,5 in order. Edge Output groups these into (1,2), (3,4), and (5). It sends a combined visibly ordered sequence 1,2,3,4,5 labeled 'Ordered Batch'. AFTER that sequence, a small control marker labeled 'Control After Data' precedes the downstream task. The downstream shows the same ordered sequence and then sends it to Operator, represented by a small graph glyph.
+Below the downstream, a minimal gauge is labeled 'Backpressure'. A thin dashed curved path travels BACK from Downstream Task to Edge Output; it is labeled 'Ack' and has its arrowhead at Edge Output. Make this reverse acknowledgement distinct from the rightward data flow.
+Record numbers and their grouping must be exact. Tiny circles for records and light grouping brackets may be used; do not put stages in cards or draw large rectangles. Keep a small approved Klein symbol at top left and the separate Ray mark at top right.
