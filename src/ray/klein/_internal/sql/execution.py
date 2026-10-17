@@ -11,6 +11,7 @@ from sqlglot import exp
 from ray.klein._internal.frozen_mapping import FrozenMapping
 from ray.klein._internal.sql.ai_function_execution import apply_batch_ai_projections
 from ray.klein._internal.sql.ai_function_registry import AIFunctionSpec
+from ray.klein._internal.sql.batch_join import JOIN_KEY_COLUMN, coalesced_join_key_expression, join_key_expression
 from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy, apply_batch_downloads
 from ray.klein._internal.sql.expression import evaluate_expression
 from ray.klein._internal.sql.media_function import plan_media_projections, validate_media_function_calls
@@ -97,6 +98,10 @@ class _ProjectRow:
             if table is not None and not source_name.startswith(f"{table}."):
                 continue
             output_name = source_name.split(".", 1)[-1]
+            if table is None and "." in source_name and output_name in row:
+                # USING exposes one coalesced unqualified key in SELECT *,
+                # while alias.* still exposes that side's original key.
+                continue
             if output_name in result:
                 output_name = source_name
             result[output_name] = value
@@ -176,7 +181,14 @@ def _table_relation(
     # into a lazy Dataset. Carrying the estimate alongside the SQL relation
     # avoids either materializing the plan or reaching into Ray internals.
     input_blocks = _estimated_num_blocks(dataset)
-    return dataset.map(_QualifyRow(alias), num_cpus=num_cpus), alias, input_blocks
+    schema = dataset.schema()
+    if schema is not None and schema.names:
+        # Native projection retains Arrow types and the schema of an empty
+        # relation; a row map cannot qualify columns when there are no rows.
+        qualified = dataset.rename_columns({name: f"{alias}.{name}" for name in schema.names}, num_cpus=num_cpus)
+    else:
+        qualified = dataset.map(_QualifyRow(alias), num_cpus=num_cpus)
+    return qualified, alias, input_blocks
 
 
 def _join_type(join: exp.Join) -> str:
@@ -272,6 +284,7 @@ def _apply_joins(
     input_blocks: int | None,
     context: _JoinContext,
 ) -> tuple[Dataset, list[str], int]:
+    using_columns: set[str] = set()
     for join in select.args.get("joins") or ():
         right, right_alias, right_blocks = _table_relation(
             join.this,
@@ -296,13 +309,30 @@ def _apply_joins(
             dataset = dataset.drop_columns([key])
         else:
             left_keys, right_keys = _join_keys(join, aliases, right_alias)
-            dataset = dataset.join(
-                right,
+            using_names = tuple(identifier.name for identifier in join.args.get("using") or ())
+            if using_names:
+                left_keys = tuple(
+                    name if name in using_columns else key for name, key in zip(using_names, left_keys, strict=True)
+                )
+            dataset = dataset.with_column(
+                JOIN_KEY_COLUMN, join_key_expression(left_keys, left=True), num_cpus=context.num_cpus
+            ).join(
+                right.with_column(
+                    JOIN_KEY_COLUMN, join_key_expression(right_keys, left=False), num_cpus=context.num_cpus
+                ),
                 join_type=join_type,
                 num_partitions=partitions,
-                on=left_keys,
-                right_on=right_keys,
+                on=(JOIN_KEY_COLUMN,),
             )
+            # Ray coalesces its join keys. Joining on a private key preserves
+            # both original SQL columns, including NULLs on unmatched sides.
+            dataset = dataset.drop_columns([JOIN_KEY_COLUMN])
+            if using_names:
+                for name, left_key, right_key in zip(using_names, left_keys, right_keys, strict=True):
+                    dataset = dataset.with_column(
+                        name, coalesced_join_key_expression(left_key, right_key), num_cpus=context.num_cpus
+                    )
+                using_columns.update(using_names)
         input_blocks = partitions
         aliases.append(right_alias)
     return dataset, aliases, max(1, input_blocks or _cluster_parallelism())

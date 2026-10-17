@@ -8,6 +8,15 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- Batch SQL equality joins now keep all matching rows when join keys contain
+  NULLs or input blocks infer different nullable types. Outer joins retain
+  unmatched NULL-key rows, and both sides' original key columns remain available
+  for projections and subsequent joins.
+- SQL catalog `DROP TABLE` remains compatible with SQLGlot 30.23's target-list
+  representation.
+
 ## [0.1.0a1] - 2026-10-17
 
 ### Added

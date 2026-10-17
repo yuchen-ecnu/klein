@@ -178,6 +178,7 @@ files = [
   "src/ray/klein/_compat",
   "src/ray/klein/config",
   "src/ray/klein/_internal/duration.py",
+  "src/ray/klein/_internal/sql/batch_join.py",
   "src/ray/klein/_internal/sql/media_function.py",
   "src/ray/klein/_internal/sql/media_function_execution.py",
   "src/ray/klein/_internal/sql/media_runtime.py",

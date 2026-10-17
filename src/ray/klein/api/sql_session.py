@@ -291,10 +291,13 @@ class SQLSession:
     def _drop_table(self, statement) -> None:
         from sqlglot import exp
 
-        if statement.args.get("kind") != "TABLE" or not isinstance(statement.this, exp.Table):
+        # SQLGlot 30.23 moved DROP targets from `this` to a `tables` list.
+        targets = statement.args.get("tables") or [statement.this]
+        if statement.args.get("kind") != "TABLE" or len(targets) != 1 or not isinstance(targets[0], exp.Table):
             raise SQLQueryError("Klein DROP currently supports TABLE objects only")
-        name = statement.this.name
-        if statement.this.catalog or statement.this.db:
+        target = targets[0]
+        name = target.name
+        if target.catalog or target.db:
             raise SQLQueryError("Catalog-qualified SQL table names are not supported yet")
         if name not in self._tables:
             if statement.args.get("exists"):
