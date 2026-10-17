@@ -119,8 +119,9 @@ jobs:
           wheel=$(realpath release/python/*.whl)
           python -m pip install --constraint requirements/ci-constraints.txt --target "$RUNNER_TEMP/klein-sbom-base" "$wheel"
           python -m pip install --constraint requirements/ci-constraints.txt --target "$RUNNER_TEMP/klein-sbom-all" "ray-klein[all] @ file://$wheel"
-          pip-audit --strict --path "$RUNNER_TEMP/klein-sbom-base" --format cyclonedx-json --output release/metadata/python-wheel-base-sbom.cdx.json --progress-spinner off
-          pip-audit --strict --path "$RUNNER_TEMP/klein-sbom-all" --format cyclonedx-json --output release/metadata/python-wheel-all-sbom.cdx.json --progress-spinner off
+          # OSV can audit the candidate before its version exists on PyPI.
+          pip-audit --strict --vulnerability-service osv --path "$RUNNER_TEMP/klein-sbom-base" --format cyclonedx-json --output release/metadata/python-wheel-base-sbom.cdx.json --progress-spinner off
+          pip-audit --strict --vulnerability-service osv --path "$RUNNER_TEMP/klein-sbom-all" --format cyclonedx-json --output release/metadata/python-wheel-all-sbom.cdx.json --progress-spinner off
           cd "$CANONICAL_SOURCE_ROOT/frontend"
           npm sbom --omit=dev --sbom-format=cyclonedx > "$GITHUB_WORKSPACE/release/metadata/frontend-sbom.cdx.json"
           cd "$GITHUB_WORKSPACE/release"
