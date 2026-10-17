@@ -143,23 +143,6 @@ class _AddExpressions:
         return result
 
 
-class _AddConstant:
-    def __init__(self, name: str, value: Any) -> None:
-        self._name = name
-        self._value = value
-
-    def __call__(self, row: dict[str, Any]) -> dict[str, Any]:
-        return {**row, self._name: self._value}
-
-
-class _FinalizeAggregate:
-    def __init__(self, outputs: Sequence[tuple[str, str]]) -> None:
-        self._outputs = tuple(outputs)
-
-    def __call__(self, row: dict[str, Any]) -> dict[str, Any]:
-        return {output: row[source] for output, source in self._outputs}
-
-
 def _table_relation(
     table: exp.Expression,
     datasets: Mapping[str, Dataset],
@@ -284,6 +267,8 @@ def _apply_joins(
     input_blocks: int | None,
     context: _JoinContext,
 ) -> tuple[Dataset, list[str], int]:
+    from ray.data.expressions import lit
+
     using_columns: set[str] = set()
     for index, join in enumerate(select.args.get("joins") or ()):
         if index:
@@ -305,8 +290,8 @@ def _apply_joins(
         )
         if join_type == "cross":
             key = "_klein_cross_join_key"
-            dataset = dataset.map(_AddConstant(key, 1), num_cpus=context.num_cpus).join(
-                right.map(_AddConstant(key, 1), num_cpus=context.num_cpus),
+            dataset = dataset.with_column(key, lit(1), num_cpus=context.num_cpus).join(
+                right.with_column(key, lit(1), num_cpus=context.num_cpus),
                 join_type="inner",
                 num_partitions=partitions,
                 on=(key,),
@@ -465,6 +450,40 @@ def _group_key(group_fields: Sequence[tuple[str, exp.Expression]]) -> str | list
     return keys[0] if len(keys) == 1 else keys
 
 
+def _extract_aggregate_expressions(select: exp.Select) -> tuple[exp.Select, list[exp.Expression] | None]:
+    """Lower scalar expressions around aggregates to a final SQL projection."""
+    values = [projection.this if isinstance(projection, exp.Alias) else projection for projection in select.expressions]
+    if not any(value.find(exp.AggFunc) and not isinstance(value, exp.AggFunc) for value in values):
+        return select, None
+    group = select.args.get("group")
+    group_expressions = tuple(group.expressions) if group is not None else ()
+    group_names = {expression.sql(): f"_klein_group_output_{i}" for i, expression in enumerate(group_expressions)}
+    flattened = [exp.alias_(expression.copy(), group_names[expression.sql()]) for expression in group_expressions]
+    aggregate_names: dict[str, str] = {}
+
+    def rewrite(node: exp.Expression) -> exp.Expression:
+        key = node.sql()
+        if key in group_names:
+            return exp.column(group_names[key])
+        if isinstance(node, exp.AggFunc):
+            if key not in aggregate_names:
+                name = f"_klein_aggregate_output_{len(aggregate_names)}"
+                aggregate_names[key] = name
+                flattened.append(exp.alias_(node.copy(), name))
+            return exp.column(aggregate_names[key])
+        if isinstance(node, exp.Column):
+            raise SQLQueryError(f"Non-aggregate projection {node.sql()!r} must appear in GROUP BY")
+        return node
+
+    projected = [
+        exp.alias_(value.transform(rewrite), projection.alias_or_name or projection.sql(), quoted=True)
+        for projection, value in zip(select.expressions, values, strict=True)
+    ]
+    lowered = select.copy()
+    lowered.set("expressions", flattened)
+    return lowered, projected
+
+
 def _aggregate_select(
     select: exp.Select,
     dataset: Dataset,
@@ -475,6 +494,7 @@ def _aggregate_select(
     functions: Mapping[str, ScalarFunction] | None = None,
     download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
+    select, final_projection = _extract_aggregate_expressions(select)
     group = select.args.get("group")
     group_expressions = tuple(group.expressions) if group is not None else ()
     group_fields = [(f"_klein_group_{index}", expression) for index, expression in enumerate(group_expressions)]
@@ -488,12 +508,71 @@ def _aggregate_select(
             **_function_options(functions),
             **_download_policy_options(download_policy),
         )
-    grouped = dataset.groupby(
-        _group_key(group_fields),
-        num_partitions=_shuffle_partitions(dataset, known_blocks=(input_blocks,)),
+    # Empty hash aggregates in Ray have no output blocks and therefore no
+    # schema. Keep the input distributed while obtaining a definitive row
+    # count and expression types; this also releases preceding shuffle actors.
+    dataset = dataset.materialize()
+    if dataset.count() == 0:
+        result = _empty_aggregate(select, outputs, dataset)
+    else:
+        grouped = dataset.groupby(
+            _group_key(group_fields),
+            num_partitions=_shuffle_partitions(dataset, known_blocks=(input_blocks,)),
+        )
+        result = _select_sql_fields(grouped.aggregate(*aggregators), outputs, num_cpus=num_cpus)
+    if final_projection is None:
+        return result
+    return _project_select(
+        final_projection,
+        result,
+        aliases=(),
+        num_cpus=num_cpus,
+        **_function_options(functions),
+        **_download_policy_options(download_policy),
     )
-    dataset = grouped.aggregate(*aggregators)
-    return dataset.map(_FinalizeAggregate(outputs), num_cpus=num_cpus)
+
+
+def _empty_aggregate(select: exp.Select, outputs: Sequence[tuple[str, str]], dataset: Dataset) -> Dataset:
+    """Represent SQL's empty grouped/global aggregate with explicit columns."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    import ray.data
+
+    schema = dataset.schema()
+    types = dict(zip(schema.names, schema.types, strict=True)) if schema is not None else {}
+    grouped = select.args.get("group") is not None
+    arrays = []
+    names = []
+    aggregate_index = 0
+    for projection, (name, source) in zip(select.expressions, outputs, strict=True):
+        expression = projection.this if isinstance(projection, exp.Alias) else projection
+        dtype = types.get(source, pa.null())
+        value = None
+        if isinstance(expression, exp.AggFunc):
+            if isinstance(expression, exp.Count):
+                dtype, value = pa.int64(), 0
+            else:
+                input_type = types.get(f"_klein_aggregate_input_{aggregate_index}", pa.null())
+                reduce = {exp.Sum: pc.sum, exp.Min: pc.min, exp.Max: pc.max, exp.Avg: pc.mean}[type(expression)]
+                dtype = reduce(pa.array([], type=input_type)).type
+            aggregate_index += 1
+        arrays.append(pa.array([] if grouped else [value], type=dtype))
+        names.append(name)
+    return ray.data.from_arrow(pa.Table.from_arrays(arrays, names=names))
+
+
+def _select_sql_fields(dataset: Dataset, outputs: Sequence[tuple[str, str]], *, num_cpus: float) -> Dataset:
+    """Project and alias natively so zero-row relations keep their schema."""
+    from ray.data.expressions import col
+
+    temporary = []
+    names = {}
+    for index, (output, source) in enumerate(outputs):
+        name = f"_klein_output_{index}"
+        dataset = dataset.with_column(name, col(source), num_cpus=num_cpus)
+        temporary.append(name)
+        names[name] = output
+    return dataset.select_columns(temporary, num_cpus=num_cpus).rename_columns(names, num_cpus=num_cpus)
 
 
 def _has_aggregates(select: exp.Select) -> bool:
@@ -531,8 +610,28 @@ def _add_sql_expressions(
             num_cpus=num_cpus,
         )
     if fallback:
-        dataset = dataset.map(_AddExpressions(fallback, functions), num_cpus=num_cpus)
+        dataset = _add_row_expressions(dataset, fallback, functions, num_cpus=num_cpus)
     return dataset
+
+
+def _add_row_expressions(
+    dataset: Dataset,
+    expressions: Sequence[tuple[str, exp.Expression]],
+    functions: Mapping[str, ScalarFunction] | None,
+    *,
+    num_cpus: float,
+) -> Dataset:
+    from ray.data.expressions import lit
+
+    # A row UDF cannot run on an empty relation; Ray's map then loses even its
+    # input columns. Stage blocks without collecting rows on the driver and
+    # keep empty expression columns explicit, without invoking user functions.
+    dataset = dataset.materialize()
+    if dataset.count() == 0:
+        for name, _ in expressions:
+            dataset = dataset.with_column(name, lit(None), num_cpus=num_cpus)
+        return dataset
+    return dataset.map(_AddExpressions(expressions, functions), num_cpus=num_cpus)
 
 
 def _project_select(
@@ -596,6 +695,17 @@ def _project_select(
         **_function_options(functions),
         **_download_policy_options(download_policy),
     )
+    if all(output is not None and source is not None for output, source in fields):
+        return _select_sql_fields(
+            dataset,
+            [(output, source) for output, source in fields if output is not None and source is not None],
+            num_cpus=num_cpus,
+        )
+    schema = dataset.schema()
+    if schema is not None:
+        # Resolve star expansion from column names, without sampling any rows.
+        sources = _FinalizeProjection(fields)({name: name for name in schema.names})
+        return _select_sql_fields(dataset, tuple(sources.items()), num_cpus=num_cpus)
     return dataset.map(_FinalizeProjection(fields), num_cpus=num_cpus)
 
 
@@ -612,21 +722,33 @@ def _parse_limit_literal(expression: exp.Expression) -> int:
 
 
 def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
+    from ray.data.expressions import col
     from sqlglot import exp
 
     order = select.args.get("order")
     if order is not None:
         keys: list[str] = []
         descending: list[bool] = []
-        for ordered in order.expressions:
+        null_keys: list[str] = []
+        for index, ordered in enumerate(order.expressions):
             expression = ordered.this
             if not isinstance(expression, exp.Column):
                 raise SQLQueryError("ORDER BY currently supports output column names only")
+            if ordered.args.get("nulls_first"):
+                # Ray sorts NULLs last regardless of direction. An explicit
+                # non-null Boolean prefix implements SQL's per-column order.
+                null_key = f"_klein_sort_null_{index}"
+                dataset = dataset.with_column(null_key, col(expression.name).is_null())
+                null_keys.append(null_key)
+                keys.append(null_key)
+                descending.append(True)
             keys.append(expression.name)
             descending.append(bool(ordered.args.get("desc")))
         dataset = dataset.sort(
             keys[0] if len(keys) == 1 else keys, descending=descending[0] if len(keys) == 1 else descending
         )
+        if null_keys:
+            dataset = dataset.drop_columns(null_keys)
 
     limit = select.args.get("limit")
     if limit is not None:
@@ -687,10 +809,6 @@ def _execute_select(
         raise SQLQueryError("SELECT DISTINCT is not supported yet")
 
     if _has_aggregates(select):
-        if select.args.get("joins"):
-            # Keep intermediate blocks distributed and spillable while releasing
-            # the join's actor reservations before starting the aggregate.
-            dataset = dataset.materialize()
         dataset = _aggregate_select(
             select,
             dataset,

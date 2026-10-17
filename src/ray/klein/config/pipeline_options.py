@@ -137,17 +137,18 @@ class PipelineOptions:
     # Each EdgeOutput retains records it has already put() downstream until
     # the downstream confirms (via the put() return watermark) that it has in
     # turn forwarded their derived output onward — i.e. the records exist on two
-    # nodes. On a downstream single-task crash the upstream replays its buffer to
-    # the rebuilt task, giving at-least-once without a full-job restart. The
+    # nodes. An eligible stateless downstream single-task crash can replay this
+    # tail. Stateful/transactional graphs, source failures, and multiple unhealthy
+    # tasks require a consistent full-job checkpoint restore instead. The
     # buffer is drained by per-sender durability watermarks and guarded by a hard
     # retained-memory limit before a stalled watermark can exhaust the process.
     REPLAY_BUFFER_ENABLED = ConfigOption(
         "pipeline.replay-buffer.enabled",
         True,
         bool,
-        description="Retain emitted records for replay to a rebuilt downstream task "
-        "(single-fault at-least-once). Disable to fall back to full-job "
-        "restart recovery only.",
+        description="Retain emitted records for single-task replay in stateless graphs. "
+        "Stateful or transactional graphs, source failures, and unsafe replay require "
+        "a full-job checkpoint restore. Disable to always use full-job recovery.",
     )
 
     REPLAY_WATERMARK_FLUSH_BATCHES = ConfigOption(

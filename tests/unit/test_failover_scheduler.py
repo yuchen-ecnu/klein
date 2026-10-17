@@ -90,6 +90,9 @@ class _FakeVertex:
         self.task_generation = f"generation-{name}"
         self.restore_operation_id = None
         self.operator_spec = mock.MagicMock()
+        self.operator_spec.stateful = False
+        self.operator_spec.transactional_sink = False
+        self.operator_spec.source = False
         self.config = Configuration(include_environment=False)
         self.task_metric_group = mock.MagicMock()
 
@@ -201,7 +204,7 @@ class TryRecoverTasksTest(unittest.TestCase):
 
     # ----- mixed-state: dead + recoverable --------------------------------
 
-    def test_mixed_dead_and_alive_not_running_recovers_alive_one(self):
+    def test_mixed_dead_and_alive_not_running_escalates_before_bootstrapping(self):
         alive = _FakeStreamTask(running=False, setup_ok=True)
         dead = _FakeStreamTask(running=False)
         vs = [
@@ -212,8 +215,55 @@ class TryRecoverTasksTest(unittest.TestCase):
         with (
             mock.patch.object(js_mod.klein, "get_actor_status", side_effect=self._status_map),
             mock.patch.object(js_mod.klein, "get", side_effect=lambda x, **kw: x),
+            mock.patch.object(recovery_mod.task_deployer, "bootstrap_vertex") as bootstrap,
         ):
-            self.assertTrue(s.try_recover_tasks())
+            self.assertFalse(s.try_recover_tasks())
+            bootstrap.assert_not_called()
+
+    def test_stateful_or_transactional_graph_requires_one_checkpoint_cut(self):
+        for capability in ("stateful", "transactional_sink"):
+            with self.subTest(capability=capability):
+                healthy = _FakeVertex("healthy", ExecutionVertexStatus.RUNNING, _FakeStreamTask())
+                setattr(healthy.operator_spec, capability, True)
+                failed = _FakeVertex("failed", ExecutionVertexStatus.RUNNING, _FakeStreamTask(running=False))
+                scheduler = self._scheduler(
+                    [healthy, failed], {"healthy": StreamTaskStatus.ALIVE, "failed": StreamTaskStatus.ALIVE}
+                )
+                with (
+                    mock.patch.object(js_mod.klein, "get_actor_status", side_effect=self._status_map),
+                    mock.patch.object(js_mod.klein, "get", side_effect=lambda value, **kw: value),
+                    mock.patch.object(recovery_mod.task_deployer, "bootstrap_vertex") as bootstrap,
+                ):
+                    self.assertFalse(scheduler.try_recover_tasks())
+                    bootstrap.assert_not_called()
+
+    def test_rebuilt_source_requires_consistent_downstream_restore(self):
+        source = _FakeVertex("source", ExecutionVertexStatus.RUNNING, _FakeStreamTask(running=False))
+        source.operator_spec.source = True
+        scheduler = self._scheduler([source], {"source": StreamTaskStatus.ALIVE})
+        with (
+            mock.patch.object(js_mod.klein, "get_actor_status", side_effect=self._status_map),
+            mock.patch.object(js_mod.klein, "get", side_effect=lambda value, **kw: value),
+            mock.patch.object(recovery_mod.task_deployer, "bootstrap_vertex") as bootstrap,
+        ):
+            self.assertFalse(scheduler.try_recover_tasks())
+            bootstrap.assert_not_called()
+
+    def test_replay_rpc_failure_escalates_instead_of_reporting_success(self):
+        upstream = _FakeVertex("upstream", ExecutionVertexStatus.RUNNING, _FakeStreamTask(replay_ok=False))
+        failed = _FakeVertex("failed", ExecutionVertexStatus.RUNNING, _FakeStreamTask(running=False))
+        graph = _build_graph([upstream, failed])
+        edge = SimpleNamespace(source=upstream, target=failed)
+        graph.input_job_edges.side_effect = lambda job_vertex_id: (
+            [SimpleNamespace(execution_edges=[edge])] if job_vertex_id == failed.id.job_vertex_id else []
+        )
+        manager = recovery_mod.RecoveryManager(graph, lambda: None, rpc_timeout=1, start_timeout=1)
+        with (
+            mock.patch.object(js_mod.klein, "get_actor_status", return_value=StreamTaskStatus.ALIVE),
+            mock.patch.object(js_mod.klein, "get", side_effect=lambda value, **kw: value),
+            mock.patch.object(recovery_mod.task_deployer, "bootstrap_vertex"),
+        ):
+            self.assertFalse(manager.try_recover_tasks())
 
     def test_mixed_healthy_and_dead_returns_true(self):
         healthy = _FakeStreamTask()

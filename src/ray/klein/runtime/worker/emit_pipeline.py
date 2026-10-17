@@ -39,6 +39,12 @@ class _WatermarkMarker:
     sequence: int
 
 
+@dataclass(frozen=True, slots=True)
+class _ReplayRequest:
+    commands: list["DeliveryCommand"]
+    completion: asyncio.Future[None]
+
+
 class EmitPipeline:
     """Owns the emit queue and the single FIFO emit-worker task."""
 
@@ -60,6 +66,7 @@ class EmitPipeline:
         self._queue: asyncio.Queue[object] = asyncio.Queue(maxsize=queue_maxsize)
         self._queue_size_observer = queue_size_observer
         self._worker: asyncio.Task | None = None
+        self._failure: Exception | None = None
 
     def start(self) -> None:
         """Launch the emit-worker task (idempotent)."""
@@ -95,6 +102,34 @@ class EmitPipeline:
         await self._queue.put(commands)
         self._publish_queue_size()
 
+    async def replay(self, commands: list["DeliveryCommand"]) -> None:
+        """Serialize replay with live sends and acknowledge actual delivery."""
+        worker = self._worker
+        if worker is None or worker.done():
+            raise RuntimeError(f"emit worker of {self._task_name} is not running") from self._failure
+        completion: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        admission = asyncio.create_task(self._queue.put(_ReplayRequest(commands, completion)))
+        try:
+            await asyncio.wait((admission, worker), return_when=asyncio.FIRST_COMPLETED)
+            if not admission.done():
+                raise RuntimeError(
+                    f"emit worker of {self._task_name} stopped before replay admission"
+                ) from self._failure
+            admission.result()
+            self._publish_queue_size()
+            await asyncio.wait((completion, worker), return_when=asyncio.FIRST_COMPLETED)
+            if completion.done():
+                completion.result()
+                return
+            raise RuntimeError(f"emit worker of {self._task_name} stopped before replay completed") from self._failure
+        finally:
+            if not admission.done():
+                admission.cancel()
+                with suppress(asyncio.CancelledError):
+                    await admission
+            if not completion.done():
+                completion.cancel()
+
     async def wait_idle(self, timeout: float) -> None:
         """Wait until every command accepted before a topology cut is sent."""
 
@@ -111,6 +146,7 @@ class EmitPipeline:
     async def _loop(self) -> None:
         while True:
             pending = await self._queue.get()
+            replay = pending if isinstance(pending, _ReplayRequest) else None
             try:
                 if pending is _SHUTDOWN:
                     return
@@ -118,11 +154,16 @@ class EmitPipeline:
                     await self._watermark.apply_forwarded(pending.sender_vertex_id, pending.sequence)
                     continue
                 if self._task_output is not None:
-                    await self._task_output.send_commands(pending)
+                    await self._task_output.send_commands(replay.commands if replay is not None else pending)
+                if replay is not None and not replay.completion.done():
+                    replay.completion.set_result(None)
             except Exception as error:
                 # A fatal emit failure (e.g. downstream permanently gone) must
                 # fail the task, not die silently in a detached worker.
                 logger.exception("Emit worker of %s failed.", self._task_name)
+                self._failure = error
+                if replay is not None and not replay.completion.done():
+                    replay.completion.set_exception(error)
                 self._on_fatal(error)
                 return
             finally:
