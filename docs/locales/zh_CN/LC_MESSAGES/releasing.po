@@ -3,7 +3,7 @@
 # Copyright (C) 2024-2026, Klein Authors
 msgid ""
 msgstr ""
-"Project-Id-Version: Klein 0.1.0a1\n"
+"Project-Id-Version: Klein 0.1.0a2\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-10-17 17:06+0800\n"
 "PO-Revision-Date: 2026-10-17 00:00+0000\n"
@@ -68,8 +68,8 @@ msgid ""
 "`main` commit. An older successful check does not replace a pending or failed rerun."
 msgstr "合入变更，等待 CI、CodeQL 和密钥扫描在确切的 `main` 提交上通过。较早的成功检查不能替代仍在等待或已失败的重新运行。"
 
-msgid "Create an annotated version tag on that commit. For the first alpha release:"
-msgstr "在该提交上创建带注释的版本标签。首次 alpha 发布示例："
+msgid "Create an annotated version tag on that commit. For example:"
+msgstr "在该提交上创建带注释的版本标签。例如："
 
 msgid "From GitHub Actions, run `Release` on `main` with the tag, or use:"
 msgstr "在 GitHub Actions 中选择 `main` 和对应标签运行 `Release`，或使用："
@@ -123,8 +123,8 @@ msgstr ""
 "在全新环境中安装确切的已发布版本并运行快速入门示例。确认 PyPI 项目介绍、图片、安装元数据和来源证明链接显示正常，并将下载制品的哈希值与 GitHub Release"
 " 中的 `SHA512SUMS` 比较。"
 
-msgid "Update the package version, PyPI installation examples, changelog, `CITATION.cff`, and compatibility documentation through a reviewed pull request. Keep the release's alpha, beta, or stable status accurate and record the intended release date."
-msgstr "通过经过审查的拉取请求更新包版本、PyPI 安装示例、变更日志、`CITATION.cff` 和兼容性文档。准确标明 alpha、beta 或稳定版状态，并记录计划发布日期。"
+msgid "Update the package version, PyPI installation examples, changelog, `CITATION.cff`, and compatibility documentation through a reviewed pull request. Keep the release's alpha, beta, or stable status accurate and record the intended release date. Write the public release notes in `.github/release-notes/<tag>.md`, with highlights, fixes linked to pull requests, upgrade instructions, and any known issues. The workflow publishes this reviewed text as the GitHub Release description and includes it in the checksummed artifacts."
+msgstr "通过经过审查的拉取请求更新包版本、PyPI 安装示例、变更日志、`CITATION.cff` 和兼容性文档。准确标明 alpha、beta 或稳定版状态，并记录计划发布日期。在 `.github/release-notes/<tag>.md` 中编写公开发布说明，包含重点变化、关联拉取请求的修复、升级方法和已知问题。工作流将这份经过审查的文本发布为 GitHub Release 描述，并将其纳入带校验和的制品。"
 
 msgid "After successful publication, confirm the release date in the changelog and `CITATION.cff`. Never replace an uploaded file or reuse its version. If a publication fails partway through, inspect the published artifacts and finish only missing steps for the same verified bytes, or prepare a new version."
 msgstr "发布成功后，确认变更日志和 `CITATION.cff` 中的发布日期。不要替换已上传的文件或复用其版本号。如果发布中途失败，应先检查已经发布的制品，仅使用相同且经过验证的字节内容完成缺失步骤，或准备新版本。"

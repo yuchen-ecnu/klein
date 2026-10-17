@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Annotated tag at the current main commit (for example v0.1.0a1)"
+        description: "Annotated tag at the current main commit (for example v0.1.0a2)"
         required: true
         type: string
 
@@ -46,6 +46,7 @@ jobs:
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
           package_version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
           test "${RELEASE_TAG#v}" = "$package_version"
+          test -s ".github/release-notes/$RELEASE_TAG.md"
       - name: Verify maintainer authorization and successful exact-commit CI
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -95,6 +96,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/klein-source"
           tar -xzf release/source/*-src.tar.gz -C "$RUNNER_TEMP/klein-source"
           echo "CANONICAL_SOURCE_ROOT=$RUNNER_TEMP/klein-source/ray-klein-${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+          cp ".github/release-notes/$RELEASE_TAG.md" release/metadata/RELEASE_NOTES.md
       - name: Build Dashboard and Python distributions from the source archive
         run: |
           cd "$CANONICAL_SOURCE_ROOT/frontend"
@@ -183,6 +185,6 @@ jobs:
           gh release create "$RELEASE_TAG" \
             release/source/* release/python/* release/metadata/* \
             --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --generate-notes \
+            --verify-tag --notes-file release/metadata/RELEASE_NOTES.md \
             --title "Klein ${RELEASE_TAG}" \
             "${release_flags[@]}"

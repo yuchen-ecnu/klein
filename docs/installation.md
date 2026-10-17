@@ -40,7 +40,7 @@ python -m pip install --upgrade pip
 Install the alpha release and its base dependencies, including `ray[data]`:
 
 ```bash
-python -m pip install ray-klein==0.1.0a1
+python -m pip install ray-klein==0.1.0a2
 ```
 
 Use the same Klein version on the driver and every worker. The distribution
@@ -110,7 +110,7 @@ tests are opt-in. See [Testing](testing.md) for the test tiers and commands.
 ## Optional extras
 
 Install only the integrations used by the application. Extras can be combined,
-for example `python -m pip install "ray-klein[kafka,rocksdb]==0.1.0a1"`.
+for example `python -m pip install "ray-klein[kafka,rocksdb]==0.1.0a2"`.
 
 | Extra | Installed dependencies | Use it for |
 | --- | --- | --- |
@@ -199,7 +199,7 @@ before upgrading an application that must restore checkpoints. Select the
 target version explicitly and keep the required extras; for example:
 
 ```bash
-python -m pip install --upgrade "ray-klein[kafka,rocksdb]==0.1.0a1"
+python -m pip install --upgrade "ray-klein[kafka,rocksdb]==0.1.0a2"
 ```
 
 For an editable contributor environment, re-run:

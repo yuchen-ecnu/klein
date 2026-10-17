@@ -183,7 +183,7 @@ Klein targets Python 3.10 through 3.12 and Ray 2.56.x
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install ray-klein==0.1.0a1
+python -m pip install ray-klein==0.1.0a2
 ```
 
 See the complete [installation guide](installation.md) for optional extras,

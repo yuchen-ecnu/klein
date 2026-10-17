@@ -25,7 +25,7 @@ ray-klein [--help] [--version] COMMAND [ARGS]...
 | `stop` | Compatibility alias for `cancel`. | No |
 
 Use `ray-klein COMMAND --help` to inspect the installed version. The command
-names and defaults below describe the current `0.1.0a1` source tree.
+names and defaults below describe the current `0.1.0a2` source tree.
 
 (cli-ray-connection)=
 ## Connect to the Ray cluster

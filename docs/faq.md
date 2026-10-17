@@ -36,7 +36,7 @@ porting a job.
 
 ### Is the API stable enough for production?
 
-The current source tree carries the `0.1.0a1` alpha candidate version. Production evaluation should
+The current source tree carries the `0.1.0a2` alpha candidate version. Production evaluation should
 pin Klein and Ray, rehearse recovery, and accept that APIs and checkpoint
 formats can change before 1.0. See [API stability](api-stability.md) and the
 [production-readiness checklist](production-readiness.md).
@@ -58,7 +58,7 @@ intentional. See [Installation](installation.md#supported-environment) and
 
 ### Can I install `ray-klein` from PyPI?
 
-Yes. Install the alpha release with `python -m pip install ray-klein==0.1.0a1`.
+Yes. Install the alpha release with `python -m pip install ray-klein==0.1.0a2`.
 The distribution name is `ray-klein`; import it as `ray.klein`. See
 [Installation](installation.md#install-from-pypi) for optional extras and
 source installation.

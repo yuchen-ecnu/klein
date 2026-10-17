@@ -11,6 +11,7 @@ from sqlglot import exp
 from ray.klein._internal.frozen_mapping import FrozenMapping
 from ray.klein._internal.sql.ai_function_execution import apply_batch_ai_projections
 from ray.klein._internal.sql.ai_function_registry import AIFunctionSpec
+from ray.klein._internal.sql.batch_join import JOIN_KEY_COLUMN, coalesced_join_key_expression, join_key_expression
 from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy, apply_batch_downloads
 from ray.klein._internal.sql.expression import evaluate_expression
 from ray.klein._internal.sql.media_function import plan_media_projections, validate_media_function_calls
@@ -97,6 +98,10 @@ class _ProjectRow:
             if table is not None and not source_name.startswith(f"{table}."):
                 continue
             output_name = source_name.split(".", 1)[-1]
+            if table is None and "." in source_name and output_name in row:
+                # USING exposes one coalesced unqualified key in SELECT *,
+                # while alias.* still exposes that side's original key.
+                continue
             if output_name in result:
                 output_name = source_name
             result[output_name] = value
@@ -176,7 +181,14 @@ def _table_relation(
     # into a lazy Dataset. Carrying the estimate alongside the SQL relation
     # avoids either materializing the plan or reaching into Ray internals.
     input_blocks = _estimated_num_blocks(dataset)
-    return dataset.map(_QualifyRow(alias), num_cpus=num_cpus), alias, input_blocks
+    schema = dataset.schema()
+    if schema is not None and schema.names:
+        # Native projection retains Arrow types and the schema of an empty
+        # relation; a row map cannot qualify columns when there are no rows.
+        qualified = dataset.rename_columns({name: f"{alias}.{name}" for name in schema.names}, num_cpus=num_cpus)
+    else:
+        qualified = dataset.map(_QualifyRow(alias), num_cpus=num_cpus)
+    return qualified, alias, input_blocks
 
 
 def _join_type(join: exp.Join) -> str:
@@ -272,7 +284,13 @@ def _apply_joins(
     input_blocks: int | None,
     context: _JoinContext,
 ) -> tuple[Dataset, list[str], int]:
-    for join in select.args.get("joins") or ():
+    using_columns: set[str] = set()
+    for index, join in enumerate(select.args.get("joins") or ()):
+        if index:
+            # Ray reserves resources for every hash-shuffle actor pool in a
+            # Dataset DAG up front. Finish the preceding join before another
+            # pool can exhaust the resources needed by its input tasks.
+            dataset = dataset.materialize()
         right, right_alias, right_blocks = _table_relation(
             join.this,
             context.datasets,
@@ -296,13 +314,30 @@ def _apply_joins(
             dataset = dataset.drop_columns([key])
         else:
             left_keys, right_keys = _join_keys(join, aliases, right_alias)
-            dataset = dataset.join(
-                right,
+            using_names = tuple(identifier.name for identifier in join.args.get("using") or ())
+            if using_names:
+                left_keys = tuple(
+                    name if name in using_columns else key for name, key in zip(using_names, left_keys, strict=True)
+                )
+            dataset = dataset.with_column(
+                JOIN_KEY_COLUMN, join_key_expression(left_keys, left=True), num_cpus=context.num_cpus
+            ).join(
+                right.with_column(
+                    JOIN_KEY_COLUMN, join_key_expression(right_keys, left=False), num_cpus=context.num_cpus
+                ),
                 join_type=join_type,
                 num_partitions=partitions,
-                on=left_keys,
-                right_on=right_keys,
+                on=(JOIN_KEY_COLUMN,),
             )
+            # Ray coalesces its join keys. Joining on a private key preserves
+            # both original SQL columns, including NULLs on unmatched sides.
+            dataset = dataset.drop_columns([JOIN_KEY_COLUMN])
+            if using_names:
+                for name, left_key, right_key in zip(using_names, left_keys, right_keys, strict=True):
+                    dataset = dataset.with_column(
+                        name, coalesced_join_key_expression(left_key, right_key), num_cpus=context.num_cpus
+                    )
+                using_columns.update(using_names)
         input_blocks = partitions
         aliases.append(right_alias)
     return dataset, aliases, max(1, input_blocks or _cluster_parallelism())
@@ -652,6 +687,10 @@ def _execute_select(
         raise SQLQueryError("SELECT DISTINCT is not supported yet")
 
     if _has_aggregates(select):
+        if select.args.get("joins"):
+            # Keep intermediate blocks distributed and spillable while releasing
+            # the join's actor reservations before starting the aggregate.
+            dataset = dataset.materialize()
         dataset = _aggregate_select(
             select,
             dataset,
@@ -674,6 +713,14 @@ def _execute_select(
     return _apply_order_and_limit(select, dataset)
 
 
+def _materialize_shuffled_subquery(query: exp.Query, dataset: Dataset) -> Dataset:
+    """Release a subquery's shuffle actors before a consuming SQL stage."""
+
+    if query.find(exp.Join, exp.Group, exp.AggFunc) is not None:
+        return dataset.materialize()
+    return dataset
+
+
 def _execute_query_ast(
     query: exp.Query,
     datasets: Mapping[str, Dataset],
@@ -692,7 +739,7 @@ def _execute_query_ast(
             raise SQLQueryError("Recursive CTEs are not supported")
         nested_ctes = dict(ctes)
         for cte in with_expression.expressions:
-            nested_ctes[cte.alias] = _execute_query_ast(
+            result = _execute_query_ast(
                 cte.this,
                 datasets,
                 nested_ctes,
@@ -701,6 +748,7 @@ def _execute_query_ast(
                 **_ai_function_options(ai_functions),
                 **_download_policy_options(download_policy),
             )
+            nested_ctes[cte.alias] = _materialize_shuffled_subquery(cte.this, result)
         query = query.copy()
         query.set("with_", None)
         ctes = nested_ctes
@@ -727,6 +775,7 @@ def _execute_query_ast(
             **_ai_function_options(ai_functions),
             **_download_policy_options(download_policy),
         )
+        left = _materialize_shuffled_subquery(query.this, left)
         right = _execute_query_ast(
             query.expression,
             datasets,
@@ -736,6 +785,7 @@ def _execute_query_ast(
             **_ai_function_options(ai_functions),
             **_download_policy_options(download_policy),
         )
+        right = _materialize_shuffled_subquery(query.expression, right)
         return left.union(right)
     raise SQLQueryError(f"Unsupported SQL query form: {query.key.upper()}")
 
@@ -750,7 +800,12 @@ def execute_sql_query(
     ai_functions: Mapping[str, AIFunctionSpec] | None = None,
     download_policy: SQLDownloadPolicy | None = None,
 ) -> Dataset:
-    """Lower a SQLGlot query AST to a native, lazy Ray Dataset DAG."""
+    """Lower SQL to native Ray operators, staging dependent hash shuffles.
+
+    Intermediate shuffle results stay in Ray's distributed object store, where
+    they can spill, instead of holding multiple actor pools' resource
+    reservations for the lifetime of one combined Dataset DAG.
+    """
 
     from ray.klein._internal.sql.validation import validate_read_query
 

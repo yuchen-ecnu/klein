@@ -17,7 +17,7 @@ copyright = "2024-2026, Klein Authors"
 try:
     release = version("ray-klein")
 except PackageNotFoundError:
-    release = "0.1.0a1"
+    release = "0.1.0a2"
 version = os.environ.get("KLEIN_DOCS_VERSION", release)
 
 extensions = [

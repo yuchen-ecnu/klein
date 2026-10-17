@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 from sqlglot import exp, parse_one
 
 from ray.klein._internal.sql import execution
+from ray.klein._internal.sql.batch_join import encode_join_key
 from ray.klein._internal.sql.download_runtime import SQLDownloadPolicy
 from ray.klein.api.sql_query_error import SQLQueryError
 
@@ -25,6 +29,13 @@ class _Dataset:
 
     def map(self, function, **kwargs):
         self.calls.append(("map", function, kwargs))
+        return self
+
+    def schema(self):
+        return SimpleNamespace(names=["id"])
+
+    def rename_columns(self, names, **kwargs):
+        self.calls.append(("rename_columns", names, kwargs))
         return self
 
     def with_column(self, name, expression, **kwargs):
@@ -57,6 +68,10 @@ class _Dataset:
 
     def union(self, other):
         self.calls.append(("union", other))
+        return self
+
+    def materialize(self):
+        self.calls.append(("materialize",))
         return self
 
 
@@ -165,9 +180,9 @@ def test_table_relation_qualifies_rows_prefers_ctes_and_validates_inputs() -> No
     assert result is cte_dataset
     assert alias == "i"
     assert blocks == 4
-    operation, qualifier, options = cte_dataset.calls[0]
-    assert operation == "map"
-    assert qualifier({"id": 1}) == {"i.id": 1}
+    operation, names, options = cte_dataset.calls[0]
+    assert operation == "rename_columns"
+    assert names == {"id": "i.id"}
     assert options == {"num_cpus": 0.25}
 
     with pytest.raises(SQLQueryError, match="unbound table 'missing'"):
@@ -273,18 +288,52 @@ def test_apply_joins_lowers_outer_join_keys(monkeypatch) -> None:
     )
 
     assert (result, aliases, blocks) == (left, ["a", "b"], 4)
-    assert left.calls == [
+    assert [call[0] for call in left.calls] == ["with_column", "join", "drop_columns"]
+    assert left.calls[1:] == [
         (
             "join",
             right,
             {
                 "join_type": "left_outer",
                 "num_partitions": 4,
-                "on": ("a.id",),
-                "right_on": ("b.id",),
+                "on": (execution.JOIN_KEY_COLUMN,),
             },
-        )
+        ),
+        ("drop_columns", [execution.JOIN_KEY_COLUMN]),
     ]
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "matches"),
+    [
+        ((None,), (None,), False),
+        ((1, None), (1, None), False),
+        ((None,), (0,), False),
+        ((1,), (1.0,), True),
+        ((Decimal("1.00"),), (1,), True),
+        ((Decimal("0.1"),), (0.1,), False),
+        ((2**53 + 1,), (float(2**53),), False),
+        ((-0.0,), (0,), True),
+        (("1",), (1,), False),
+        (("x",), (b"x",), False),
+        (("ab", "c"), ("a", "bc"), False),
+        ((float("nan"),), (float("nan"),), True),
+        (
+            (datetime(2026, 1, 1, tzinfo=timezone.utc),),
+            (datetime(2026, 1, 1, 8, tzinfo=timezone(timedelta(hours=8))),),
+            True,
+        ),
+    ],
+)
+def test_batch_join_key_preserves_value_equality_without_null_matches(left, right, matches):
+    assert (encode_join_key(left, left=True) == encode_join_key(right, left=False)) is matches
+
+
+def test_batch_composite_join_key_is_independent_of_shared_object_identity():
+    text = "a deliberately non-interned repeated join field"
+    other = text.encode().decode()
+    assert text == other and text is not other
+    assert encode_join_key((text, text), left=True) == encode_join_key((text, other), left=False)
 
 
 def test_apply_joins_without_joins_uses_cluster_fallback(monkeypatch) -> None:

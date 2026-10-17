@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from sqlglot import parse_one
+from sqlglot import exp, parse_one
 
 from ray.klein import KleinContext, Pipeline, SQLQueryError, SQLSession, TableFactory, sql
 from ray.klein._internal.sql.execution import _apply_order_and_limit, _build_aggregate_plan, _shuffle_partitions
@@ -397,6 +397,28 @@ def test_flink_style_create_and_drop_table() -> None:
     session.execute_sql("DROP TABLE events")
     assert session.tables == ()
     session.execute_sql("DROP TABLE IF EXISTS events")
+
+
+@pytest.mark.parametrize("target_list", [False, True])
+def test_drop_table_accepts_both_supported_sqlglot_target_representations(target_list):
+    session = SQLSession(KleinContext())
+    session.execute_sql(
+        "CREATE TABLE events (id BIGINT) WITH ('connector'='filesystem', 'path'='/unused', 'format'='json')"
+    )
+    table = exp.to_table("events")
+    arguments = {"tables": [table]} if target_list else {"this": table}
+    session._drop_table(exp.Drop(kind="TABLE", **arguments))
+    assert session.tables == ()
+
+
+def test_drop_table_rejects_multiple_targets_without_dropping_any():
+    session = SQLSession(KleinContext())
+    session.execute_sql(
+        "CREATE TABLE events (id BIGINT) WITH ('connector'='filesystem', 'path'='/unused', 'format'='json')"
+    )
+    with pytest.raises(SQLQueryError, match="TABLE objects only"):
+        session._drop_table(exp.Drop(kind="TABLE", tables=[exp.to_table("events"), exp.to_table("other")]))
+    assert session.tables == ("events",)
 
 
 def test_canal_json_is_a_kafka_format_and_validates_options() -> None:

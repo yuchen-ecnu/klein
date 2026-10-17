@@ -32,22 +32,26 @@ status and an authorization attributed to a current maintainer.
 1. Update the package version, PyPI installation examples, changelog,
    `CITATION.cff`, and compatibility documentation through a reviewed pull
    request. Keep the release's alpha, beta, or stable status accurate and
-   record the intended release date.
+   record the intended release date. Write the public release notes in
+   `.github/release-notes/<tag>.md`, with highlights, fixes linked to pull
+   requests, upgrade instructions, and any known issues. The workflow publishes
+   this reviewed text as the GitHub Release description and includes it in the
+   checksummed artifacts.
 2. Merge the change and wait for CI, CodeQL, and secret scanning to pass on the
    exact `main` commit. An older successful check does not replace a pending
    or failed rerun.
-3. Create an annotated version tag on that commit. For the first alpha release:
+3. Create an annotated version tag on that commit. For example:
 
    ```bash
    git fetch origin main --tags
-   git tag -a v0.1.0a1 origin/main -m "Klein 0.1.0a1"
-   git push origin refs/tags/v0.1.0a1
+   git tag -a v0.1.0a2 origin/main -m "Klein 0.1.0a2"
+   git push origin refs/tags/v0.1.0a2
    ```
 
 4. From GitHub Actions, run `Release` on `main` with the tag, or use:
 
    ```bash
-   gh workflow run release.yml --ref main -f tag=v0.1.0a1
+   gh workflow run release.yml --ref main -f tag=v0.1.0a2
    ```
 
 The tag must match `pyproject.toml` and resolve to the exact workflow commit.
