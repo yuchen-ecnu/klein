@@ -42,6 +42,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
+- The repository README selects the matching logo when GitHub's theme differs
+  from the operating-system theme or changes after the page loads.
 - Runtime scheduling reads node state from GCS and works with the Ray
   Dashboard disabled.
 - `collect(limit=...)` and `take_all(limit=...)` now reject invalid limits and
