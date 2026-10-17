@@ -42,8 +42,15 @@ src/ray/klein/observability/dashboard/static/.
 
 README and documentation illustrations
 
-../_static/klein-overview.png introduces the API and the per-job runtime
-choice in the README. It was generated with ImageGen for first-time readers.
+../_static/klein-overview.png introduces stateful stream processing on Ray
+in the README: incoming events become results, with event time, managed state,
+and checkpoint recovery as supporting capabilities. It was generated with
+ImageGen using klein-logo-selected.png as the brand reference. Both this
+light-theme image and ../_static/klein-overview-dark.png are RGBA PNGs with
+transparent backgrounds. The dark variant uses light text. GitHub theme
+links select the matching illustration, as they do for the header wordmark;
+keep both links when editing the README. Runtime selection is explained
+separately in the README and technical guides.
 The detailed diagrams below also embed the Klein mark in their pixels:
 
 architecture-overview.png  - docs/architecture.md
@@ -54,7 +61,7 @@ key-concepts-pipeline.png - docs/key-concepts.md
 
 English and Chinese documentation share those five files under ../_static/.
 Their marks use the approved blue and mint ribbon reference. The figures use
-the overview's open layout, flowing paths, and contemporary blue/mint icons,
+the earlier overview's open layout, flowing paths, and blue/mint icons,
 with technical labels and relationships checked against the original figures.
 The prompts for all six illustrations are in diagram-imagegen-prompts.txt.
 When auditing branding, inspect these images visually as well as searching
