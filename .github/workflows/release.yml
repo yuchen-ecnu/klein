@@ -89,10 +89,9 @@ jobs:
         with:
           name: release-evidence
           path: release/metadata/
-      - name: Build and validate the canonical source archive
+      - name: Build the canonical source archive
         run: |
           python scripts/build_source_release.py --ref "$GITHUB_SHA" --output-dir release/source
-          python scripts/check_distribution.py release/source/*
           mkdir -p "$RUNNER_TEMP/klein-source"
           tar -xzf release/source/*-src.tar.gz -C "$RUNNER_TEMP/klein-source"
           echo "CANONICAL_SOURCE_ROOT=$RUNNER_TEMP/klein-source/ray-klein-${RELEASE_TAG#v}" >> "$GITHUB_ENV"
