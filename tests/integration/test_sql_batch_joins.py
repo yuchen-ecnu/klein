@@ -296,7 +296,8 @@ def test_order_by_respects_null_placement(direction, nulls):
 @pytest.mark.parametrize("empty", [False, True])
 def test_cross_join_preserves_projected_empty_relation(empty):
     rows = [{"id": 1, "key": 7}]
-    query = f"""WITH e AS (SELECT id, key FROM rows WHERE id {'<' if empty else '>'} 0)
+    comparison = "<" if empty else ">"
+    query = f"""WITH e AS (SELECT id, key FROM rows WHERE id {comparison} 0)
         SELECT r.id AS rid, e.id AS eid FROM rows r CROSS JOIN e"""
     expected = _oracle(query, {"rows": (("id", "key"), rows)})
     context = KleinContext({"execution.runtime.mode": "batch"})
