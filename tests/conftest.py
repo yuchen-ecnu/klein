@@ -128,8 +128,8 @@ def ray_cluster(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, 
             ray.__path__.insert(0, source_ray)
 
     options = {
-        # Klein's placement planner reads the public dashboard node API.
-        "include_dashboard": True,
+        # Runtime scheduling and recovery must work without the Dashboard API.
+        "include_dashboard": False,
         "num_cpus": 8,
         "_temp_dir": str(ray_temp_dir),
         "_system_config": {"enable_metrics_collection": False},

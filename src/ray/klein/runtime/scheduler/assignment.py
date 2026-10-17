@@ -8,8 +8,7 @@ classes. Consumed by the placement strategies in ``scheduler/placement.py``.
 
 from dataclasses import dataclass
 
-import ray.util.state
-
+import ray
 from ray.klein._internal.logging import get_logger
 from ray.klein.runtime.execution_graph.execution_job_vertex import ExecutionJobVertex
 
@@ -43,15 +42,15 @@ class WorkerNode:
 
 
 def cluster_worker_nodes() -> tuple[list[WorkerNode], list[str]]:
-    """Return resource snapshots and IDs for live, non-head Ray nodes."""
-    ray_nodes = ray.util.state.list_nodes(
-        address=ray.get_runtime_context().gcs_address,
-        limit=10000,
-        filters=[("state", "=", "ALIVE"), ("is_head_node", "=", False)],
-    )
-    node_ids = [node.node_id for node in ray_nodes]
+    """Read live worker nodes from the connected runtime's GCS node table.
+
+    ``ray.nodes()`` bypasses the Dashboard HTTP State API. Ray marks the head
+    with a reserved resource, including when it shares an IP with workers.
+    """
+    ray_nodes = [node for node in ray.nodes() if node["Alive"] and "node:__internal_head__" not in node["Resources"]]
+    node_ids = [node["NodeID"] for node in ray_nodes]
     workers = [
-        WorkerNode(i, float(node.resources_total.get("CPU", 0)), float(node.resources_total.get("GPU", 0)))
+        WorkerNode(i, float(node["Resources"].get("CPU", 0)), float(node["Resources"].get("GPU", 0)))
         for i, node in enumerate(ray_nodes)
     ]
     return workers, node_ids

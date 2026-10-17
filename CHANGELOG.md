@@ -37,6 +37,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
+- Runtime scheduling reads node state from GCS and works with the Ray
+  Dashboard disabled.
 - `collect(limit=...)` and `take_all(limit=...)` now reject invalid limits and
   fail when the complete result exceeds the bound; `take(limit)` remains the
   explicitly truncating terminal.
@@ -62,7 +64,7 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 - Dashboard proxy, asset, and request-correlation response headers now use
   fixed, allowlisted, or server-generated values so untrusted input cannot
   produce HTTP response splitting.
-- The optional PDF dependency now requires `pypdf>=6.15.0,<7`, resolving the
+- The optional PDF dependency now requires `pypdf>=6.19.0,<7`, resolving the
   published vulnerabilities affecting earlier supported versions.
 - Unsupported `DOWNLOAD` compositions now fail during graph construction;
   redirects are revalidated, request budgets are cumulative, and private

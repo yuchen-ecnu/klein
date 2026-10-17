@@ -5,8 +5,8 @@ from datetime import timedelta
 from pathlib import Path
 from queue import Empty
 
+from ray.util import list_named_actors
 from ray.util.queue import Queue
-from ray.util.state import list_actors
 
 import ray
 from ray.klein.api.job_status import JobStatus
@@ -19,6 +19,7 @@ from ray.klein.config.configuration import Configuration
 from ray.klein.config.job_manager_options import JobManagerOptions
 from ray.klein.config.pipeline_options import PipelineOptions
 from ray.klein.config.restart_strategy_options import RestartStrategyOptions
+from ray.klein.runtime.actor import KleinActorHandle
 from ray.klein.runtime.coordinator import checkpoint_io
 from tests.support.streaming import LoopSourceFunction
 from tests.support.waiting import wait_until
@@ -38,12 +39,12 @@ class _QueueSink(SinkFunction):
         return None
 
 
-def _task_actors(address: str, namespace: str):
-    return [
-        actor
-        for actor in list_actors(address=address, filters=[("ray_namespace", "=", namespace)], detail=True)
-        if actor.name not in {None, "JobManager", "CheckpointCoordinator"}
-    ]
+def _live_task_actor(name: str, namespace: str, *, previous_id: str | None = None) -> KleinActorHandle | None:
+    actor = KleinActorHandle(ray.get_actor(name, namespace=namespace))
+    if actor.actor_id == previous_id:
+        return None
+    ray.get(actor.ping(), timeout=1)
+    return actor
 
 
 def _drain_indices(output_queue: Queue) -> list[int]:
@@ -98,20 +99,26 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
         )
         assert checkpoint
 
-        original = wait_until(
+        task_name = wait_until(
             lambda: next(
                 (
-                    actor
-                    for actor in _task_actors(ray_cluster.address_info["address"], handle.namespace)
-                    if actor.state == "ALIVE" and actor.name.startswith("RecoveryMap")
+                    actor["name"]
+                    for actor in list_named_actors(all_namespaces=True)
+                    if actor["namespace"] == handle.namespace and actor["name"].startswith("RecoveryMap")
                 ),
                 None,
             ),
             timeout=20,
             interval=0.2,
+            description="a named stream task in GCS",
+        )
+        original = wait_until(
+            lambda: _live_task_actor(task_name, handle.namespace),
+            timeout=20,
+            interval=0.2,
             description="a live stream task",
         )
-        original_handle = ray.get_actor(original.name, namespace=handle.namespace)
+        assert original.actor_id is not None
 
         delivered_before_failure: set[int] = set()
 
@@ -130,20 +137,13 @@ def test_real_ray_recreates_a_killed_stream_task_from_checkpoint(tmp_path: Path,
             interval=0.05,
             description="a contiguous output prefix before fault injection",
         )
-        ray.kill(original_handle, no_restart=True)
+        ray.kill(original.inner_actor, no_restart=True)
 
         replacement = wait_until(
-            lambda: next(
-                (
-                    actor
-                    for actor in _task_actors(ray_cluster.address_info["address"], handle.namespace)
-                    if actor.name == original.name and actor.state == "ALIVE" and actor.actor_id != original.actor_id
-                ),
-                None,
-            ),
+            lambda: _live_task_actor(task_name, handle.namespace, previous_id=original.actor_id),
             timeout=60,
             interval=0.5,
-            description=f"replacement actor for {original.name}",
+            description=f"replacement actor for {task_name}",
         )
         assert replacement.actor_id != original.actor_id
 
