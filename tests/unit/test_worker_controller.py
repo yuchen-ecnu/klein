@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from ray.klein.api.klein_context import KleinContext
 from ray.klein.config.configuration import Configuration
@@ -12,27 +14,60 @@ from tests.support.execution_graph import expand_execution_graph
 from tests.support.streaming import LoopSourceFunction
 
 
-def test_cluster_node_lookup_is_scoped_to_the_connected_ray_runtime(monkeypatch) -> None:
+def test_cluster_node_lookup_filters_gcs_snapshot_to_live_workers(monkeypatch) -> None:
     from ray.klein.runtime.scheduler import assignment
 
-    captured = {}
-    monkeypatch.setattr(
-        assignment.ray,
-        "get_runtime_context",
-        lambda: SimpleNamespace(gcs_address="127.0.0.1:4321"),
+    lookup = Mock(
+        return_value=[
+            {
+                "NodeID": "head",
+                "Alive": True,
+                "NodeManagerAddress": "127.0.0.1",
+                "Resources": {"CPU": 8, "node:__internal_head__": 1},
+            },
+            {"NodeID": "dead", "Alive": False, "Resources": {}},
+            {
+                "NodeID": "worker-1",
+                "Alive": True,
+                "NodeManagerAddress": "127.0.0.1",
+                "Resources": {"CPU": 4, "GPU": 0.5},
+            },
+            {"NodeID": "worker-2", "Alive": True, "Resources": {"CPU": 2}},
+            {"NodeID": "worker-3", "Alive": True, "Resources": {"GPU": 1}},
+        ]
     )
-
-    def list_nodes(**kwargs):
-        captured.update(kwargs)
-        return [SimpleNamespace(node_id="node-1", resources_total={"CPU": 4, "GPU": 1})]
-
-    monkeypatch.setattr(assignment.ray.util.state, "list_nodes", list_nodes)
+    monkeypatch.setattr(assignment.ray, "nodes", lookup)
 
     nodes, node_ids = assignment.cluster_worker_nodes()
 
-    assert captured["address"] == "127.0.0.1:4321"
-    assert node_ids == ["node-1"]
-    assert [(node.index, node.cpu, node.gpu) for node in nodes] == [(0, 4.0, 1.0)]
+    lookup.assert_called_once_with()
+    assert node_ids == ["worker-1", "worker-2", "worker-3"]
+    assert [(node.index, node.cpu, node.gpu) for node in nodes] == [(0, 4.0, 0.5), (1, 2.0, 0.0), (2, 0.0, 1.0)]
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        [],
+        [{"NodeID": "head", "Alive": True, "Resources": {"node:__internal_head__": 1}}],
+        [{"NodeID": "dead", "Alive": False, "Resources": {}}],
+    ],
+)
+def test_cluster_node_lookup_without_live_workers(monkeypatch, snapshot) -> None:
+    from ray.klein.runtime.scheduler import assignment
+
+    monkeypatch.setattr(assignment.ray, "nodes", lambda: snapshot)
+
+    assert assignment.cluster_worker_nodes() == ([], [])
+
+
+def test_cluster_node_lookup_does_not_treat_gcs_failure_as_an_empty_cluster(monkeypatch) -> None:
+    from ray.klein.runtime.scheduler import assignment
+
+    monkeypatch.setattr(assignment.ray, "nodes", Mock(side_effect=RuntimeError("GCS unavailable")))
+
+    with pytest.raises(RuntimeError, match="GCS unavailable"):
+        assignment.cluster_worker_nodes()
 
 
 def scheduling_source(context: KleinContext, *, num_cpus: float, concurrency: int):
