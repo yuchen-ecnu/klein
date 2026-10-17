@@ -8,7 +8,10 @@ myst:
 (klein)=
 # Klein: Stateful stream processing on Ray
 
-Klein is a stateful stream processing library built on Ray. Use the `DataStream` API to run bounded Ray Data inputs and long-running streaming inputs with event time, managed keyed state, checkpoint recovery, and SQL and Table APIs.
+Klein is a stateful stream processing library built on Ray. Build dataflows
+with the Python DataStream API or write queries with Klein SQL. Both use the
+same runtime for bounded and continuous processing, with event time, managed
+keyed state, and checkpoint recovery.
 
 :::{warning}
 Klein is independent alpha software. It is not affiliated with,
@@ -21,9 +24,8 @@ endorsed by, or maintained by the Ray project.
 :caption: Getting started
 
 installation
-getting-started
+user-guides
 examples
-production-streaming
 ```
 
 ```{toctree}
@@ -32,6 +34,7 @@ production-streaming
 :caption: Concepts
 
 key-concepts
+features
 architecture
 glossary
 ```
@@ -39,28 +42,41 @@ glossary
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Application development
+:caption: DataStream API guide
 
-user-guides
+datastream
+getting-started
 datastream-programming-guide
 development
-job-lifecycle
-operator-compatibility
+datastream-examples
+ray-data-interop
+ray-native-state
+event-time
+production-streaming
 ```
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Features
+:caption: Klein SQL guide
 
-features
-ray-data-interop
-ray-native-state
-event-time
 sql
+sql/getting-started
+sql/examples
+sql/connectors
+sql/functions
+sql/streaming
+sql/execution
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Application development
+
+job-lifecycle
+operator-compatibility
 delivery-semantics
-operator-rescaling
-driver-fault-tolerance
 ```
 
 ```{toctree}
@@ -101,6 +117,8 @@ configuration-reference
 :caption: Operations
 
 checkpoint-recovery
+operator-rescaling
+driver-fault-tolerance
 observability
 cli-reference
 performance-tuning
@@ -180,11 +198,20 @@ cluster environment checks, verification, upgrades, and troubleshooting. Read
 ::::{grid} 1 2 2 2
 :gutter: 1
 
-:::{grid-item-card} Getting started
-:link: getting-started
+:::{grid-item-card} DataStream API guide
+:link: datastream
 :link-type: doc
 
-Build and run your first bounded pipeline, then learn how to submit a streaming job.
+Build Python pipelines with transformations, UDFs, event-time windows, and
+managed state. Start with the API quick start and runnable examples.
+:::
+
+:::{grid-item-card} Klein SQL guide
+:link: sql
+:link-type: doc
+
+Write SQL queries, define tables and connectors, register functions, and run
+continuous queries. Start with the SQL quick start and runnable examples.
 :::
 
 :::{grid-item-card} Key concepts
@@ -214,15 +241,16 @@ ordered transport, checkpoints, and recovery.
 :link: user-guides
 :link-type: doc
 
-Configure jobs, use Ray Data and SQL, manage state, store checkpoints, and operate pipelines.
+Choose the DataStream API or SQL learning path, then follow the shared guides
+for connectors, job submission, deployment, and operations.
 :::
 
-:::{grid-item-card} DataStream programming
-:link: datastream-programming-guide
+:::{grid-item-card} Examples
+:link: examples
 :link-type: doc
 
-Choose row or batch functions, manage callable lifecycles, preserve ordering,
-and design serializable, observable user code.
+Run the DataStream API and SQL examples independently, then explore guides
+for production pipelines and connectors.
 :::
 
 :::{grid-item-card} Production walkthrough

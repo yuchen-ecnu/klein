@@ -30,21 +30,6 @@ msgid "User guides"
 msgstr "用户指南"
 
 msgid ""
-"If you're new to Klein, complete [Getting started](getting-started.md) "
-"and read [Key concepts](key-concepts.md) first. Use [Feature "
-"highlights](features.md) for a separate product-oriented map of hybrid "
-"execution, state, event time, SQL, recovery, live rescaling, detached "
-"jobs, and Ray Serve. The guides below cover pipeline development and "
-"production behavior."
-msgstr ""
-"如果刚接触 Klein，请先完成[快速入门](getting-started.md)并阅读[核心概念](key-"
-"concepts.md)。要从产品视角单独了解混合执行、状态、事件时间、SQL、恢复、在线扩缩容、detached 作业和 Ray "
-"Serve，请参阅[特色功能](features.md)。下列指南介绍管道开发和生产环境行为。"
-
-msgid "Build dataflows"
-msgstr "构建数据流"
-
-msgid ""
 "[Program with DataStream and UDFs](datastream-programming-guide.md) is "
 "the complete guide to records, batches, callable lifecycles, asynchronous"
 " work, ordering, errors, resources, and partitioning."
@@ -90,14 +75,6 @@ msgid ""
 "[Use Ray Data operations](ray-data-interop.md) explains bounded readers "
 "and the explicit `stream.ray_data` adapter."
 msgstr "[使用 Ray Data 操作](ray-data-interop.md)介绍有界读取器和显式 `stream.ray_data` 适配器。"
-
-msgid ""
-"[Query streams with SQL](sql.md) covers built-ins, scalar and AI UDFs, "
-"multimodal functions, SQLGlot planning, temporary views, and Flink-style "
-"Table data definition language (DDL)."
-msgstr ""
-"[使用 SQL 查询数据流](sql.md)介绍内置函数、标量与 AI UDF、多模态函数、SQLGlot 规划、临时视图和 Flink 风格的 "
-"Table 数据定义语言（DDL）。"
 
 msgid ""
 "[Write transactional files](connectors/filesystem.md) covers streaming "
@@ -213,3 +190,103 @@ msgid ""
 "navigation section so application users do not need to filter it out of "
 "the runtime guides."
 msgstr "贡献者和内部开发文档拥有独立的顶层导航，因此应用开发者无需从运行时指南中筛选这些内容。"
+
+msgid ""
+"Start with [installation](installation.md) and [key concepts](key-"
+"concepts.md), then choose a programming interface. The sidebar keeps the "
+"DataStream API and SQL guides in separate sections; both share the "
+"connector, deployment, and operations guides."
+msgstr ""
+"先阅读[安装指南](installation.md)和[核心概念](key-concepts.md)，再选择编程接口。侧栏将 DataStream "
+"API 和 SQL 指南分为独立章节；两者共用连接器、部署和运维指南。"
+
+msgid "Choose a programming interface"
+msgstr "选择编程接口"
+
+msgid "Interface"
+msgstr "接口"
+
+msgid "Use it when"
+msgstr "适用场景"
+
+msgid "Start here"
+msgstr "入门入口"
+
+msgid "Python DataStream API"
+msgstr "Python DataStream API"
+
+msgid ""
+"You want to compose Python transformations, UDFs, event-time operators, or "
+"managed state."
+msgstr "需要组合 Python 转换、UDF、事件时间算子或托管状态。"
+
+msgid ""
+"[API quick start](getting-started.md) · [API examples](datastream-"
+"examples.md)"
+msgstr "[API 快速入门](getting-started.md) · [API 示例](datastream-examples.md)"
+
+msgid "Klein SQL"
+msgstr "Klein SQL"
+
+msgid "You want to express queries, aggregations, and connector tables in SQL."
+msgstr "需要使用 SQL 表达查询、聚合和连接器表。"
+
+msgid "[SQL quick start](sql/getting-started.md) · [SQL examples](sql/examples.md)"
+msgstr "[SQL 快速入门](sql/getting-started.md) · [SQL 示例](sql/examples.md)"
+
+msgid ""
+"The interface does not select the execution mode: both support bounded and "
+"streaming workloads within their documented limits. SQL queries return a "
+"`DataStream`, so you can continue processing their results with Python. See"
+" [SQL execution and compatibility](sql/execution.md) before combining "
+"operators."
+msgstr ""
+"编程接口不决定执行模式：两者都在各自文档说明的限制内支持有界和流式工作负载。SQL 查询返回 `DataStream`，因此你可以继续用 Python"
+" 处理查询结果。组合算子前，请阅读 [SQL 执行与兼容性](sql/execution.md)。"
+
+msgid "DataStream API guide"
+msgstr "DataStream API 使用指南"
+
+msgid ""
+"[DataStream API overview](datastream.md) maps the Python learning path from"
+" the first pipeline to stateful streaming."
+msgstr "[DataStream API 概览](datastream.md)提供从第一个管道到有状态流处理的 Python 学习路径。"
+
+msgid "Klein SQL guide"
+msgstr "Klein SQL 使用指南"
+
+msgid ""
+"[SQL overview](sql.md) introduces query entry points and the SQL learning "
+"path."
+msgstr "[SQL 概览](sql.md)介绍查询入口和 SQL 学习路径。"
+
+msgid ""
+"[SQL quick start](sql/getting-started.md) runs a query and explains table "
+"bindings and session scope."
+msgstr "[SQL 快速入门](sql/getting-started.md)演示运行查询，并解释表绑定和会话作用域。"
+
+msgid "[SQL examples](sql/examples.md) provides a runnable batch query."
+msgstr "[SQL 示例](sql/examples.md)提供可运行的批查询。"
+
+msgid ""
+"[SQL connectors and Table DDL](sql/connectors.md) covers catalog tables, "
+"connector options, and inserts."
+msgstr "[SQL 连接器与 Table DDL](sql/connectors.md)介绍目录表、连接器选项和插入操作。"
+
+msgid ""
+"[SQL functions](sql/functions.md) covers built-ins, Python scalar "
+"functions, batched AI functions, and image/PDF processing."
+msgstr "[SQL 函数](sql/functions.md)介绍内置函数、Python 标量函数、批量 AI 函数和图像/PDF 处理。"
+
+msgid ""
+"[Continuous SQL](sql/streaming.md) explains streaming queries and changelog"
+" output."
+msgstr "[连续 SQL](sql/streaming.md)解释流式查询和变更日志输出。"
+
+msgid ""
+"[SQL execution and compatibility](sql/execution.md) lists supported query "
+"features and execution boundaries."
+msgstr "[SQL 执行与兼容性](sql/execution.md)列出受支持的查询功能和执行边界。"
+
+msgid "Shared application guides"
+msgstr "共用应用指南"

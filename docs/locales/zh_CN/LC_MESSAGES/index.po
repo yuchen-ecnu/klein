@@ -30,9 +30,6 @@ msgstr "核心概念"
 msgid "Application development"
 msgstr "应用开发"
 
-msgid "Features"
-msgstr "特色功能"
-
 msgid "Connectors"
 msgstr "连接器"
 
@@ -61,15 +58,6 @@ msgstr "Klein 文档：在 Ray 上构建有状态批处理与流式数据流。"
 
 msgid "Klein: Stateful stream processing on Ray"
 msgstr "Klein：基于 Ray 的有状态流处理"
-
-msgid ""
-"Klein is a stateful stream processing library built on Ray. Use the "
-"`DataStream` API to run bounded Ray Data inputs and long-running "
-"streaming inputs with event time, managed keyed state, checkpoint "
-"recovery, and SQL and Table APIs."
-msgstr ""
-"Klein 是一个构建于 Ray 之上的有状态流处理库。使用 `DataStream` API，可以运行有界 Ray Data "
-"输入和长时间运行的流式输入，并获得事件时间、托管键控状态、检查点恢复以及 SQL 和 Table API 支持。"
 
 msgid ""
 "Klein is independent alpha software. It is not affiliated with, endorsed "
@@ -122,11 +110,6 @@ msgstr ""
 msgid "Learn Klein"
 msgstr "学习 Klein"
 
-msgid ""
-"Build and run your first bounded pipeline, then learn how to submit a "
-"streaming job."
-msgstr "构建并运行第一个有界管道，然后学习如何提交流式作业。"
-
 msgid "Key concepts"
 msgstr "核心概念"
 
@@ -153,19 +136,6 @@ msgstr "跟随一张图，了解它如何从公共 API 经过规划、Ray Data �
 
 msgid "User guides"
 msgstr "用户指南"
-
-msgid ""
-"Configure jobs, use Ray Data and SQL, manage state, store checkpoints, "
-"and operate pipelines."
-msgstr "配置作业、使用 Ray Data 和 SQL、管理状态、存储检查点并运维管道。"
-
-msgid "DataStream programming"
-msgstr "DataStream 编程"
-
-msgid ""
-"Choose row or batch functions, manage callable lifecycles, preserve "
-"ordering, and design serializable, observable user code."
-msgstr "选择逐行或批量函数，管理可调用对象生命周期，保持顺序，并设计可序列化、可观测的用户代码。"
 
 msgid "Production walkthrough"
 msgstr "生产环境实战"
@@ -322,3 +292,42 @@ msgstr ""
 "或运行时行为前，请阅读[贡献指南](https://github.com/yuchen-"
 "ecnu/klein/blob/main/CONTRIBUTING.md)。报告漏洞时，请遵循[安全策略](https://github.com"
 "/yuchen-ecnu/klein/blob/main/SECURITY.md) 中的流程。"
+
+msgid "DataStream API guide"
+msgstr "DataStream API 使用指南"
+
+msgid "Klein SQL guide"
+msgstr "Klein SQL 使用指南"
+
+msgid ""
+"Klein is a stateful stream processing library built on Ray. Build dataflows"
+" with the Python DataStream API or write queries with Klein SQL. Both use "
+"the same runtime for bounded and continuous processing, with event time, "
+"managed keyed state, and checkpoint recovery."
+msgstr ""
+"Klein 是构建于 Ray 之上的有状态流处理库。你可以使用 Python DataStream API 构建数据流，也可以使用 Klein SQL"
+" 编写查询。两者共享运行时，支持有界和连续处理、事件时间、托管键控状态与检查点恢复。"
+
+msgid ""
+"Build Python pipelines with transformations, UDFs, event-time windows, and "
+"managed state. Start with the API quick start and runnable examples."
+msgstr "使用转换、UDF、事件时间窗口和托管状态构建 Python 管道。从 API 快速入门和可运行示例开始。"
+
+msgid ""
+"Write SQL queries, define tables and connectors, register functions, and "
+"run continuous queries. Start with the SQL quick start and runnable "
+"examples."
+msgstr "编写 SQL 查询、定义表和连接器、注册函数并运行连续查询。从 SQL 快速入门和可运行示例开始。"
+
+msgid ""
+"Choose the DataStream API or SQL learning path, then follow the shared "
+"guides for connectors, job submission, deployment, and operations."
+msgstr "选择 DataStream API 或 SQL 学习路径，再阅读连接器、作业提交、部署和运维的共用指南。"
+
+msgid "Examples"
+msgstr "示例"
+
+msgid ""
+"Run the DataStream API and SQL examples independently, then explore guides "
+"for production pipelines and connectors."
+msgstr "分别运行 DataStream API 和 SQL 示例，再学习生产环境管道和连接器指南。"

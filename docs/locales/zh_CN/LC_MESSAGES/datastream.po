@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein 0.1.0a1\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-17 13:08+0800\n"
+"PO-Revision-Date: 2026-10-17 04:58+0000\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Learn Klein's Python DataStream API through a dedicated path for pipelines,"
+" transformations, state, and event time."
+msgstr "通过管道、转换、状态和事件时间的独立学习路径，掌握 Klein 的 Python DataStream API。"
+
+msgid "DataStream API overview"
+msgstr "DataStream API 概览"
+
+msgid ""
+"Use the Python DataStream API when you want to build a pipeline in code, "
+"apply Python functions, or work directly with keyed state and event-time "
+"operations. A `Pipeline` connects sources, transformations, and terminal "
+"sinks into a lazy graph. The supported operations determine whether it can "
+"run on Ray Data batch execution or Klein's native streaming backend."
+msgstr ""
+"需要通过代码构建管道、应用 Python 函数，或直接操作键控状态和事件时间时，请使用 Python DataStream "
+"API。`Pipeline` 将源、转换和终端 sink 连接为惰性图。图中操作的支持情况决定了它能否通过 Ray Data 批执行或 Klein "
+"原生流式后端运行。"
+
+msgid ""
+"For queries, table definitions, and SQL functions, follow the separate [SQL"
+" guide](sql.md). Both interfaces use Klein's execution and connector "
+"infrastructure; choose the guide that matches how you author your job."
+msgstr ""
+"查询、表定义和 SQL 函数的用法请参阅独立的 [SQL 使用指南](sql.md)。两种接口共用 Klein "
+"的执行和连接器基础设施，请根据编写作业的方式选择指南。"
+
+msgid "Learning path"
+msgstr "学习路径"
+
+msgid "Goal"
+msgstr "目标"
+
+msgid "Guide"
+msgstr "指南"
+
+msgid "Install Klein and run your first Python pipeline"
+msgstr "安装 Klein 并运行首个 Python 管道"
+
+msgid "[DataStream API quick start](getting-started.md)"
+msgstr "[DataStream API 快速入门](getting-started.md)"
+
+msgid "Understand records, transformations, batching, and partitioning"
+msgstr "理解记录、转换、批处理和分区"
+
+msgid "[DataStream programming guide](datastream-programming-guide.md)"
+msgstr "[DataStream 编程指南](datastream-programming-guide.md)"
+
+msgid "Develop Python functions and submit pipelines"
+msgstr "开发 Python 函数并提交管道"
+
+msgid "[Pipeline development](development.rst)"
+msgstr "[管道开发](development.rst)"
+
+msgid "Run complete local programs"
+msgstr "运行完整的本地程序"
+
+msgid "[DataStream API examples](datastream-examples.md)"
+msgstr "[DataStream API 示例](datastream-examples.md)"
+
+msgid "Use Ray Data readers and Dataset operations"
+msgstr "使用 Ray Data reader 和 Dataset 操作"
+
+msgid "[Ray Data interoperability](ray-data-interop.md)"
+msgstr "[Ray Data 互操作性](ray-data-interop.md)"
+
+msgid "Manage keyed state and timers"
+msgstr "管理键控状态和定时器"
+
+msgid "[Managed state](ray-native-state.md)"
+msgstr "[托管状态](ray-native-state.md)"
+
+msgid "Work with timestamps, watermarks, and windows"
+msgstr "使用时间戳、水位线和窗口"
+
+msgid "[Event time](event-time.md)"
+msgstr "[事件时间](event-time.md)"
+
+msgid "Connect Kafka, checkpoints, and file output"
+msgstr "串联 Kafka、检查点和文件输出"
+
+msgid "[Production streaming walkthrough](production-streaming.md)"
+msgstr "[生产环境流处理实战](production-streaming.md)"
+
+msgid "References and shared guides"
+msgstr "参考资料与通用指南"
+
+msgid ""
+"Use the [operator compatibility matrix](operator-compatibility.md) to check"
+" backend support and the [connector catalog](connectors/index.md) to select"
+" sources and sinks. Configuration, deployment, and operations apply to both"
+" DataStream API and SQL jobs; find these in the [user guides](user-"
+"guides.md)."
+msgstr ""
+"使用[算子兼容性矩阵](operator-"
+"compatibility.md)检查后端支持情况，通过[连接器目录](connectors/index.md)选择源和 "
+"sink。配置、部署和运维适用于 DataStream API 与 SQL 两类作业，可在[用户指南](user-guides.md)中查阅。"
+
+#, python-brace-format
+msgid ""
+"The {doc}`API reference <api/api>` documents public classes, method "
+"signatures, and parameters. Use it to look up individual calls while "
+"following the guides above."
+msgstr "{doc}`API 参考 <api/api>`记录公共类、方法签名和参数。在学习上述指南时，可用它查阅具体调用。"

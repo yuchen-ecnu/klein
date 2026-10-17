@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: Apache-2.0
+# Chinese translations for Klein package
+# Simplified Chinese translations for Klein.
+# Copyright (C) 2024-2026, Klein Authors
+# This file is distributed under the same license as the Klein
+# package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Klein 0.1.0a1\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-17 13:08+0800\n"
+"PO-Revision-Date: 2026-10-17 04:58+0000\n"
+"Last-Translator: Automatically generated\n"
+"Language: zh_CN\n"
+"Language-Team: none\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+msgid ""
+"Runnable Python DataStream API examples for bounded pipelines, managed "
+"state, and event time."
+msgstr "可运行的 Python DataStream API 示例，涵盖有界管道、托管状态和事件时间。"
+
+msgid "DataStream API examples"
+msgstr "DataStream API 示例"
+
+msgid ""
+"These examples build jobs with the Python DataStream API. Install Klein "
+"using the [DataStream API quick start](getting-started.md#install-klein) "
+"and run the scripts from the project root. Both standalone examples below "
+"use in-memory input and need no external data service. For SQL queries and "
+"table DDL, see the separate [SQL examples](sql/examples.md)."
+msgstr ""
+"这些示例使用 Python DataStream API 构建作业。请按照 [DataStream API 快速入门](getting-"
+"started.md#install-klein)安装 "
+"Klein，并从项目根目录运行脚本。下面两个独立示例均使用内存中的输入，无需外部数据服务。SQL 查询和表 DDL 的用法请参阅独立的 [SQL "
+"示例](sql/examples.md)。"
+
+msgid "Run the quick start"
+msgstr "运行快速入门示例"
+
+msgid ""
+"The quick start creates a bounded pipeline, attaches a collection sink, and"
+" retrieves its rows from the completed job handle:"
+msgstr "快速入门示例创建一个有界管道，挂接集合 sink，并从已完成的作业句柄中取回记录："
+
+msgid "examples/quick_start.py"
+msgstr "examples/quick_start.py"
+
+msgid "Run it with:"
+msgstr "运行命令如下："
+
+msgid "Run managed state on a finite streaming source"
+msgstr "在有限流式源上运行托管状态"
+
+msgid "examples/stateful_streaming.py"
+msgstr "examples/stateful_streaming.py"
+
+msgid ""
+"This example explicitly selects streaming because managed keyed state has "
+"no Ray Data batch lowering. The finite collection source reaches end-of-"
+"data, the job completes, and ``JobHandle.result()`` returns the collected "
+"rows."
+msgstr ""
+"此示例显式选择 streaming，因为托管键控状态无法下沉为 Ray Data "
+"批处理。有限集合源到达数据末尾后，作业完成，``JobHandle.result()`` 返回收集到的记录。"
+
+msgid "Explore feature examples"
+msgstr "探索功能示例"
+
+msgid ""
+"The guides include focused examples next to the behavior they explain. Code"
+" containing placeholders or external URIs is illustrative; the standalone "
+"files under `examples/` are the smoke-tested local examples."
+msgstr "各指南会在所解释的行为旁提供针对性示例。包含占位符或外部 URI 的代码仅用于说明；`examples/` 下的独立文件才是经过冒烟测试的本地示例。"
+
+msgid ""
+"[Production streaming walkthrough](production-streaming.md) provides one "
+"complete Kafka, watermark, window, checkpoint, file-sink, CLI, and restore "
+"path and states all external prerequisites."
+msgstr ""
+"[生产环境流处理实战](production-streaming.md)提供一条涵盖 Kafka、水位线、窗口、检查点、文件 sink、CLI "
+"和恢复的完整路径，并列出所有外部前置条件。"
+
+msgid ""
+"[Ray Data interoperability](ray-data-interop.md) shows native Dataset "
+"transforms and multi-stream dependencies."
+msgstr "[Ray Data 互操作性](ray-data-interop.md)演示原生 Dataset 转换和多流依赖。"
+
+msgid ""
+"[Connector catalog](connectors/index.md) includes runnable setup examples "
+"for Kafka, filesystems, Redis, collections, console, custom connectors, and"
+" Ray Serve."
+msgstr ""
+"[连接器目录](connectors/index.md)包含 Kafka、文件系统、Redis、集合、控制台、自定义连接器和 Ray Serve "
+"的可运行配置示例。"
+
+msgid ""
+"[Managed state](ray-native-state.md) shows a keyed running total and event-"
+"time windows."
+msgstr "[托管状态](ray-native-state.md)演示键控累计值和事件时间窗口。"
+
+msgid ""
+"[Event time](event-time.md) shows bounded-out-of-orderness watermarks and "
+"idle-input detection."
+msgstr "[事件时间](event-time.md)演示有限乱序水位线和空闲输入检测。"
+
+msgid ""
+"Connector and production examples state whether they require a bounded "
+"source, a streaming source, or an external service."
+msgstr "连接器和生产环境示例会说明其是否需要有界源、流式源或外部服务。"
