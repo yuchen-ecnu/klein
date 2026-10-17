@@ -2,30 +2,41 @@
 
 # Intellectual-property clearance
 
-**Status: PENDING — this document is not a grant or a clearance decision.**
+**Status: CLEARED**
 
-Klein's initial public snapshot was extracted from the Apache-2.0-licensed
-Red-Ray fork described in [PROVENANCE.md](PROVENANCE.md). An Apache-2.0 header on
-that fork is necessary but is not, by itself, evidence that every extracted
-contribution and bundled asset was authorized for independent publication.
+**Authorized by:** @yuchen-ecnu
 
-## Release-blocking evidence
+**Confirmed on:** 2026-10-17
 
-| Evidence | Status | Required record |
-| --- | --- | --- |
-| Exact initial public tree | Recorded | Root commit and extraction scope in `PROVENANCE.md` |
-| Post-extraction contributions | Enforced | Public Git history plus DCO sign-offs checked in CI |
-| Extracted-code contributor inventory | Pending | Path/commit ownership report for every extracted file |
-| Employer or copyright-holder authorization where applicable | Pending | Verifiable grant covering the extracted code and assets |
-| Third-party dependency and frontend asset notices | Automated | `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, SPDX/REUSE, SBOM, and license checks |
-| Private endpoint and credential removal from current artifacts | Automated | Public-source, secret-scan, and distribution-policy CI checks |
-| Historical internal metadata disposition | In progress | Branch rewrite completed; provider PR-ref purge and external fork cleanup pending |
-| Independent clearance review | Pending | Public maintainer vote recording reviewed evidence and exceptions |
+## Maintainer authorization
 
-Before changing this status to `CLEARED`, maintainers must attach the evidence
-to a public issue (redacting only legally necessary material), identify every
-exception, and pass the governance vote. If authorization cannot be established
-for a file, it must be removed or independently reimplemented without relying on
-the uncleared material.
+On 2026-10-17, project owner and maintainer Yu Chen (`@yuchen-ecnu`) explicitly
+confirmed that they own the extracted Klein code or have obtained permission
+from the appropriate rights holder to independently open-source it and publish
+it to PyPI. The maintainer authorized the first public `ray-klein` release.
+This record documents that maintainer confirmation; it does not claim an
+independent legal review or a separately published employer authorization.
 
-No official release may be approved while this status remains `PENDING`.
+The confirmation covers the Klein code extracted from the Red-Ray fork as
+identified in [PROVENANCE.md](PROVENANCE.md), together with the subsequent
+public project changes. Upstream and third-party license terms, attribution,
+and notices remain applicable.
+
+## Evidence and release scope
+
+| Record | Basis |
+| --- | --- |
+| Initial source and extraction scope | Public root commit and scope in `PROVENANCE.md` |
+| Authorization for independent publication | Maintainer confirmation recorded above |
+| Post-extraction contributions | Public Git history and DCO sign-offs checked in CI |
+| Dependencies and frontend assets | `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES`, SPDX/REUSE, SBOMs, and license checks |
+| Published artifact contents | Public-source, secret-scan, and distribution-policy checks |
+
+The release contains the current reviewed source tree and its built artifacts.
+The historical provider PR-ref and external-fork cleanup described in
+`PROVENANCE.md` remains a separate ongoing task. This clearance does not assert
+that those external historical copies have been removed.
+
+Revisit this record when new provenance or authorization concerns are reported.
+Unresolved authorization concerns block the affected release until the
+maintainer records a resolution or removes the affected material.

@@ -25,6 +25,7 @@ WHEEL_REQUIRED_SUFFIXES = COMMON_REQUIRED_SUFFIXES | {
 }
 SDIST_REQUIRED_SUFFIXES = COMMON_REQUIRED_SUFFIXES | {
     "README.md",
+    "README-PYPI.md",
     "pyproject.toml",
     "frontend/package-lock.json",
     "frontend/package.json",
@@ -33,6 +34,7 @@ SDIST_REQUIRED_SUFFIXES = COMMON_REQUIRED_SUFFIXES | {
 }
 SOURCE_REQUIRED_SUFFIXES = COMMON_REQUIRED_SUFFIXES | {
     "README.md",
+    "README-PYPI.md",
     "pyproject.toml",
     "frontend/package-lock.json",
     "frontend/package.json",

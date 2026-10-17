@@ -58,10 +58,10 @@ intentional. See [Installation](installation.md#supported-environment) and
 
 ### Can I install `ray-klein` from PyPI?
 
-No approved release has been published yet. The current documentation does not assume a PyPI distribution.
-Install a source checkout non-editably, use an editable checkout for
-development, or install a wheel built from a reviewed checkout. See
-[Installation](installation.md#regular-installation-from-a-checkout).
+Yes. Install the alpha release with `python -m pip install ray-klein==0.1.0a1`.
+The distribution name is `ray-klein`; import it as `ray.klein`. See
+[Installation](installation.md#install-from-pypi) for optional extras and
+source installation.
 
 ### Which optional extra do I need?
 

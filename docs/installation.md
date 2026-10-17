@@ -1,16 +1,15 @@
 ---
 myst:
   html_meta:
-    description: "Install Klein from source, select optional integrations, and keep every Ray worker on a compatible environment."
+    description: "Install Klein from PyPI or source, select optional integrations, and keep every Ray worker on a compatible environment."
 ---
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 (klein-installation)=
 # Install Klein
 
-Klein is currently alpha software. This guide installs it from a source
-checkout or from an artifact that you build from that checkout; it does not
-assume that a `ray-klein` distribution is available from PyPI.
+Klein is currently alpha software. Install the `ray-klein` distribution from
+PyPI for ordinary use, or use a source checkout for development.
 
 ## Supported environment
 
@@ -35,6 +34,17 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 ```
+
+## Install from PyPI
+
+Install the alpha release and its base dependencies, including `ray[data]`:
+
+```bash
+python -m pip install ray-klein==0.1.0a1
+```
+
+Use the same Klein version on the driver and every worker. The distribution
+name is `ray-klein`; the Python import is `ray.klein`.
 
 ## Regular installation from a checkout
 
@@ -100,8 +110,7 @@ tests are opt-in. See [Testing](testing.md) for the test tiers and commands.
 ## Optional extras
 
 Install only the integrations used by the application. Extras can be combined,
-for example `python -m pip install -e ".[kafka,rocksdb]"` in an editable
-checkout.
+for example `python -m pip install "ray-klein[kafka,rocksdb]==0.1.0a1"`.
 
 | Extra | Installed dependencies | Use it for |
 | --- | --- | --- |
@@ -186,11 +195,11 @@ or reuses the runtime needed by its bounded Ray Data execution.
 ## Upgrade or change extras
 
 Review [Upgrade Klein jobs](upgrading.md) and [Compatibility](compatibility.md)
-before upgrading an application that must restore checkpoints. Then update the
-checkout and reinstall the required extras:
+before upgrading an application that must restore checkpoints. Select the
+target version explicitly and keep the required extras; for example:
 
 ```bash
-python -m pip install --upgrade ".[kafka,rocksdb]"
+python -m pip install --upgrade "ray-klein[kafka,rocksdb]==0.1.0a1"
 ```
 
 For an editable contributor environment, re-run:

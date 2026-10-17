@@ -8,10 +8,7 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
-### Changed
-
-- Refresh the Klein logo with blue and mint ribbons across the README,
-  documentation, and Dashboard, including light/dark wordmarks and favicons.
+## [0.1.0a1] - 2026-10-17
 
 ### Added
 
@@ -106,6 +103,10 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Changed
 
+- Refresh the Klein logo with blue and mint ribbons across the README,
+  documentation, and Dashboard, including light/dark wordmarks and favicons.
+- Use a PyPI-specific project description with absolute documentation and
+  image links that render outside GitHub.
 - Insert-only streaming `COUNT`, `SUM`, and `AVG` use constant-size
   per-group accumulators, and insert-only `ORDER BY ... LIMIT n` retains only
   the sorted prefix. Retraction-capable inputs retain the additional
@@ -123,9 +124,11 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   replace legacy private-registry coordinates and corporate-domain commit
   metadata; provider-retained pull-request refs are tracked in `PROVENANCE.md`,
   and clones created before 2026-08-11 must fetch and rebase or re-clone.
-- The source and Python release workflow now requires a signed tag, public
-  72-hour vote evidence, the voted source SHA-512 digest, detached signatures,
-  SBOMs, and guarded promotion environments.
+- The first public release uses the single-maintainer governance process and
+  records the owner's authorization to publish. The release workflow requires
+  an annotated version tag, successful CI on the exact commit, validated
+  artifacts, SBOMs, checksums, and provenance attestations, then publishes
+  through PyPI Trusted Publishing.
 - Protobuf 7 is supported; the validated dependency range is now
   `protobuf>=5.29.6,<8`.
 

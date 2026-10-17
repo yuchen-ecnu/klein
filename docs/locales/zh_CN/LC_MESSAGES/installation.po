@@ -19,19 +19,8 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-msgid ""
-"Install Klein from source, select optional integrations, and keep"
-" every Ray worker on a compatible environment."
-msgstr "从源码安装 Klein、选择可选集成，并确保每个 Ray worker 使用兼容的运行环境。"
-
 msgid "Install Klein"
 msgstr "安装 Klein"
-
-msgid ""
-"Klein is currently alpha software. This guide installs it from a source "
-"checkout or from an artifact that you build from that checkout; it does "
-"not assume that a `ray-klein` distribution is available from PyPI."
-msgstr "Klein 目前是 Alpha 软件。本指南介绍如何从源码 checkout 或由该 checkout 构建的制品进行安装；不假定 PyPI 上已有可用的 `ray-klein` 发行包。"
 
 msgid "Supported environment"
 msgstr "支持的环境"
@@ -146,12 +135,6 @@ msgstr "集成测试会启动一个受管理的本地 Ray 集群，外部服务�
 
 msgid "Optional extras"
 msgstr "可选 extras"
-
-msgid ""
-"Install only the integrations used by the application. Extras can be "
-"combined, for example `python -m pip install -e \".[kafka,rocksdb]\"` in "
-"an editable checkout."
-msgstr "只安装应用使用的集成。Extras 可以组合使用，例如在 editable checkout 中运行 `python -m pip install -e \".[kafka,rocksdb]\"`。"
 
 msgid "Extra"
 msgstr "Extra"
@@ -338,13 +321,6 @@ msgstr "导入和版本检查不会启动 Ray 集群。该示例会启动或复�
 msgid "Upgrade or change extras"
 msgstr "升级或更改 extras"
 
-msgid ""
-"Review [Upgrade Klein jobs](upgrading.md) and "
-"[Compatibility](compatibility.md) before upgrading an application that "
-"must restore checkpoints. Then update the checkout and reinstall the "
-"required extras:"
-msgstr "升级必须恢复 checkpoint 的应用前，请先查看[升级 Klein 作业](upgrading.md)和[兼容性](compatibility.md)。然后更新 checkout 并重新安装所需 extras："
-
 msgid "For an editable contributor environment, re-run:"
 msgstr "对于 editable 贡献者环境，请重新运行："
 
@@ -466,3 +442,24 @@ msgstr "`rocketmq-client-python==2.0.0`"
 
 msgid "`httpx>=0.28.1,<1`, `orjson>=3.11.6`, and `ray[serve]>=2.56.1,<2.57`"
 msgstr "`httpx>=0.28.1,<1`、`orjson>=3.11.6` 和 `ray[serve]>=2.56.1,<2.57`"
+
+msgid "Install Klein from PyPI or source, select optional integrations, and keep every Ray worker on a compatible environment."
+msgstr "从 PyPI 或源码安装 Klein、选择可选集成，并确保所有 Ray worker 使用兼容的环境。"
+
+msgid "Klein is currently alpha software. Install the `ray-klein` distribution from PyPI for ordinary use, or use a source checkout for development."
+msgstr "Klein 目前处于 alpha 阶段。日常使用可从 PyPI 安装 `ray-klein` 发行包，开发时可使用源码检出。"
+
+msgid "Install from PyPI"
+msgstr "从 PyPI 安装"
+
+msgid "Install the alpha release and its base dependencies, including `ray[data]`:"
+msgstr "安装 alpha 版本及其基础依赖，包括 `ray[data]`："
+
+msgid "Use the same Klein version on the driver and every worker. The distribution name is `ray-klein`; the Python import is `ray.klein`."
+msgstr "在驱动进程和所有 worker 上使用相同的 Klein 版本。发行包名为 `ray-klein`，Python 导入路径为 `ray.klein`。"
+
+msgid "Install only the integrations used by the application. Extras can be combined, for example `python -m pip install \"ray-klein[kafka,rocksdb]==0.1.0a1\"`."
+msgstr "只安装应用使用的集成。可组合多个 extra，例如 `python -m pip install \"ray-klein[kafka,rocksdb]==0.1.0a1\"`。"
+
+msgid "Review [Upgrade Klein jobs](upgrading.md) and [Compatibility](compatibility.md) before upgrading an application that must restore checkpoints. Select the target version explicitly and keep the required extras; for example:"
+msgstr "升级需要恢复 checkpoint 的应用前，请阅读[升级 Klein 作业](upgrading.md)和[兼容性](compatibility.md)。明确选择目标版本，并保留所需 extra，例如："

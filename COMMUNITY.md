@@ -12,12 +12,12 @@ security matters. Participants must follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.
 | --- | --- | --- |
 | Contributor | Any useful code, review, documentation, testing, or support contribution | Follow contribution, DCO, licensing, and conduct requirements |
 | Committer | Sustained contributions in more than one area; dependable reviews; compatibility and test judgment; constructive community participation | Merge only reviewed, green changes; protect public APIs and release evidence |
-| Maintainer | Sustained project-wide stewardship; release and security judgment; mentoring; governance participation; demonstrated independence | Binding votes, releases, security response, elections, and governance records |
+| Maintainer | Sustained project-wide stewardship; release and security judgment; mentoring; governance participation; demonstrated independence | Release decisions, security response, appointments, and governance records |
 
-Role decisions are based on public evidence, not employment, affiliation, or
-volume alone. Nominations identify representative contributions and remain open
-under the voting rules in [GOVERNANCE.md](GOVERNANCE.md). A candidate may decline
-without explanation.
+Role decisions are based on public evidence of contribution and stewardship.
+Nominations identify representative contributions and are considered under the
+maintainer decision process in [GOVERNANCE.md](GOVERNANCE.md). A candidate may
+decline without explanation.
 
 ## Current roster
 
@@ -33,5 +33,5 @@ without explanation.
 
 - None.
 
-This roster is changed only through a recorded governance vote. Repository
+This roster is changed through a recorded maintainer decision. Repository
 permissions and `CODEOWNERS` should match the approved roster.
