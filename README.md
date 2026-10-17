@@ -1,10 +1,12 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/_static/klein-logo-dark.png">
+  <a href="https://github.com/yuchen-ecnu/klein#gh-dark-mode-only">
+    <img alt="Klein" src="docs/_static/klein-logo-dark.png" width="440">
+  </a>
+  <a href="https://github.com/yuchen-ecnu/klein#gh-light-mode-only">
     <img alt="Klein" src="docs/_static/klein-logo.png" width="440">
-  </picture>
+  </a>
 </p>
 
 <p align="center"><strong>Stateful stream processing on Ray.</strong></p>

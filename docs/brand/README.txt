@@ -16,12 +16,23 @@ Use ../_static/klein-logo.png on light backgrounds and
 ../_static/klein-mark.png for square icons. Keep the artwork's aspect ratio
 and transparent negative spaces intact.
 
+The GitHub README uses theme-specific links so its wordmark follows GitHub's
+selected theme, including when it differs from the operating-system theme.
+Keep both the light and dark links when changing the README header.
+
+klein-avatar.png is a 500-by-500 export of the approved standalone mark for
+the owner's GitHub profile picture. Upload it from
+https://github.com/settings/profile using Profile picture > Edit > Upload
+a photo. This changes the account avatar across GitHub, not just this
+repository. Adding the file to Git does not change the account setting.
+
 The website exports are resized from the masters with ImageMagick. Run these
 commands from the repository root to regenerate them:
 
 convert docs/brand/klein-logo-master.webp -resize 1320x -strip -define png:compression-level=9 docs/_static/klein-logo.png
 convert docs/brand/klein-logo-dark-master.webp -resize 1320x -strip -define png:compression-level=9 docs/_static/klein-logo-dark.png
 convert docs/brand/klein-mark-master.webp -resize 96x96 -strip -define png:compression-level=9 docs/_static/klein-mark.png
+convert docs/brand/klein-mark-master.webp -resize 500x500 -strip -define png:compression-level=9 docs/brand/klein-avatar.png
 convert docs/brand/klein-mark-master.webp -fuzz 1% -trim +repage -resize 104x80 -gravity center -background none -extent 112x96 -strip -define png:compression-level=9 frontend/src/assets/KleinMark.png
 cp docs/_static/klein-mark.png frontend/public/favicon.png
 
