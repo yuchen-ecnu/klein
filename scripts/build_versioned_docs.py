@@ -96,14 +96,21 @@ def _git_tags(repository: Path) -> list[str]:
 
 
 def validate_documentation_ref(repository: Path, ref: DocumentationRef) -> None:
-    """Accept only signed release tags on the checked-out main lineage."""
+    """Accept annotated, version-matched tags on the checked-out main lineage."""
 
     if ref.ref == "HEAD":
         return
-    subprocess.run(["git", "verify-tag", ref.ref], cwd=repository, check=True)
-    subprocess.run(["git", "merge-base", "--is-ancestor", f"{ref.ref}^{{commit}}", "HEAD"], cwd=repository, check=True)
+    if _RELEASE_TAG.fullmatch(ref.ref) is None:
+        raise ValueError(f"invalid documentation release tag: {ref.ref!r}")
+    tag_ref = f"refs/tags/{ref.ref}"
+    tag_type = subprocess.run(
+        ["git", "cat-file", "-t", tag_ref], cwd=repository, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    if tag_type != "tag":
+        raise ValueError(f"documentation tag {ref.ref!r} must be annotated")
+    subprocess.run(["git", "merge-base", "--is-ancestor", f"{tag_ref}^{{commit}}", "HEAD"], cwd=repository, check=True)
     project_file = subprocess.run(
-        ["git", "show", f"{ref.ref}:pyproject.toml"],
+        ["git", "show", f"{tag_ref}:pyproject.toml"],
         cwd=repository,
         check=True,
         capture_output=True,

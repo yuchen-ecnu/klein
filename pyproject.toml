@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 name = "ray-klein"
 version = "0.1.0a1"
 description = "Stateful stream processing for Ray"
-readme = "README.md"
+readme = "README-PYPI.md"
 requires-python = ">=3.10,<3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES", "LICENSES/*"]

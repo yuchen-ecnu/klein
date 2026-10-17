@@ -12,15 +12,13 @@ This guide uses the Python DataStream API to create an explicit `Pipeline`, run 
 
 ## Install Klein
 
-Create an isolated Python environment and install the current source checkout:
+Create an isolated Python environment and install the alpha release from PyPI:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-git clone https://github.com/yuchen-ecnu/klein.git
-cd klein
-python -m pip install .
+python -m pip install ray-klein==0.1.0a1
 ```
 
 Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional integrations. Install

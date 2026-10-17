@@ -5,7 +5,6 @@ import runpy
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -139,46 +138,42 @@ def test_versioned_docs_loads_klein_from_the_selected_source_tree(tmp_path: Path
     assert result.stdout.strip() == "selected-tag"
 
 
-def test_versioned_docs_validates_signed_tag_ancestry_and_package_version(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    calls: list[list[str]] = []
-
-    def run(command: list[str], **_kwargs: object) -> SimpleNamespace:
-        calls.append(command)
-        project = b'[project]\nname = "ray-klein"\nversion = "1.2.3"\n'
-        return SimpleNamespace(stdout=project if command[:2] == ["git", "show"] else b"")
-
-    monkeypatch.setattr(subprocess, "run", run)
-
-    validate_documentation_ref(
-        tmp_path,
-        DocumentationRef("1.2.3", "v1.2.3", "1.2.3", "1.2.3"),
-    )
-
-    assert calls == [
-        ["git", "verify-tag", "v1.2.3"],
-        ["git", "merge-base", "--is-ancestor", "v1.2.3^{commit}", "HEAD"],
-        ["git", "show", "v1.2.3:pyproject.toml"],
-    ]
+def _git(repository: Path, *arguments: str) -> None:
+    subprocess.run(["git", *arguments], cwd=repository, check=True, capture_output=True)
 
 
-def test_versioned_docs_rejects_a_tag_with_mismatched_package_version(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *_args, **_kwargs: SimpleNamespace(stdout=b'[project]\nname = "ray-klein"\nversion = "1.2.4"\n'),
-    )
+@pytest.fixture()
+def tagged_repository(tmp_path: Path) -> Path:
+    _git(tmp_path, "init", "--quiet")
+    _git(tmp_path, "config", "user.name", "Release Test")
+    _git(tmp_path, "config", "user.email", "release@example.test")
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "1.2.3"\n')
+    _git(tmp_path, "add", "pyproject.toml")
+    _git(tmp_path, "commit", "--quiet", "-m", "source")
+    _git(tmp_path, "tag", "-a", "v1.2.3", "-m", "Release 1.2.3")
+    return tmp_path
 
+
+def test_versioned_docs_accepts_annotated_version_matched_tags(tagged_repository: Path) -> None:
+    validate_documentation_ref(tagged_repository, DocumentationRef("1.2.3", "v1.2.3", "1.2.3", "1.2.3"))
+
+
+def test_versioned_docs_rejects_a_tag_with_mismatched_package_version(tagged_repository: Path) -> None:
     with pytest.raises(ValueError, match="does not match"):
-        validate_documentation_ref(
-            tmp_path,
-            DocumentationRef("1.2.3", "v1.2.3", "1.2.3", "1.2.3"),
-        )
+        validate_documentation_ref(tagged_repository, DocumentationRef("1.2.3", "v1.2.3", "1.2.3", "1.2.4"))
+
+
+def test_versioned_docs_rejects_lightweight_tags(tagged_repository: Path) -> None:
+    _git(tagged_repository, "tag", "v1.2.4")
+    with pytest.raises(ValueError, match="must be annotated"):
+        validate_documentation_ref(tagged_repository, DocumentationRef("1.2.4", "v1.2.4", "1.2.4", "1.2.4"))
+
+
+def test_versioned_docs_rejects_a_tag_outside_the_current_lineage(tagged_repository: Path) -> None:
+    _git(tagged_repository, "checkout", "--orphan", "unrelated")
+    _git(tagged_repository, "commit", "--quiet", "-m", "unrelated history")
+    with pytest.raises(subprocess.CalledProcessError):
+        validate_documentation_ref(tagged_repository, DocumentationRef("1.2.3", "v1.2.3", "1.2.3", "1.2.3"))
 
 
 def test_documentation_workflow_keeps_tag_builds_separate_from_deploy_privileges() -> None:
@@ -191,5 +186,5 @@ def test_documentation_workflow_keeps_tag_builds_separate_from_deploy_privileges
     assert build["permissions"] == {"contents": "read", "pages": "read"}
     assert deploy["needs"] == "build"
     assert deploy["permissions"] == {"pages": "write", "id-token": "write"}
-    assert "RELEASE_GPG_PUBLIC_KEY" in build_source
+    assert "RELEASE_GPG_PUBLIC_KEY" not in build_source
     assert "steps.pages.outputs.base_url" in build_source

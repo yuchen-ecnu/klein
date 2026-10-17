@@ -25,11 +25,6 @@ msgid "Install Klein"
 msgstr "安装 Klein"
 
 msgid ""
-"Create an isolated Python environment and install the current source "
-"checkout:"
-msgstr "创建隔离的 Python 环境并安装当前源码检出："
-
-msgid ""
 "Kafka, Iceberg, RocketMQ, Redis, RocksDB, and Serve are optional "
 "integrations. Install only the extra required by the application, for "
 "example `ray-klein[kafka]`, `ray-klein[iceberg]`, `ray-klein[rocketmq]`, "
@@ -210,3 +205,6 @@ msgid ""
 msgstr ""
 "按照 [DataStream API 使用指南](datastream.md)学习转换、Python 函数、状态和事件时间，或运行 "
 "[DataStream API 示例](datastream-examples.md)。"
+
+msgid "Create an isolated Python environment and install the alpha release from PyPI:"
+msgstr "创建隔离的 Python 环境，并从 PyPI 安装 alpha 版本："

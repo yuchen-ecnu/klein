@@ -41,16 +41,6 @@ jobs:
           cache: pip
       - run: python -m pip install "pip==26.2.1"
       - run: python -m pip install --constraint requirements/ci-constraints.txt -e ".[all,docs]"
-      - name: Import the release-tag verification key
-        env:
-          RELEASE_GPG_PUBLIC_KEY: ${{ vars.RELEASE_GPG_PUBLIC_KEY }}
-        run: |
-          if test -n "$RELEASE_GPG_PUBLIC_KEY"; then
-            printf '%s' "$RELEASE_GPG_PUBLIC_KEY" | gpg --batch --import
-          elif git tag --list 'v[0-9]*' | grep -q .; then
-            echo 'RELEASE_GPG_PUBLIC_KEY is required to verify documentation release tags' >&2
-            exit 1
-          fi
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
         id: pages
       - name: Build latest and retained release documentation

@@ -39,9 +39,9 @@ IDs are intentionally no longer part of branch history, so clones made before
 2026-08-11 must fetch and rebase or re-clone. CI additionally runs Gitleaks over
 branch history.
 
-The remaining authorization evidence and release gate are tracked in
-[IP_CLEARANCE.md](IP_CLEARANCE.md). Nothing in this provenance record should be
-read as a copyright-holder grant or completed IP clearance.
+The maintainer's authorization confirmation and release scope are recorded in
+[IP_CLEARANCE.md](IP_CLEARANCE.md). This provenance record describes the source
+history; it does not itself grant additional rights to third-party material.
 
 ## Third-party license metadata overrides
 
