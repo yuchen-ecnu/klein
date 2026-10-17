@@ -1,0 +1,38 @@
+Tool: built-in ImageGen
+Mode: refine the user-selected design
+Reference: klein-logo-selected.png
+Output: klein-logo-blue-green-refined.png
+
+Use case: precise-object-edit / logo-brand.
+Input image: the attached blue-and-mint "klein" logo is the selected design to refine. Treat it as the authoritative design reference. This is a careful refinement of the same identity, not a redesign or a new concept.
+Preserve: the recognizable asymmetrical, intertwined two-ribbon symbol; its raised blue upper-left arch, mint left crescent continuing through the central crossing, and blue lower-right loop; the same open interior spaces and overall sense of a folded continuous surface. Preserve the blue and muted mint-green color relationship of this exact reference, and the friendly rounded lowercase "klein" lettering.
+Refinements:
+1. Make every outer and inner curve exceptionally smooth, with consistent optical ribbon weight. Remove awkward cusps and accidental tangencies. Keep intentional tapered ribbon ends but avoid fragile hairline tips.
+2. Open the narrow separating channels between overlapping ribbons slightly and give them a more consistent width, so the crossing still reads clearly when the symbol is 24–32 pixels tall. The channels and interior openings are transparent negative space. Maintain the original interweaving pattern exactly.
+3. Give the symbol and wordmark a little more breathing room. Keep the same left-symbol/right-wordmark horizontal lockup, balanced vertical optical alignment, and rounded letter shapes. Refine letter spacing subtly; preserve the overall wordmark weight and personality.
+4. Use clean solid color fills with crisp antialiased contours. Remove texture, shading, mottling, and gradients. Aim for the reference palette: rich medium cobalt blue approximately #2F5CF0, muted mint green approximately #55B4A1, charcoal lettering approximately #202326. Do not switch to orange, neon turquoise, purple, or a blue-green gradient.
+Composition: one horizontal primary logo only, in a wide landscape canvas. Modest balanced outer padding. The logo should occupy the canvas confidently. Keep proportions very close to the reference.
+Exact text: "klein", all five lowercase letters, k-l-e-i-n. No other words.
+Background: transparent alpha, including the spaces within and between ribbons and the counters inside letters. Logo fill interiors should be opaque.
+Do not turn the symbol into a generic infinity sign, cloud, circle, a letter K monogram, a trefoil, or a different topology. No drop shadow, glow, bevel, 3D effect, extra strokes, badge, presentation board, mockup, watermark, or alternate logos. Deliver one polished production-ready transparent PNG.
+
+Standalone symbol
+Reference: klein-logo-blue-green-refined.png
+Output: klein-mark-blue-green-refined.png
+
+Use case: precise-object-edit / logo-brand.
+The attached image is the finished refined Klein logo. Create its standalone symbol asset.
+Remove the entire "klein" wordmark and preserve ONLY the exact blue-and-muted-mint intertwined ribbon symbol on the left. Preserve its silhouette, topology, positions of the four colored ribbon portions, curves, internal openings, separating channels, proportions, and colors. Do not invent a different mark or change its design.
+Center this exact symbol in a square transparent canvas. Scale the whole symbol uniformly to occupy about 84 percent of the canvas width; leave enough transparent padding on all sides. Do not stretch, rotate, crop, outline, or enclose the symbol. No letters or other text.
+Improve production crispness only: clean antialiased contours and opaque flat fills; no gradient, texture, shadow, glow, speckles, or semitransparent haze. Preserve the same cobalt blue and muted mint green as the attached logo, approximately #2F5CF0 and #55B4A1.
+The background and all negative spaces must be fully transparent. Output one square high-resolution transparent PNG suitable as the master for an app icon or favicon.
+
+Dark variant
+Reference: klein-logo-blue-green-refined.png
+Output: klein-logo-blue-green-refined-dark.png
+
+Use case: precise-object-edit / logo-brand.
+The attached image is the finished refined Klein logo. Produce its dark-interface version by changing ONLY the color of the lowercase wordmark "klein" to flat soft white #F5F5F4.
+Keep the intertwined ribbon symbol exactly unchanged, including its rich cobalt blue, muted mint green, all curves, folds, transparent separating channels, and proportions. Preserve the exact custom lowercase lettering outlines, spacing, original horizontal layout, alignment, aspect ratio, canvas dimensions, and outer transparent padding. Do not redraw the logo in another style.
+Keep the background and all interior openings transparent, not a dark fill. Use solid opaque fills with clean antialiased edges. No gradients, texture, shadow, glow, haze, bevels, mockup, decorative elements, extra text, or alternate versions.
+Deliver one production-ready transparent PNG with the exact word "klein".
