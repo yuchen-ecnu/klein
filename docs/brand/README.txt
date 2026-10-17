@@ -45,8 +45,12 @@ README and documentation illustrations
 ../_static/klein-overview.png introduces stateful stream processing on Ray
 in the README: incoming events become results, with event time, managed state,
 and checkpoint recovery as supporting capabilities. It was generated with
-ImageGen using klein-logo-selected.png as the brand reference. Runtime
-selection is explained separately in the README and technical guides.
+ImageGen using klein-logo-selected.png as the brand reference. Both this
+light-theme image and ../_static/klein-overview-dark.png are RGBA PNGs with
+transparent backgrounds. The dark variant uses light text. GitHub theme
+links select the matching illustration, as they do for the header wordmark;
+keep both links when editing the README. Runtime selection is explained
+separately in the README and technical guides.
 The detailed diagrams below also embed the Klein mark in their pixels:
 
 architecture-overview.png  - docs/architecture.md

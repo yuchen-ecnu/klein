@@ -30,7 +30,14 @@ Klein is a Python library for stateful stream processing on Ray. Build
 continuous applications with keyed state, event-time windows, and checkpoint
 recovery. The `DataStream` and SQL APIs also support bounded data pipelines.
 
-![Events flow through Klein's stateful processing into results, supported by event time, managed state, and checkpoint recovery.](docs/_static/klein-overview.png)
+<p align="center">
+  <a href="docs/_static/klein-overview-dark.png#gh-dark-mode-only">
+    <img alt="Events flow through Klein's stateful processing into results, supported by event time, managed state, and checkpoint recovery." src="docs/_static/klein-overview-dark.png">
+  </a>
+  <a href="docs/_static/klein-overview.png#gh-light-mode-only">
+    <img alt="Events flow through Klein's stateful processing into results, supported by event time, managed state, and checkpoint recovery." src="docs/_static/klein-overview.png">
+  </a>
+</p>
 
 ## Why Klein?
 
