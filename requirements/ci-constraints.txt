@@ -16,7 +16,7 @@ mypy==2.3.0
 numpy==2.2.6
 orjson==3.11.9
 pandas==2.3.3
-Pillow==12.3.0
+Pillow==13.0.0
 pip==26.2.1
 pip-audit==2.10.1
 pre-commit==4.6.1
