@@ -49,6 +49,9 @@ it("validates the target and confirms a scale-out operation", async () => {
   await user.click(screen.getByRole("button", { name: "Confirm rescale" }));
 
   await waitFor(() => expect(rescale).toHaveBeenCalledWith(1, 4));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { hidden: true })).not.toBeInTheDocument(),
+  );
 });
 
 it("explains why an operator cannot be rescaled", () => {
