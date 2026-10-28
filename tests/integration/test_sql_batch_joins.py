@@ -3,6 +3,7 @@
 
 import random
 import sqlite3
+import time
 from collections import Counter
 
 import pyarrow as pa
@@ -291,6 +292,41 @@ def test_order_by_respects_null_placement(direction, nulls):
     expected = _oracle(query, {"rows": (("id", "key"), rows)})
     context = KleinContext({"execution.runtime.mode": "batch"})
     assert _execute(context, query, {"rows": context.data.from_items(rows, override_num_blocks=4)}) == expected
+
+
+@pytest.mark.parametrize("limit", [None, 3])
+def test_order_by_survives_out_of_order_partition_completion(monkeypatch, limit):
+    from ray.data import DataContext, Dataset
+
+    original_drop_columns = Dataset.drop_columns
+    global_order = DataContext.get_current().execution_options.preserve_order
+
+    def delayed_drop_columns(dataset, columns, **kwargs):
+        if not any(column.startswith("_klein_sort_null_") for column in columns):
+            return original_drop_columns(dataset, columns, **kwargs)
+
+        def drop_first_partition_slowly(batch):
+            if 0 in batch.column("id").to_pylist():
+                time.sleep(2)
+            return batch.drop(columns)
+
+        return dataset.map_batches(
+            drop_first_partition_slowly,
+            batch_size=1,
+            batch_format="pyarrow",
+            **kwargs,
+        )
+
+    monkeypatch.setattr(Dataset, "drop_columns", delayed_drop_columns)
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    rows = [{"id": index} for index in (3, 1, 0, 2)]
+    query = "SELECT id FROM rows ORDER BY id"
+    if limit is not None:
+        query += f" LIMIT {limit}"
+    actual = _execute(context, query, {"rows": context.data.from_items(rows, override_num_blocks=4)})
+
+    assert actual == [{"id": index} for index in range(4)][:limit]
+    assert DataContext.get_current().execution_options.preserve_order == global_order
 
 
 @pytest.mark.parametrize("empty", [False, True])

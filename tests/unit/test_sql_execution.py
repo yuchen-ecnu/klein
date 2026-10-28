@@ -20,6 +20,7 @@ class _Dataset:
 
     def __init__(self, *, blocks: int | None = 2) -> None:
         self.blocks = blocks
+        self.context = SimpleNamespace(execution_options=SimpleNamespace(preserve_order=False))
         self.calls: list[tuple[object, ...]] = []
 
     def num_blocks(self) -> int:
@@ -534,6 +535,7 @@ def test_order_and_limit_lower_single_and_multiple_keys() -> None:
     single = _Dataset()
     execution._apply_order_and_limit(_select("SELECT x FROM rows ORDER BY x DESC LIMIT 2"), single)
     assert single.calls == [("sort", "x", {"descending": True}), ("limit", 2)]
+    assert single.context.execution_options.preserve_order is True
 
     multiple = _Dataset()
     execution._apply_order_and_limit(_select("SELECT x, y FROM rows ORDER BY x, y DESC"), multiple)
@@ -542,10 +544,12 @@ def test_order_and_limit_lower_single_and_multiple_keys() -> None:
         ("sort", ["_klein_sort_null_0", "x", "y"], {"descending": [True, False, True]}),
         ("drop_columns", ["_klein_sort_null_0"]),
     ]
+    assert multiple.context.execution_options.preserve_order is True
 
     unchanged = _Dataset()
     assert execution._apply_order_and_limit(_select("SELECT x FROM rows"), unchanged) is unchanged
     assert unchanged.calls == []
+    assert unchanged.context.execution_options.preserve_order is False
 
 
 def test_order_by_rejects_non_output_expression() -> None:

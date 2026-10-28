@@ -747,6 +747,9 @@ def _apply_order_and_limit(select: exp.Select, dataset: Dataset) -> Dataset:
         dataset = dataset.sort(
             keys[0] if len(keys) == 1 else keys, descending=descending[0] if len(keys) == 1 else descending
         )
+        # A projection after Sort can otherwise emit partitions in task
+        # completion order, changing both ORDER BY results and LIMIT selection.
+        dataset.context.execution_options.preserve_order = True
         if null_keys:
             dataset = dataset.drop_columns(null_keys)
 

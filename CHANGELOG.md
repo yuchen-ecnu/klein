@@ -29,7 +29,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   `COALESCE(SUM(value), 0)`, arithmetic, and `CASE`, after grouping. Empty
   relations also retain their columns when using row-expression fallbacks.
 - Batch SQL `ORDER BY` honors per-column NULL placement, including explicit
-  `NULLS FIRST`/`NULLS LAST`, before applying `LIMIT`.
+  `NULLS FIRST`/`NULLS LAST`, before applying `LIMIT`. Parallel projections
+  preserve sorted partition order even when later partitions finish first.
 - Task recovery now uses a complete checkpoint restore for stateful or
   transactional graphs, source failures, and multiple unhealthy tasks. This
   prevents partial replay after node loss from combining restored state with
