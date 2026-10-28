@@ -190,20 +190,20 @@ class SourceStreamTask(StreamTask):
             return
         if self._state.output is not None:
             self._state.output.collect(Watermark(MAX_WATERMARK))
-            checkpoint_id = self._pop_requested_checkpoint()
-            if checkpoint_id is None:
-                while self._inflight_source_states and not self._checkpoint_wait_stop.is_set():
-                    self._emit_pending_rescale_barrier()
-                    time.sleep(0.01)
-                if self._checkpoint_wait_stop.is_set():
-                    return
-            barrier = self._await_terminal_barrier(checkpoint_id)
-            while barrier is not None and barrier.coordinated:
-                self._emit_checkpoint_barrier(barrier)
-                barrier = self._await_terminal_barrier(self._pop_requested_checkpoint())
-            if barrier is None:
+        checkpoint_id = self._pop_requested_checkpoint()
+        if checkpoint_id is None:
+            while self._inflight_source_states and not self._checkpoint_wait_stop.is_set():
+                self._emit_pending_rescale_barrier()
+                time.sleep(0.01)
+            if self._checkpoint_wait_stop.is_set():
                 return
+        barrier = self._await_terminal_barrier(checkpoint_id)
+        while barrier is not None and barrier.coordinated:
             self._emit_checkpoint_barrier(barrier)
+            barrier = self._await_terminal_barrier(self._pop_requested_checkpoint())
+        if barrier is None:
+            return
+        self._emit_checkpoint_barrier(barrier)
         # Close the arm-vs-FINISHED race before returning to the actor loop,
         # which performs the status RPC asynchronously.
         self._eof_reached = True
@@ -436,7 +436,9 @@ class SourceStreamTask(StreamTask):
     def _emit_checkpoint_barrier(self, barrier: Barrier) -> None:
         output = self._state.output
         if output is None:
-            raise RuntimeError("source checkpoint barrier requires an output")
+            # A source chained through its terminal sink aligns locally while
+            # generating the barrier; there is no downstream transport.
+            return
         if barrier.coordinated:
             self._coordinated_checkpoint_barrier_id = barrier.id
         output.collect(barrier)

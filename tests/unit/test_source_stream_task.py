@@ -286,8 +286,11 @@ def test_run_source_returns_immediately_after_stop_interrupt() -> None:
 
 def test_run_source_without_output_marks_eof_without_blocking_status_rpc() -> None:
     task = _task(output=None)
+    task._await_terminal_barrier = Mock(return_value=Barrier(10, task._vertex_id))
 
     task._run_source()
+
+    task._await_terminal_barrier.assert_called_once_with(None)
 
     task._job_manager.update_stream_task_status.assert_not_called()
     assert task._eof_reached is True
