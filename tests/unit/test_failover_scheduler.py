@@ -599,6 +599,10 @@ class StopJobTest(unittest.TestCase):
 
     def test_natural_completion_requires_all_sink_transactions_before_stop(self):
         s = self._scheduler()
+        self._coord.persist_now.side_effect = lambda **_kwargs: s.execution_graph
+        events = []
+        self._coord.stop.side_effect = lambda **_kwargs: events.append("coordinator")
+        s._stop_workers_and_placement = mock.Mock(side_effect=lambda *args: events.append("workers") or [])
         with (
             self._patch_stop_workers(),
             mock.patch.object(js_mod.klein, "get_actor_status", return_value=StreamTaskStatus.ALIVE),
@@ -607,11 +611,13 @@ class StopJobTest(unittest.TestCase):
             s.stop_job(graceful_completion=True)
 
         self._coord.persist_now.assert_called_once_with(
-            notify_sources=False,
+            notify_sources=True,
             abort_inflight_sinks=False,
             require_resolved_sinks=True,
         )
         self._coord.stop.assert_called_once()
+
+        assert events == ["coordinator", "workers"]
 
     def test_natural_completion_propagates_terminal_sink_flush_failure(self):
         s = self._scheduler()

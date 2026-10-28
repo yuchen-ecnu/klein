@@ -96,6 +96,7 @@ class KafkaSource(SourceFunction):
         self._parallelism = 1
         self._stop_event = threading.Event()
         self._state_lock = threading.Lock()
+        self._commit_lock = threading.RLock()
         self._assigned: set[PartitionKey] = set()
         self._positions: dict[PartitionKey, int] = {}
         self._restored_positions: dict[PartitionKey, int] = {}
@@ -144,8 +145,6 @@ class KafkaSource(SourceFunction):
                 self._update_consumer_lag()
         finally:
             self._commit_completed_checkpoints()
-            consumer.close()
-            self._consumer = None
 
     def snapshot_state(self, checkpoint_id: int) -> dict[str, Any]:
         with self._state_lock:
@@ -180,6 +179,9 @@ class KafkaSource(SourceFunction):
         with self._state_lock:
             if checkpoint_id in self._checkpoint_positions:
                 self._completed_checkpoints.append(checkpoint_id)
+        # Completion can arrive after the read loop has drained. Report commit
+        # failures to the coordinator so its callback retry remains active.
+        self._commit_completed_checkpoints(strict=True)
 
     def notify_checkpoint_aborted(self, checkpoint_id: int) -> None:
         with self._state_lock:
@@ -196,10 +198,14 @@ class KafkaSource(SourceFunction):
         """Release the consumer after the source loop has stopped."""
 
         self.cancel()
-        consumer = self._consumer
-        if consumer is not None:
-            consumer.close()
-            self._consumer = None
+        with self._commit_lock:
+            consumer = self._consumer
+            if consumer is not None:
+                try:
+                    self._commit_completed_checkpoints(strict=True)
+                finally:
+                    consumer.close()
+                    self._consumer = None
 
     def _wait_for_assignment(self, context: SourceContext) -> None:
         context.on_idle()
@@ -440,7 +446,11 @@ class KafkaSource(SourceFunction):
             return _clamp_offset(offset, low, high, key)
         return _clamp_offset(configured, low, high, key)
 
-    def _commit_completed_checkpoints(self) -> None:
+    def _commit_completed_checkpoints(self, *, strict: bool = False) -> None:
+        with self._commit_lock:
+            self._commit_completed_checkpoints_locked(strict=strict)
+
+    def _commit_completed_checkpoints_locked(self, *, strict: bool) -> None:
         consumer = self._consumer
         if consumer is None:
             return
@@ -460,12 +470,14 @@ class KafkaSource(SourceFunction):
             return
         started_at = time.monotonic()
         try:
-            consumer.commit(offsets=offsets, asynchronous=False)
+            self._commit_offsets(consumer, offsets)
         except Exception:
             self._record_error()
             with self._state_lock:
                 self._completed_checkpoints.append(completed)
             logger.warning("Kafka offset commit failed for checkpoint %d; it will be retried", completed, exc_info=True)
+            if strict:
+                raise
             return
         if self._metrics is not None:
             self._metrics.commits.inc()
@@ -474,6 +486,13 @@ class KafkaSource(SourceFunction):
             stale = [checkpoint_id for checkpoint_id in self._checkpoint_positions if checkpoint_id <= completed]
             for checkpoint_id in stale:
                 self._checkpoint_positions.pop(checkpoint_id, None)
+
+    @staticmethod
+    def _commit_offsets(consumer, offsets) -> None:
+        for partition in consumer.commit(offsets=offsets, asynchronous=False) or ():
+            error = getattr(partition, "error", None)
+            if error is not None:
+                raise RuntimeError(f"Kafka offset commit failed for {partition.topic}[{partition.partition}]: {error}")
 
     def _update_consumer_lag(self) -> None:
         if self._metrics is None or self._consumer is None:

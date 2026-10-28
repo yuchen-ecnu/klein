@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import confluent_kafka
+import pytest
 
 from ray.klein.integrations.kafka import KafkaSource
 
@@ -120,6 +121,35 @@ def _install_consumer(monkeypatch, consumer: _Consumer) -> None:
     monkeypatch.setattr(confluent_kafka, "Consumer", create_consumer)
 
 
+@pytest.mark.parametrize("failure", ["exception", "partition"])
+def test_late_checkpoint_completion_retries_commit_before_closing(monkeypatch, failure) -> None:
+    consumer = _Consumer([_Message(offset=10)])
+    _install_consumer(monkeypatch, consumer)
+    source = KafkaSource("events", bootstrap_servers="broker:9092", timeout_ms=1)
+    source.open(_runtime_context())
+    context = SimpleNamespace(collect=lambda row: source.cancel())
+    source.run(context)
+    source.snapshot_state(7)
+    assert not consumer.closed
+    original_commit = consumer.commit
+
+    def failed_commit(**kwargs):
+        if failure == "exception":
+            raise RuntimeError("commit unavailable")
+        return [SimpleNamespace(topic="events", partition=0, error="commit unavailable")]
+
+    consumer.commit = failed_commit
+    with pytest.raises(RuntimeError, match="commit unavailable"):
+        source.notify_checkpoint_complete(7)
+    assert 7 in source._checkpoint_positions
+    consumer.commit = original_commit
+    source.notify_checkpoint_complete(7)
+    source.notify_checkpoint_complete(7)
+    assert [[offset.offset for offset in commit] for commit in consumer.commits] == [[11]]
+    source.close()
+    assert consumer.closed
+
+
 def test_confluent_consumer_config_is_used_for_continuous_reads(monkeypatch) -> None:
     consumer = _Consumer()
     _install_consumer(monkeypatch, consumer)
@@ -184,6 +214,8 @@ def test_checkpoint_captures_next_offset_and_commits_only_after_completion(monke
     assert [[(item.topic, item.partition, item.offset) for item in commit] for commit in consumer.commits] == [
         [("events", 0, 11)]
     ]
+    assert consumer.closed is False
+    source.close()
     assert consumer.closed is True
 
 

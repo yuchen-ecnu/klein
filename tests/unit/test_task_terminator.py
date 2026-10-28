@@ -38,8 +38,19 @@ def _vertex(index: int, status: ExecutionVertexStatus, *, handle=...) -> Executi
 def _job_vertex(*vertices: ExecutionVertex):
     return SimpleNamespace(
         name="operator",
+        operator=SimpleNamespace(source=False),
         execution_vertices={vertex.index: vertex for vertex in vertices},
     )
+
+
+def test_finished_source_is_closed_without_changing_its_terminal_status() -> None:
+    vertex = _vertex(0, ExecutionVertexStatus.FINISHED)
+    job = _job_vertex(vertex)
+    job.operator.source = True
+    references = terminator._stop_worker(job, force=False)
+    assert references == [vertex.stream_task.stop.return_value]
+    vertex.stream_task.stop.assert_called_once_with()
+    assert vertex.status == ExecutionVertexStatus.FINISHED
 
 
 class _Graph:

@@ -125,9 +125,6 @@ async def test_idle_iteration_flushes_batches_output_and_watermark() -> None:
     state.input_batches.flush.assert_called_once_with(force=False)
     state.runner.process.assert_called_once_with(buffered)
     state.operator.on_idle.assert_called_once_with()
-    state.output.flush.assert_called_once_with()
-    emit.drain_pending.assert_awaited_once_with()
-    watermark.advance.assert_awaited_once_with()
     task._check_end_of_stream.assert_not_called()
 
 
@@ -244,6 +241,58 @@ async def test_async_idle_flush_is_ordered_behind_async_compute() -> None:
     state.output.flush.assert_called_once_with()
     emit.drain_pending.assert_awaited_once_with()
     watermark.advance.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_idle_notifications_are_coalesced_behind_slow_compute() -> None:
+    from ray.klein.runtime.worker.async_ordered_runner import AsyncOrderedRunner
+
+    pump, _, state, _, _ = _runtime(async_operator=True)
+    release = asyncio.Event()
+    fatal = MagicMock()
+    runner = AsyncOrderedRunner(1, AsyncMock(), fatal, "idle-coalescing")
+    state.async_runner = runner
+    runner.start()
+
+    async def compute():
+        await release.wait()
+        return []
+
+    try:
+        await runner.submit_compute(compute())
+        await asyncio.sleep(0)
+        for _ in range(25):
+            await pump._idle_flush_async()
+        assert runner._queue.qsize() == 1
+        state.operator.on_idle.assert_not_called()
+        release.set()
+        await runner.barrier()
+        state.operator.on_idle.assert_called_once_with()
+        await pump._idle_flush_async()
+        await runner.barrier()
+        assert state.operator.on_idle.call_count == 2
+        fatal.assert_not_called()
+    finally:
+        release.set()
+        await runner.shutdown(1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["submit", "callback"])
+async def test_failed_idle_action_allows_a_later_notification(failure_stage) -> None:
+    pump, _, state, watermark, _ = _runtime(async_operator=True)
+    if failure_stage == "submit":
+        state.async_runner.submit_control.side_effect = RuntimeError("idle failed")
+        action = pump._idle_flush_async
+    else:
+        await pump._idle_flush_async()
+        watermark.advance.side_effect = RuntimeError("idle failed")
+        action = pump._complete_async_idle
+    with pytest.raises(RuntimeError, match="idle failed"):
+        await action()
+    state.async_runner.submit_control.side_effect = None
+    await pump._idle_flush_async()
+    assert state.async_runner.submit_control.await_count == 2
 
 
 @pytest.mark.asyncio

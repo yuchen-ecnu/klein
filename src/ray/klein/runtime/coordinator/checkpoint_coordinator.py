@@ -3,7 +3,8 @@ import asyncio
 import logging
 import time
 from collections import deque
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 import ray.klein as klein
 from ray.klein._internal.constants import ComponentName
@@ -274,6 +275,8 @@ class CheckpointCoordinator(AsyncWorker):
         self._opened: bool = False
         self._progress_lock = None
         self._persistence_lock = None
+        self._checkpoint_io_tasks: set[asyncio.Task] = set()
+        self._coordinator_stop_task: asyncio.Task | None = None
         self._rescale_gate_lock = None
         self._rescale_operation_id: str | None = None
         # A committed local topology is not independently recoverable until one
@@ -307,6 +310,10 @@ class CheckpointCoordinator(AsyncWorker):
             self._rescale_gate_lock = asyncio.Lock()
 
     async def open(self, execution_graph: ExecutionGraph, restore_path: str | None) -> None:
+        if self._coordinator_stop_task is not None:
+            await asyncio.shield(self._coordinator_stop_task)
+            self._coordinator_stop_task = None
+        await self._wait_checkpoint_io()
         self._ensure_locks()
         # ``open`` is also used by a global restart on an existing coordinator.
         # Clear any abandoned in-memory transaction.  A coordinator-only Ray
@@ -442,6 +449,42 @@ class CheckpointCoordinator(AsyncWorker):
                 self._checkpoint_persistence_interval,
             )
         await super().start()
+
+    async def stop(self, timeout: float = 30.0) -> None:
+        """Fence admission and join storage work before reporting a stopped actor."""
+        self._opened = False
+        self._stopping = True
+        self._ensure_locks()
+        task = self._coordinator_stop_task
+        if task is None or (task.done() and (task.cancelled() or task.exception() is not None)):
+            task = asyncio.create_task(self._drain_checkpoint_worker(timeout))
+            self._coordinator_stop_task = task
+        # A timed-out RPC must not cancel the lock owner or detach storage I/O.
+        await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+
+    async def _drain_checkpoint_worker(self, timeout: float) -> None:
+        while self._completing_checkpoints:
+            await asyncio.sleep(0.01)
+        async with self._persistence_lock:
+            await self._wait_checkpoint_io()
+            await super().stop(timeout=timeout)
+
+    async def _run_checkpoint_io(self, function: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+        self._checkpoint_io_tasks.add(task)
+        try:
+            return await asyncio.shield(task)
+        finally:
+            if task.done():
+                self._checkpoint_io_tasks.discard(task)
+
+    async def _wait_checkpoint_io(self) -> None:
+        tasks = tuple(self._checkpoint_io_tasks)
+        if tasks:
+            # Joining also retrieves errors from callers that timed out. The
+            # original persistence path reports failures; teardown joins effects.
+            await asyncio.gather(*(asyncio.shield(task) for task in tasks), return_exceptions=True)
+            self._checkpoint_io_tasks.difference_update(tasks)
 
     async def _run(self) -> None:
         """Run liveness maintenance independently of periodic persistence."""
@@ -1035,6 +1078,8 @@ class CheckpointCoordinator(AsyncWorker):
 
     async def notify_checkpoint_aligned(self, barrier_id: int, vertex_id: ExecutionVertexId) -> bool:
         """Acks barrier alignment from a sink; once aligned, snapshots the source."""
+        if self._stopping:
+            return False
         vertex = self._execution_graph.execution_vertex(vertex_id)
         checkpoint = self._inflight_checkpoints.get(barrier_id)
         if checkpoint is None:
@@ -1358,6 +1403,9 @@ class CheckpointCoordinator(AsyncWorker):
         async with self._persistence_lock:
             # Finish previously durable sink transactions before newer source
             # offsets are committed. This preserves exactly-once ordering.
+            await self._wait_checkpoint_io()
+            if self._stopping:
+                return False
             sinks_committed = await self._commit_durable_sink_committables(strict=strict)
             if not sinks_committed:
                 return False
@@ -1398,7 +1446,7 @@ class CheckpointCoordinator(AsyncWorker):
                 )
                 # Disk write: off-load to a thread.
                 latest_checkpoint_path = await asyncio.wait_for(
-                    asyncio.to_thread(
+                    self._run_checkpoint_io(
                         checkpoint_io.write_checkpoint,
                         source_states,
                         target_revision,
@@ -1412,7 +1460,7 @@ class CheckpointCoordinator(AsyncWorker):
                     timeout=self._checkpoint_operation_timeout(),
                 )
                 restored_operator_states = await asyncio.wait_for(
-                    asyncio.to_thread(
+                    self._run_checkpoint_io(
                         checkpoint_io.restore_operator_state_entries,
                         latest_checkpoint_path,
                         self._checkpoint_storage_options,
@@ -1456,37 +1504,37 @@ class CheckpointCoordinator(AsyncWorker):
                 await self._notify_durable_source_checkpoints()
             self._clear_rescale_recovery_fence_if_durable()
 
-        try:
-            await asyncio.to_thread(
-                checkpoint_io.cleanup_checkpoints,
-                self._checkpoint_dir,
-                self._job_id,
-                self._checkpoint_retained_count,
-                self._checkpoint_storage_options,
-            )
-        except Exception:
-            # Retention is best-effort after the new _metadata is durable. A
-            # transient delete/list error must not invalidate that checkpoint.
+            try:
+                await self._run_checkpoint_io(
+                    checkpoint_io.cleanup_checkpoints,
+                    self._checkpoint_dir,
+                    self._job_id,
+                    self._checkpoint_retained_count,
+                    self._checkpoint_storage_options,
+                )
+            except Exception:
+                # Retention is best-effort after the new _metadata is durable. A
+                # transient delete/list error must not invalidate that checkpoint.
+                log_event(
+                    logger,
+                    logging.WARNING,
+                    "checkpoint.retention.failed",
+                    "Checkpoint retention cleanup failed",
+                    exc_info=True,
+                    job_id=self._job_id,
+                )
+
             log_event(
                 logger,
-                logging.WARNING,
-                "checkpoint.retention.failed",
-                "Checkpoint retention cleanup failed",
-                exc_info=True,
+                logging.INFO,
+                "checkpoint.persisted",
+                "Persisted checkpoint revision %s",
+                self._metadata_revision,
                 job_id=self._job_id,
+                checkpoint_revision=self._metadata_revision,
+                checkpoint_path=self._checkpoint_path,
             )
-
-        log_event(
-            logger,
-            logging.INFO,
-            "checkpoint.persisted",
-            "Persisted checkpoint revision %s",
-            self._metadata_revision,
-            job_id=self._job_id,
-            checkpoint_revision=self._metadata_revision,
-            checkpoint_path=self._checkpoint_path,
-        )
-        return True
+            return True
 
     async def _notify_durable_source_checkpoints(self) -> None:
         """Best-effort source release with at-least-once connector callbacks."""
@@ -1730,11 +1778,13 @@ class CheckpointCoordinator(AsyncWorker):
         Called by the scheduler right before stopping the coordinator on job
         FINISHED/CANCELLED, so the progress accumulated since the last periodic
         flush is durable rather than lost between the last loop tick and stop.
-        The scheduler disables source callbacks because workers have already
-        stopped; explicit calls keep callbacks enabled for normal checkpoints.
+        Natural EOF flushes before workers close so source callbacks can commit
+        their final offsets. Cancellation disables those callbacks after teardown.
         """
         if abort_inflight_sinks and require_resolved_sinks:
             raise ValueError("cannot abort and require sink transactions in the same terminal flush")
+        while self._completing_checkpoints:
+            await asyncio.sleep(0.01)
         if abort_inflight_sinks:
             for barrier_id in tuple(self._inflight_sink_committables):
                 await self._abort_inflight_sink_committables(barrier_id)
@@ -1755,7 +1805,17 @@ class CheckpointCoordinator(AsyncWorker):
             await self._commit_durable_sink_committables(strict=True)
             if self._pending_sink_committables:
                 raise RuntimeError("cannot finish the job with uncommitted sink transactions")
+            if notify_sources:
+                await self._notify_terminal_source_checkpoints()
         return self._checkpoint_path
+
+    async def _notify_terminal_source_checkpoints(self) -> None:
+        await self._notify_durable_source_checkpoints()
+        if any(
+            self._notified_source_checkpoint_ids.get(key, -1) < entry.checkpoint_id
+            for key, entry in self._durable_source_states.items()
+        ):
+            raise RuntimeError("cannot finish the job with unacknowledged source checkpoint callbacks")
 
     def latest_checkpoint_path(self) -> str | None:
         """Return the latest durable checkpoint path."""

@@ -99,6 +99,7 @@ class InboxPump:
         self._inflight_envelopes: dict[int, int] = {}
         self._processing_accumulator_bytes = 0
         self._inbox_timeout = inbox_timeout
+        self._idle_flush_pending = False
         self._checkpoint_expected_inputs = Counter(input_vertex_ids)
         self._checkpoint_barrier_id: int | None = None
         self._checkpoint_seen_inputs: Counter[ExecutionVertexId] = Counter()
@@ -724,13 +725,23 @@ class InboxPump:
     async def _idle_flush_async(self) -> None:
         """Queue an async operator's idle boundary behind its in-flight work."""
         await self.flush_input_async(force=False)
-        await self._state.async_runner.submit_control(self._complete_async_idle)
+        if self._idle_flush_pending:
+            return
+        self._idle_flush_pending = True
+        try:
+            await self._state.async_runner.submit_control(self._complete_async_idle)
+        except BaseException:
+            self._idle_flush_pending = False
+            raise
 
     async def _complete_async_idle(self) -> None:
         """Flush outputs and replay progress at the ordered async idle boundary."""
-        await self._watermark.advance()
-        await asyncio.get_running_loop().run_in_executor(self._state.executor, self._notify_idle)
-        await self._emit.drain_pending()
+        try:
+            await self._watermark.advance()
+            await asyncio.get_running_loop().run_in_executor(self._state.executor, self._notify_idle)
+            await self._emit.drain_pending()
+        finally:
+            self._idle_flush_pending = False
 
     def handle_stream_control(self, control: StreamControl, sender_vertex_id: object | None) -> None:
         tracker = self._state.event_time_tracker

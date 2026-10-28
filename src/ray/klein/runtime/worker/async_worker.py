@@ -14,6 +14,7 @@ class AsyncWorker(ABC):
 
     def __init__(self) -> None:
         self._task: asyncio.Task | None = None
+        self._stop_cancelled_task: asyncio.Task | None = None
         self._stopping = False
 
     @abstractmethod
@@ -35,13 +36,16 @@ class AsyncWorker(ABC):
         task = self._task
         if task is None or task.done() or asyncio.current_task() is task:
             return
-        task.cancel()
+        if self._stop_cancelled_task is not task:
+            self._stop_cancelled_task = task
+            task.cancel()
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
-        except TimeoutError:
-            logger.warning("Worker %s did not stop within %.1f seconds", self._get_name(), timeout)
+        except asyncio.TimeoutError as error:
+            raise TimeoutError(f"Worker {self._get_name()} did not stop within {timeout:g} seconds") from error
         except asyncio.CancelledError:
-            pass
+            if not task.done():
+                raise
         finally:
             if task.done():
                 self._task = None

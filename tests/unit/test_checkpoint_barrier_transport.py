@@ -6,13 +6,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from ray.exceptions import ActorUnavailableError
 
 from ray.klein.config.configuration import Configuration
 from ray.klein.runtime.collector.delivery_journal import DeliveryJournal
 from ray.klein.runtime.collector.downstream_sender import DownstreamSender
 from ray.klein.runtime.coordinator.checkpoint_strategy import _BarrierAligner
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
-from ray.klein.runtime.message import Barrier, DeliveryChannel, Record, Watermark
+from ray.klein.runtime.message import Barrier, DeliveryChannel, PutAck, Record, Watermark
 from ray.klein.runtime.worker.pump import InboxPump
 from ray.klein.runtime.worker.stream_task import StreamTask
 from ray.klein.runtime.worker.weighted_queue import WeightedQueue
@@ -25,6 +26,100 @@ class _BarrierTarget:
     def emit_barrier(self, barrier, **kwargs):
         self.calls.append((barrier, kwargs))
         return len(self.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_barrier_refreshes_rebuilding_actor_without_changing_channel(monkeypatch, asynchronous) -> None:
+    failed, rebuilt = _BarrierTarget(), _BarrierTarget()
+    journal = DeliveryJournal(1)
+    journal.configure(False, ExecutionVertexId(4, 2), sender_task_name="source", edge_index=0)
+    sender = DownstreamSender([failed], ["target"], (0,), journal, 1, "test")
+    barrier = Barrier(9, source_id=ExecutionVertexId(1, 0))
+    failed.emit_barrier = MagicMock(side_effect=ActorUnavailableError("rebuilding", None))
+    lookup = MagicMock(return_value=rebuilt)
+    monkeypatch.setattr("ray.klein.runtime.collector.downstream_sender.klein.get_actor_by_name", lookup)
+    if asynchronous:
+        sender._await_delivery = AsyncMock()
+        await sender.send_barrier_async(barrier)
+    else:
+        monkeypatch.setattr("ray.klein.runtime.collector.downstream_sender.klein.get", lambda value: value)
+        await asyncio.to_thread(sender.send_barrier_sync, barrier)
+    lookup.assert_called_once_with("target", namespace="test")
+    assert rebuilt.calls == [(barrier, failed.emit_barrier.call_args.kwargs)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("temporary", [False, True])
+async def test_barrier_failure_is_bounded_and_permanent_errors_are_not_retried(
+    monkeypatch, asynchronous, temporary
+) -> None:
+    error = ActorUnavailableError("rebuilding", None) if temporary else RuntimeError("broken barrier")
+    target = MagicMock()
+    target.emit_barrier.side_effect = error
+    sender = DownstreamSender([target], ["target"], (0,), DeliveryJournal(1), 1, "test", reresolve_max_wait=0.01)
+    sender.refresh_target = MagicMock()
+    barrier = Barrier(9)
+    with pytest.raises(type(error)):
+        if asynchronous:
+            await asyncio.wait_for(sender.send_barrier_async(barrier), 1)
+        else:
+            await asyncio.wait_for(asyncio.to_thread(sender.send_barrier_sync, barrier), 1)
+    assert target.emit_barrier.call_count == (2 if temporary else 1)
+
+
+@pytest.mark.asyncio
+async def test_failed_barrier_broadcast_joins_other_target_requests() -> None:
+    targets = [MagicMock(), MagicMock()]
+    sender = DownstreamSender(targets, ["a", "b"], (0, 1), DeliveryJournal(2), 1, "test")
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def deliver(request):
+        if request is targets[0].emit_barrier.return_value:
+            await entered.wait()
+            raise RuntimeError("barrier failed")
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    sender._await_delivery = deliver
+    with pytest.raises(RuntimeError, match="barrier failed"):
+        await sender.send_barrier_async(Barrier(9))
+    assert cancelled.is_set()
+    assert all(not lock.locked() for lock in sender._target_locks)
+
+
+@pytest.mark.asyncio
+async def test_data_cannot_overtake_a_retried_barrier() -> None:
+    target = MagicMock()
+    target.emit_barrier.side_effect = [ActorUnavailableError("rebuilding", None), "barrier"]
+    target.try_put.return_value = "data"
+    sender = DownstreamSender([target], ["target"], (0,), DeliveryJournal(1), 1, "test")
+    sender.refresh_target = MagicMock()
+    entered, release = asyncio.Event(), asyncio.Event()
+    delivered = []
+
+    async def deliver(request):
+        if request == "barrier":
+            entered.set()
+            await release.wait()
+        delivered.append(request)
+        return PutAck(True, 0)
+
+    sender._await_delivery = deliver
+    barrier = asyncio.create_task(sender.send_barrier_async(Barrier(9)))
+    await asyncio.wait_for(entered.wait(), 1)
+    data = asyncio.create_task(sender.send_async(0, [Record({"id": 1})]))
+    try:
+        await asyncio.sleep(0)
+        target.try_put.assert_not_called()
+    finally:
+        release.set()
+        await asyncio.gather(barrier, data)
+    assert delivered == ["barrier", "data"]
 
 
 def _stream_task_with_pump(input_vertex_ids: tuple[ExecutionVertexId, ...]):

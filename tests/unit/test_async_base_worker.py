@@ -128,3 +128,34 @@ async def test_loop_iterates_many_times():
     await asyncio.sleep(0.05)
     await w.stop()
     assert w.ticks >= 5
+
+
+@pytest.mark.asyncio
+async def test_stop_timeout_keeps_cleanup_owned_and_reports_failure():
+    worker = _SlowStopWorker()
+    release = asyncio.Event()
+
+    async def cleanup():
+        try:
+            worker.entered.set()
+            await asyncio.Event().wait()
+        finally:
+            await release.wait()
+
+    worker._run = cleanup
+    await worker.start()
+    await worker.entered.wait()
+    try:
+        with pytest.raises(TimeoutError, match="did not stop"):
+            await worker.stop(timeout=0.01)
+        assert worker.healthy
+        with pytest.raises(TimeoutError, match="did not stop"):
+            await worker.stop(timeout=0.01)
+        assert worker.healthy
+        release.set()
+        await asyncio.wait_for(asyncio.shield(worker._task), 1)
+        await worker.stop()
+        assert not worker.healthy
+    finally:
+        release.set()
+        await worker.stop()

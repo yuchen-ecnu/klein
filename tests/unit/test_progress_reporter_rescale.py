@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -12,6 +13,51 @@ from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionV
 from ray.klein.runtime.job_manager.job_manager import JobManager
 from ray.klein.runtime.job_manager.progress import ProgressSnapshot, SubtaskCounts
 from ray.klein.runtime.job_manager.progress_reporter import ProgressReporter
+
+
+@pytest.mark.asyncio
+async def test_actor_removal_retains_cached_counts() -> None:
+    vertex = _vertex(0, _CountsHandle(_counts(100)))
+    reporter = ProgressReporter(_Graph([vertex]), lambda: JobStatus.RUNNING, lambda: (0, 0, 0))
+    before = await reporter.snapshot()
+    vertex.stream_task = None
+    after = await reporter.snapshot()
+    assert after.operators[0].rows_out == before.operators[0].rows_out == 102
+
+
+@pytest.mark.asyncio
+async def test_final_sample_survives_teardown_without_any_previous_probe() -> None:
+    vertex = _vertex(0, None)
+    vertex.task_generation = "first"
+    vertex.status = ExecutionVertexStatus.FINISHED
+    reporter = ProgressReporter(_Graph([vertex]), lambda: JobStatus.FINISHED, lambda: (0, 0, 0))
+    reporter.record_final_counts(vertex.id, "first", _counts(100))
+    assert (await reporter.snapshot()).operators[0].rows_out == 102
+
+
+@pytest.mark.asyncio
+async def test_late_probe_cannot_overwrite_final_sample(monkeypatch) -> None:
+    vertex = _vertex(0, _CountsHandle(_counts(1)))
+    vertex.task_generation = "first"
+    reporter = ProgressReporter(_Graph([vertex]), lambda: JobStatus.RUNNING, lambda: (0, 0, 0))
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def delayed_get(value, **kwargs):
+        entered.set()
+        await release.wait()
+        return value
+
+    monkeypatch.setattr("ray.klein.runtime.job_manager.progress_reporter.klein.aget", delayed_get)
+    probe = asyncio.create_task(reporter.snapshot())
+    await entered.wait()
+    reporter.record_final_counts(vertex.id, "first", _counts(100))
+    vertex.stream_task = None
+    release.set()
+    assert (await probe).operators[0].rows_out == 102
+    assert (await reporter.snapshot()).operators[0].rows_out == 102
+    vertex.task_generation = "second"
+    vertex.stream_task = _CountsHandle(_counts(200))
+    assert (await reporter.snapshot()).operators[0].rows_out == 202
 
 
 class _CountsHandle:

@@ -305,7 +305,8 @@ def _stop_worker(
                 except Exception as error:
                     logger.warning("Could not force-kill execution vertex %s by handle: %s", vertex.name, error)
             continue
-        if vertex.status == ExecutionVertexStatus.CREATED or vertex.status.is_terminal:
+        finished_source = vertex.status == ExecutionVertexStatus.FINISHED and job_vertex.operator.source
+        if not finished_source and (vertex.status == ExecutionVertexStatus.CREATED or vertex.status.is_terminal):
             logger.debug("Skipping inactive execution vertex %s during task shutdown", vertex.name)
             continue
         if vertex.stream_task is None:
@@ -320,7 +321,8 @@ def _stop_worker(
             logger.warning("Execution vertex %s rejected graceful stop: %s", vertex.name, error)
             continue
         references.append(reference)
-        vertex.transition_to(ExecutionVertexStatus.CANCELLING)
+        if not finished_source:
+            vertex.transition_to(ExecutionVertexStatus.CANCELLING)
     return references
 
 

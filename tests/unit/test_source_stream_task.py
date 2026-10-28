@@ -9,6 +9,7 @@ import pytest
 
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionVertexStatus
+from ray.klein.runtime.job_manager.progress import SubtaskCounts
 from ray.klein.runtime.message import MAX_WATERMARK, Barrier, RescaleBarrier, Watermark
 from ray.klein.runtime.operator.source import SourceOperator
 from ray.klein.runtime.worker.source_stream_task import SourceStreamTask
@@ -35,6 +36,8 @@ def _task(*, output=...) -> SourceStreamTask:
         metrics=SimpleNamespace(barriers_out=MagicMock()),
     )
     operator.end_of_stream = False
+    task._task = None
+    task.progress_counts = Mock(return_value=SubtaskCounts(rows_out=7))
     task._running = True
     task._eof_reached = False
     task._drain_requested = False
@@ -129,7 +132,9 @@ async def test_run_executes_blocking_source_then_stops() -> None:
 
     task._run_source.assert_called_once_with()
     task.report_eof_finished.assert_awaited_once_with()
-    task.stop.assert_awaited_once_with()
+    task.stop.assert_not_awaited()
+    task._state.operator.close.assert_not_called()
+    assert task._stopping
 
 
 @pytest.mark.asyncio
@@ -156,7 +161,9 @@ async def test_run_without_terminal_eof_stops_without_reporting_finished() -> No
     await task._run()
 
     task.report_eof_finished.assert_not_awaited()
-    task.stop.assert_awaited_once_with()
+    task.stop.assert_not_awaited()
+    task._state.operator.close.assert_not_called()
+    assert task._stopping
 
 
 @pytest.mark.asyncio
@@ -174,6 +181,7 @@ async def test_report_eof_finished_awaits_status_rpc_with_generation() -> None:
         ExecutionVertexStatus.FINISHED,
         task_name="source-1",
         task_generation=4,
+        final_counts=SubtaskCounts(rows_out=7),
     )
     aget.assert_awaited_once_with(status_ref)
 
@@ -672,7 +680,32 @@ def test_generate_barrier_tolerates_unmeasurable_source_state() -> None:
     task.register_checkpoint_metrics.assert_called_once_with(barrier, 0)
 
 
-def test_persisted_checkpoint_notifies_connector() -> None:
+@pytest.mark.asyncio
+async def test_persisted_checkpoint_notifies_connector() -> None:
     task = _task()
-    task.notify_source_checkpoint_persisted(12)
+    assert await task.notify_source_checkpoint_persisted(12)
     task._state.operator.notify_checkpoint_complete.assert_called_once_with(12)
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_callback_does_not_block_actor_loop_and_failure_is_retryable() -> None:
+    task = _task()
+    entered, release = threading.Event(), threading.Event()
+
+    def commit(checkpoint_id):
+        entered.set()
+        assert release.wait(2)
+        raise RuntimeError("commit failed")
+
+    task._state.operator.notify_checkpoint_complete.side_effect = commit
+    callback = asyncio.create_task(task.notify_source_checkpoint_persisted(12))
+    try:
+        assert await asyncio.to_thread(entered.wait, 1)
+        assert not callback.done()
+        release.set()
+        assert not await callback
+        task._state.operator.notify_checkpoint_complete.side_effect = None
+        assert await task.notify_source_checkpoint_persisted(12)
+    finally:
+        release.set()
+        await callback
