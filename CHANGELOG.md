@@ -39,7 +39,6 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 - Replay failures now escalate to checkpoint recovery. Pipelined replay waits
   for delivery to finish; inline sources with pending replay also require a
   complete checkpoint restore instead of silently queuing undelivered records.
-### Fixed
 
 - Graceful streaming completion persists the final checkpoint and commits source
   offsets before closing source resources. Kafka commit failures remain retryable.

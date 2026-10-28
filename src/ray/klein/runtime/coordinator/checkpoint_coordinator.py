@@ -460,7 +460,10 @@ class CheckpointCoordinator(AsyncWorker):
             task = asyncio.create_task(self._drain_checkpoint_worker(timeout))
             self._coordinator_stop_task = task
         # A timed-out RPC must not cancel the lock owner or detach storage I/O.
-        await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+        except asyncio.TimeoutError as error:
+            raise TimeoutError(f"Checkpoint coordinator did not stop within {timeout:g} seconds") from error
 
     async def _drain_checkpoint_worker(self, timeout: float) -> None:
         while self._completing_checkpoints:
