@@ -52,7 +52,7 @@ in [Ray Data interoperability](ray-data-interop.md).
 
 ### Which Python and Ray versions are supported?
 
-Python 3.10–3.12 and `ray[data]>=2.56.1,<2.57`. The Ray upper bound is
+Python 3.11–3.12 and `ray[data]>=2.56.1,<2.57`. The Ray upper bound is
 intentional. See [Installation](installation.md#supported-environment) and
 [Compatibility](compatibility.md).
 

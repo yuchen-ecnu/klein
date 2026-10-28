@@ -324,5 +324,5 @@ msgid ""
 "for production pipelines and connectors."
 msgstr "分别运行 DataStream API 和 SQL 示例，再学习生产环境管道和连接器指南。"
 
-msgid "Klein targets Python 3.10 through 3.12 and Ray 2.56.x (`ray[data]>=2.56.1,<2.57`). Install the alpha release from PyPI:"
-msgstr "Klein 支持 Python 3.10 至 3.12 和 Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。从 PyPI 安装 alpha 版本："
+msgid "Klein targets Python 3.11 through 3.12 and Ray 2.56.x (`ray[data]>=2.56.1,<2.57`). Install the alpha release from PyPI:"
+msgstr "Klein 支持 Python 3.11 至 3.12 和 Ray 2.56.x（`ray[data]>=2.56.1,<2.57`）。从 PyPI 安装 alpha 版本："

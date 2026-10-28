@@ -71,8 +71,8 @@ msgstr "公共 API、检查点格式和行为在 1.0 之前可能发生变化。
 msgid "Python"
 msgstr "Python"
 
-msgid "CPython 3.10 through 3.12"
-msgstr "CPython 3.10 至 3.12"
+msgid "CPython 3.11 through 3.12"
+msgstr "CPython 3.11 至 3.12"
 
 msgid "Other Python implementations and versions are not in the tested matrix."
 msgstr "其他 Python 实现和版本不在测试矩阵中。"

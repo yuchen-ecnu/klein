@@ -27,10 +27,10 @@ msgid "Compatibility policy"
 msgstr "兼容性策略"
 
 msgid ""
-"Klein 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The "
+"Klein 0.1 targets Python 3.11–3.12 and `ray>=2.56.1,<2.57`. The "
 "upper bound is intentional: several Ray Data extension points used by the "
 "current code are DeveloperAPI and can change between Ray minors."
-msgstr "Klein 0.1 支持 Python 3.10–3.12 和 `ray>=2.56.1,<2.57`。设置上限是有意为之：当前代码使用的若干 Ray Data 扩展点属于 DeveloperAPI，可能在不同 Ray 次版本之间发生变化。"
+msgstr "Klein 0.1 支持 Python 3.11–3.12 和 `ray>=2.56.1,<2.57`。设置上限是有意为之：当前代码使用的若干 Ray Data 扩展点属于 DeveloperAPI，可能在不同 Ray 次版本之间发生变化。"
 
 msgid ""
 "Every supported Python version is tested against the latest compatible Ray "

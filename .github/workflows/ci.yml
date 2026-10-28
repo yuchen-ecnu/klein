@@ -225,7 +225,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.11"]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -256,8 +256,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: minimum on Python 3.10
-            python-version: "3.10"
+          - name: minimum on Python 3.11
+            python-version: "3.11"
             constraint: minimum
           - name: minimum on Python 3.12
             python-version: "3.12"
@@ -528,7 +528,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            python-version: "3.10"
+            python-version: "3.11"
             upload: false
           - os: ubuntu-latest
             python-version: "3.12"

@@ -29,10 +29,14 @@ upgrade is not supported.
 
 The current tested compatibility target is:
 
-- Python 3.10--3.12;
+- Python 3.11--3.12;
 - `ray>=2.56.1,<2.57` with the `data` extra;
 - `protobuf>=5.29.6,<8`;
 - connector dependencies within the ranges in `pyproject.toml`.
+
+Python 3.10 is no longer supported. Upgrade both the driver and worker
+environments to Python 3.11 or 3.12 before installing this version; the media
+extra now requires Pillow 13 for its security fixes.
 
 Ray Data integration uses DeveloperAPI extension points. A newer Ray minor is
 not supported merely because the package imports. Before widening the Ray

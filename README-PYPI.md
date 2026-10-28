@@ -19,7 +19,7 @@ recovery. The `DataStream` and SQL APIs also support bounded data pipelines.
 
 ## Install
 
-Use Python **3.10–3.12** on Linux or macOS. Klein includes a supported Ray
+Use Python **3.11–3.12** on Linux or macOS. Klein includes a supported Ray
 dependency (`ray[data]>=2.56.1,<2.57`).
 
 ```bash

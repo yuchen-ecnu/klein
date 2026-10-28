@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 [build-system]
-requires = ["setuptools>=83,<84"]
+requires = ["setuptools>=84.1,<85"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,7 @@ name = "ray-klein"
 version = "0.1.0a2"
 description = "Stateful stream processing for Ray"
 readme = "README-PYPI.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.11,<3.13"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES", "LICENSES/*"]
 authors = [{ name = "Klein Authors" }]
@@ -21,7 +21,6 @@ classifiers = [
   "Operating System :: MacOS :: MacOS X",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: System :: Distributed Computing",
@@ -45,8 +44,8 @@ dependencies = [
 kafka = ["confluent-kafka>=2.3,<3"]
 iceberg = ["pyiceberg>=0.11.1,<0.12"]
 media = [
-  "Pillow>=12.3.0,<13",
-  "pypdf>=6.19.0,<7",
+  "Pillow>=13,<14",
+  "pypdf>=6.21.2,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
 ]
@@ -62,9 +61,9 @@ all = [
   "confluent-kafka>=2.3,<3",
   "httpx>=0.28.1,<1",
   "orjson>=3.11.6",
-  "Pillow>=12.3.0,<13",
+  "Pillow>=13,<14",
   "pyiceberg>=0.11.1,<0.12",
-  "pypdf>=6.19.0,<7",
+  "pypdf>=6.21.2,<7",
   "pypdfium2>=4.30,<6",
   "pyvips[binary]>=3,<4",
   "ray[serve]>=2.56.1,<2.57",
@@ -86,11 +85,10 @@ test = [
   "pytest-timeout>=2.3.1,<3",
   "redislite>=6.2.899109,<7",
   "reuse>=5,<7",
-  "setuptools>=83,<84",
+  "setuptools>=84.1,<85",
   "testcontainers[kafka,redis]>=4.13,<5",
-  "tomli>=2.4.1; python_version < '3.11'",
   "twine>=5,<8",
-  "uv>=0.11.31,<0.12",
+  "uv>=0.13.4,<0.14",
 ]
 dev = [
   "ray-klein[all,docs,test]",
@@ -103,7 +101,6 @@ docs = [
   "sphinx==8.1.3",
   "sphinx-copybutton==0.5.2",
   "sphinx-design==0.6.1",
-  "tomli>=2.4.1; python_version < '3.11'",
 ]
 
 [project.scripts]
@@ -130,6 +127,7 @@ namespaces = true
 addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 timeout = 120
 xfail_strict = true
 required_plugins = ["pytest-asyncio>=0.23.7", "pytest-timeout>=2.3.1"]
@@ -168,12 +166,13 @@ skip_covered = true
 fail_under = 80
 
 [tool.ruff]
+# Keep the existing source style; runtime support is set by requires-python.
 target-version = "py310"
 line-length = 120
 src = ["src", "tests"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 files = [
   "src/ray/klein/_compat",
   "src/ray/klein/config",
@@ -273,8 +272,11 @@ select = [
 # Exceptions inside retry/rollback loops are intentional control boundaries.
 ignore = ["B008", "E501", "PERF203"]
 
+[tool.ruff.lint.isort]
+extra-standard-library = ["tomllib"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN201", "ANN202", "ANN204", "ANN205", "B017"]
-# ``make doctor`` must still parse far enough to explain an unsupported
-# pre-3.10 interpreter, so this one script deliberately uses typing aliases.
+# ``make doctor`` must still parse far enough to explain unsupported Python
+# versions, so this script deliberately uses typing aliases.
 "scripts/check_development_environment.py" = ["UP006", "UP021", "UP035", "UP045"]

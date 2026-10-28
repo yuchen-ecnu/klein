@@ -7,7 +7,7 @@ myst:
 
 # Compatibility policy
 
-Klein 0.1 targets Python 3.10–3.12 and `ray>=2.56.1,<2.57`. The upper
+Klein 0.1 targets Python 3.11–3.12 and `ray>=2.56.1,<2.57`. The upper
 bound is intentional: several Ray Data extension points used by the current
 code are DeveloperAPI and can change between Ray minors.
 

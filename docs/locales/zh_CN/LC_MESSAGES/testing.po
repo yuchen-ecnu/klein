@@ -114,11 +114,11 @@ msgstr ""
 
 msgid ""
 "CI also resolves the exact lowest supported direct dependencies on Python"
-" 3.10 and Python 3.12, plus the newest versions within the declared "
+" 3.11 and Python 3.12, plus the newest versions within the declared "
 "bounds. Hypothesis property tests exercise configuration encodings and "
 "durable state binary round-trips across generated values."
 msgstr ""
-"CI 还会在 Python 3.10 和 Python 3.12 上解析精确的最低受支持直接依赖，以及声明范围内的最新版本。Hypothesis "
+"CI 还会在 Python 3.11 和 Python 3.12 上解析精确的最低受支持直接依赖，以及声明范围内的最新版本。Hypothesis "
 "属性测试会使用生成的值检验配置编码和持久状态二进制往返转换。"
 
 msgid ""

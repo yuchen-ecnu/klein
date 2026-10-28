@@ -4,16 +4,12 @@
 from __future__ import annotations
 
 import runpy
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from packaging.requirements import Requirement
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI job
-    import tomli as tomllib
 
 PROJECT_ROOT = Path(__file__).parents[2]
 POLICY = runpy.run_path(str(PROJECT_ROOT / "scripts" / "check_dependency_licenses.py"))

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from typing import Callable, List, Optional, Sequence, Tuple
 
-MINIMUM_PYTHON = (3, 10)
+MINIMUM_PYTHON = (3, 11)
 MAXIMUM_PYTHON_EXCLUSIVE = (3, 13)
 MINIMUM_NODE = (22, 22, 0)
 REQUIRED_COMMANDS = (
@@ -39,7 +39,7 @@ def collect_problems(
     problems = []
     current_python = tuple(python_version[:2])
     if current_python < MINIMUM_PYTHON or current_python >= MAXIMUM_PYTHON_EXCLUSIVE:
-        problems.append("Python {}.{} is unsupported; activate Python 3.10, 3.11, or 3.12.".format(*current_python))
+        problems.append("Python {}.{} is unsupported; activate Python 3.11 or 3.12.".format(*current_python))
 
     missing = [command for command in REQUIRED_COMMANDS if command_finder(command) is None]
     if missing:

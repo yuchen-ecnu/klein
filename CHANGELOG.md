@@ -8,6 +8,16 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+### Security
+
+- Update Pillow, pypdf, setuptools, uv, Vite, and Vitest to patched releases.
+
+### Changed
+
+- Require Python 3.11–3.12. Python 3.10 is no longer supported; upgrade the
+  driver and workers together before installing this version. This enables
+  Pillow 13's security fixes across every supported environment.
+
 ### Fixed
 
 - Empty filtered and grouped CTEs retain their output columns
