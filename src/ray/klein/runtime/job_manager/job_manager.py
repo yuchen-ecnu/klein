@@ -1032,16 +1032,34 @@ class JobManager(AsyncWorker):
             )
         return await self._progress_reporter.snapshot()
 
+    def _rescale_operation_snapshots(self) -> list[dict]:
+        return [operation.to_dict() for operation in reversed(tuple(self._rescale_operations.values()))]
+
+    async def _dashboard_runtime_snapshot(self) -> tuple["ProgressSnapshot", dict, list[dict]]:
+        # Both samples await RPCs. A rescale can commit its graph or finish its
+        # stabilization checkpoint in either gap, so retry rather than attach
+        # newer operation metadata to older progress or checkpoint state.
+        for _ in range(3):
+            graph = self.execution_graph
+            rescaling = self._rescale_in_progress
+            operations = self._rescale_operation_snapshots()
+            progress = await self.progress_snapshot()
+            checkpoint = await self._checkpoint_dashboard_snapshot()
+            if (
+                graph is self.execution_graph
+                and rescaling == self._rescale_in_progress
+                and operations == self._rescale_operation_snapshots()
+            ):
+                return progress, checkpoint, [dashboard_value(operation) for operation in operations]
+        # The Dashboard retains its last good snapshot on sampling failures.
+        raise RuntimeError("Operator rescale kept changing while collecting the dashboard snapshot")
+
     async def dashboard_snapshot(self) -> dict:
         """Return one immutable, redacted, Flink-style job snapshot."""
 
         now_ms = int(time.time() * 1000)
-        progress = await self.progress_snapshot()
-        checkpoint = await self._checkpoint_dashboard_snapshot()
+        progress, checkpoint, rescale_operations = await self._dashboard_runtime_snapshot()
         rescale_stabilizing = bool(checkpoint.get("rescale_recovery_fenced", False))
-        rescale_operations = [
-            dashboard_value(operation.to_dict()) for operation in reversed(tuple(self._rescale_operations.values()))
-        ]
         operators = [dashboard_value(operator) for operator in progress.operators]
         for operator in operators:
             job_vertex = (

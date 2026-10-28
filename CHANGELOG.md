@@ -20,6 +20,8 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ### Fixed
 
+- Dashboard snapshots keep operator parallelism, checkpoint fencing, and rescale
+  operation status consistent when a rescale finishes during polling.
 - Empty filtered and grouped CTEs retain their output columns
   for subsequent batch SQL joins. Global aggregates over empty inputs return
   one row with zero counts and NULL values for other aggregates.

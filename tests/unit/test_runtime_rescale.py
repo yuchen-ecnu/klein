@@ -1076,6 +1076,125 @@ async def test_async_scale_out_and_in_are_retained_in_snapshot_history() -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sample_method", ["progress_snapshot", "_checkpoint_dashboard_snapshot"])
+async def test_dashboard_snapshot_remains_consistent_when_rescale_finishes_during_sampling(sample_method) -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=None)
+    manager.job_master.restart_window.return_value = (0, 0, 0)
+    manager.job_master.take_retired_rescale_counts.return_value = {}
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    manager.run_exclusive = AsyncMock(return_value=None)
+    sampled = asyncio.Event()
+    release = asyncio.Event()
+    original_sample = getattr(manager, sample_method)
+
+    async def sample_before_rescale():
+        result = await original_sample()
+        if not sampled.is_set():
+            sampled.set()
+            await release.wait()
+        return result
+
+    setattr(manager, sample_method, sample_before_rescale)
+    snapshot_task = asyncio.create_task(manager.dashboard_snapshot())
+    try:
+        await asyncio.wait_for(sampled.wait(), timeout=2)
+        accepted = await manager.submit_operator_rescale(2, 1)
+        await _wait_for_rescale_status(manager, accepted["operation_id"], "COMPLETED")
+        for vertex in manager.execution_graph.execution_vertices:
+            if vertex.status == ExecutionVertexStatus.CREATED:
+                vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+                vertex.transition_to(ExecutionVertexStatus.RUNNING)
+        release.set()
+        snapshot = await asyncio.wait_for(snapshot_task, timeout=2)
+
+        operation = snapshot["rescale_operations"][0]
+        target = next(operator for operator in snapshot["operators"] if operator["op_id"] == 2)
+        assert operation["operation_id"] == accepted["operation_id"]
+        assert operation["status"] == "COMPLETED"
+        assert target["parallelism"] == 1
+        assert len(target["subtasks"]) == 1
+        assert target["can_rescale"] is True
+    finally:
+        release.set()
+        await snapshot_task
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_snapshot_rechecks_the_fence_when_stabilization_finishes_during_sampling() -> None:
+    logical, physical = _graphs()
+    _mark_running(physical)
+    fenced = True
+    coordinator = SimpleNamespace(
+        operator_rescale_recovery_fenced=lambda: fenced,
+        dashboard_snapshot=lambda: {"rescale_recovery_fenced": fenced},
+    )
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+    manager.logical_graph = logical
+    manager.execution_graph = physical
+    manager.job_master = Mock(coordinator=coordinator)
+    manager.job_master.restart_window.return_value = (0, 0, 0)
+    manager.job_master.take_retired_rescale_counts.return_value = {}
+    manager._job_config = Configuration(include_environment=False)
+    manager._job_status = JobStatus.RUNNING
+    manager.run_exclusive = AsyncMock(return_value=None)
+    try:
+        accepted = await manager.submit_operator_rescale(2, 1)
+        await _wait_for_rescale_status(manager, accepted["operation_id"], "STABILIZING")
+        for vertex in manager.execution_graph.execution_vertices:
+            if vertex.status == ExecutionVertexStatus.CREATED:
+                vertex.transition_to(ExecutionVertexStatus.DEPLOYED)
+                vertex.transition_to(ExecutionVertexStatus.RUNNING)
+        committed_graph = manager.execution_graph
+        original_sample = manager._checkpoint_dashboard_snapshot
+
+        async def sample_before_stabilization():
+            nonlocal fenced
+            checkpoint = await original_sample()
+            if fenced:
+                fenced = False
+                await asyncio.wait_for(manager._rescale_task_obj, timeout=2)
+            return checkpoint
+
+        manager._checkpoint_dashboard_snapshot = sample_before_stabilization
+        snapshot = await manager.dashboard_snapshot()
+
+        assert manager.execution_graph is committed_graph
+        assert snapshot["rescale_operations"][0]["status"] == "COMPLETED"
+        assert snapshot["checkpoints"]["rescale_recovery_fenced"] is False
+        target = next(operator for operator in snapshot["operators"] if operator["op_id"] == 2)
+        assert target["can_rescale"] is True
+    finally:
+        fenced = False
+        if manager._rescale_task_obj is not None:
+            await asyncio.wait_for(manager._rescale_task_obj, timeout=2)
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_dashboard_snapshot_does_not_retry_forever_when_rescales_keep_changing() -> None:
+    manager = JobManager(Configuration(include_environment=False), namespace="job")
+
+    async def change_rescale_state():
+        manager._rescale_in_progress = not manager._rescale_in_progress
+        return {}
+
+    manager._checkpoint_dashboard_snapshot = AsyncMock(side_effect=change_rescale_state)
+    try:
+        with pytest.raises(RuntimeError, match="rescale kept changing"):
+            await manager.dashboard_snapshot()
+        assert manager._checkpoint_dashboard_snapshot.await_count == 3
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
 async def test_job_manager_rejects_unknown_operator_before_async_admission() -> None:
     logical, physical = _graphs()
     _mark_running(physical)
