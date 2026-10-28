@@ -8,7 +8,7 @@ import warnings
 from collections import Counter
 from datetime import timedelta
 from pathlib import Path
-from uuid import uuid4
+from tempfile import TemporaryDirectory
 
 import pytest
 from ray.cluster_utils import Cluster
@@ -79,7 +79,7 @@ def _ready_counter(namespace):
 
 
 @pytest.fixture
-def node_cluster():
+def node_cluster(monkeypatch):
     source_ray = str(Path(klein.__file__).resolve().parent.parent)
 
     def activate_worker():
@@ -89,7 +89,11 @@ def node_cluster():
             ray.__path__.insert(0, source_ray)
 
     cluster = Cluster()
-    with warnings.catch_warnings():
+    with TemporaryDirectory(prefix="kn-", dir="/tmp") as ray_temp_dir, warnings.catch_warnings():
+        # Cluster writes its address to the default Ray directory, even when
+        # the head has an explicit temp_dir. Use one isolated root for both,
+        # with a short path to stay within Unix-domain socket length limits.
+        monkeypatch.setenv("RAY_TMPDIR", ray_temp_dir)
         # Ray's local multi-node test helper can leave socket wrappers to GC.
         warnings.filterwarnings("ignore", message="unclosed <socket.socket", category=ResourceWarning)
         try:
@@ -97,7 +101,6 @@ def node_cluster():
                 num_cpus=0,
                 include_dashboard=False,
                 dashboard_port=0,
-                temp_dir=f"/tmp/kn-{uuid4().hex[:8]}",
                 object_store_memory=256 * 1024**2,
                 _system_config={"enable_metrics_collection": False},
             )
