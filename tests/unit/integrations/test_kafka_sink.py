@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ray.klein.integrations.kafka import KafkaSink
+from ray.klein.integrations.kafka import kafka_sink as sink_module
 
 
 class _Producer:
@@ -77,7 +78,7 @@ def test_streaming_sink_surfaces_delivery_failures(monkeypatch) -> None:
     assert str(error.value.__cause__) == "broker rejected message"
 
 
-def test_streaming_sink_retries_once_when_the_producer_queue_is_full(monkeypatch) -> None:
+def test_streaming_sink_retries_repeated_queue_pressure_without_reserializing(monkeypatch) -> None:
     class FullOnceProducer(_Producer):
         def __init__(self, config):
             super().__init__(config)
@@ -85,7 +86,7 @@ def test_streaming_sink_retries_once_when_the_producer_queue_is_full(monkeypatch
 
         def produce(self, topic, *, value, key, on_delivery):
             self.attempts += 1
-            if self.attempts == 1:
+            if self.attempts <= 2:
                 raise BufferError("full")
             super().produce(topic, value=value, key=key, on_delivery=on_delivery)
 
@@ -93,11 +94,42 @@ def test_streaming_sink_retries_once_when_the_producer_queue_is_full(monkeypatch
     monkeypatch.setattr("ray.klein.integrations.kafka.kafka_sink.Producer", lambda _config: producer)
     sink = KafkaSink("events", "localhost:9092", value_serializer="bytes")
     sink.open(_runtime_context())
+    serializer = MagicMock(wraps=sink_module._serialize)
+    monkeypatch.setattr(sink_module, "_serialize", serializer)
 
     sink.write({"value": b"payload"})
 
-    assert producer.attempts == 2
+    assert producer.attempts == 3
+    serializer.assert_called_once()
     assert producer.messages == [("events", None, b"{'value': b'payload'}")]
+
+
+@pytest.mark.parametrize("option", ["delivery.timeout.ms", "message.timeout.ms"])
+def test_queue_pressure_obeys_the_total_delivery_deadline(monkeypatch, option) -> None:
+    clock = [0.0]
+    polls = []
+
+    class FullProducer(_Producer):
+        def produce(self, *args, **kwargs):
+            raise BufferError("full")
+
+        def poll(self, timeout):
+            polls.append(timeout)
+            clock[0] += timeout
+
+    monkeypatch.setattr("ray.klein.integrations.kafka.kafka_sink.Producer", FullProducer)
+    monkeypatch.setattr("ray.klein.integrations.kafka.kafka_sink.time.monotonic", lambda: clock[0])
+    sink = KafkaSink("events", "localhost:9092", producer_config={option: 25_000})
+    sink.open(_runtime_context())
+    with pytest.raises(TimeoutError, match="queue"):
+        sink.write({"id": 1})
+    assert polls == [10, 10, 5]
+
+
+@pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
+def test_sink_rejects_unbounded_delivery_timeout(timeout) -> None:
+    with pytest.raises(ValueError, match=r"delivery\.timeout\.ms"):
+        KafkaSink("events", "localhost:9092", producer_config={"delivery.timeout.ms": timeout})
 
 
 def test_streaming_sink_rejects_messages_left_after_flush(monkeypatch) -> None:

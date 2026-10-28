@@ -62,6 +62,7 @@ class ProgressReporter:
         # RPC fails mid-restart falls back to these so its row holds its numbers
         # instead of dropping to zero.
         self._last_counts: dict[ExecutionVertexId, SubtaskCounts] = {}
+        self._final_counts: dict[ExecutionVertexId, tuple[str, SubtaskCounts]] = {}
         # Scale-in removes live subtasks, but their cumulative work remains part
         # of the operator's lifetime totals.  Gauges (queue depth/capacity,
         # checkpoint latency and state size) are deliberately not retained.
@@ -75,6 +76,15 @@ class ProgressReporter:
         """Per-operator progress + failover state. Best-effort and read-only."""
         async with self._lock:
             return await self._snapshot()
+
+    def record_final_counts(self, vertex_id: ExecutionVertexId, generation: str, counts: SubtaskCounts) -> None:
+        """Retain an accepted EOF sample before actor teardown, without an RPC."""
+        self._final_counts[vertex_id] = (generation, counts)
+        self._last_counts[vertex_id] = counts
+
+    def _final_count(self, vertex_id: ExecutionVertexId, generation: str) -> SubtaskCounts | None:
+        final = self._final_counts.get(vertex_id)
+        return final[1] if final is not None and final[0] == generation else None
 
     async def _snapshot(self) -> ProgressSnapshot:
         job_status = self._job_status()
@@ -135,6 +145,7 @@ class ProgressReporter:
             old_vertex_ids = {vertex.id for vertex in self._execution_graph.execution_vertices}
             new_vertex_ids = {vertex.id for vertex in execution_graph.execution_vertices}
             for vertex_id in old_vertex_ids - new_vertex_ids:
+                self._final_counts.pop(vertex_id, None)
                 counts = final_counts.get(vertex_id)
                 cached_counts = self._last_counts.pop(vertex_id, None)
                 if counts is None:
@@ -160,6 +171,7 @@ class ProgressReporter:
             for vertices in vertices_by_job_vertex
             for vertex in vertices
             if runtime_by_vertex[vertex.id].stream_task is not None
+            and self._final_count(vertex.id, runtime_by_vertex[vertex.id].task_generation) is None
         ]
         requests = [runtime_by_vertex[vertex.id].stream_task.progress_counts() for vertex in probed_vertices]
         results = (
@@ -171,11 +183,23 @@ class ProgressReporter:
             else []
         )
 
-        counts_by_vertex = {}
+        counts_by_vertex = {
+            vertex.id: self._final_count(vertex.id, runtime_by_vertex[vertex.id].task_generation)
+            or self._last_counts.get(vertex.id, SubtaskCounts())
+            for vertices in vertices_by_job_vertex
+            for vertex in vertices
+        }
         failed_vertices: set[ExecutionVertexId] = set()
         for vertex, result in zip(probed_vertices, results, strict=True):
             vertex_key = vertex.id
-            if isinstance(result, Exception):
+            current = self._runtime_snapshot(vertex)
+            final = self._final_count(vertex_key, current.task_generation)
+            if final is not None:
+                counts_by_vertex[vertex_key] = final
+            elif current.task_generation != runtime_by_vertex[vertex_key].task_generation:
+                counts_by_vertex[vertex_key] = self._last_counts.get(vertex_key, SubtaskCounts())
+                failed_vertices.add(vertex_key)
+            elif isinstance(result, BaseException) or not isinstance(result, SubtaskCounts):
                 failed_vertices.add(vertex_key)
                 counts_by_vertex[vertex_key] = self._last_counts.get(vertex_key, SubtaskCounts())
             else:

@@ -2090,6 +2090,7 @@ class StreamTask(AsyncWorker):
                 ExecutionVertexStatus.FINISHED,
                 task_name=self._task_name,
                 task_generation=self._task_generation,
+                final_counts=self.progress_counts(),
             )
         )
 

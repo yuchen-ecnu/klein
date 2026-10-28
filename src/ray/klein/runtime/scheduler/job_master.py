@@ -190,11 +190,12 @@ class JobMaster:
             "Stopping all job workers",
             force=force,
         )
+        # EOF sources retain connector resources for the terminal durable
+        # checkpoint and its completion callbacks. Close them only afterwards.
+        coordinator_error = self._stop_coordinator(deadline, graceful_completion=True) if graceful_completion else None
         teardown_errors = self._stop_workers_and_placement(force, deadline)
-        coordinator_error = self._stop_coordinator(
-            deadline,
-            graceful_completion=graceful_completion,
-        )
+        if not graceful_completion:
+            coordinator_error = self._stop_coordinator(deadline)
         if coordinator_error is not None:
             teardown_errors.append(coordinator_error)
         if teardown_errors:
@@ -251,7 +252,7 @@ class JobMaster:
         try:
             klein.get(
                 self.coordinator.persist_now(
-                    notify_sources=False,
+                    notify_sources=graceful_completion,
                     abort_inflight_sinks=not graceful_completion,
                     require_resolved_sinks=graceful_completion,
                 ),

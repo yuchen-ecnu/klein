@@ -2904,3 +2904,9 @@ msgstr ""
 "**Table DDL** 列，以及各 Connector 对 SQL 数据源、Sink 和执行模式的限制。DDL "
 "示例：[Kafka](kafka.md#use-table-ddl)、[Filesystem](filesystem.md#use-table-"
 "ddl) 和 [Console](console.md#use-table-ddl)。"
+
+msgid "On graceful completion, the consumer remains open until the final Klein checkpoint is durable and its offset commit succeeds. A failed final commit prevents the job from reporting successful completion."
+msgstr "作业正常结束时，消费者会保持打开，直到最后一个 Klein 检查点持久化且 offset 提交成功。最后一次提交失败时，作业不会报告成功完成。"
+
+msgid "When the streaming producer queue is full, Klein polls and retries within one total `producer_config[\"delivery.timeout.ms\"]` budget (300000 ms by default). The value must be finite and positive. Exhausting the budget raises `TimeoutError`; delivery failures still propagate immediately."
+msgstr "流式 Producer 队列已满时，Klein 会在 `producer_config[\"delivery.timeout.ms\"]` 指定的总时限内轮询并重试（默认 300000 毫秒）。该值必须为有限正数。超出时限会抛出 `TimeoutError`；投递失败仍会立即向上传播。"

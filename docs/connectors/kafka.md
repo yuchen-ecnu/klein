@@ -136,6 +136,10 @@ Klein forces `enable.auto.offset.store=false` and disables automatic commits;
 Klein checkpoint is durable and retries a failed commit. This prevents the
 consumer group from moving ahead of recoverable Klein state.
 
+On graceful completion, the consumer remains open until the final Klein
+checkpoint is durable and its offset commit succeeds. A failed final commit
+prevents the job from reporting successful completion.
+
 ## Write Kafka
 
 ```python
@@ -167,6 +171,11 @@ events.write_kafka(
 `bytes` preserves an existing `bytes` value but UTF-8 encodes `str(value)` for
 other types. If `key_field` is absent or its value is `None`, the producer sends
 no Kafka key. The value serializer receives the whole record mapping.
+
+When the streaming producer queue is full, Klein polls and retries within one
+total `producer_config["delivery.timeout.ms"]` budget (300000 ms by default).
+The value must be finite and positive. Exhausting the budget raises
+`TimeoutError`; delivery failures still propagate immediately.
 
 The streaming producer flushes outstanding deliveries at checkpoint barriers
 and waits for acknowledgements, but it does not use Kafka transactions. Output

@@ -354,24 +354,60 @@ class DownstreamSender:
                 await asyncio.sleep(backoff)
 
     def _barrier_requests(self, barrier: Barrier) -> list:
-        return [
-            self._target_tasks[index].emit_barrier(
-                barrier,
-                sender_vertex_id=self._journal.sender_vertex_id,
-                delivery_channel=self._journal.delivery_channel(index),
-            )
-            for index in self._control_target_indices
-        ]
+        return [self._barrier_request(index, barrier) for index in self._control_target_indices]
 
     def send_barrier_sync(self, barrier: Barrier) -> None:
-        if self._delivery_aborted.is_set():
-            return
-        klein.get(self._barrier_requests(barrier))
+        for index in self._control_target_indices:
+            deadline = time.monotonic() + self._reresolve_max_wait
+            backoff = 0.0
+            while not self._delivery_aborted.is_set():
+                try:
+                    klein.get(self._barrier_request(index, barrier))
+                    break
+                except ActorUnavailableError:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    self.refresh_target(index)
+                    backoff = min(1.0, backoff * 2 + 0.05, remaining)
+                    self._delivery_aborted.wait(backoff)
 
     async def send_barrier_async(self, barrier: Barrier) -> None:
         if self._delivery_aborted.is_set():
             return
-        await self._await_delivery(self._barrier_requests(barrier))
+        tasks = [asyncio.create_task(self._send_barrier_to(index, barrier)) for index in self._control_target_indices]
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    def _barrier_request(self, index: int, barrier: Barrier) -> Any:
+        return self._target_tasks[index].emit_barrier(
+            barrier,
+            sender_vertex_id=self._journal.sender_vertex_id,
+            delivery_channel=self._journal.delivery_channel(index),
+        )
+
+    async def _send_barrier_to(self, index: int, barrier: Barrier) -> None:
+        # Hold the lane throughout actor recovery so later sends cannot pass
+        # the checkpoint fence. Only temporary unavailability is retryable.
+        async with self._target_locks[index]:
+            deadline = time.monotonic() + self._reresolve_max_wait
+            backoff = 0.0
+            while not self._delivery_aborted.is_set():
+                try:
+                    await self._await_delivery(self._barrier_request(index, barrier))
+                    return
+                except ActorUnavailableError:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    self.refresh_target(index)
+                    backoff = min(1.0, backoff * 2 + 0.05, remaining)
+                    await asyncio.sleep(backoff)
 
     def _control_requests(self, control: StreamControl) -> list:
         return [

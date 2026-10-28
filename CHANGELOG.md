@@ -40,6 +40,17 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
   for delivery to finish; inline sources with pending replay also require a
   complete checkpoint restore instead of silently queuing undelivered records.
 
+- Graceful streaming completion persists the final checkpoint and commits source
+  offsets before closing source resources. Kafka commit failures remain retryable.
+- Checkpoint coordinator shutdown joins pending storage writes and retention;
+  worker stop timeouts now report failure while cleanup remains owned.
+- Kafka sinks retry producer queue pressure within the configured delivery timeout.
+- Checkpoint barriers refresh temporarily unavailable downstream actors and retry
+  without allowing later data to overtake them.
+- Async operators coalesce idle callbacks behind slow compute, bounding idle backlog.
+- Progress retains final EOF counters and cached counters after actor teardown,
+  including when an older progress probe completes late.
+
 ## [0.1.0a2] - 2026-10-17
 
 This alpha bugfix release corrects batch SQL joins on nullable keys and prevents

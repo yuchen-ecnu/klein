@@ -12,6 +12,7 @@ from ray.klein._internal.logging import get_logger
 from ray.klein.api.runtime_context import RuntimeContext
 from ray.klein.runtime.message import MAX_WATERMARK, Barrier, EndOfData, RescaleBarrier, Watermark
 from ray.klein.runtime.operator.source import SourceOperator
+from ray.klein.runtime.worker.async_worker import AsyncWorker
 from ray.klein.runtime.worker.stream_task import StreamTask
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 
@@ -107,7 +108,9 @@ class SourceStreamTask(StreamTask):
         await asyncio.get_running_loop().run_in_executor(state.executor, self._run_source)
         if self._eof_reached:
             await self.report_eof_finished()
-        await self.stop()
+        # Keep commit resources alive until downstream has finished the final
+        # checkpoint. Job-wide teardown owns operator cleanup.
+        await AsyncWorker.stop(self)
 
     async def stop(self, timeout: float = 30.0) -> None:
         """Stop both the actor task and its blocking source thread.
@@ -187,20 +190,20 @@ class SourceStreamTask(StreamTask):
             return
         if self._state.output is not None:
             self._state.output.collect(Watermark(MAX_WATERMARK))
-            checkpoint_id = self._pop_requested_checkpoint()
-            if checkpoint_id is None:
-                while self._inflight_source_states and not self._checkpoint_wait_stop.is_set():
-                    self._emit_pending_rescale_barrier()
-                    time.sleep(0.01)
-                if self._checkpoint_wait_stop.is_set():
-                    return
-            barrier = self._await_terminal_barrier(checkpoint_id)
-            while barrier is not None and barrier.coordinated:
-                self._emit_checkpoint_barrier(barrier)
-                barrier = self._await_terminal_barrier(self._pop_requested_checkpoint())
-            if barrier is None:
+        checkpoint_id = self._pop_requested_checkpoint()
+        if checkpoint_id is None:
+            while self._inflight_source_states and not self._checkpoint_wait_stop.is_set():
+                self._emit_pending_rescale_barrier()
+                time.sleep(0.01)
+            if self._checkpoint_wait_stop.is_set():
                 return
+        barrier = self._await_terminal_barrier(checkpoint_id)
+        while barrier is not None and barrier.coordinated:
             self._emit_checkpoint_barrier(barrier)
+            barrier = self._await_terminal_barrier(self._pop_requested_checkpoint())
+        if barrier is None:
+            return
+        self._emit_checkpoint_barrier(barrier)
         # Close the arm-vs-FINISHED race before returning to the actor loop,
         # which performs the status RPC asynchronously.
         self._eof_reached = True
@@ -433,7 +436,9 @@ class SourceStreamTask(StreamTask):
     def _emit_checkpoint_barrier(self, barrier: Barrier) -> None:
         output = self._state.output
         if output is None:
-            raise RuntimeError("source checkpoint barrier requires an output")
+            # A source chained through its terminal sink aligns locally while
+            # generating the barrier; there is no downstream transport.
+            return
         if barrier.coordinated:
             self._coordinated_checkpoint_barrier_id = barrier.id
         output.collect(barrier)
@@ -501,14 +506,14 @@ class SourceStreamTask(StreamTask):
             return barrier
         return None
 
-    def notify_source_checkpoint_persisted(self, checkpoint_id: int) -> bool:
+    async def notify_source_checkpoint_persisted(self, checkpoint_id: int) -> bool:
         """Notify the source only after its state is durable checkpoint metadata."""
         callback_succeeded = True
         try:
             for barrier_id in tuple(self._inflight_source_states):
                 if barrier_id <= checkpoint_id:
                     self._inflight_source_states.pop(barrier_id, None)
-            self._source_operator.notify_checkpoint_complete(checkpoint_id)
+            await asyncio.to_thread(self._source_operator.notify_checkpoint_complete, checkpoint_id)
         except Exception:
             callback_succeeded = False
             logger.exception("Source checkpoint callback failed for durable checkpoint %s", checkpoint_id)

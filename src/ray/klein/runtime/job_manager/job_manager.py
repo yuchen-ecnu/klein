@@ -44,7 +44,8 @@ from ray.klein.runtime.worker.async_worker import AsyncWorker
 
 if TYPE_CHECKING:
     from ray.klein.runtime.execution_graph.execution_vertex import ExecutionVertex
-    from ray.klein.runtime.job_manager.progress import ProgressSnapshot
+    from ray.klein.runtime.job_manager.progress import ProgressSnapshot, SubtaskCounts
+    from ray.klein.runtime.job_manager.progress_reporter import ProgressReporter
 
 logger = get_logger(__name__)
 
@@ -859,13 +860,17 @@ class JobManager(AsyncWorker):
         error_message: str | None = None,
         task_name: str | None = None,
         task_generation: str | None = None,
+        final_counts: "SubtaskCounts | None" = None,
     ) -> None:
         # The status update + all-sinks-finished scan are atomic inside
         # on_task_status_report (one run_exclusive call); we only react here.
         # Once lifecycle teardown starts, its writer transaction owns the graph
         # until every worker is gone. A late FINISHED/FAILED report must neither
         # mutate that graph nor retain an actor RPC while the actor is closing.
-        if self.job_master is None or self._lifecycle_stop_requested:
+        if self.job_master is None:
+            return
+        if self._lifecycle_stop_requested:
+            self._record_late_final_counts(vertex_id, status, task_name, task_generation, final_counts)
             return
         accepted, all_finished, resolved_name = await self.run_exclusive(
             self.job_master.apply_task_status_report,
@@ -877,6 +882,8 @@ class JobManager(AsyncWorker):
         )
         if not accepted:
             return
+        if status == ExecutionVertexStatus.FINISHED and final_counts is not None:
+            self._get_progress_reporter().record_final_counts(vertex_id, task_generation or "", final_counts)
         if status == ExecutionVertexStatus.FAILED and not is_blank(error_message):
             self._task_failure_details.setdefault(resolved_name or task_name or str(vertex_id), error_message)
         if not all_finished:
@@ -889,6 +896,25 @@ class JobManager(AsyncWorker):
                 self._complete_finished_job(),
                 name=f"{self.namespace}-complete-job",
             )
+
+    def _record_late_final_counts(
+        self,
+        vertex_id: ExecutionVertexId,
+        status: ExecutionVertexStatus,
+        task_name: str | None,
+        task_generation: str | None,
+        final_counts: "SubtaskCounts | None",
+    ) -> None:
+        # Sinks can finish before a source's EOF RPC arrives. Teardown owns the
+        # graph writer now; only retain the matching generation's counters.
+        if status != ExecutionVertexStatus.FINISHED or final_counts is None or task_generation is None:
+            return
+        graph = self.execution_graph
+        vertex = None if graph is None else graph.find_execution_vertex(vertex_id)
+        if vertex is None or (task_name is not None and vertex.name != task_name):
+            return
+        if vertex.runtime_snapshot().task_generation == task_generation:
+            self._get_progress_reporter().record_final_counts(vertex_id, task_generation, final_counts)
 
     async def _complete_finished_job(self) -> None:
         """Tear down a naturally finished job outside the reporting worker RPC.
@@ -1020,17 +1046,23 @@ class JobManager(AsyncWorker):
         harmless.
         """
         from ray.klein.runtime.job_manager.progress import ProgressSnapshot
-        from ray.klein.runtime.job_manager.progress_reporter import ProgressReporter
 
         if self.execution_graph is None:
             return ProgressSnapshot()
+        return await self._get_progress_reporter().snapshot()
+
+    def _get_progress_reporter(self) -> "ProgressReporter":
+        from ray.klein.runtime.job_manager.progress_reporter import ProgressReporter
+
+        if self.execution_graph is None:
+            raise RuntimeError("execution graph is unavailable")
         if self._progress_reporter is None:
             self._progress_reporter = ProgressReporter(
                 self.execution_graph,
                 job_status=lambda: self._job_status,
                 restart_window=self._restart_window,
             )
-        return await self._progress_reporter.snapshot()
+        return self._progress_reporter
 
     def _rescale_operation_snapshots(self) -> list[dict]:
         return [operation.to_dict() for operation in reversed(tuple(self._rescale_operations.values()))]

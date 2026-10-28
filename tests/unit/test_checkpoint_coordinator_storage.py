@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 import hashlib
 import pickle
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -22,6 +24,100 @@ from ray.klein.state.checkpoint_layout import CheckpointLayout
 from ray.klein.state.sink_committable_checkpoint_entry import SinkCommittableCheckpointEntry
 from ray.klein.state.source_checkpoint_entry import SourceCheckpointEntry
 from ray.klein.state.state_snapshot_reference import StateSnapshotReference
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["write_checkpoint", "cleanup_checkpoints"])
+async def test_stop_waits_for_threaded_checkpoint_effects(tmp_path, monkeypatch, operation):
+    config = Configuration(include_environment=False)
+    config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
+    coordinator = CheckpointCoordinator(config, job_id="drain")
+    graph = Mock(execution_vertices=[], barrier_splits={}, sink_execution_vertices=[], source_execution_vertices=[])
+    await coordinator.open(graph, restore_path=None)
+    coordinator._update_latest_source_state(SourceCheckpointEntry("11:0", 7, {"offset": 7}))
+    entered, release = threading.Event(), threading.Event()
+    original = getattr(checkpoint_io, operation)
+    completed = []
+
+    def blocked(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        result = original(*args, **kwargs)
+        completed.append(operation)
+        return result
+
+    monkeypatch.setattr(checkpoint_io, operation, blocked)
+    persist = asyncio.create_task(coordinator.persist_now())
+    try:
+        assert await asyncio.to_thread(entered.wait, 2)
+        with pytest.raises(TimeoutError):
+            await coordinator.stop(timeout=0.01)
+        assert not persist.done()
+        release.set()
+        await asyncio.wait_for(persist, 2)
+        await coordinator.stop(timeout=2)
+        assert completed == [operation]
+        assert not coordinator._checkpoint_io_tasks
+        coordinator._update_latest_source_state(SourceCheckpointEntry("11:0", 8, {"offset": 8}))
+        await coordinator.persist_now()
+        assert completed == [operation]
+    finally:
+        release.set()
+        await asyncio.gather(persist, return_exceptions=True)
+        await coordinator.stop(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_timed_out_storage_write_remains_owned_until_stop(tmp_path, monkeypatch):
+    config = Configuration(include_environment=False)
+    config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
+    coordinator = CheckpointCoordinator(config, job_id="timeout")
+    graph = Mock(execution_vertices=[], barrier_splits={}, sink_execution_vertices=[], source_execution_vertices=[])
+    await coordinator.open(graph, restore_path=None)
+    coordinator._update_latest_source_state(SourceCheckpointEntry("11:0", 7, {"offset": 7}))
+    entered, release = threading.Event(), threading.Event()
+    original = checkpoint_io.write_checkpoint
+
+    def blocked(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(checkpoint_io, "write_checkpoint", blocked)
+    monkeypatch.setattr(coordinator, "_checkpoint_operation_timeout", lambda: 0.01)
+    try:
+        await coordinator.persist_now()
+        assert entered.is_set()
+        assert coordinator._checkpoint_io_tasks
+        with pytest.raises(TimeoutError):
+            await coordinator.stop(timeout=0.01)
+        release.set()
+        await coordinator.stop(timeout=2)
+        assert not coordinator._checkpoint_io_tasks
+        assert checkpoint_io.latest_checkpoint(tmp_path.as_uri(), "timeout") is not None
+    finally:
+        release.set()
+        await coordinator.stop(timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_terminal_flush_requires_source_callback_success(tmp_path):
+    config = Configuration(include_environment=False)
+    config.set(CheckpointOptions.DIRECTORY, tmp_path.as_uri())
+    coordinator = CheckpointCoordinator(config, job_id="callbacks")
+    task = Mock()
+    task.notify_source_checkpoint_persisted.return_value = False
+    vertex = Mock(id=ExecutionVertexId(11, 0), stream_task=task)
+    graph = Mock(
+        execution_vertices=[], barrier_splits={}, sink_execution_vertices=[], source_execution_vertices=[vertex]
+    )
+    await coordinator.open(graph, restore_path=None)
+    coordinator._update_latest_source_state(SourceCheckpointEntry("11:0", 7, {"offset": 7}))
+    with pytest.raises(RuntimeError, match="unacknowledged source"):
+        await coordinator.persist_now(require_resolved_sinks=True)
+    task.notify_source_checkpoint_persisted.return_value = True
+    await coordinator.persist_now(require_resolved_sinks=True)
+    await coordinator.stop()
 
 
 @pytest.mark.parametrize(("needs_recovery", "expected"), [(False, True), (True, False)])

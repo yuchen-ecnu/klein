@@ -9,6 +9,60 @@ from ray.klein.config.configuration import Configuration
 from ray.klein.runtime.execution_graph.execution_vertex_id import ExecutionVertexId
 from ray.klein.runtime.execution_graph.execution_vertex_status import ExecutionVertexStatus
 from ray.klein.runtime.job_manager.job_manager import JobManager
+from ray.klein.runtime.job_manager.progress import SubtaskCounts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("accepted", [True, False])
+async def test_only_accepted_eof_reports_publish_final_counts(accepted) -> None:
+    manager = JobManager(Configuration(), namespace="final-counts")
+    manager.job_master = Mock()
+    manager.execution_graph = Mock()
+    manager._progress_reporter = Mock()
+    manager.run_exclusive = AsyncMock(return_value=(accepted, False, "source"))
+    vertex_id = ExecutionVertexId(2, 0)
+    counts = SubtaskCounts(rows_out=100)
+    try:
+        await manager.update_stream_task_status(
+            vertex_id, ExecutionVertexStatus.FINISHED, task_generation="first", final_counts=counts
+        )
+        if accepted:
+            manager._progress_reporter.record_final_counts.assert_called_once_with(vertex_id, "first", counts)
+        else:
+            manager._progress_reporter.record_final_counts.assert_not_called()
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("generation", ["current", "retired", None])
+async def test_late_source_eof_retains_counts_without_waiting_for_teardown_writer(generation) -> None:
+    manager = JobManager(Configuration(), namespace="late-final-counts")
+    manager.job_master = Mock()
+    manager.execution_graph = Mock()
+    manager._progress_reporter = Mock()
+    manager._lifecycle_stop_requested = True
+    manager.run_exclusive = AsyncMock()
+    vertex = manager.execution_graph.find_execution_vertex.return_value
+    vertex.name = "source"
+    vertex.runtime_snapshot.return_value.task_generation = "current"
+    vertex_id = ExecutionVertexId(2, 0)
+    counts = SubtaskCounts(rows_out=100)
+    try:
+        await manager.update_stream_task_status(
+            vertex_id,
+            ExecutionVertexStatus.FINISHED,
+            task_name="source",
+            task_generation=generation,
+            final_counts=counts,
+        )
+        manager.run_exclusive.assert_not_awaited()
+        if generation == "current":
+            manager._progress_reporter.record_final_counts.assert_called_once_with(vertex_id, generation, counts)
+        else:
+            manager._progress_reporter.record_final_counts.assert_not_called()
+    finally:
+        manager._writer.shutdown(wait=False)
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from enum import Enum
 from typing import Any
@@ -77,6 +78,16 @@ class KafkaSink(SinkFunction):
         self._key_serializer = _serializer_format(key_serializer, "key_serializer")
         self._value_serializer = _serializer_format(value_serializer, "value_serializer")
         self._producer_config = dict(producer_config or {})
+        self._delivery_timeout_seconds = (
+            float(
+                self._producer_config.get(
+                    "delivery.timeout.ms", self._producer_config.get("message.timeout.ms", 300_000)
+                )
+            )
+            / 1_000
+        )
+        if not math.isfinite(self._delivery_timeout_seconds) or self._delivery_timeout_seconds <= 0:
+            raise ValueError("delivery.timeout.ms must be finite and greater than zero")
         if self._producer_config.pop("bootstrap.servers", None) is not None:
             logger.warning("Ignoring 'bootstrap.servers' from producer_config; use bootstrap_servers instead.")
 
@@ -109,19 +120,21 @@ class KafkaSink(SinkFunction):
         key = self._serialize_key(value)
         payload = _serialize(value, self._value_serializer)
 
-        try:
-            self._produce(producer, payload, key)
-        except BufferError:
-            producer.poll(_BUFFER_FULL_POLL_TIMEOUT_SECONDS)
-            self._raise_delivery_error()
+        deadline = time.monotonic() + self._delivery_timeout_seconds
+        while True:
             try:
                 self._produce(producer, payload, key)
+                break
             except BufferError as error:
-                self._record_error()
-                raise RuntimeError(
-                    f"Kafka producer queue for topic {self._topic!r} remained full after "
-                    f"{_BUFFER_FULL_POLL_TIMEOUT_SECONDS:g}s"
-                ) from error
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._record_error()
+                    raise TimeoutError(
+                        f"Kafka producer queue for topic {self._topic!r} remained full after "
+                        f"{self._delivery_timeout_seconds:g}s"
+                    ) from error
+                producer.poll(min(_BUFFER_FULL_POLL_TIMEOUT_SECONDS, remaining))
+                self._raise_delivery_error()
 
         producer.poll(0)
         self._raise_delivery_error()
