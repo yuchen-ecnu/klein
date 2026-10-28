@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 class _RecoveryOutcome(Enum):
     RUNNING = auto()
     REBUILDING = auto()
-    REBUILT = auto()
+    NEEDS_BOOTSTRAP = auto()
     TERMINAL = auto()
     UNRECOVERABLE = auto()
 
@@ -292,30 +292,21 @@ class RecoveryManager:
                 break
 
     def try_recover_tasks(self) -> bool:
-        """Tier-0 single-task recovery (classify-then-act in one pass).
-
-        Returns True if every non-terminal vertex is running or being rebuilt by
-        Ray; False (escalate to global restart) only for genuinely unrecoverable
-        vertices: FAILED, NOT_EXIST, missing handle, or a setup_and_run() error.
-        Classifying before acting stops one mid-rebuild vertex from blocking the
-        re-bootstrap of others.
-        """
+        """Classify the whole graph before attempting stateless single-task replay."""
         preflight = self._task_recovery_preflight()
         if preflight is not None:
             return preflight
 
-        rebuilt: list[ExecutionVertex] = []
-        rebuilding: list[ExecutionVertex] = []
-        for vertex in self._execution_graph.execution_vertices:
-            outcome = self._recover_vertex(vertex)
-            if outcome is _RecoveryOutcome.UNRECOVERABLE:
-                return False
-            if outcome is _RecoveryOutcome.REBUILDING:
-                rebuilding.append(vertex)
-            elif outcome is _RecoveryOutcome.REBUILT:
-                rebuilt.append(vertex)
+        classified = self._classify_task_recovery()
+        if classified is None:
+            return False
+        rebuilt, rebuilding = classified
+        recovering = [*rebuilt, *rebuilding]
+        if recovering and self._requires_consistent_restore(recovering):
+            return False
         for vertex in rebuilt:
-            self._replay_upstreams_to(vertex)
+            if not self._bootstrap_vertex(vertex) or not self._replay_upstreams_to(vertex):
+                return False
         if rebuilt:
             task_names = [vertex.name for vertex in rebuilt]
             log_event(
@@ -339,6 +330,41 @@ class RecoveryManager:
                 task_names=task_names,
             )
         return True
+
+    def _classify_task_recovery(self) -> tuple[list[ExecutionVertex], list[ExecutionVertex]] | None:
+        rebuilt: list[ExecutionVertex] = []
+        rebuilding: list[ExecutionVertex] = []
+        for vertex in self._execution_graph.execution_vertices:
+            outcome = self._recover_vertex(vertex)
+            if outcome is _RecoveryOutcome.UNRECOVERABLE:
+                return None
+            if outcome is _RecoveryOutcome.REBUILDING:
+                rebuilding.append(vertex)
+            elif outcome is _RecoveryOutcome.NEEDS_BOOTSTRAP:
+                rebuilt.append(vertex)
+        return rebuilt, rebuilding
+
+    def _requires_consistent_restore(self, recovering: list[ExecutionVertex]) -> bool:
+        # Forwarded-watermark journals retain only the tail, not all inputs
+        # since a task's checkpoint. They cannot reconstruct managed state or
+        # coordinate a transactional sink with still-running neighbours. A node
+        # loss can also destroy both copies of an edge's replay history.
+        stateful = any(
+            vertex.operator_spec.stateful or vertex.operator_spec.transactional_sink
+            for vertex in self._execution_graph.execution_vertices
+        )
+        if len(recovering) > 1 or stateful or recovering[0].operator_spec.source:
+            log_event(
+                logger,
+                logging.WARNING,
+                "failover.task.consistent_restore_required",
+                "Using a complete checkpoint restore for %d unhealthy tasks (stateful graph: %s)",
+                len(recovering),
+                stateful,
+                task_names=[vertex.name for vertex in recovering],
+            )
+            return True
+        return False
 
     def _task_recovery_preflight(self) -> bool | None:
         if self._force_global_recovery_reason is not None:
@@ -453,7 +479,7 @@ class RecoveryManager:
             return _RecoveryOutcome.UNRECOVERABLE
         if running:
             return _RecoveryOutcome.RUNNING
-        return _RecoveryOutcome.REBUILT if self._bootstrap_vertex(vertex) else _RecoveryOutcome.UNRECOVERABLE
+        return _RecoveryOutcome.NEEDS_BOOTSTRAP
 
     def _bootstrap_vertex(self, vertex: ExecutionVertex) -> bool:
         log_event(
@@ -484,18 +510,20 @@ class RecoveryManager:
             )
             return False
 
-    def _replay_upstreams_to(self, vertex: ExecutionVertex) -> None:
-        """Tell every live upstream to replay its buffer to ``vertex``."""
+    def _replay_upstreams_to(self, vertex: ExecutionVertex) -> bool:
+        """Require every upstream's replay to finish before declaring recovery."""
         for input_edge in self._execution_graph.input_job_edges(vertex.id.job_vertex_id):
             for execution_edge in input_edge.execution_edges:
                 if execution_edge.target.id != vertex.id:
                     continue
                 upstream = execution_edge.source
                 if upstream.stream_task is None:
-                    continue
+                    return False
                 if klein.get_actor_status(upstream.name, namespace=self._namespace) != StreamTaskStatus.ALIVE:
-                    continue
+                    return False
                 try:
+                    if not klein.get(upstream.stream_task.is_running(), timeout=self._rpc_timeout):
+                        return False
                     klein.get(
                         upstream.stream_task.replay_buffered_to(vertex.name),
                         timeout=self._rpc_timeout,
@@ -505,7 +533,7 @@ class RecoveryManager:
                         logger,
                         logging.WARNING,
                         "failover.buffer.replay_failed",
-                        "Buffer replay from %s to %s failed and will be retried: %s",
+                        "Buffer replay from %s to %s failed; escalating to a complete checkpoint restore: %s",
                         upstream.name,
                         vertex.name,
                         error,
@@ -513,3 +541,5 @@ class RecoveryManager:
                         source_task=upstream.name,
                         target_task=vertex.name,
                     )
+                    return False
+        return True

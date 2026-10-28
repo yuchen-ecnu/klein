@@ -20,12 +20,16 @@ class _Dataset:
 
     def __init__(self, *, blocks: int | None = 2) -> None:
         self.blocks = blocks
+        self.context = SimpleNamespace(execution_options=SimpleNamespace(preserve_order=False))
         self.calls: list[tuple[object, ...]] = []
 
     def num_blocks(self) -> int:
         if self.blocks is None:
             raise NotImplementedError
         return self.blocks
+
+    def count(self):
+        return 1
 
     def map(self, function, **kwargs):
         self.calls.append(("map", function, kwargs))
@@ -36,6 +40,10 @@ class _Dataset:
 
     def rename_columns(self, names, **kwargs):
         self.calls.append(("rename_columns", names, kwargs))
+        return self
+
+    def select_columns(self, columns, **kwargs):
+        self.calls.append(("select_columns", columns, kwargs))
         return self
 
     def with_column(self, name, expression, **kwargs):
@@ -98,8 +106,6 @@ def test_row_adapters_preserve_sql_data_semantics() -> None:
     assert execution._FilterRow(parse_one("x > 1"))({"x": 2}) is True
     assert execution._FilterRow(parse_one("x > 1"))({"x": 1}) is False
     assert execution._FilterRow(parse_one("x > 1"))({"x": None}) is False
-    assert execution._AddConstant("x", 3)({"x": 1, "y": 2}) == {"x": 3, "y": 2}
-    assert execution._FinalizeAggregate((("total", "_sum"),))({"_sum": 7}) == {"total": 7}
 
 
 def test_sql_download_uses_the_bounded_batch_runtime(monkeypatch) -> None:
@@ -268,9 +274,9 @@ def test_apply_joins_lowers_cross_join_without_join_keys(monkeypatch) -> None:
     assert result is left
     assert aliases == ["a", "b"]
     assert blocks == 3
-    assert [call[0] for call in left.calls] == ["map", "join", "drop_columns"]
+    assert [call[0] for call in left.calls] == ["with_column", "join", "drop_columns"]
     assert left.calls[1][2] == {"join_type": "inner", "num_partitions": 3, "on": ("_klein_cross_join_key",)}
-    assert right.calls[0][1]({"id": 1}) == {"id": 1, "_klein_cross_join_key": 1}
+    assert right.calls[0][0:2] == ("with_column", "_klein_cross_join_key")
 
 
 def test_apply_joins_lowers_outer_join_keys(monkeypatch) -> None:
@@ -427,9 +433,10 @@ def test_aggregate_select_builds_grouped_dataset_plan(monkeypatch) -> None:
 
     assert result is dataset
     assert len(additions) == 1
-    assert [call[0] for call in dataset.calls] == ["groupby", "aggregate", "map"]
-    assert dataset.calls[0][1:] == ("_klein_group_0", {"num_partitions": 5})
-    assert isinstance(dataset.calls[-1][1], execution._FinalizeAggregate)
+    assert ("groupby", "_klein_group_0", {"num_partitions": 5}) in dataset.calls
+    assert any(call[0] == "aggregate" for call in dataset.calls)
+    assert not any(call[0] == "map" for call in dataset.calls)
+    assert dataset.calls[-1][1] == {"_klein_output_0": "category", "_klein_output_1": "total"}
 
 
 def test_aggregate_select_skips_computation_for_count_star(monkeypatch) -> None:
@@ -457,6 +464,18 @@ def test_has_aggregates_recognizes_group_and_nested_aggregate() -> None:
     assert not execution._has_aggregates(_select("SELECT value + 1 FROM rows"))
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT SUM(value) + other FROM rows",
+        "SELECT category, COALESCE(SUM(value), other) FROM rows GROUP BY category",
+    ],
+)
+def test_aggregate_scalar_expression_rejects_ungrouped_column(query) -> None:
+    with pytest.raises(SQLQueryError, match="must appear in GROUP BY"):
+        execution._extract_aggregate_expressions(_select(query))
+
+
 def test_add_sql_expressions_combines_native_and_row_fallback(monkeypatch) -> None:
     dataset = _Dataset()
     first, second = _select("SELECT x + 1, y + 2 FROM rows").expressions
@@ -476,8 +495,9 @@ def test_add_sql_expressions_combines_native_and_row_fallback(monkeypatch) -> No
 
     assert result is dataset
     assert dataset.calls[0] == ("with_column", "first", native, {"num_cpus": 0.4})
-    assert dataset.calls[1][0] == "map"
-    assert dataset.calls[1][1]({"x": 2, "y": 3}) == {"x": 2, "y": 3, "second": 5}
+    assert dataset.calls[1][0] == "materialize"
+    assert dataset.calls[2][0] == "map"
+    assert dataset.calls[2][1]({"x": 2, "y": 3}) == {"x": 2, "y": 3, "second": 5}
 
 
 def test_add_sql_expressions_skips_map_when_every_expression_is_native(monkeypatch) -> None:
@@ -490,6 +510,7 @@ def test_add_sql_expressions_skips_map_when_every_expression_is_native(monkeypat
 
 def test_project_select_plans_stars_expressions_and_duplicate_validation(monkeypatch) -> None:
     dataset = _Dataset()
+    monkeypatch.setattr(dataset, "schema", lambda: SimpleNamespace(names=["rows.id", "_klein_projection_2"]))
     select = _select("SELECT *, rows.*, value + 1 AS next FROM rows")
     captured: list[object] = []
     monkeypatch.setattr(
@@ -502,8 +523,8 @@ def test_project_select_plans_stars_expressions_and_duplicate_validation(monkeyp
 
     assert result is dataset
     assert [name for name, _ in captured[0][0]] == ["_klein_projection_2"]
-    finalize = dataset.calls[-1][1]
-    assert finalize({"rows.id": 1, "_klein_projection_2": 4}) == {"id": 1, "rows.id": 1, "next": 4}
+    assert dataset.calls[-1][1] == {"_klein_output_0": "id", "_klein_output_1": "rows.id", "_klein_output_2": "next"}
+    assert not any(call[0] == "map" for call in dataset.calls)
 
     duplicate = _select("SELECT a.id, b.id FROM a").expressions
     with pytest.raises(SQLQueryError, match="Duplicate SQL output column"):
@@ -514,14 +535,21 @@ def test_order_and_limit_lower_single_and_multiple_keys() -> None:
     single = _Dataset()
     execution._apply_order_and_limit(_select("SELECT x FROM rows ORDER BY x DESC LIMIT 2"), single)
     assert single.calls == [("sort", "x", {"descending": True}), ("limit", 2)]
+    assert single.context.execution_options.preserve_order is True
 
     multiple = _Dataset()
     execution._apply_order_and_limit(_select("SELECT x, y FROM rows ORDER BY x, y DESC"), multiple)
-    assert multiple.calls == [("sort", ["x", "y"], {"descending": [False, True]})]
+    assert multiple.calls[0][0:2] == ("with_column", "_klein_sort_null_0")
+    assert multiple.calls[1:] == [
+        ("sort", ["_klein_sort_null_0", "x", "y"], {"descending": [True, False, True]}),
+        ("drop_columns", ["_klein_sort_null_0"]),
+    ]
+    assert multiple.context.execution_options.preserve_order is True
 
     unchanged = _Dataset()
     assert execution._apply_order_and_limit(_select("SELECT x FROM rows"), unchanged) is unchanged
     assert unchanged.calls == []
+    assert unchanged.context.execution_options.preserve_order is False
 
 
 def test_order_by_rejects_non_output_expression() -> None:

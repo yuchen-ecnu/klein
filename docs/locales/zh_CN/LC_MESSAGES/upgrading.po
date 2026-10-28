@@ -63,8 +63,8 @@ msgstr "检查版本边界"
 msgid "The current tested compatibility target is:"
 msgstr "当前经过测试的兼容性目标为："
 
-msgid "Python 3.10--3.12;"
-msgstr "Python 3.10--3.12；"
+msgid "Python 3.11--3.12;"
+msgstr "Python 3.11--3.12；"
 
 msgid "`ray>=2.56.1,<2.57` with the `data` extra;"
 msgstr "`ray>=2.56.1,<2.57`，并包含 `data` 可选依赖；"
@@ -74,6 +74,14 @@ msgstr "`protobuf>=5.29.6,<8`；"
 
 msgid "connector dependencies within the ranges in `pyproject.toml`."
 msgstr "连接器依赖须处于 `pyproject.toml` 中声明的范围内。"
+
+msgid ""
+"Python 3.10 is no longer supported. Upgrade both the driver and worker "
+"environments to Python 3.11 or 3.12 before installing this version; the media "
+"extra now requires Pillow 13 for its security fixes."
+msgstr ""
+"不再支持 Python 3.10。安装此版本前，请将 driver 和 worker 环境统一升级到 Python "
+"3.11 或 3.12；媒体可选依赖现要求使用 Pillow 13，以获得其安全修复。"
 
 msgid ""
 "Ray Data integration uses DeveloperAPI extension points. A newer Ray "

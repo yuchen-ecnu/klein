@@ -176,7 +176,7 @@ bounded execution to Ray Data instead of implementing another batch engine.
 
 ## Install Klein
 
-Klein targets Python 3.10 through 3.12 and Ray 2.56.x
+Klein targets Python 3.11 through 3.12 and Ray 2.56.x
 (`ray[data]>=2.56.1,<2.57`). Install the alpha release from PyPI:
 
 ```bash

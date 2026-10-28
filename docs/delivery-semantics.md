@@ -58,11 +58,18 @@ prevents a multi-source sink state from being committed with only one source
 position advanced.
 
 The replay buffer retains emitted native-streaming batches until downstream
-progress acknowledges them. It improves single-task recovery and prevents an
-upstream task from forgetting data that a failed downstream task had not made
-durable. Disabling `pipeline.replay-buffer.enabled` changes the recovery path to
-a broader job restart; it does not upgrade or downgrade an external sink's
-transaction semantics.
+progress acknowledges them. Local replay is limited to a single failed
+non-source task in a graph without managed state or transactional sinks. A
+source failure, multiple unhealthy tasks, or any graph with managed state or
+transactional sinks requires a complete checkpoint restore so source positions,
+state, and sink commits remain consistent. The retained replay tail cannot
+reconstruct all inputs since a stateful task's checkpoint.
+
+Recovery also falls back to a complete checkpoint restore if an upstream is
+unavailable, replay delivery fails, or an inline source has buffered records to
+replay. Pipelined replay completes only after its sends finish. Disabling
+`pipeline.replay-buffer.enabled` always uses checkpoint recovery for failed
+tasks; neither setting changes an external sink's transaction semantics.
 
 If a checkpoint fails or times out while its tasks continue, already-consumed
 input is not automatically replayed. Klein therefore carries prepared sink

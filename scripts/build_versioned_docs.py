@@ -11,17 +11,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
-    import tomli as tomllib
 
 _RELEASE_TAG = re.compile(r"^v(?P<version>[0-9]+(?:\.[0-9A-Za-z]+)+)$")
 _OUTPUT_MARKER = ".klein-versioned-docs"

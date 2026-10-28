@@ -8,6 +8,38 @@ project intends to follow [Semantic Versioning](https://semver.org/) after 1.0.
 
 ## [Unreleased]
 
+### Security
+
+- Update Pillow, pypdf, setuptools, uv, Vite, and Vitest to patched releases.
+
+### Changed
+
+- Require Python 3.11–3.12. Python 3.10 is no longer supported; upgrade the
+  driver and workers together before installing this version. This enables
+  Pillow 13's security fixes across every supported environment.
+
+### Fixed
+
+- Dashboard snapshots keep operator parallelism, checkpoint fencing, and rescale
+  operation status consistent when a rescale finishes during polling.
+- Empty filtered and grouped CTEs retain their output columns
+  for subsequent batch SQL joins. Global aggregates over empty inputs return
+  one row with zero counts and NULL values for other aggregates.
+- Batch SQL evaluates scalar expressions around aggregates, including
+  `COALESCE(SUM(value), 0)`, arithmetic, and `CASE`, after grouping. Empty
+  relations also retain their columns when using row-expression fallbacks.
+- Batch SQL `ORDER BY` honors per-column NULL placement, including explicit
+  `NULLS FIRST`/`NULLS LAST`, before applying `LIMIT`. Parallel projections
+  preserve sorted partition order even when later partitions finish first.
+- Task recovery now uses a complete checkpoint restore for stateful or
+  transactional graphs, source failures, and multiple unhealthy tasks. This
+  prevents partial replay after node loss from combining restored state with
+  live neighbours and producing duplicate or incorrect results, including
+  after operator rescaling.
+- Replay failures now escalate to checkpoint recovery. Pipelined replay waits
+  for delivery to finish; inline sources with pending replay also require a
+  complete checkpoint restore instead of silently queuing undelivered records.
+
 ## [0.1.0a2] - 2026-10-17
 
 This alpha bugfix release corrects batch SQL joins on nullable keys and prevents

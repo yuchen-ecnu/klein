@@ -3,6 +3,7 @@
 
 import random
 import sqlite3
+import time
 from collections import Counter
 
 import pyarrow as pa
@@ -215,6 +216,128 @@ def test_using_chain_preserves_empty_intermediate_schema():
     context = KleinContext({"execution.runtime.mode": "batch"})
     tables = {name: context.from_items([{"key": index}]) for index, name in enumerate(("a", "b", "c"))}
     assert _execute(context, "SELECT key FROM a JOIN b USING (key) JOIN c USING (key)", tables) == []
+
+
+@pytest.mark.parametrize("join", ["INNER", "LEFT", "RIGHT", "FULL"])
+@pytest.mark.parametrize("aggregate", [False, True])
+def test_empty_cte_preserves_join_columns(join, aggregate):
+    tables = {
+        "orders": [{"oid": 1, "cid": 1, "amount": 10}],
+        "customers": [{"cid": 1}, {"cid": 2}],
+    }
+    projection = "cid, SUM(amount) AS total" if aggregate else "cid, amount AS total"
+    group = " GROUP BY cid" if aggregate else ""
+    query = f"""WITH e AS (SELECT {projection} FROM orders WHERE oid < 0{group})
+        SELECT c.cid, e.total FROM customers c {join} JOIN e ON c.cid = e.cid"""
+    expected = _oracle(query, {name: (tuple(rows[0]), rows) for name, rows in tables.items()})
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    actual = _execute(context, query, {name: context.from_items(rows) for name, rows in tables.items()})
+    assert _rows(actual) == _rows(expected)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT COUNT(*) AS n, COUNT(amount) AS nn, SUM(amount) AS total, "
+        "AVG(amount) AS mean, MIN(amount) AS lo, MAX(amount) AS hi FROM orders WHERE oid < 0",
+        "WITH e AS (SELECT * FROM orders WHERE oid < 0) "
+        "SELECT c.cid, e.amount FROM customers c LEFT JOIN e ON c.cid = e.cid",
+        "WITH e AS (SELECT cid, COALESCE(amount, 0) AS total FROM orders WHERE oid < 0) "
+        "SELECT c.cid, e.total FROM customers c LEFT JOIN e ON c.cid = e.cid",
+        "WITH e AS (SELECT cid, SUM(amount) AS total FROM orders WHERE oid < 0 GROUP BY cid), "
+        "renamed AS (SELECT cid, total FROM e) "
+        "SELECT c.cid, r.total FROM customers c LEFT JOIN renamed r ON c.cid = r.cid",
+        "WITH e AS (SELECT cid, cid AS other, SUM(amount) AS total FROM orders WHERE oid < 0 GROUP BY cid) "
+        "SELECT c.cid, e.total FROM customers c LEFT JOIN e ON c.cid = e.other",
+        "WITH e AS (SELECT cid, SUM(amount) AS total FROM orders WHERE oid < 0 GROUP BY cid), "
+        "u AS (SELECT * FROM e UNION ALL SELECT cid, amount AS total FROM orders) "
+        "SELECT c.cid, u.total FROM customers c LEFT JOIN u ON c.cid = u.cid",
+        "WITH e AS (SELECT cid, SUM(amount) AS total FROM orders WHERE oid < 0 GROUP BY cid) "
+        "SELECT c.cid, COUNT(e.cid) AS n, COALESCE(SUM(e.total), 0) AS total "
+        "FROM customers c LEFT JOIN e ON c.cid = e.cid GROUP BY c.cid ORDER BY c.cid",
+        "SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) + 1 AS n FROM orders WHERE oid < 0",
+        "SELECT cid, COALESCE(SUM(amount), 0) + COUNT(*) AS score, "
+        "SUM(amount) AS total, SUM(amount) * 2 AS doubled FROM orders GROUP BY cid",
+        "SELECT cid, CASE WHEN COUNT(*) > 0 THEN SUM(amount) ELSE 0 END AS total FROM orders GROUP BY cid",
+    ],
+    ids=[
+        "global-aggregate",
+        "star-cte",
+        "row-expression-cte",
+        "nested-cte",
+        "repeated-key",
+        "empty-union-branch",
+        "empty-cte-join-coalesced-sum",
+        "empty-global-aggregate-expression",
+        "reused-aggregate",
+        "case-aggregate",
+    ],
+)
+def test_empty_intermediate_relations_match_sqlite(query):
+    tables = {
+        "orders": [{"oid": 1, "cid": 1, "amount": 10}],
+        "customers": [{"cid": 1}, {"cid": 2}],
+    }
+    expected = _oracle(query, {name: (tuple(rows[0]), rows) for name, rows in tables.items()})
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    actual = _execute(context, query, {name: context.from_items(rows) for name, rows in tables.items()})
+    assert _rows(actual) == _rows(expected)
+
+
+@pytest.mark.parametrize("direction", ["ASC", "DESC"])
+@pytest.mark.parametrize("nulls", ["", "NULLS FIRST", "NULLS LAST"])
+def test_order_by_respects_null_placement(direction, nulls):
+    rows = [{"id": i, "key": key} for i, key in enumerate([None, 2, 1, None, 1, 3, None])]
+    query = f"SELECT id, key FROM rows ORDER BY key {direction} {nulls}, id DESC LIMIT 5"
+    expected = _oracle(query, {"rows": (("id", "key"), rows)})
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    assert _execute(context, query, {"rows": context.data.from_items(rows, override_num_blocks=4)}) == expected
+
+
+@pytest.mark.parametrize("limit", [None, 3])
+def test_order_by_survives_out_of_order_partition_completion(monkeypatch, limit):
+    from ray.data import DataContext, Dataset
+
+    original_drop_columns = Dataset.drop_columns
+    global_order = DataContext.get_current().execution_options.preserve_order
+
+    def delayed_drop_columns(dataset, columns, **kwargs):
+        if not any(column.startswith("_klein_sort_null_") for column in columns):
+            return original_drop_columns(dataset, columns, **kwargs)
+
+        def drop_first_partition_slowly(batch):
+            if 0 in batch.column("id").to_pylist():
+                time.sleep(2)
+            return batch.drop(columns)
+
+        return dataset.map_batches(
+            drop_first_partition_slowly,
+            batch_size=1,
+            batch_format="pyarrow",
+            **kwargs,
+        )
+
+    monkeypatch.setattr(Dataset, "drop_columns", delayed_drop_columns)
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    rows = [{"id": index} for index in (3, 1, 0, 2)]
+    query = "SELECT id FROM rows ORDER BY id"
+    if limit is not None:
+        query += f" LIMIT {limit}"
+    actual = _execute(context, query, {"rows": context.data.from_items(rows, override_num_blocks=4)})
+
+    assert actual == [{"id": index} for index in range(4)][:limit]
+    assert DataContext.get_current().execution_options.preserve_order == global_order
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_cross_join_preserves_projected_empty_relation(empty):
+    rows = [{"id": 1, "key": 7}]
+    comparison = "<" if empty else ">"
+    query = f"""WITH e AS (SELECT id, key FROM rows WHERE id {comparison} 0)
+        SELECT r.id AS rid, e.id AS eid FROM rows r CROSS JOIN e"""
+    expected = _oracle(query, {"rows": (("id", "key"), rows)})
+    context = KleinContext({"execution.runtime.mode": "batch"})
+    assert _execute(context, query, {"rows": context.from_items(rows)}) == expected
 
 
 @pytest.mark.parametrize(

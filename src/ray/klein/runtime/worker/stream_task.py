@@ -2037,15 +2037,21 @@ class StreamTask(AsyncWorker):
 
         Enqueues the still-unacknowledged records on the emit queue so they are
         resent in sequence order, serialized with live emits on the
-        same FIFO consumer. Idempotent. Returns the number of replay ops enqueued.
+        same FIFO consumer. Returns only after every replay put has completed.
         """
         if self._state is None or self._state.output is None or self._emit is None:
-            return 0
+            raise RuntimeError("task output is unavailable for replay")
         commands = self._state.output.replay_commands_for(downstream_name)
         if not commands:
             return 0
+        if not self._state.pipelined:
+            # Inline sources send on their executor thread and have no emit
+            # consumer. Queuing here silently loses replay; concurrent direct
+            # sends would race sequence allocation. Escalate to checkpoint
+            # recovery until inline sends share a single replay owner.
+            raise RuntimeError("inline replay requires a complete checkpoint restore")
         self._state.output.refresh_downstream(downstream_name)
-        await self._emit.enqueue_commands(commands)
+        await self._emit.replay(commands)
         logger.warning(
             "Replaying %d buffered op(s) of %s to rebuilt downstream %s.",
             len(commands),

@@ -108,11 +108,11 @@ msgid "Which Python and Ray versions are supported?"
 msgstr "支持哪些 Python 和 Ray 版本？"
 
 msgid ""
-"Python 3.10–3.12 and `ray[data]>=2.56.1,<2.57`. The Ray upper bound is "
+"Python 3.11–3.12 and `ray[data]>=2.56.1,<2.57`. The Ray upper bound is "
 "intentional. See [Installation](installation.md#supported-environment) "
 "and [Compatibility](compatibility.md)."
 msgstr ""
-"支持 Python 3.10–3.12 和 `ray[data]>=2.56.1,<2.57`。Ray "
+"支持 Python 3.11–3.12 和 `ray[data]>=2.56.1,<2.57`。Ray "
 "的上界是有意设置的。请参阅[安装](installation.md#supported-"
 "environment)和[兼容性](compatibility.md)。"
 

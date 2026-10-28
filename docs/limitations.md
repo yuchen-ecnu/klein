@@ -23,7 +23,7 @@ operational boundaries.
 | Area | Current boundary | Consequence |
 | --- | --- | --- |
 | Project status | Independent alpha project, not maintained or endorsed by Ray | Public APIs, checkpoint formats, and behavior can change before 1.0. Pin an exact Klein release. |
-| Python | CPython 3.10 through 3.12 | Other Python implementations and versions are not in the tested matrix. |
+| Python | CPython 3.11 through 3.12 | Other Python implementations and versions are not in the tested matrix. |
 | Ray | `ray[data]>=2.56.1,<2.57` | Klein deliberately pins one Ray minor because some Ray Data extension points can change between minors. |
 | Operating systems | Linux and macOS are declared by the package | Native Windows is not part of the release contract. |
 | Language API | Python only | There is no Java, Scala, SQL Gateway, or REST job-submission API. |

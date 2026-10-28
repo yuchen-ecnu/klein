@@ -1,12 +1,43 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for replay-watermark durability boundaries."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from ray.klein.runtime.message import DeliveryChannel
+from ray.klein.runtime.worker.stream_task import StreamTask
 from ray.klein.runtime.worker.watermark import WatermarkController, WatermarkMode
+
+
+@pytest.mark.asyncio
+async def test_inline_source_replay_requires_checkpoint_restore() -> None:
+    task = object.__new__(StreamTask)
+    output = MagicMock()
+    output.replay_commands_for.return_value = [MagicMock()]
+    task._state = SimpleNamespace(output=output, pipelined=False)
+    task._emit = MagicMock()
+
+    with pytest.raises(RuntimeError, match="complete checkpoint restore"):
+        await task.replay_buffered_to("downstream")
+    task._emit.enqueue_commands.assert_not_called()
+    output.refresh_downstream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_pipelined_task_propagates_replay_failure() -> None:
+    task = object.__new__(StreamTask)
+    output = MagicMock()
+    commands = [MagicMock()]
+    output.replay_commands_for.return_value = commands
+    task._state = SimpleNamespace(output=output, pipelined=True)
+    task._emit = SimpleNamespace(replay=AsyncMock(side_effect=RuntimeError("delivery failed")))
+
+    with pytest.raises(RuntimeError, match="delivery failed"):
+        await task.replay_buffered_to("downstream")
+    output.refresh_downstream.assert_called_once_with("downstream")
+    task._emit.replay.assert_awaited_once_with(commands)
 
 
 @pytest.mark.asyncio

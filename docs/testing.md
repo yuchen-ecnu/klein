@@ -24,7 +24,7 @@ an alias for `make unit`. Integration modules receive an isolated, managed Ray
 runtime through the `ray_cluster` fixture. External tests are skipped unless
 `--run-external` is supplied.
 
-CI also resolves the exact lowest supported direct dependencies on Python 3.10
+CI also resolves the exact lowest supported direct dependencies on Python 3.11
 and Python 3.12, plus the newest versions within the declared bounds. Hypothesis
 property tests exercise configuration encodings and durable state binary
 round-trips across generated values.

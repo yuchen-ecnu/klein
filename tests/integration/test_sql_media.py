@@ -96,6 +96,7 @@ def test_common_image_formats_resize_in_batch_and_propagate_null() -> None:
     )
     rows = execute_terminal(result.data.take_all(), job_name="sql-image-media-batch")
 
+    assert [row["id"] for row in rows] == list(range(1, len(source_rows) + 1))
     for row in rows[:-1]:
         assert (row["width"], row["height"]) == (8, 6)
         assert row["image_format"] == row["expected_format"]

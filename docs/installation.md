@@ -15,7 +15,7 @@ PyPI for ordinary use, or use a source checkout for development.
 
 | Component | Supported range | Notes |
 | --- | --- | --- |
-| Python | 3.10, 3.11, or 3.12 | Use the same minor version on the driver and workers. |
+| Python | 3.11 or 3.12 | Use the same minor version on the driver and workers. |
 | Ray | `ray[data]>=2.56.1,<2.57` | Klein pins one Ray minor because some Ray Data extension points are Developer APIs. |
 | Operating system | Linux or macOS | These are the platforms declared by the package metadata. Other platforms are not part of the current support target. |
 | Project maturity | Alpha | Public APIs and checkpoint formats can still change before 1.0. |
@@ -116,7 +116,7 @@ for example `python -m pip install "ray-klein[kafka,rocksdb]==0.1.0a2"`.
 | --- | --- | --- |
 | `kafka` | `confluent-kafka>=2.3,<3` | Bounded or continuous Kafka input and Kafka output. |
 | `iceberg` | `pyiceberg>=0.11.1,<0.12` | Iceberg catalog access and batch or checkpointed append output. Catalog-specific dependencies may still be required. |
-| `media` | `pyvips[binary]>=3,<4`, `Pillow>=12.3.0,<13`, `pypdf>=6.19.0,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
+| `media` | `pyvips[binary]>=3,<4`, `Pillow>=13,<14`, `pypdf>=6.21.2,<7`, and `pypdfium2>=4.30,<6` | SQL image and PDF functions: native libvips processing with a Pillow compatibility fallback, plus PDF splitting and PDFium rendering. |
 | `rocketmq` | `rocketmq-client-python==2.0.0` | Continuous RocketMQ input. A compatible native `librocketmq` is also required on every executing worker. |
 | `redis` | `redis>=5,<9` | Redis lookup, filtering, and output. |
 | `rocksdb` | `rocksdict>=0.3.29,<0.4` | The node-local RocksDB managed-state backend. |
@@ -231,7 +231,7 @@ package: Ray is a separate distribution.
 
 | Symptom | Check and fix |
 | --- | --- |
-| Pip rejects the Python version | Run `python --version`. Create a Python 3.10–3.12 environment and invoke pip as `python -m pip`. |
+| Pip rejects the Python version | Run `python --version`. Create a Python 3.11–3.12 environment and invoke pip as `python -m pip`. |
 | The resolver reports a Ray conflict | Another package requires a Ray version outside `>=2.56.1,<2.57`. Use a separate environment rather than widening Klein's bound without compatibility testing. |
 | `ModuleNotFoundError: ray.klein` | Confirm `python -m pip show ray-klein` uses the same interpreter as the application. Merely placing the checkout beside an installed Ray package is not an installation. |
 | `ray-klein: command not found` | Activate the environment and confirm its `bin` directory is on `PATH`. Reinstall the project to create the console entry point. |
