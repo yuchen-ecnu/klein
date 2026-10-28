@@ -35,6 +35,37 @@ async def test_only_accepted_eof_reports_publish_final_counts(accepted) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("generation", ["current", "retired", None])
+async def test_late_source_eof_retains_counts_without_waiting_for_teardown_writer(generation) -> None:
+    manager = JobManager(Configuration(), namespace="late-final-counts")
+    manager.job_master = Mock()
+    manager.execution_graph = Mock()
+    manager._progress_reporter = Mock()
+    manager._lifecycle_stop_requested = True
+    manager.run_exclusive = AsyncMock()
+    vertex = manager.execution_graph.find_execution_vertex.return_value
+    vertex.name = "source"
+    vertex.runtime_snapshot.return_value.task_generation = "current"
+    vertex_id = ExecutionVertexId(2, 0)
+    counts = SubtaskCounts(rows_out=100)
+    try:
+        await manager.update_stream_task_status(
+            vertex_id,
+            ExecutionVertexStatus.FINISHED,
+            task_name="source",
+            task_generation=generation,
+            final_counts=counts,
+        )
+        manager.run_exclusive.assert_not_awaited()
+        if generation == "current":
+            manager._progress_reporter.record_final_counts.assert_called_once_with(vertex_id, generation, counts)
+        else:
+            manager._progress_reporter.record_final_counts.assert_not_called()
+    finally:
+        manager._writer.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
 async def test_failure_detail_preserves_the_error_that_triggered_restart() -> None:
     manager = JobManager(Configuration(), namespace="job-a")
     vertex_id = ExecutionVertexId(2, 0)

@@ -867,7 +867,10 @@ class JobManager(AsyncWorker):
         # Once lifecycle teardown starts, its writer transaction owns the graph
         # until every worker is gone. A late FINISHED/FAILED report must neither
         # mutate that graph nor retain an actor RPC while the actor is closing.
-        if self.job_master is None or self._lifecycle_stop_requested:
+        if self.job_master is None:
+            return
+        if self._lifecycle_stop_requested:
+            self._record_late_final_counts(vertex_id, status, task_name, task_generation, final_counts)
             return
         accepted, all_finished, resolved_name = await self.run_exclusive(
             self.job_master.apply_task_status_report,
@@ -893,6 +896,25 @@ class JobManager(AsyncWorker):
                 self._complete_finished_job(),
                 name=f"{self.namespace}-complete-job",
             )
+
+    def _record_late_final_counts(
+        self,
+        vertex_id: ExecutionVertexId,
+        status: ExecutionVertexStatus,
+        task_name: str | None,
+        task_generation: str | None,
+        final_counts: "SubtaskCounts | None",
+    ) -> None:
+        # Sinks can finish before a source's EOF RPC arrives. Teardown owns the
+        # graph writer now; only retain the matching generation's counters.
+        if status != ExecutionVertexStatus.FINISHED or final_counts is None or task_generation is None:
+            return
+        graph = self.execution_graph
+        vertex = None if graph is None else graph.find_execution_vertex(vertex_id)
+        if vertex is None or (task_name is not None and vertex.name != task_name):
+            return
+        if vertex.runtime_snapshot().task_generation == task_generation:
+            self._get_progress_reporter().record_final_counts(vertex_id, task_generation, final_counts)
 
     async def _complete_finished_job(self) -> None:
         """Tear down a naturally finished job outside the reporting worker RPC.
